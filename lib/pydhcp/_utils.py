@@ -1,0 +1,5 @@
+class Missing:
+    ...
+
+
+MISSING = Missing()
