@@ -96,13 +96,13 @@ class U32DhcpOptionType(DhcpOptionType):
 
 class IPv4DhcpOptionType(DhcpOptionType):
     ip: _IP
-
+    def __init__(self, ip:_IP) -> None:
+        self.ip = _IP(ip)
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         if len(option) != 4:
             raise ValueError(option)
-        self = cls()
-        self.ip = _IP(bytes(option))
+        self = cls(bytes(option))
         return self
 
     def encode(self) -> bytearray:
@@ -114,14 +114,19 @@ class IPv4DhcpOptionType(DhcpOptionType):
 
 class IPsv4DhcpOptionType(DhcpOptionType):
     ips: list[_IP]
-
+    def __init__(self, *ips:_IP|list[_IP]) -> None:
+        self.ips = []
+        for _ips in ips:
+            if not isinstance(_ips, (tuple,list)):
+                _ips = (_ips,)
+            for ip in _ips:
+                self.ips.append(_IP(ip))
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         if len(option) % 4 != 0:
             raise ValueError(option)
         view = memoryview(option)
         self = cls()
-        self.ips = []
         while view:
             self.ips.append(_IP(view[:4].tobytes()))
             view = view[4:]
