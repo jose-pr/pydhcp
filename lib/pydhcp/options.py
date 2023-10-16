@@ -72,6 +72,11 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         self, __key: int, /, decode: _ty.Literal[True] = True
     ) -> DhcpOptionType | None:
         ...
+    @_ty.overload
+    def get(
+        self, __key: int, /
+    ) -> DhcpOptionType:
+        ...
 
     @_ty.overload
     def get(

@@ -33,7 +33,13 @@ class Address(_Address):
 
 
 _APIPA = _ip.ip_network("169.254.0.0/16")
-
+def get_ipinterface(ip:str)->_ip.IPv4Interface:
+    ip = str(ip)
+    for adapter in _if.get_adapters():
+        for ip_ in adapter.ips:
+            if ip == ip_.ip:
+                return _ip.ip_interface((ip,ip_.network_prefix))
+            
 def all_ipv4_addresses():
     address = []
     for adapter in _if.get_adapters():
