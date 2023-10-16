@@ -1,5 +1,12 @@
-from .options import DhcpOptions, StringDhcpOptionType 
-from .iana import OpCode, HardwareAddressType, Flags, MAGIC_COOKIE, DhcpOptionCode, OptionOverload
+from .options import DhcpOptions, StringDhcpOptionType
+from .iana import (
+    OpCode,
+    HardwareAddressType,
+    Flags,
+    MAGIC_COOKIE,
+    DhcpOptionCode,
+    OptionOverload,
+)
 from .netutils import IPAddress
 
 import enum as _enum
@@ -25,7 +32,7 @@ def _codemap(code, value: bytearray):
 class DhcpMessage:
     op: OpCode  # One byte
     """Message op code / message type"""
-    htype: HardwareAddressType  # One byte
+    htype: HardwareAddressType
     """Hardware address type, see ARP section in "Assigned Numbers" RFC"""
     hlen: int  # One byte
     """Hardware address length"""
@@ -98,11 +105,11 @@ class DhcpMessage:
         options = DhcpOptions()
         if options.decode(data[240:])[0] != 255:
             raise Exception("Bad Options end")
-        
+
         overload = options.get(DhcpOptionCode.OPTION_OVERLOAD, decode=False)
         overload = OptionOverload(overload[0] if overload else 0)
 
-        #rfc3396 order
+        # rfc3396 order
         if OptionOverload.FILE in overload:
             options.decode(file)
             file = None
@@ -110,16 +117,22 @@ class DhcpMessage:
         if OptionOverload.SNAME in overload:
             options.decode(sname)
             sname = None
-       
+
         if sname is not None:
             sname = sname.tobytes().split(_NULL, 1)[0].decode()
         else:
-            sname = str(options.get(DhcpOptionCode.TFTP_SERVER, decode=StringDhcpOptionType) or '')
+            sname = str(
+                options.get(DhcpOptionCode.TFTP_SERVER, decode=StringDhcpOptionType)
+                or ""
+            )
 
         if file is not None:
             file = file.tobytes().split(_NULL, 1)[0].decode()
         else:
-            file = str(options.get(DhcpOptionCode.BOOTFILE_NAME, decode=StringDhcpOptionType) or '')
+            file = str(
+                options.get(DhcpOptionCode.BOOTFILE_NAME, decode=StringDhcpOptionType)
+                or ""
+            )
 
         # opts -> file -> sname
 
@@ -141,6 +154,35 @@ class DhcpMessage:
             options,
         )
 
+    def encode(self, maxsize: int = 576):
+        maxsize = maxsize or 576
+        data = bytearray(12)
+        sname = self.sname.encode()
+        file = self.file.encode()
+        _struct.pack_into(
+            "!BBBBIHH",
+            data,
+            0,
+            self.op.value,
+            int(self.htype),
+            self.hlen,
+            self.hops,
+            self.xid,
+            self.secs,
+            self.flags.value
+        )
+        for ip in [self.ciaddr, self.yiaddr, self.siaddr, self.giaddr]:
+            data.extend(ip.packed)
+
+        data.extend(self.chaddr.ljust(16, b'\x00')[:16])
+        data.extend(sname.ljust(64, b"\x00")[:64])
+        data.extend(file.ljust(128, b"\x00")[:128])
+        data.extend(MAGIC_COOKIE)
+        data.extend(self.options.encode())
+        #
+        # TODO overload sname/file
+        return data
+
     def client_id(self, func: _ty.Callable[["DhcpMessage"], bytearray] = None):
         cid = self.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:
@@ -149,8 +191,7 @@ class DhcpMessage:
             if not cid:
                 cid = bytearray([self.htype.value])
                 cid.extend(self.chaddr)
-        return cid.hex(':').upper()
-
+        return cid.hex(":").upper()
 
     def dumps(self, codemap: _ty.Callable[[int, bytearray], tuple[str, str]] = None):
         lines = []
@@ -172,3 +213,6 @@ class DhcpMessage:
             code, value = codemap(code, value)
             lines.append(f"{code}: {value}")
         return "\n".join(lines)
+
+    def __contains__(self, __key: object) -> bool:
+        return self.options.__contains__(__key)

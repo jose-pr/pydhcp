@@ -41,7 +41,7 @@ class DhcpOptionCodesDhcpOptionType(DhcpOptionType):
         return str(self.options)
     
 
-
+DhcpOptionCode.BROADCAST_ADDRESS.register_type(IPv4DhcpOptionType)
 DhcpOptionCode.CLIENT_IDENTIFIER.register_type(ClientIdentifierOptionType)
 DhcpOptionCode.DNS.register_type(IPsv4DhcpOptionType)
 DhcpOptionCode.DOMAIN_NAME.register_type(StringDhcpOptionType)

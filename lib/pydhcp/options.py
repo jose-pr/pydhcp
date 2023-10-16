@@ -9,7 +9,7 @@ T = _ty.TypeVar("T", bound=DhcpOptionType)
 class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def __init__(self, codemap: DhcpOptionCodeMap = None) -> None:
         self._codemap = codemap or _ianacodes
-        self._options: dict[int, bytearray] = {}
+        self._options: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
     def __repr__(self) -> str:
         return f"DhcpOptions({list(self._options.keys())})"
@@ -49,7 +49,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             while option:
                 slice = option[:255]
                 options.append(len(slice))
-                options.append(slice)
+                options.extend(slice)
                 if padding:
                     pad = padding - len(bytearray) % padding
                     options.extend(bytes(pad))
@@ -125,3 +125,6 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
     def items(self) -> _ty.ItemsView[int, bytearray]:
         return self._options.items()
+    
+    def __contains__(self, __key: object) -> bool:
+        return self._options.__contains__(self._key(__key))
