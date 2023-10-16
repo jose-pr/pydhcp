@@ -79,13 +79,14 @@ class U16DhcpOptionType(DhcpOptionType):
 class U32DhcpOptionType(DhcpOptionType):
     data: int
 
+    def __init__(self, u32 = 0) -> None:
+        self.data = int(u32)
+
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         if len(option) != 4:
             raise ValueError(option)
-        self = cls()
-        self.data = _struct.unpack("!I", option)[0]
-        return self
+        return cls(_struct.unpack("!I", option)[0])
 
     def encode(self) -> bytearray:
         return _struct.pack("!I", self.data)
