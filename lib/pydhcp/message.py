@@ -260,12 +260,12 @@ class DhcpMessage:
             code = codemap.from_code(code)
             decoded = codemap.get_type(code).decode(value)
             decoded = repr(decoded).splitlines()
-            SPACE = ' '*43
+            SPACE = ' '*42
             if decoded:
                 first =_tw.fill(decoded[0], width=100, initial_indent='', subsequent_indent=SPACE)
             else:
                 first = ''
-            lines.append(f"[{repr(code): <40}: {first}")
+            lines.append(f"{repr(code): <40}: {first}")
             for line in decoded[1:]:
                 lines.append(_tw.fill(line, width=100, initial_indent=SPACE, subsequent_indent=SPACE))
 

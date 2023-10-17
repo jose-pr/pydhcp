@@ -25,22 +25,18 @@ class DhcpServer(DhcpServer):
     def acquire_lease(self, client_id: str, server_id: str, msg: DhcpMessage):
         ip, expires, options = super().acquire_lease(client_id, server_id, msg)
         _server = netutils.get_ipinterface(server_id)
-
-        if client_id.endswith("CC:7C") and not ip:
-            ip = _server.network.network_address + self.offset
-
-        requested = msg.options.get(DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=DhcpOptionCodesDhcpOptionType)
-        if requested:
-            requested = requested.options
-        if not requested or DhcpOptionCode.ROUTER in requested:
-            options[DhcpOptionCode.ROUTER] = IPv4DhcpOptionType(
-                _server.network.network_address + 1
-            )
-        if not requested or DhcpOptionCode.DNS in requested:
-            options[DhcpOptionCode.DNS] = IPsv4DhcpOptionType(
-                _server.network.network_address + 1, '8.8.8.8'
-            )
-            options.append((DhcpOptionCode.DNS, "1.1.1.1"))
+        if not ip:
+            if client_id.endswith("CC:7C"):
+                ip = _server.network.network_address + self.offset
+            elif client_id.endswith("C0:DE"):
+                ip = _server.network.network_address + self.offset + 1
+        options[DhcpOptionCode.ROUTER] = IPv4DhcpOptionType(
+            _server.network.network_address + 1
+        )
+        options[DhcpOptionCode.DNS] = IPsv4DhcpOptionType(
+            _server.network.network_address + 1, "8.8.8.8"
+        )
+        options.append((DhcpOptionCode.DNS, "1.1.1.1"))
         if ip is None:
             return
         return DhcpLease(ip, expires, options)
