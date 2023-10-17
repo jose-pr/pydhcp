@@ -6,13 +6,16 @@ from .iana import (
     MAGIC_COOKIE,
     DhcpOptionCode,
     OptionOverload,
+    DHCP_MIN_LEGAL_PACKET_SIZE,
 )
 from .netutils import IPAddress
+from .log import LOGGER
 
 import enum as _enum
 import struct as _struct
 import typing as _ty
 import dataclasses as _data
+import datetime as _dt
 
 
 _NULL = 0x00.to_bytes(1)
@@ -42,7 +45,7 @@ class DhcpMessage:
     """Transaction ID, a random number chosen by the
     client, used by the client and server to associate
     messages and responses between a client and a server."""
-    secs: int  # 2 bytes
+    secs: _dt.timedelta  # 2 bytes
     """Filled in by client, seconds elapsed since client
     began address acquisition or renewal process."""
     flags: Flags  # 2 bytes
@@ -72,6 +75,8 @@ class DhcpMessage:
 
     @classmethod
     def decode(cls, data: memoryview):
+        if not isinstance(data, memoryview):
+            data = memoryview(data)
         (
             op,
             htype,
@@ -90,6 +95,7 @@ class DhcpMessage:
             htype = HardwareAddressType(htype)
         except:
             pass
+        secs = _dt.timedelta(seconds=secs)
         flags = Flags(flags)
         ciaddr = IPAddress(ciaddr)
         yiaddr = IPAddress(yiaddr)
@@ -154,13 +160,64 @@ class DhcpMessage:
             options,
         )
 
-    def encode(self, maxsize: int = 576):
-        maxsize = maxsize or 576
-        data = bytearray(12)
+    def encode(self, max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE):
+        max_packetsize = max_packetsize or DHCP_MIN_LEGAL_PACKET_SIZE
+        max_options_field_size = max_packetsize - 264 - len(MAGIC_COOKIE)
+        if max_options_field_size < 0:
+            raise Exception(f"{max_packetsize} is to small for a DHCP packet")
+
         sname = self.sname.encode()
         file = self.file.encode()
+        options_field = self.options.encode()
+        if len(options_field) > max_options_field_size + 128:
+            if self.file and DhcpOptionCode.BOOTFILE_NAME not in self.options:
+                self.options[DhcpOptionCode.BOOTFILE_NAME] = StringDhcpOptionType(
+                    self.file
+                )
+                self.options._options.move_to_end(
+                    int(DhcpOptionCode.BOOTFILE_NAME), False
+                )
+            if self.sname and DhcpOptionCode.TFTP_SERVER not in self.options:
+                self.options[DhcpOptionCode.TFTP_SERVER] = StringDhcpOptionType(
+                    self.sname
+                )
+                self.options._options.move_to_end(
+                    int(DhcpOptionCode.TFTP_SERVER), False
+                )
+            overload = OptionOverload.BOTH
+        elif len(options_field) > max_options_field_size:
+            if self.file:
+                self.options[DhcpOptionCode.BOOTFILE_NAME] = StringDhcpOptionType(
+                    self.file
+                )
+                self.options._options.move_to_end(
+                    int(DhcpOptionCode.BOOTFILE_NAME), False
+                )
+            overload = OptionOverload.FILE
+        else:
+            overload = OptionOverload.NONE
+
+        try:
+            self.options._options.move_to_end(DhcpOptionCode.DHCP_MESSAGE_TYPE, False)
+        except KeyError:
+            pass
+
+
+        if overload is not OptionOverload.NONE:
+            self.options._options[DhcpOptionCode.OPTION_OVERLOAD] = bytearray(
+                [overload.value]
+            )
+            self.options._options.move_to_end(DhcpOptionCode.OPTION_OVERLOAD, False)
+            options_field, options = self.options.partial_encode(max_options_field_size)
+
+            if OptionOverload.FILE in overload:
+                file, options = options.partial_encode(128)
+            if OptionOverload.SNAME in overload:
+                sname, options = self.options.partial_encode(64)
+
+        data = bytearray(28)
         _struct.pack_into(
-            "!BBBBIHH",
+            "!BBBBIHHIIII",
             data,
             0,
             self.op.value,
@@ -168,19 +225,18 @@ class DhcpMessage:
             self.hlen,
             self.hops,
             self.xid,
-            self.secs,
-            self.flags.value
+            self.secs.seconds,
+            self.flags.value,
+            int(self.ciaddr),
+            int(self.yiaddr),
+            int(self.siaddr),
+            int(self.giaddr),
         )
-        for ip in [self.ciaddr, self.yiaddr, self.siaddr, self.giaddr]:
-            data.extend(ip.packed)
-
-        data.extend(self.chaddr.ljust(16, b'\x00')[:16])
+        data.extend(self.chaddr.ljust(16, b"\x00")[:16])
         data.extend(sname.ljust(64, b"\x00")[:64])
         data.extend(file.ljust(128, b"\x00")[:128])
         data.extend(MAGIC_COOKIE)
-        data.extend(self.options.encode())
-        #
-        # TODO overload sname/file
+        data.extend(options_field)
         return data
 
     def client_id(self, func: _ty.Callable[["DhcpMessage"], bytearray] = None):
@@ -196,14 +252,14 @@ class DhcpMessage:
     def dumps(self, codemap: _ty.Callable[[int, bytearray], tuple[str, str]] = None):
         lines = []
         lines.append(f"OP: {self.op.name}")
-        lines.append(f"Hardware Type: {self.htype.name}")
+        lines.append(f"Time Since Boot: {self.secs}")
         lines.append(f"Hops: {self.hops}")
         lines.append(f"Transaction ID: {self.xid}")
         lines.append(f"Flags: {self.flags.name}")
         lines.append(f"Client Current Address: {self.ciaddr}")
         lines.append(f"Allocated Address: {self.yiaddr}")
         lines.append(f"Gateway Address: {self.giaddr}")
-        lines.append(f"Hardware Address: {self.htype.dumps(self.chaddr)}")
+        lines.append(f"Hardware Address: {self.htype.name}({self.htype.dumps(self.chaddr)})")
         lines.append(f"Server Address: {self.siaddr}")
         lines.append(f"Server Hostname: {self.sname}")
         lines.append(f"Bootfile: {self.file}")
@@ -213,6 +269,10 @@ class DhcpMessage:
             code, value = codemap(code, value)
             lines.append(f"{code}: {value}")
         return "\n".join(lines)
-
+    
+    def log(self, src, dst, level):
+        header = f"{"#" * 10} {self.op.name} Src: {src} Dst: {dst} {"#" * 10}"
+        LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{"#" * len(header)}")
+    
     def __contains__(self, __key: object) -> bool:
         return self.options.__contains__(__key)

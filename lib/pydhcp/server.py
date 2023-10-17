@@ -7,6 +7,7 @@ from .iana import DHCP_SERVER_PORT, DhcpOptionCode, DhcpMessageType, OpCode, Opt
 from .options import IPv4DhcpOptionType, DhcpOptions, IPsv4DhcpOptionType, U32DhcpOptionType
 from socket import socket as _socket
 from .log import LOGGER
+import logging as _logging
 import datetime
 import typing as _ty
 
@@ -78,15 +79,12 @@ class DhcpServer(DhcpListener):
                 LOGGER.warning(
                     f"Receive a DHCP Message with message type: {other} from: {client}|{client_id} at: {server}, which we dont handle"
                 )
-        resp.options._options.move_to_end(int(DhcpOptionCode.DHCP_MESSAGE_TYPE), False)
-        header = f"{"#" * 10} DHCP REPLY to: {client} from: {server} {"#" * 10}"
-        LOGGER.info(f"\n{header}\n{resp.dumps()}\n{"#" * len(header)}")
         data = resp.encode()
-        port = client.port
+        resp.log(server, client, _logging.INFO)
         if msg.giaddr!= netutils.ALL_IPS:
             dest = msg.giaddr
         elif msg.ciaddr != netutils.ALL_IPS:
             dest = msg.chaddr
         else:
             dest = IPAddress('255.255.255.255')
-        socket.sendto(data, (str(dest), port))
+        socket.sendto(data, (str(dest), client.port))
