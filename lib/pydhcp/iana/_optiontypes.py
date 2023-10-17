@@ -38,6 +38,9 @@ class DhcpOptionCodesDhcpOptionType(DhcpOptionType):
         return data
 
     def __repr__(self) -> str:
+        return str(self.options)[1:-1].replace(', ','\n')
+    
+    def __str__(self) -> str:
         return str(self.options)
     
 

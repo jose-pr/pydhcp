@@ -10,15 +10,25 @@ from .netutils import IPAddress as _IP
 class DhcpOptionCodeMap:
     def get_type(code) -> "type[DhcpOptionType]":
         return GenericDhcpOptionType
-    
+
     def label(code) -> str:
         return "UNKNOWN"
-    
+
     @classmethod
-    def from_code(cls, code:int):
+    def from_code(cls, code: int):
         return cls(code)
-    
+
+    def __repr__(self):
+        return f"[{int(self):0>3}]{self.label()}"
+
+    def __str__(self):
+        return self.label()
+
+
 class DhcpOptionType:
+    def __init__(self, *args) -> None:
+        pass
+
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         return NotImplementedError()
@@ -41,22 +51,26 @@ class GenericDhcpOptionType(DhcpOptionType):
 
     def __repr__(self) -> str:
         return str(bytes(self.data))
-    
+
+
 class StringDhcpOptionType(DhcpOptionType):
     data: str
 
+    def __init__(self, text) -> None:
+        self.data = text
+
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
-        self = cls()
         text, _, _ = option.partition(b"\x00")
-        self.data = text.decode()
-        return self
+        text.decode()
+        return cls(text.decode())
 
     def encode(self) -> bytearray:
         return self.data.encode()
 
     def __repr__(self) -> str:
         return self.data
+
 
 class U16DhcpOptionType(DhcpOptionType):
     data: int
@@ -79,7 +93,7 @@ class U16DhcpOptionType(DhcpOptionType):
 class U32DhcpOptionType(DhcpOptionType):
     data: int
 
-    def __init__(self, u32 = 0) -> None:
+    def __init__(self, u32=0) -> None:
         self.data = int(u32)
 
     @classmethod
@@ -97,8 +111,10 @@ class U32DhcpOptionType(DhcpOptionType):
 
 class IPv4DhcpOptionType(DhcpOptionType):
     ip: _IP
-    def __init__(self, ip:_IP) -> None:
+
+    def __init__(self, ip: _IP) -> None:
         self.ip = _IP(ip)
+
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         if len(option) != 4:
@@ -115,13 +131,15 @@ class IPv4DhcpOptionType(DhcpOptionType):
 
 class IPsv4DhcpOptionType(DhcpOptionType):
     ips: list[_IP]
-    def __init__(self, *ips:_IP|list[_IP]) -> None:
+
+    def __init__(self, *ips: _IP | list[_IP]) -> None:
         self.ips = []
         for _ips in ips:
-            if not isinstance(_ips, (tuple,list)):
+            if not isinstance(_ips, (tuple, list)):
                 _ips = (_ips,)
             for ip in _ips:
                 self.ips.append(_IP(ip))
+
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         if len(option) % 4 != 0:
@@ -140,7 +158,10 @@ class IPsv4DhcpOptionType(DhcpOptionType):
         return data
 
     def __repr__(self) -> str:
-        return str([str(ip) for ip in self.ips])
+        return "\n".join([str(ip) for ip in self.ips])
+
+    def __str__(self) -> str:
+        return "[" + ",".join([str(ip) for ip in self.ips]) + "]"
 
 
 class DomainListDhcpOptionType(DhcpOptionType):
@@ -194,19 +215,19 @@ class DomainListDhcpOptionType(DhcpOptionType):
         return self
 
     def encode(self) -> bytearray:
-        components:list[tuple[list[str], int|None]] = []
+        components: list[tuple[list[str], int | None]] = []
         data = bytearray()
         for domain in self.domains:
-            domain=domain.split('.')
+            domain = domain.split(".")
             unique = domain
-            parent:tuple[int, int] = None
+            parent: tuple[int, int] = None
             for cn, cidx in components:
                 pair = 1
                 while pair < len(domain):
                     if domain[-pair:] != cn[-pair:]:
                         break
-                    pair+=1
-                pair-=1
+                    pair += 1
+                pair -= 1
                 if pair:
                     if parent:
                         _, _pair = parent
@@ -216,7 +237,7 @@ class DomainListDhcpOptionType(DhcpOptionType):
                         cidx += 1 + len(n)
 
                     parent = cidx, pair
-                    unique=domain[:-pair]
+                    unique = domain[:-pair]
 
             components.append((domain, len(data)))
             for cn in unique:
@@ -225,11 +246,14 @@ class DomainListDhcpOptionType(DhcpOptionType):
             if parent is None:
                 data.append(0x00)
             else:
-                cn 
-                data.extend((0xc000|parent[0]).to_bytes(2,byteorder='big'))
+                cn
+                data.extend((0xC000 | parent[0]).to_bytes(2, byteorder="big"))
         return data
 
     def __repr__(self) -> str:
+        return "\n".join(self.domains)
+
+    def __str__(self) -> str:
         return str(self.domains)
 
 
@@ -238,4 +262,4 @@ class DhcpOption(_ty.NamedTuple):
     value: "DhcpOptionType"
 
     def encode(self) -> bytearray:
-        self.value.encode()
+        return self.value.encode()

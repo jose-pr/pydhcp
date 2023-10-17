@@ -1,4 +1,4 @@
-from .options import DhcpOptions, StringDhcpOptionType
+from .options import DhcpOptions, StringDhcpOptionType, DhcpOptionCodeMap
 from .iana import (
     OpCode,
     HardwareAddressType,
@@ -16,20 +16,9 @@ import struct as _struct
 import typing as _ty
 import dataclasses as _data
 import datetime as _dt
-
+import textwrap as _tw
 
 _NULL = 0x00.to_bytes(1)
-
-
-def _codemap(code, value: bytearray):
-    ty = DhcpOptionCode.get_type(code)
-    value = ty.decode(value)
-    try:
-        name = DhcpOptionCode(code).name
-    except:
-        name = "UNKNOWN"
-    return (f"[{int(code):0>3}]{name:<40}", value)
-
 
 @_data.dataclass
 class DhcpMessage:
@@ -249,7 +238,7 @@ class DhcpMessage:
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()
 
-    def dumps(self, codemap: _ty.Callable[[int, bytearray], tuple[str, str]] = None):
+    def dumps(self, codemap: type[DhcpOptionCodeMap] = None):
         lines = []
         lines.append(f"OP: {self.op.name}")
         lines.append(f"Time Since Boot: {self.secs}")
@@ -264,10 +253,22 @@ class DhcpMessage:
         lines.append(f"Server Hostname: {self.sname}")
         lines.append(f"Bootfile: {self.file}")
         lines.append(f"OPTIONS:")
-        codemap = codemap or _codemap
+        if not codemap:
+            codemap = DhcpOptionCode
+
         for code, value in self.options.items():
-            code, value = codemap(code, value)
-            lines.append(f"{code}: {value}")
+            code = codemap.from_code(code)
+            decoded = codemap.get_type(code).decode(value)
+            decoded = repr(decoded).splitlines()
+            SPACE = ' '*43
+            if decoded:
+                first =_tw.fill(decoded[0], width=100, initial_indent='', subsequent_indent=SPACE)
+            else:
+                first = ''
+            lines.append(f"[{repr(code): <40}: {first}")
+            for line in decoded[1:]:
+                lines.append(_tw.fill(line, width=100, initial_indent=SPACE, subsequent_indent=SPACE))
+
         return "\n".join(lines)
     
     def log(self, src, dst, level):
