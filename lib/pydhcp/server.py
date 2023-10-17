@@ -8,9 +8,10 @@ from .iana import (
     DHCP_SERVER_PORT,
     DhcpOptionCode,
     DhcpMessageType,
+    Flags,
     OpCode,
     INIFINITE_LEASE_TIME,
-    DhcpOptionCodesDhcpOptionType
+    DhcpOptionCodesDhcpOptionType,
 )
 from .options import (
     IPv4DhcpOptionType,
@@ -40,24 +41,18 @@ class DhcpServer(DhcpListener):
         requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP)
         expires = datetime.datetime.now() + datetime.timedelta(0, 3600)
         options = DhcpOptions()
-        ty = msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE]
-        if ty is DhcpMessageType.DHCPINFORM and msg.ciaddr:
-            ip = msg.ciaddr
-        elif requested_ip:
+        if requested_ip:
             ip = requested_ip.ip
+        elif msg.ciaddr != netutils.ALL_IPS:
+            ip = msg.ciaddr
         else:
             ip = None
-        requested = msg.options.get(DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=DhcpOptionCodesDhcpOptionType)
-        if requested:
-            requested = requested.options
-        if not requested or DhcpOptionCode.SUBNET_MASK in requested:
-            options[DhcpOptionCode.SUBNET_MASK] = IPv4DhcpOptionType(
-                _server.network.netmask
-            )
-        if not requested or DhcpOptionCode.SUBNET_MASK in requested:
-            options[DhcpOptionCode.BROADCAST_ADDRESS] = IPv4DhcpOptionType(
-                _server.network.broadcast_address
-            )
+        options[DhcpOptionCode.SUBNET_MASK] = IPv4DhcpOptionType(
+            _server.network.netmask
+        )
+        options[DhcpOptionCode.BROADCAST_ADDRESS] = IPv4DhcpOptionType(
+            _server.network.broadcast_address
+        )
         return DhcpLease(ip, expires, options)
 
     def release_lease(self, client_id: str, server_id: str, msg: DhcpMessage):
@@ -114,22 +109,20 @@ class DhcpServer(DhcpListener):
             )
             resp.yiaddr = lease.ip
         resp.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4DhcpOptionType(server_id)
+        resp_ty = None
         match msg_ty:
             case DhcpMessageType.DHCPDISCOVER:
-                resp.options[
-                    DhcpOptionCode.DHCP_MESSAGE_TYPE
-                ] = DhcpMessageType.DHCPOFFER
+                resp_ty = DhcpMessageType.DHCPOFFER
             case DhcpMessageType.DHCPREQUEST:
-                if (
-                    msg.options.get(DhcpOptionCode.REQUESTED_IP).ip == lease.ip
-                ):  # MUST BE SET TO YIADDR/LEASE_IP
-                    resp.options[
-                        DhcpOptionCode.DHCP_MESSAGE_TYPE
-                    ] = DhcpMessageType.DHCPACK
+                ip = msg.options.get(DhcpOptionCode.REQUESTED_IP)
+                if ip:
+                    ip = ip.ip
                 else:
-                    resp.options[
-                        DhcpOptionCode.DHCP_MESSAGE_TYPE
-                    ] = DhcpMessageType.DHCPNAK
+                    ip = msg.ciaddr
+                if ip == lease.ip:
+                    resp_ty = DhcpMessageType.DHCPACK
+                else:
+                    resp_ty = DhcpMessageType.DHCPNAK
             case DhcpMessageType.DHCPDECLINE:
                 ...
             case DhcpMessageType.DHCPRELEASE:
@@ -137,18 +130,52 @@ class DhcpServer(DhcpListener):
             case DhcpMessageType.DHCPINFORM:
                 del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
                 resp.yiaddr = netutils.ALL_IPS
+
             case other:
                 LOGGER.warning(
                     f"Receive a DHCP Message with message type: {other} from: {client}|{client_id} at: {server}, which we dont handle"
                 )
-        data = resp.encode(msg.options.get(DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE, DHCP_MIN_LEGAL_PACKET_SIZE))
-        resp.log(server, client, _logging.INFO)
+        requests_params = msg.options.get(
+            DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=DhcpOptionCodesDhcpOptionType
+        )
+        if requests_params:
+            requests_params = [
+                *requests_params.options,
+                DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
+                DhcpOptionCode.SERVER_IDENTIFIER,
+            ]
+        if resp_ty is DhcpMessageType.DHCPNAK:
+            requests_params = [
+                DhcpOptionCode.DHCP_MESSAGE,
+                DhcpOptionCode.CLIENT_IDENTIFIER,
+                DhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
+                DhcpOptionCode.SERVER_IDENTIFIER,
+            ]
+            resp[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
+                client_id.replace(":", "")
+            )
+        if requests_params:
+
+            def _paramfilter(opt: tuple[int, bytes]):
+                return opt[0] in requests_params
+
+            resp.options._options = _ty.OrderedDict(
+                filter(_paramfilter, resp.options._options.items())
+            )
+        resp.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+
+        data = resp.encode(
+            msg.options.get(
+                DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE, DHCP_MIN_LEGAL_PACKET_SIZE
+            )
+        )
         if msg.giaddr != netutils.ALL_IPS:
             dest = msg.giaddr
-        elif msg.ciaddr != netutils.ALL_IPS:
+        elif msg.ciaddr != netutils.ALL_IPS and msg.flags is Flags.UNICAST:
             dest = msg.ciaddr
         else:
             # We should be sending unicast to mac if BROADCAST not set but socket wont allow setting the mac
             # Protocol allows sending to broadcast as an option
             dest = IPAddress("255.255.255.255")
+        resp.log(server, Address(dest, client.port), _logging.INFO)
         socket.sendto(data, (str(dest), client.port))
