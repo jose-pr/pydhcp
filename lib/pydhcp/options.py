@@ -2,6 +2,7 @@ import typing as _ty
 from ._options import *
 from . import _utils
 from .iana.options import DhcpOptionCode as _ianacodes
+from math import inf as _inf
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
 
@@ -37,28 +38,53 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             self._options.setdefault(code, bytearray()).extend(data)
         return options
 
-    def encode(self, padding=False):
-        if padding is True:
-            padding = 2
-        elif not padding or padding < 2:
-            padding = 0
+    def partial_encode(self, maxsize: int, word_size: int = 1):
+        if maxsize is None:
+            maxsize = _inf
+
+        if word_size <= 0:
+            raise ValueError(f"Invalid Options Word Size")
+
+        endbytes = b"\xff" + b"\x00" * (word_size - 1)
+
+        if maxsize < max(word_size * 2, 4):
+            raise ValueError(f"Invalid Options Max Size")
+
+        tofill = maxsize - word_size
         options = bytearray()
+        _extraoptions = _ty.OrderedDict()
+
         for code, option in self._options.items():
+            if not tofill or tofill < 3:
+                _extraoptions[code] = option
+                continue
+
             options.append(int(code))
             option = memoryview(option)
-            while option:
-                slice = option[:255]
-                options.append(len(slice))
-                options.extend(slice)
-                if padding:
-                    pad = padding - len(bytearray) % padding
-                    options.extend(bytes(pad))
-                option = option[255:]
+            tofill -= 1
 
-        options.append(255)
-        if padding:
-            options.extend(bytes(padding - 1))
-        return options
+            while option and tofill >= word_size:
+                slice = option[: min(255, tofill)]
+                _len = len(slice)
+                options.append(_len)
+                options.extend(slice)
+                options.extend(b"\x00" * (word_size - _len))
+                option = option[_len:]
+                tofill -= _len
+            if option:
+                _extraoptions[code] = bytearray(option)
+
+        options.extend(endbytes)
+        if _extraoptions:
+            leftover = DhcpOptions(self._codemap)
+            leftover._options = _extraoptions
+        else:
+            leftover = None
+        return options, leftover
+
+    def encode(self, word_size=1):
+        encoded, _ = self.partial_encode(None, word_size)
+        return encoded
 
     def __getitem__(self, _key: int):
         return self._options[self._key(_key)]
@@ -72,10 +98,9 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         self, __key: int, /, decode: _ty.Literal[True] = True
     ) -> DhcpOptionType | None:
         ...
+
     @_ty.overload
-    def get(
-        self, __key: int, /
-    ) -> DhcpOptionType:
+    def get(self, __key: int, /) -> DhcpOptionType:
         ...
 
     @_ty.overload
@@ -125,6 +150,6 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
     def items(self) -> _ty.ItemsView[int, bytearray]:
         return self._options.items()
-    
+
     def __contains__(self, __key: object) -> bool:
         return self._options.__contains__(self._key(__key))

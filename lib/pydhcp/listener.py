@@ -5,6 +5,7 @@ import threading as _thread
 from .netutils import Address, all_ipv4_addresses, IPAddress, ALL_IPS
 from .message import DhcpMessage
 from .log import LOGGER
+import logging as _logging
 from . import iana as _iana
 
 
@@ -134,8 +135,7 @@ class DhcpListener:
                     server = Address(*socket.getsockname())
                     try:
                         msg = DhcpMessage.decode(view[:size])
-                        header = f"{"#" * 10} DHCP MESSAGE From: {client} Received By: {server} {"#" * 10}"
-                        LOGGER.debug(f"\n{header}\n{msg.dumps()}\n{"#" * len(header)}")
+                        msg.log(client, server, _logging.DEBUG)
                         self.handle(msg, client, server, socket)
                     except Exception as e:
                         if isinstance(e, KeyboardInterrupt):
