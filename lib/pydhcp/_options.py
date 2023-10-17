@@ -75,6 +75,9 @@ class StringDhcpOptionType(DhcpOptionType):
 class U16DhcpOptionType(DhcpOptionType):
     data: int
 
+    def __int__(self):
+        return self.data
+
     @classmethod
     def decode(cls, option: bytearray) -> "Self":
         if len(option) != 2:

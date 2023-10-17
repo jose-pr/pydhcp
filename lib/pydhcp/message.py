@@ -150,7 +150,7 @@ class DhcpMessage:
         )
 
     def encode(self, max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE):
-        max_packetsize = max_packetsize or DHCP_MIN_LEGAL_PACKET_SIZE
+        max_packetsize = int(max_packetsize or DHCP_MIN_LEGAL_PACKET_SIZE)
         max_options_field_size = max_packetsize - 264 - len(MAGIC_COOKIE)
         if max_options_field_size < 0:
             raise Exception(f"{max_packetsize} is to small for a DHCP packet")

@@ -1,7 +1,7 @@
 from .options import DhcpOptionCode
 from .messagetype import DhcpMessageType
 from .hardwaretype import HardwareAddressType
-
+import datetime as _dt
 import enum as _enum
 
 # https://www.iana.org/assignments/bootp-dhcp-parameters/bootp-dhcp-parameters.xhtml
@@ -38,4 +38,4 @@ DHCP_SERVER_PORT = 67
 DHCP_CLIENT_PORT = 68
 DHCP_MIN_LEGAL_PACKET_SIZE = 576
 
-from ._optiontypes import _REGISTERED
+from ._optiontypes import *
