@@ -124,12 +124,15 @@ class DhcpServer(DhcpListener):
                 else:
                     resp_ty = DhcpMessageType.DHCPNAK
             case DhcpMessageType.DHCPDECLINE:
-                ...
+                self.release_lease(client_id, server_id, msg)
+                return
             case DhcpMessageType.DHCPRELEASE:
-                ...
+                self.release_lease(client_id,server_id, msg)
+                return
             case DhcpMessageType.DHCPINFORM:
                 del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
                 resp.yiaddr = netutils.ALL_IPS
+                resp_ty = DhcpMessageType.DHCPACK
 
             case other:
                 LOGGER.warning(
