@@ -2,6 +2,7 @@ import enum as _enum
 from . import options as _opts
 from .._options import DhcpOptionType
 
+
 class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     """DHCP message types"""
 
@@ -12,7 +13,10 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
 
     def encode(self):
         return bytes([self.value])
-    
+
+    def __repr__(self):
+        return self.name
+
     def __str__(self):
         return self.name
 
@@ -72,5 +76,6 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     DHCPACTIVELEASEQUERY = 16
     DHCPLEASEQUERYSTATUS = 17
     DHCPTLS = 18
+
 
 _opts.DhcpOptionCode.DHCP_MESSAGE_TYPE.register_type(DhcpMessageType)

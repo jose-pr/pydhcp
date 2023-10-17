@@ -121,13 +121,21 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             return ty.decode(value)
         else:
             return value
+    def _getopt(self, option:DhcpOption|tuple[int,str]):
+        if isinstance(option, DhcpOption):
+            return option
+        code, value = option
+        code = self._codemap.from_code(code)
+        return DhcpOption(code, code.get_type()(value) )
 
     def append(self, option: DhcpOption):
+        option = self._getopt(option) 
         self._options.setdefault(self._key(option.code), bytearray()).extend(
             option.encode()
         )
 
     def replace(self, option: DhcpOption):
+        option = self._getopt(option) 
         data = option.encode()
         if not isinstance(data, bytearray):
             data = bytearray(data)

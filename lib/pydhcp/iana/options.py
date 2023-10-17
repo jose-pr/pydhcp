@@ -13,16 +13,10 @@ class DhcpOptionCode(DhcpOptionCodeMap, _enum.IntEnum):
         return DhcpOptionCode.__CODEMAP[int(code)]
     
     def label(code) -> str:
-        if code in DhcpOptionCode:
-            return code.name
-        else:
-            return super().label()
-
-    def __repr__(self):
-        return self.name
-
-    def __str__(self):
-        return self.name
+        label = getattr(code, 'name', None)
+        if not label:
+            return DhcpOptionCodeMap.label(code)
+        return label
 
     #
     #   VENDOR EXTENSIONS
