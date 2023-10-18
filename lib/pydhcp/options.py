@@ -119,7 +119,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
                 ty = decode
             else:
                 ty = self._codemap.get_type(__key)
-            return ty._dhcp_decode(value)
+            return ty._dhcp_decode(value)[0]
         else:
             return value
 
