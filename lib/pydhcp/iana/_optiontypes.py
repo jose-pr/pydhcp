@@ -5,7 +5,7 @@ from .hardwaretype import HardwareAddressType
 
 class ClientIdentifierOptionType(Bytes):
     @classmethod
-    def __dhcp_decode__(cls, option: bytearray) -> "Self":
+    def _dhcp_decode(cls, option: memoryview) -> tuple["Self", int]:
         if len(option) < 2:
             raise ValueError(option)
         return super().decode(option)
@@ -23,7 +23,7 @@ class ClientIdentifierOptionType(Bytes):
 class DhcpOptionCodesDhcpOptionType(DhcpOptionType):
     options:list[DhcpOptionCode|int]
     @classmethod
-    def decode(cls, option: bytearray):
+    def _dhcp_decode(cls, option: memoryview) -> tuple["Self", int]:
         self = cls()
         self.options = []
         for o in option:
@@ -32,9 +32,9 @@ class DhcpOptionCodesDhcpOptionType(DhcpOptionType):
             except:
                 ...
             self.options.append(o)
-        return self
+        return self, len(option)
     
-    def encode(self) -> bytearray:
+    def _dhcp_encode(self) -> bytearray:
         data = bytearray([int(o) for o in self.options])
         return data
 

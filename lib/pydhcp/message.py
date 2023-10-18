@@ -257,7 +257,7 @@ class DhcpMessage:
 
         for code, value in self.options.items():
             code = codemap.from_code(code)
-            decoded = codemap.get_type(code)._dhcp_decode(value)
+            decoded = codemap.get_type(code)._dhcp_decode(value)[0]
             decoded = repr(decoded).splitlines()
             SPACE = ' '*42
             if decoded:
