@@ -103,11 +103,22 @@ class IPv4Address(DhcpOptionType, _IP):
 
     def __repr__(self) -> str:
         return str(self)
+    
+    def _json_(self) -> str:
+        return str(self)
 
 
-class Bytes(DhcpOptionType, bytearray):
+class Bytes(DhcpOptionType, bytes):
+    def __new__(cls, src=None) -> 'Self':
+        if isinstance(src, str):
+            return cls.fromhex(src)
+        return super().__new__(cls, src)
+    
     def __repr__(self) -> str:
         return str(bytes(self))
+
+    def __str__(self) -> str:
+        return self.hex().upper()
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
@@ -116,6 +127,9 @@ class Bytes(DhcpOptionType, bytearray):
     def _dhcp_write(self, data: bytearray):
         data.extend(self)
         return len(self)
+
+    def _json_(self) -> str:
+        return self.hex(' ')
 
 
 class String(DhcpOptionType, str):
@@ -150,43 +164,55 @@ class Boolean(DhcpOptionType, int):
     def _dhcp_len_hint(self) -> int:
         return 1
 
+    def _json_(self):
+        return self.__bool__()
 
-class U16(DhcpOptionType, int):
-    def __new__(cls, val):
-        if val > 1 << 16 or val < 0:
-            raise ValueError()
-        return super().__new__(cls, val)
+class BaseFixedLengthInteger(DhcpOptionType):
+    NUMBER_OF_BYTES: int
+    SIGNED: bool = False
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
-        return cls(_struct.unpack("!H", option[:2])[0]), 2
+    def _dhcp_read(cls: "type[int|Self]", option: memoryview) -> tuple["Self", int]:
+        option = option[: cls.NUMBER_OF_BYTES]
+        if len(option) != cls.NUMBER_OF_BYTES:
+            raise ValueError()
+        return cls.from_bytes(option, "big", signed=cls.SIGNED), cls.NUMBER_OF_BYTES
 
-    def _dhcp_write(self, data: bytearray):
-        data.extend(_struct.pack("!H", self))
-        return 2
+    def _dhcp_write(self: "int|Self", data: bytearray):
+        data.extend(self.to_bytes(self.NUMBER_OF_BYTES, "big", signed=self.SIGNED))
+        return self.NUMBER_OF_BYTES
 
     @classmethod
     def _dhcp_len_hint(self) -> int:
-        return 2
+        return self.NUMBER_OF_BYTES
+
+    def _validate(self: "type[int|Self]"):
+        if self.bit_length() > self.NUMBER_OF_BYTES * 8:
+            raise ValueError("Number is too  big")
+        if not self.SIGNED and self < 0:
+            raise ValueError("Value must not be signed")
 
 
-class U32(DhcpOptionType, int):
+class FixedLengthInteger(BaseFixedLengthInteger, int):
     def __new__(cls, val):
-        if val > 1 << 32 or val < 0:
-            raise ValueError()
-        return super().__new__(cls, val)
+        val = super().__new__(cls, val)
+        val._validate()
+        return val
 
-    @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
-        return cls(_struct.unpack("!I", option)[0]), 4
 
-    def _dhcp_write(self, data: bytearray):
-        data.extend(_struct.pack("!I", self))
-        return 4
+class U8(FixedLengthInteger):
+    NUMBER_OF_BYTES = 1
+    SIGNED = False
 
-    @classmethod
-    def _dhcp_len_hint(self) -> int:
-        return 4
+
+class U16(FixedLengthInteger):
+    NUMBER_OF_BYTES = 2
+    SIGNED = False
+
+
+class U32(FixedLengthInteger):
+    NUMBER_OF_BYTES = 4
+    SIGNED = False
 
 
 class DomainList(DhcpOptionType, list[str]):

@@ -3,12 +3,12 @@ from ..optiontype import *
 from .options import DhcpOptionCode
 from .hardwaretype import HardwareAddressType
 
-class ClientIdentifierOptionType(Bytes):
+class ClientIdentifier(Bytes):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         if len(option) < 2:
             raise ValueError(option)
-        return super().decode(option)
+        return super()._dhcp_read(option)
     
     def __repr__(self) -> str:
             ty = self[0]
@@ -17,44 +17,39 @@ class ClientIdentifierOptionType(Bytes):
                 ty = HardwareAddressType(ty).name
             except:
                 ...
-            maybe = f"{ty}({addr.hex(':')})"
+            maybe = f"{ty}({addr.hex(':').upper()})"
 
-            return f'{maybe}|{self.hex(':').upper()}'  
+            return f'{maybe}|{self}'  
+    
+    def __str__(self) -> str:
+        return self.__repr__()
 
-class DhcpOptionCodesDhcpOptionType(DhcpOptionType):
-    options:list[DhcpOptionCode|int]
+class DhcpOptionCodes(DhcpOptionType, list[DhcpOptionCode|int]):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         self = cls()
-        self.options = []
         for o in option:
             try:
                 o = DhcpOptionCode(o)
             except:
                 ...
-            self.options.append(o)
+            self.append(o)
         return self, len(option)
     
     def _dhcp_write(self, data:bytearray):
-        data.extend([int(o) for o in self.options])
-        return len(self.options)
-
-    def __repr__(self) -> str:
-        return str(self.options)[1:-1].replace(', ','\n')
-    
-    def __str__(self) -> str:
-        return str(self.options)
-    
+        data.extend(self)
+        return len(self)
+   
 
 DhcpOptionCode.BROADCAST_ADDRESS.register_type(IPv4Address)
-DhcpOptionCode.CLIENT_IDENTIFIER.register_type(ClientIdentifierOptionType)
+DhcpOptionCode.CLIENT_IDENTIFIER.register_type(ClientIdentifier)
 DhcpOptionCode.DNS.register_type(List[IPv4Address])
 DhcpOptionCode.DOMAIN_NAME.register_type(String)
 DhcpOptionCode.DOMAIN_SEARCH.register_type(DomainList)
 DhcpOptionCode.HOSTNAME.register_type(String)
 DhcpOptionCode.IP_ADDRESS_LEASE_TIME.register_type(U32)
 DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE.register_type(U16)
-DhcpOptionCode.PARAMETER_REQUEST_LIST.register_type(DhcpOptionCodesDhcpOptionType)
+DhcpOptionCode.PARAMETER_REQUEST_LIST.register_type(DhcpOptionCodes)
 DhcpOptionCode.REQUESTED_IP.register_type(IPv4Address)
 DhcpOptionCode.ROUTER.register_type(List[IPv4Address])
 DhcpOptionCode.SERVER_IDENTIFIER.register_type(IPv4Address)
