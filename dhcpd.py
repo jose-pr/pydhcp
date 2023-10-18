@@ -40,6 +40,6 @@ class DhcpServer(DhcpServer):
 
 
 dhcpd = DhcpServer()
-dhcpd.start()
-dhcpd.wait()
+dhcpd.listen()
+#dhcpd.wait()
 pass

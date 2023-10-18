@@ -24,10 +24,17 @@ class DhcpOptionCodeMap:
 
     def __str__(self):
         return self.label()
+    
+    @classmethod
+    def normalize(cls, code:int, value: object):
+        _code = cls.from_code(code)
+        return DhcpOption(_code, _code.get_type()(value))
+    
+    @classmethod
+    def decode(cls, code:int, value: bytearray):
+        _code = cls.from_code(code)
+        return DhcpOption(_code, _code.get_type()._dhcp_decode(value))
 
 class DhcpOption(_ty.NamedTuple):
     code: int
     value: "DhcpOptionType"
-
-    def encode(self) -> bytearray:
-        return self.value._dhcp_encode()

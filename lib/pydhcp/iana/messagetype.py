@@ -11,12 +11,13 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     """DHCP message types"""
 
     @classmethod
-    def _dhcp_decode(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         assert len(option) == 1
         return cls(option[0]), 1
 
-    def _dhcp_encode(self):
-        return self.value.to_bytes(1)
+    def _dhcp_write(self, data: bytearray):
+        data.append(self)
+        return 1
 
     @classmethod
     def _dhcp_len_hint(self):
