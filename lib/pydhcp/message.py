@@ -1,4 +1,5 @@
-from .options import DhcpOptions, StringDhcpOptionType, DhcpOptionCodeMap
+from .options import DhcpOptions, DhcpOptionCodeMap
+from . import optiontype
 from .iana import (
     OpCode,
     HardwareAddressType,
@@ -117,7 +118,7 @@ class DhcpMessage:
             sname = sname.tobytes().split(_NULL, 1)[0].decode()
         else:
             sname = str(
-                options.get(DhcpOptionCode.TFTP_SERVER, decode=StringDhcpOptionType)
+                options.get(DhcpOptionCode.TFTP_SERVER, decode=optiontype.String)
                 or ""
             )
 
@@ -125,7 +126,7 @@ class DhcpMessage:
             file = file.tobytes().split(_NULL, 1)[0].decode()
         else:
             file = str(
-                options.get(DhcpOptionCode.BOOTFILE_NAME, decode=StringDhcpOptionType)
+                options.get(DhcpOptionCode.BOOTFILE_NAME, decode=optiontype.String)
                 or ""
             )
 
@@ -160,23 +161,21 @@ class DhcpMessage:
         options_field = self.options.encode()
         if len(options_field) > max_options_field_size + 128:
             if self.file and DhcpOptionCode.BOOTFILE_NAME not in self.options:
-                self.options[DhcpOptionCode.BOOTFILE_NAME] = StringDhcpOptionType(
-                    self.file
-                )
+                self.options[DhcpOptionCode.BOOTFILE_NAME] = optiontype.String(self.file)
+                
                 self.options._options.move_to_end(
                     int(DhcpOptionCode.BOOTFILE_NAME), False
                 )
             if self.sname and DhcpOptionCode.TFTP_SERVER not in self.options:
-                self.options[DhcpOptionCode.TFTP_SERVER] = StringDhcpOptionType(
-                    self.sname
-                )
+                self.options[DhcpOptionCode.TFTP_SERVER] = optiontype.String(self.sname)
+                
                 self.options._options.move_to_end(
                     int(DhcpOptionCode.TFTP_SERVER), False
                 )
             overload = OptionOverload.BOTH
         elif len(options_field) > max_options_field_size:
             if self.file:
-                self.options[DhcpOptionCode.BOOTFILE_NAME] = StringDhcpOptionType(
+                self.options[DhcpOptionCode.BOOTFILE_NAME] = optiontype.String(
                     self.file
                 )
                 self.options._options.move_to_end(
@@ -258,7 +257,7 @@ class DhcpMessage:
 
         for code, value in self.options.items():
             code = codemap.from_code(code)
-            decoded = codemap.get_type(code).decode(value)
+            decoded = codemap.get_type(code)._dhcp_decode(value)
             decoded = repr(decoded).splitlines()
             SPACE = ' '*42
             if decoded:
