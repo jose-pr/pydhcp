@@ -255,8 +255,8 @@ class DhcpMessage:
             lines.append(f"{name: <40}: {value}")
         lines.append(f"OPTIONS:")
         for code, value in self.options.items(decoded=codemap or True):
-            if isinstance(value, optiontype.List):
-                decoded = '\n'.join([str(i) for i in value])
+            if isinstance(value, list):
+                decoded = '\n'.join([repr(i) for i in value])
             else:
                 decoded = repr(value)
             decoded = decoded.splitlines()

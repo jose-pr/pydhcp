@@ -11,7 +11,7 @@ from .iana import (
     Flags,
     OpCode,
     INIFINITE_LEASE_TIME,
-    DhcpOptionCodesDhcpOptionType,
+    DhcpOptionCodes,
 )
 from .options import (
     DhcpOptions,
@@ -40,7 +40,7 @@ class DhcpServer(DhcpListener):
         expires = datetime.datetime.now() + datetime.timedelta(0, 3600)
         options = DhcpOptions()
         if requested_ip:
-            ip = requested_ip.ip
+            ip = requested_ip
         elif msg.ciaddr != netutils.ALL_IPS:
             ip = msg.ciaddr
         else:
@@ -67,7 +67,7 @@ class DhcpServer(DhcpListener):
             DhcpOptionCode.SERVER_IDENTIFIER, decode=optiontype.IPv4Address
         )
         msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        if server_id and server_id != server.ip:
+        if server_id and server_id != server:
             if msg_ty is DhcpMessageType.DHCPREQUEST:
                 self.release_lease(client_id, server_id, msg)
             else:
@@ -108,10 +108,8 @@ class DhcpServer(DhcpListener):
             case DhcpMessageType.DHCPDISCOVER:
                 resp_ty = DhcpMessageType.DHCPOFFER
             case DhcpMessageType.DHCPREQUEST:
-                ip = msg.options.get(DhcpOptionCode.REQUESTED_IP)
-                if ip:
-                    ip = ip.ip
-                else:
+                ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=optiontype.IPv4Address)
+                if not ip:
                     ip = msg.ciaddr
                 if ip == lease.ip:
                     resp_ty = DhcpMessageType.DHCPACK
@@ -133,11 +131,11 @@ class DhcpServer(DhcpListener):
                     f"Receive a DHCP Message with message type: {other} from: {client}|{client_id} at: {server}, which we dont handle"
                 )
         requests_params = msg.options.get(
-            DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=DhcpOptionCodesDhcpOptionType
+            DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=DhcpOptionCodes
         )
         if requests_params:
             requests_params = [
-                *requests_params.options,
+                *requests_params,
                 DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
                 DhcpOptionCode.SERVER_IDENTIFIER,
             ]
