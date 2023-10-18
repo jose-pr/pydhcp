@@ -140,6 +140,7 @@ class DhcpListener:
                     except Exception as e:
                         if isinstance(e, KeyboardInterrupt):
                             raise e
+                        raise e
                         LOGGER.error(
                             f"Encounter error handling request from {client} at {server} : {e.__class__.__name__} | {e}"
                         )

@@ -239,32 +239,33 @@ class DhcpMessage:
 
     def dumps(self, codemap: type[DhcpOptionCodeMap] = None):
         lines = []
-        lines.append(f"OP: {self.op.name}")
-        lines.append(f"Time Since Boot: {self.secs}")
-        lines.append(f"Hops: {self.hops}")
-        lines.append(f"Transaction ID: {self.xid}")
-        lines.append(f"Flags: {self.flags.name}")
-        lines.append(f"Client Current Address: {self.ciaddr}")
-        lines.append(f"Allocated Address: {self.yiaddr}")
-        lines.append(f"Gateway Address: {self.giaddr}")
-        lines.append(f"Hardware Address: {self.htype.name}({self.htype.dumps(self.chaddr)})")
-        lines.append(f"Server Address: {self.siaddr}")
-        lines.append(f"Server Hostname: {self.sname}")
-        lines.append(f"Bootfile: {self.file}")
+        for name, value in [
+            ('OP', self.op.name),
+            ('Time Since Boot', self.secs),
+            ('Hops', self.hops),
+            ('Transaction ID', self.xid),
+            ('Flags',self.flags.name),
+            ('Client Current Address', self.ciaddr),
+            ('Allocated Address', self.yiaddr),
+            ('Gateway Address',self.giaddr),
+            ('Hardware Address',f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
+            ('Server Address',self.siaddr),
+            ('Bootfile',self.file),
+        ]:
+            lines.append(f"{name: <40}: {value}")
         lines.append(f"OPTIONS:")
-        if not codemap:
-            codemap = DhcpOptionCode
-
-        for code, value in self.options.items():
-            code = codemap.from_code(code)
-            decoded = codemap.get_type(code)._dhcp_decode(value)[0]
-            decoded = repr(decoded).splitlines()
+        for code, value in self.options.items(decoded=codemap or True):
+            if isinstance(value, optiontype.List):
+                decoded = '\n'.join([str(i) for i in value])
+            else:
+                decoded = repr(value)
+            decoded = decoded.splitlines()
             SPACE = ' '*42
             if decoded:
                 first =_tw.fill(decoded[0], width=100, initial_indent='', subsequent_indent=SPACE)
             else:
                 first = ''
-            lines.append(f"{repr(code): <40}: {first}")
+            lines.append(f"  {repr(code): <38}: {first}")
             for line in decoded[1:]:
                 lines.append(_tw.fill(line, width=100, initial_indent=SPACE, subsequent_indent=SPACE))
 
@@ -273,6 +274,7 @@ class DhcpMessage:
     def log(self, src, dst, level):
         header = f"{"#" * 10} {self.op.name} Src: {src} Dst: {dst} {"#" * 10}"
         LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{"#" * len(header)}")
+
     
-    def __contains__(self, __key: object) -> bool:
+    def __contains__(self, __key: object):
         return self.options.__contains__(__key)
