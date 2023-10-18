@@ -1,6 +1,10 @@
 import enum as _enum
 from . import options as _opts
 from ..optiontype import DhcpOptionType
+import typing as _ty
+
+if _ty.TYPE_CHECKING:
+    from typing_extensions import Self
 
 
 class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
@@ -13,7 +17,7 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
 
     def _dhcp_encode(self):
         return self.value.to_bytes(1)
-    
+
     @classmethod
     def _dhcp_len_hint(self):
         return 1
