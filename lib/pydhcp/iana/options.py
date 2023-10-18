@@ -1,10 +1,11 @@
 import typing as _ty
 import enum as _enum
 
-from .._options import DhcpOptionType, GenericDhcpOptionType, DhcpOptionCodeMap
+from .._options import DhcpOptionType, DhcpOptionCodeMap
+from ..optiontype import Bytes
 
 class DhcpOptionCode(DhcpOptionCodeMap, _enum.IntEnum):
-    __CODEMAP: list[type["DhcpOptionType"]] = [GenericDhcpOptionType] * 256
+    __CODEMAP: list[type["DhcpOptionType"]] = [Bytes] * 256
 
     def register_type(code, optiontype:type["DhcpOptionType"]):
         DhcpOptionCode.__CODEMAP[int(code)] = optiontype        

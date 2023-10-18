@@ -1,18 +1,21 @@
 import enum as _enum
 from . import options as _opts
-from .._options import DhcpOptionType
+from ..optiontype import DhcpOptionType
 
 
 class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     """DHCP message types"""
 
     @classmethod
-    def decode(cls, data: bytearray):
+    def _dhcp_decode(cls, data: bytearray):
         assert len(data) == 1
         return cls(data[0])
 
-    def encode(self):
+    def _dhcp_encode(self):
         return bytes([self.value])
+    
+    def _dhcp_len(self):
+        return 1
 
     def __repr__(self):
         return self.name

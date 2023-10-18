@@ -1,5 +1,6 @@
 import typing as _ty
 from ._options import *
+from .optiontype import *
 from . import _utils
 from .iana.options import DhcpOptionCode as _ianacodes
 from math import inf as _inf
@@ -118,33 +119,34 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
                 ty = decode
             else:
                 ty = self._codemap.get_type(__key)
-            return ty.decode(value)
+            return ty._dhcp_decode(value)
         else:
             return value
-    def _getopt(self, option:DhcpOption|tuple[int,str]):
+
+    def _getopt(self, option: DhcpOption | tuple[int, str]):
         if isinstance(option, DhcpOption):
             return option
         code, value = option
         code = self._codemap.from_code(code)
-        return DhcpOption(code, code.get_type()(value) )
+        return DhcpOption(code, code.get_type()(value))
 
     def append(self, option: DhcpOption):
-        option = self._getopt(option) 
+        option = self._getopt(option)
         self._options.setdefault(self._key(option.code), bytearray()).extend(
             option.encode()
         )
 
     def replace(self, option: DhcpOption):
-        option = self._getopt(option) 
+        option = self._getopt(option)
         data = option.encode()
         if not isinstance(data, bytearray):
             data = bytearray(data)
         self._options[option.code] = data
 
     def __setitem__(self, __key: int, __value: bytearray | DhcpOptionType):
-        encode = getattr(__value, "encode", None)
+        encode = getattr(__value, "_dhcp_encode", None)
         if encode:
-            __value = __value.encode()
+            __value = __value._dhcp_encode()
         self._options[self._key(__key)] = __value
 
     def __delitem__(self, __key: int) -> None:

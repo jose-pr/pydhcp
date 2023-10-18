@@ -14,11 +14,9 @@ from .iana import (
     DhcpOptionCodesDhcpOptionType,
 )
 from .options import (
-    IPv4DhcpOptionType,
     DhcpOptions,
-    IPsv4DhcpOptionType,
-    U32DhcpOptionType,
 )
+from . import optiontype
 from socket import socket as _socket
 from .log import LOGGER
 import logging as _logging
@@ -47,10 +45,8 @@ class DhcpServer(DhcpListener):
             ip = msg.ciaddr
         else:
             ip = None
-        options[DhcpOptionCode.SUBNET_MASK] = IPv4DhcpOptionType(
-            _server.network.netmask
-        )
-        options[DhcpOptionCode.BROADCAST_ADDRESS] = IPv4DhcpOptionType(
+        options[DhcpOptionCode.SUBNET_MASK] = optiontype.IPv4Address(_server.network.netmask)
+        options[DhcpOptionCode.BROADCAST_ADDRESS] = optiontype.IPv4Address(
             _server.network.broadcast_address
         )
         return DhcpLease(ip, expires, options)
@@ -68,7 +64,7 @@ class DhcpServer(DhcpListener):
             return
         client_id = msg.client_id()
         server_id = msg.options.get(
-            DhcpOptionCode.SERVER_IDENTIFIER, decode=IPv4DhcpOptionType
+            DhcpOptionCode.SERVER_IDENTIFIER, decode=optiontype.IPv4Address
         )
         msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         if server_id and server_id != server.ip:
@@ -104,11 +100,9 @@ class DhcpServer(DhcpListener):
                     f"No lease avaliable for {client}|{client_id} at {server} ignoring"
                 )
                 return
-            resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = U32DhcpOptionType(
-                expires
-            )
+            resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = optiontype.U32(expires)
             resp.yiaddr = lease.ip
-        resp.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4DhcpOptionType(server_id)
+        resp.options[DhcpOptionCode.SERVER_IDENTIFIER] = optiontype.IPv4Address(server_id)
         resp_ty = None
         match msg_ty:
             case DhcpMessageType.DHCPDISCOVER:
@@ -127,7 +121,7 @@ class DhcpServer(DhcpListener):
                 self.release_lease(client_id, server_id, msg)
                 return
             case DhcpMessageType.DHCPRELEASE:
-                self.release_lease(client_id,server_id, msg)
+                self.release_lease(client_id, server_id, msg)
                 return
             case DhcpMessageType.DHCPINFORM:
                 del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
