@@ -1,0 +1,22 @@
+from .optioncode import IanaDhcpOptionCode
+from .messagetype import DhcpMessageType
+from ..optiontype import *
+
+IanaDhcpOptionCode.BROADCAST_ADDRESS.register_type(IPv4Address)
+IanaDhcpOptionCode.BOOTFILE_NAME.register_type(String)
+IanaDhcpOptionCode.CLIENT_IDENTIFIER.register_type(ClientIdentifier)
+IanaDhcpOptionCode.DNS.register_type(List[IPv4Address])
+IanaDhcpOptionCode.DOMAIN_NAME.register_type(String)
+IanaDhcpOptionCode.DOMAIN_SEARCH.register_type(DomainList)
+IanaDhcpOptionCode.HOSTNAME.register_type(String)
+IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME.register_type(U32)
+IanaDhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE.register_type(U16)
+IanaDhcpOptionCode.DHCP_MESSAGE_TYPE.register_type(DhcpMessageType)
+IanaDhcpOptionCode.OPTION_OVERLOAD.register_type(OptionOverload)
+IanaDhcpOptionCode.PARAMETER_REQUEST_LIST.register_type(DhcpOptionCodes[IanaDhcpOptionCode])
+IanaDhcpOptionCode.REQUESTED_IP.register_type(IPv4Address)
+IanaDhcpOptionCode.ROUTER.register_type(List[IPv4Address])
+IanaDhcpOptionCode.SERVER_IDENTIFIER.register_type(IPv4Address)
+IanaDhcpOptionCode.SUBNET_MASK.register_type(IPv4Address)
+IanaDhcpOptionCode.TFTP_SERVER.register_type(String)
+IanaDhcpOptionCode.VENDOR_CLASS_IDENTIFIER.register_type(String)

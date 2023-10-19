@@ -1,18 +1,6 @@
-from .options import DhcpOptions, DhcpOptionCodeMap
-from . import optiontype
-from .iana import (
-    OpCode,
-    HardwareAddressType,
-    Flags,
-    MAGIC_COOKIE,
-    DhcpOptionCode,
-    OptionOverload,
-    DHCP_MIN_LEGAL_PACKET_SIZE,
-)
-from .netutils import IPAddress
+from .options import DhcpOptions, DhcpOptionCode
+from . import optiontype as _type, netutils as _net, enum as _enum, contants as _const
 from .log import LOGGER
-
-import enum as _enum
 import struct as _struct
 import typing as _ty
 import dataclasses as _data
@@ -21,11 +9,12 @@ import textwrap as _tw
 
 _NULL = 0x00.to_bytes(1)
 
+
 @_data.dataclass
 class DhcpMessage:
-    op: OpCode  # One byte
+    op: _enum.OpCode  # One byte
     """Message op code / message type"""
-    htype: HardwareAddressType
+    htype: _enum.HardwareAddressType
     """Hardware address type, see ARP section in "Assigned Numbers" RFC"""
     hlen: int  # One byte
     """Hardware address length"""
@@ -38,18 +27,18 @@ class DhcpMessage:
     secs: _dt.timedelta  # 2 bytes
     """Filled in by client, seconds elapsed since client
     began address acquisition or renewal process."""
-    flags: Flags  # 2 bytes
+    flags: _enum.Flags  # 2 bytes
     """Only use for the BROADCAST flag in clients"""
-    ciaddr: IPAddress
+    ciaddr: _net.IPv4
     """Client IP address; only filled in if client is in
     BOUND, RENEW or REBINDING state and can respond
     to ARP requests."""
-    yiaddr: IPAddress
+    yiaddr: _net.IPv4
     """'your' (client) IP address."""
-    siaddr: IPAddress
+    siaddr: _net.IPv4
     """IP address of next server to use in bootstrap;
     returned in DHCPOFFER, DHCPACK by server."""
-    giaddr: IPAddress
+    giaddr: _net.IPv4
     """Relay agent IP address, used in booting via a
     relay agent."""
     chaddr: bytes  # 16 bytes
@@ -80,54 +69,55 @@ class DhcpMessage:
             siaddr,
             giaddr,
         ) = _struct.unpack_from("!BBBBIHHIIII", data, 0)
-        op = OpCode(op)
+        op = _enum.OpCode(op)
         try:
-            htype = HardwareAddressType(htype)
+            htype = _enum.HardwareAddressType(htype)
         except:
             pass
         secs = _dt.timedelta(seconds=secs)
-        flags = Flags(flags)
-        ciaddr = IPAddress(ciaddr)
-        yiaddr = IPAddress(yiaddr)
-        siaddr = IPAddress(siaddr)
-        giaddr = IPAddress(giaddr)
+        flags = _enum.Flags(flags)
+        ciaddr = _net.IPv4(ciaddr)
+        yiaddr = _net.IPv4(yiaddr)
+        siaddr = _net.IPv4(siaddr)
+        giaddr = _net.IPv4(giaddr)
         chaddr = data[28 : 28 + hlen].tobytes()
         sname = data[44:108]
         file = data[108:236]
 
-        if MAGIC_COOKIE != data[236:240]:
+        if _const.MAGIC_COOKIE != data[236:240]:
             raise Exception("Bad Magic Cookie")
 
         options = DhcpOptions()
         if options.decode(data[240:])[0] != 255:
             raise Exception("Bad Options end")
 
-        overload = options.get(DhcpOptionCode.OPTION_OVERLOAD, decode=False)
-        overload = OptionOverload(overload[0] if overload else 0)
+        overload = options.get(
+            _enum.IanaDhcpOptionCode.OPTION_OVERLOAD,
+            default=_type.OptionOverload.NONE,
+            decode=_type.OptionOverload,
+        )
 
         # rfc3396 order
-        if OptionOverload.FILE in overload:
+        if _type.OptionOverload.FILE in overload:
             options.decode(file)
             file = None
 
-        if OptionOverload.SNAME in overload:
+        if _type.OptionOverload.SNAME in overload:
             options.decode(sname)
             sname = None
 
         if sname is not None:
             sname = sname.tobytes().split(_NULL, 1)[0].decode()
         else:
-            sname = str(
-                options.get(DhcpOptionCode.TFTP_SERVER, decode=optiontype.String)
-                or ""
+            sname = options.get(
+                _enum.IanaDhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
             )
 
         if file is not None:
             file = file.tobytes().split(_NULL, 1)[0].decode()
         else:
-            file = str(
-                options.get(DhcpOptionCode.BOOTFILE_NAME, decode=optiontype.String)
-                or ""
+            file = options.get(
+                _enum.IanaDhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
             )
 
         # opts -> file -> sname
@@ -150,9 +140,9 @@ class DhcpMessage:
             options,
         )
 
-    def encode(self, max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE):
-        max_packetsize = int(max_packetsize or DHCP_MIN_LEGAL_PACKET_SIZE)
-        max_options_field_size = max_packetsize - 264 - len(MAGIC_COOKIE)
+    def encode(self, max_packetsize: int = _const.DHCP_MIN_LEGAL_PACKET_SIZE):
+        max_packetsize = int(max_packetsize or _const.DHCP_MIN_LEGAL_PACKET_SIZE)
+        max_options_field_size = max_packetsize - 264 - len(_const.MAGIC_COOKIE)
         if max_options_field_size < 0:
             raise Exception(f"{max_packetsize} is to small for a DHCP packet")
 
@@ -160,47 +150,48 @@ class DhcpMessage:
         file = self.file.encode()
         options_field = self.options.encode()
         if len(options_field) > max_options_field_size + 128:
-            if self.file and DhcpOptionCode.BOOTFILE_NAME not in self.options:
-                self.options[DhcpOptionCode.BOOTFILE_NAME] = optiontype.String(self.file)
-                
+            if self.file and _enum.IanaDhcpOptionCode.BOOTFILE_NAME not in self.options:
+                self.options[_enum.IanaDhcpOptionCode.BOOTFILE_NAME] = self.file
+
                 self.options._options.move_to_end(
-                    int(DhcpOptionCode.BOOTFILE_NAME), False
+                    int(_enum.IanaDhcpOptionCode.BOOTFILE_NAME), False
                 )
-            if self.sname and DhcpOptionCode.TFTP_SERVER not in self.options:
-                self.options[DhcpOptionCode.TFTP_SERVER] = optiontype.String(self.sname)
-                
+            if self.sname and _enum.IanaDhcpOptionCode.TFTP_SERVER not in self.options:
+                self.options[_enum.IanaDhcpOptionCode.TFTP_SERVER] = self.sname
+
                 self.options._options.move_to_end(
-                    int(DhcpOptionCode.TFTP_SERVER), False
+                    _enum.IanaDhcpOptionCode.TFTP_SERVER, False
                 )
-            overload = OptionOverload.BOTH
+            overload = _type.OptionOverload.BOTH
         elif len(options_field) > max_options_field_size:
             if self.file:
-                self.options[DhcpOptionCode.BOOTFILE_NAME] = optiontype.String(
-                    self.file
-                )
+                self.options[_enum.IanaDhcpOptionCode.BOOTFILE_NAME] = self.file
                 self.options._options.move_to_end(
-                    int(DhcpOptionCode.BOOTFILE_NAME), False
+                    _enum.IanaDhcpOptionCode.BOOTFILE_NAME, False
                 )
-            overload = OptionOverload.FILE
+            overload = _type.OptionOverload.FILE
         else:
-            overload = OptionOverload.NONE
+            overload = _type.OptionOverload.NONE
 
         try:
-            self.options._options.move_to_end(DhcpOptionCode.DHCP_MESSAGE_TYPE, False)
+            self.options._options.move_to_end(
+                _enum.IanaDhcpOptionCode.DHCP_MESSAGE_TYPE, False
+            )
         except KeyError:
             pass
 
-
-        if overload is not OptionOverload.NONE:
-            self.options._options[DhcpOptionCode.OPTION_OVERLOAD] = bytearray(
-                [overload.value]
+        if overload is not _type.OptionOverload.NONE:
+            self.options._options[
+                _enum.IanaDhcpOptionCode.OPTION_OVERLOAD
+            ] = overload.value
+            self.options._options.move_to_end(
+                _enum.IanaDhcpOptionCode.OPTION_OVERLOAD, False
             )
-            self.options._options.move_to_end(DhcpOptionCode.OPTION_OVERLOAD, False)
             options_field, options = self.options.partial_encode(max_options_field_size)
 
-            if OptionOverload.FILE in overload:
+            if _type.OptionOverload.FILE in overload:
                 file, options = options.partial_encode(128)
-            if OptionOverload.SNAME in overload:
+            if _type.OptionOverload.SNAME in overload:
                 sname, options = self.options.partial_encode(64)
 
         data = bytearray(28)
@@ -223,12 +214,12 @@ class DhcpMessage:
         data.extend(self.chaddr.ljust(16, b"\x00")[:16])
         data.extend(sname.ljust(64, b"\x00")[:64])
         data.extend(file.ljust(128, b"\x00")[:128])
-        data.extend(MAGIC_COOKIE)
+        data.extend(_const.MAGIC_COOKIE)
         data.extend(options_field)
         return data
 
     def client_id(self, func: _ty.Callable[["DhcpMessage"], bytearray] = None):
-        cid = self.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
+        cid = self.options.get(_enum.IanaDhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:
             if func:
                 cid = func(self)
@@ -237,44 +228,50 @@ class DhcpMessage:
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()
 
-    def dumps(self, codemap: type[DhcpOptionCodeMap] = None):
+    def dumps(self, codemap: type[DhcpOptionCode] = None):
         lines = []
         for name, value in [
-            ('OP', self.op.name),
-            ('Time Since Boot', self.secs),
-            ('Hops', self.hops),
-            ('Transaction ID', self.xid),
-            ('Flags',self.flags.name),
-            ('Client Current Address', self.ciaddr),
-            ('Allocated Address', self.yiaddr),
-            ('Gateway Address',self.giaddr),
-            ('Hardware Address',f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
-            ('Server Address',self.siaddr),
-            ('Bootfile',self.file),
+            ("OP", self.op.name),
+            ("Time Since Boot", self.secs),
+            ("Hops", self.hops),
+            ("Transaction ID", self.xid),
+            ("Flags", self.flags.name),
+            ("Client Current Address", self.ciaddr),
+            ("Allocated Address", self.yiaddr),
+            ("Gateway Address", self.giaddr),
+            ("Hardware Address", f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
+            ("Server Address", self.siaddr),
+            ("Next Server", self.file),
+            ("Bootfile", self.file),
         ]:
             lines.append(f"{name: <40}: {value}")
         lines.append(f"OPTIONS:")
         for code, value in self.options.items(decoded=codemap or True):
             if isinstance(value, list):
-                decoded = '\n'.join([repr(i) for i in value])
+                decoded = "\n".join([repr(i) for i in value])
             else:
                 decoded = repr(value)
             decoded = decoded.splitlines()
-            SPACE = ' '*42
+            SPACE = " " * 42
             if decoded:
-                first =_tw.fill(decoded[0], width=100, initial_indent='', subsequent_indent=SPACE)
+                first = _tw.fill(
+                    decoded[0], width=100, initial_indent="", subsequent_indent=SPACE
+                )
             else:
-                first = ''
+                first = ""
             lines.append(f"  {repr(code): <38}: {first}")
             for line in decoded[1:]:
-                lines.append(_tw.fill(line, width=100, initial_indent=SPACE, subsequent_indent=SPACE))
+                lines.append(
+                    _tw.fill(
+                        line, width=100, initial_indent=SPACE, subsequent_indent=SPACE
+                    )
+                )
 
         return "\n".join(lines)
-    
-    def log(self, src, dst, level):
-        header = f"{"#" * 10} {self.op.name} Src: {src} Dst: {dst} {"#" * 10}"
-        LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{"#" * len(header)}")
 
-    
     def __contains__(self, __key: object):
         return self.options.__contains__(__key)
+
+    def log(self, src, dst, level):
+        header = f"{"#" * 10} {self.op.name} Src: {src} Dst: {dst} {"#" * 10}"
+        LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")

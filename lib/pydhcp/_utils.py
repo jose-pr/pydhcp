@@ -2,18 +2,6 @@ import typing as _ty
 import types as _types
 
 
-class Missing:
-    ...
-
-
-MISSING = Missing()
-
-
-T = _ty.TypeVar("T")
-P = _ty.TypeVarTuple("P")
-
-#P = _ty.ParamSpec("P")
-
 if _ty.TYPE_CHECKING:
     class GenericMeta(type):
         ...

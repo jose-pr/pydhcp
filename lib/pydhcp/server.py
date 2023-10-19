@@ -1,74 +1,68 @@
 import socket as _socket
 from .message import DhcpMessage
-from .netutils import Address, IPAddress
-from . import netutils
-from .listener import DhcpListener
-from .iana import (
-    DHCP_MIN_LEGAL_PACKET_SIZE,
-    DHCP_SERVER_PORT,
-    DhcpOptionCode,
-    DhcpMessageType,
-    Flags,
-    OpCode,
-    INIFINITE_LEASE_TIME,
-    DhcpOptionCodes,
-)
-from .options import (
-    DhcpOptions,
-)
-from . import optiontype
-from socket import socket as _socket
+from .listener import DhcpListener as _Base
+from . import enum as _enum, contants as _const, netutils as _net
+from .options import DhcpOptions
+from . import optiontype as _type
 from .log import LOGGER
 import logging as _logging
-import datetime
+import datetime as _dt
 import typing as _ty
 from math import inf as _inf
 
 
 class DhcpLease(_ty.NamedTuple):
-    ip: IPAddress
-    expires: datetime.datetime
+    ip: _net.IPv4
+    expires: _dt.datetime
     options: DhcpOptions
 
 
-class DhcpServer(DhcpListener):
-    DEFAULT_PORTS = (DHCP_SERVER_PORT,)
+class DhcpServer(_Base):
+    DEFAULT_PORTS = (_enum.DhcpPort.SERVER,)
 
-    def acquire_lease(self, client_id: str, server_id: str, msg: DhcpMessage):
-        _server = netutils.get_ipinterface(server_id)
-        requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP)
-        expires = datetime.datetime.now() + datetime.timedelta(0, 3600)
+    def acquire_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage):
+        _server = next(_net.host_ip_interfaces(lambda int: int.ip == server_id), None)
+        requested_ip = msg.options.get(
+            _enum.IanaDhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+        )
+        expires = _dt.datetime.now() + _dt.timedelta(0, 3600)
         options = DhcpOptions()
         if requested_ip:
             ip = requested_ip
-        elif msg.ciaddr != netutils.ALL_IPS:
+        elif msg.ciaddr != _net.WILDCARD_IPv4:
             ip = msg.ciaddr
         else:
             ip = None
-        options[DhcpOptionCode.SUBNET_MASK] = optiontype.IPv4Address(_server.network.netmask)
-        options[DhcpOptionCode.BROADCAST_ADDRESS] = optiontype.IPv4Address(
-            _server.network.broadcast_address
-        )
+        options[_enum.IanaDhcpOptionCode.SUBNET_MASK] = _server.network.netmask
+
+        options[
+            _enum.IanaDhcpOptionCode.BROADCAST_ADDRESS
+        ] = _server.network.broadcast_address
+
         return DhcpLease(ip, expires, options)
 
-    def release_lease(self, client_id: str, server_id: str, msg: DhcpMessage):
+    def release_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage):
         ...
 
     def handle(
-        self, msg: DhcpMessage, client: Address, server: Address, socket: _socket
+        self,
+        msg: DhcpMessage,
+        client: _net.Address,
+        server: _net.Address,
+        socket: _socket.socket,
     ):
-        if msg.op != OpCode.BOOTREQUEST:
+        if msg.op != _enum.OpCode.BOOTREQUEST:
             LOGGER.warning(
                 f"Receive a reply msg from {client} on {server} ignoring it."
             )
             return
         client_id = msg.client_id()
         server_id = msg.options.get(
-            DhcpOptionCode.SERVER_IDENTIFIER, decode=optiontype.IPv4Address
+            _enum.IanaDhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
-        msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        msg_ty = msg.options.get(_enum.IanaDhcpOptionCode.DHCP_MESSAGE_TYPE)
         if server_id and server_id != server:
-            if msg_ty is DhcpMessageType.DHCPREQUEST:
+            if msg_ty is _enum.DhcpMessageType.DHCPREQUEST:
                 self.release_lease(client_id, server_id, msg)
             else:
                 LOGGER.warning(
@@ -84,69 +78,72 @@ class DhcpServer(DhcpListener):
             return
         resp = DhcpMessage(**msg.__dict__.copy())
         resp.options = lease.options
-        resp.op = OpCode.BOOTREPLY
+        resp.op = _enum.OpCode.BOOTREPLY
         resp.hops = 0
-        resp.secs = datetime.timedelta(seconds=0)
+        resp.secs = _dt.timedelta(seconds=0)
         if lease.ip:
             if lease.expires is None or lease.expires is _inf:
-                expires = INIFINITE_LEASE_TIME
+                expires = _const.INIFINITE_LEASE_TIME
             else:
                 expires = min(
-                    (lease.expires - datetime.datetime.now()).seconds,
-                    INIFINITE_LEASE_TIME,
+                    (lease.expires - _dt.datetime.now()).seconds,
+                    _const.INIFINITE_LEASE_TIME,
                 )
             if expires <= 0:
                 LOGGER.info(
                     f"No lease avaliable for {client}|{client_id} at {server} ignoring"
                 )
                 return
-            resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = optiontype.U32(expires)
+            resp.options[_enum.IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
             resp.yiaddr = lease.ip
-        resp.options[DhcpOptionCode.SERVER_IDENTIFIER] = optiontype.IPv4Address(server_id)
+        resp.options[_enum.IanaDhcpOptionCode.SERVER_IDENTIFIER] = server_id
         resp_ty = None
         match msg_ty:
-            case DhcpMessageType.DHCPDISCOVER:
-                resp_ty = DhcpMessageType.DHCPOFFER
-            case DhcpMessageType.DHCPREQUEST:
-                ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=optiontype.IPv4Address)
+            case _enum.DhcpMessageType.DHCPDISCOVER:
+                resp_ty = _enum.DhcpMessageType.DHCPOFFER
+            case _enum.DhcpMessageType.DHCPREQUEST:
+                ip = msg.options.get(
+                    _enum.IanaDhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+                )
                 if not ip:
                     ip = msg.ciaddr
                 if ip == lease.ip:
-                    resp_ty = DhcpMessageType.DHCPACK
+                    resp_ty = _enum.DhcpMessageType.DHCPACK
                 else:
-                    resp_ty = DhcpMessageType.DHCPNAK
-            case DhcpMessageType.DHCPDECLINE:
+                    resp_ty = _enum.DhcpMessageType.DHCPNAK
+            case _enum.DhcpMessageType.DHCPDECLINE:
                 self.release_lease(client_id, server_id, msg)
                 return
-            case DhcpMessageType.DHCPRELEASE:
+            case _enum.DhcpMessageType.DHCPRELEASE:
                 self.release_lease(client_id, server_id, msg)
                 return
-            case DhcpMessageType.DHCPINFORM:
-                del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
-                resp.yiaddr = netutils.ALL_IPS
-                resp_ty = DhcpMessageType.DHCPACK
+            case _enum.DhcpMessageType.DHCPINFORM:
+                del resp.options[_enum.IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME]
+                resp.yiaddr = _net.WILDCARD_IPv4
+                resp_ty = _enum.DhcpMessageType.DHCPACK
 
             case other:
                 LOGGER.warning(
                     f"Receive a DHCP Message with message type: {other} from: {client}|{client_id} at: {server}, which we dont handle"
                 )
         requests_params = msg.options.get(
-            DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=DhcpOptionCodes
+            _enum.IanaDhcpOptionCode.PARAMETER_REQUEST_LIST,
+            decode=_type.DhcpOptionCodes,
         )
         if requests_params:
             requests_params = [
                 *requests_params,
-                DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
-                DhcpOptionCode.SERVER_IDENTIFIER,
+                _enum.IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME,
+                _enum.IanaDhcpOptionCode.SERVER_IDENTIFIER,
             ]
-        if resp_ty is DhcpMessageType.DHCPNAK:
+        if resp_ty is _enum.DhcpMessageType.DHCPNAK:
             requests_params = [
-                DhcpOptionCode.DHCP_MESSAGE,
-                DhcpOptionCode.CLIENT_IDENTIFIER,
-                DhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
-                DhcpOptionCode.SERVER_IDENTIFIER,
+                _enum.IanaDhcpOptionCode.DHCP_MESSAGE,
+                _enum.IanaDhcpOptionCode.CLIENT_IDENTIFIER,
+                _enum.IanaDhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
+                _enum.IanaDhcpOptionCode.SERVER_IDENTIFIER,
             ]
-            resp[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
+            resp[_enum.IanaDhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
                 client_id.replace(":", "")
             )
         if requests_params:
@@ -155,22 +152,27 @@ class DhcpServer(DhcpListener):
                 return opt[0] in requests_params
 
             resp.options._options = _ty.OrderedDict(
-                filter(_paramfilter, resp.options._options.items())
+                filter(_paramfilter, resp.options.items(decoded=False))
             )
-        resp.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        resp.options[_enum.IanaDhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
 
         data = resp.encode(
             msg.options.get(
-                DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE, DHCP_MIN_LEGAL_PACKET_SIZE
+                _enum.IanaDhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE,
+                _const.DHCP_MIN_LEGAL_PACKET_SIZE,
             )
         )
-        if msg.giaddr != netutils.ALL_IPS:
+
+        if msg.giaddr != _net.WILDCARD_IPv4:
             dest = msg.giaddr
-        elif msg.ciaddr != netutils.ALL_IPS and msg.flags is Flags.UNICAST:
+        elif msg.ciaddr != _net.WILDCARD_IPv4 and msg.flags is _enum.Flags.UNICAST:
             dest = msg.ciaddr
         else:
             # We should be sending unicast to mac if BROADCAST not set but socket wont allow setting the mac
             # Protocol allows sending to broadcast as an option
-            dest = IPAddress("255.255.255.255")
-        resp.log(server, Address(dest, client.port), _logging.INFO)
+            dest = _net.IPv4("255.255.255.255")
+        resp.log(server, _net.Address(dest, client.port), _logging.INFO)
+        if __debug__:
+            _check = DhcpMessage.decode(memoryview(data))
+            _check.log(server, _net.Address(dest, client.port), _logging.DEBUG)
         socket.sendto(data, (str(dest), client.port))

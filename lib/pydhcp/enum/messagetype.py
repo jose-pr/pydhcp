@@ -1,5 +1,4 @@
 import enum as _enum
-from . import options as _opts
 from ..optiontype import BaseFixedLengthInteger
 import typing as _ty
 
@@ -82,6 +81,3 @@ class DhcpMessageType(BaseFixedLengthInteger, _enum.IntEnum):
     DHCPACTIVELEASEQUERY = 16
     DHCPLEASEQUERYSTATUS = 17
     DHCPTLS = 18
-
-
-_opts.DhcpOptionCode.DHCP_MESSAGE_TYPE.register_type(DhcpMessageType)

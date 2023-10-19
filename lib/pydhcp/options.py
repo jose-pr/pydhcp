@@ -1,27 +1,22 @@
 import typing as _ty
 from ._options import *
 from .optiontype import *
-from . import _utils
-from .iana.options import DhcpOptionCode as _ianacodes
+from . import contants as _const
+from .enum.optioncode import IanaDhcpOptionCode as _ianacodes
 from math import inf as _inf
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
-C = _ty.TypeVar('C', bound=DhcpOptionCodeMap)
+C = _ty.TypeVar("C", bound=DhcpOptionCode)
+_R = _ty.TypeVar("_R")
 
 
 class DhcpOptions(_ty.MutableMapping[int, bytearray]):
-    def __init__(self, codemap: type[DhcpOptionCodeMap] = None) -> None:
+    def __init__(self, codemap: type[DhcpOptionCode] = None) -> None:
         self._codemap = codemap or _ianacodes
         self._options: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
     def __repr__(self) -> str:
-        return f"DhcpOptions({list(self._options.keys())})"
-
-    def _key(self, code):
-        try:
-            return self._codemap.from_code(code)
-        except:
-            return int(code)
+        return f"{self.__class__.__name__}({list(self._options.keys())})"
 
     def decode(self, options: memoryview):
         while options:
@@ -32,7 +27,6 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
             if code == 255:
                 break
-            code = self._key(code)
             length = options[1]
             next = 2 + length
             data = options[2:next]
@@ -89,10 +83,16 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return encoded
 
     def __getitem__(self, _key: int):
-        return self._options[self._key(_key)]
+        return self._options[_key]
 
     @_ty.overload
     def get(self, __key: int, /, decode: type[T] = ...) -> T | None:
+        ...
+
+    @_ty.overload
+    def get(
+        self, __key: int, /, decode: _ty.Callable[[bytearray], _R] = ...
+    ) -> _R | None:
         ...
 
     @_ty.overload
@@ -102,7 +102,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         ...
 
     @_ty.overload
-    def get(self, __key: int, /) -> DhcpOptionType:
+    def get(self, __key: int, /) -> DhcpOptionType | None:
         ...
 
     @_ty.overload
@@ -111,47 +111,54 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     ) -> bytearray | None:
         ...
 
-    def get(self, __key, /, default=None, decode: bool | type[DhcpOptionType] = True):
-        value = super().get(__key, default=_utils.MISSING)
-        if value is _utils.MISSING:
+    def get(
+        self,
+        __key: int,
+        /,
+        default=None,
+        decode: bool | type[T] | _ty.Callable[[bytearray], _R] = True,
+    ):
+        value = super().get(__key, default=_const.MISSING)
+        if value is _const.MISSING:
             return default
         if decode:
-            if decode is not True:
-                ty = decode
-            else:
-                ty = self._codemap.get_type(__key)
-            return ty._dhcp_decode(value)
+            if decode is True:
+                decode = self._codemap.get_type(__key)
+            return (
+                decode._dhcp_decode(value)
+                if issubclass(decode, DhcpOptionType)
+                else decode(value)
+            )
         else:
             return value
 
-    def _getopt(self, option: DhcpOption | tuple[int, str]):
+    def _ensuretype(self, option: DhcpOption | tuple[int, str]):
         if isinstance(option, DhcpOption):
             return option
         return self._codemap.normalize(*option)
 
     def append(self, option: DhcpOption):
-        option = self._getopt(option)
-        option.value._dhcp_write(
-            self._options.setdefault(self._key(option.code), bytearray())
-        )
+        option = self._ensuretype(option)
+        option.value._dhcp_write(self._options.setdefault(option.code, bytearray()))
 
     def replace(self, option: DhcpOption):
-        option = self._getopt(option)
+        option = self._ensuretype(option)
         self[option.code] = option.value
 
     def __setitem__(self, __key: int, __value: bytearray | DhcpOptionType):
-        encode = getattr(__value, "_dhcp_write", None)
-        if encode:
-            data = self._options.setdefault(self._key(__key), bytearray())
+        if not isinstance(__value, (bytes, memoryview, bytearray, DhcpOptionType)):
+            __value = self._codemap.from_code(__key).get_type()(__value)
+        if isinstance(__value, DhcpOptionType):
+            data = self._options.setdefault(__key, bytearray())
             data.clear()
             __value._dhcp_write(data)
         else:
             if not isinstance(__value, bytearray):
                 __value = bytearray(__value)
-            self._options[self._key(__key)] = __value
+            self._options[__key] = __value
 
     def __delitem__(self, __key: int) -> None:
-        return self._options.__delitem__(self._key(__key))
+        return self._options.__delitem__(__key)
 
     def __len__(self) -> int:
         return len(self._options)
@@ -160,7 +167,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return self._options.__iter__()
 
     @_ty.overload
-    def items(self) -> _ty.ItemsView[DhcpOptionCodeMap, DhcpOptionType]:
+    def items(self) -> _ty.ItemsView[DhcpOptionCode, DhcpOptionType]:
         ...
 
     @_ty.overload
@@ -170,15 +177,14 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     @_ty.overload
     def items(
         self, decoded: _ty.Literal[True]
-    ) -> _ty.ItemsView[DhcpOptionCodeMap, DhcpOptionType]:
-        ...
-    @_ty.overload
-    def items(
-        self, decoded: type[C]
-    ) -> _ty.ItemsView[C, DhcpOptionType]:
+    ) -> _ty.ItemsView[DhcpOptionCode, DhcpOptionType]:
         ...
 
-    def items(self, decoded: Boolean | type[DhcpOptionCodeMap] = True):
+    @_ty.overload
+    def items(self, decoded: type[C]) -> _ty.ItemsView[C, DhcpOptionType]:
+        ...
+
+    def items(self, decoded: Boolean | type[DhcpOptionCode] = True):
         items = self._options.items()
         if decoded is True:
             decoded = self._codemap
@@ -187,4 +193,4 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return items
 
     def __contains__(self, __key: object) -> bool:
-        return self._options.__contains__(self._key(__key))
+        return self._options.__contains__(__key)

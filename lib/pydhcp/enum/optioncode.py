@@ -1,22 +1,23 @@
 import typing as _ty
 import enum as _enum
 
-from .._options import DhcpOptionType, DhcpOptionCodeMap
+from .. import _options
 from ..optiontype import Bytes
 
-class DhcpOptionCode(DhcpOptionCodeMap, _enum.IntEnum):
-    __CODEMAP: list[type["DhcpOptionType"]] = [Bytes] * 256
 
-    def register_type(code, optiontype:type["DhcpOptionType"]):
-        DhcpOptionCode.__CODEMAP[int(code)] = optiontype        
+class IanaDhcpOptionCode(_options.DhcpOptionCode, _enum.IntEnum):
+    __CODEMAP: list[type["_options.DhcpOptionType"]] = [Bytes] * 256
 
-    def get_type(code) -> "type[DhcpOptionType]":
-        return DhcpOptionCode.__CODEMAP[int(code)]
-    
+    def register_type(code, optiontype: type["_options.DhcpOptionType"]):
+        IanaDhcpOptionCode.__CODEMAP[code] = optiontype
+
+    def get_type(code) -> "type[_options.DhcpOptionType]":
+        return IanaDhcpOptionCode.__CODEMAP[code]
+
     def label(code) -> str:
-        label = getattr(code, 'name', None)
+        label = getattr(code, "name", None)
         if not label:
-            return DhcpOptionCodeMap.label(code)
+            return _options.DhcpOptionCodeMap.label(code)
         return label
 
     #
@@ -731,7 +732,7 @@ class DhcpOptionCode(DhcpOptionCodeMap, _enum.IntEnum):
     AUTHENTICATION = 90
     CLIENT_LAST_TRANSACTION_TIME = 91
     ASSOCIATED_IP = 92
-    CLIENT_SYSTEM_ARCHITECTURE  = 93
+    CLIENT_SYSTEM_ARCHITECTURE = 93
     CLIENT_NDI = 94
     LDAP = 95
 
@@ -825,4 +826,3 @@ class DhcpOptionCode(DhcpOptionCodeMap, _enum.IntEnum):
    field.  Subsequent octets should be filled with pad options.
 
    The code for the end option is 255, and its length is 1 octet."""
-
