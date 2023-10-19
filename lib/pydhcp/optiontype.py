@@ -35,8 +35,6 @@ class DhcpOptionType:
         if hint:
             if todecode != hint:
                 raise ValueError("Wrong option size")
-            option = option[:hint]
-
         decoded, read = cls._dhcp_read(option)
         if read != todecode:
             raise ValueError("Couldnt decode whole option")
@@ -53,9 +51,9 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
     def __init__(self, *items: _ty.Iterable[_T] | _T):
         for _items in items:
             self.extend(_items if isinstance(_items, (tuple, list)) else (_items,))
-   
+
     @classmethod
-    def _normalize(cls, item: _T)->_T:
+    def _normalize(cls, item: _T) -> _T:
         ty = cls._args_[0]
         return ty(item) if not isinstance(item, ty) else item
 
@@ -90,9 +88,8 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
 
 
 class DhcpOptionCodes(List[_C]):
-
     @classmethod
-    def _normalize(cls, item: _T)->_T:
+    def _normalize(cls, item: _T) -> _T:
         ty = cls._args_[0]
         if isinstance(item, ty):
             return item
@@ -104,7 +101,7 @@ class DhcpOptionCodes(List[_C]):
         if item > 255:
             raise ValueError()
         return item
-    
+
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         return cls(option.tolist()), len(option)
@@ -254,24 +251,24 @@ class DomainList(DhcpOptionType, list[str]):
         id = 0
         size = len(view)
         while id < size:
-            first = view[id]
+            ptr_or_len = view[id]
             id += 1
-            if first == 0x00:
+            if ptr_or_len == 0x00:
                 components[id - 1] = None
                 domains.append(id)
                 continue
-            is_ptr = first & 0xC0
+            is_ptr = ptr_or_len & 0xC0
             if is_ptr:
                 if is_ptr != 0xC0:
                     raise ValueError()
-                components[id - 1] = ((0x3F & first) << 8) | view[id]
+                components[id - 1] = ((0x3F & ptr_or_len) << 8) | view[id]
                 id += 1
             else:
-                dc = view[id : first + id]
-                if len(dc) != first:
+                dc = view[id : ptr_or_len + id]
+                if len(dc) != ptr_or_len:
                     raise ValueError()
                 components[id - 1] = dc.tobytes().decode()
-                id += first
+                id += ptr_or_len
 
         def get_dn(id: int):
             result = []
@@ -325,10 +322,6 @@ class DomainList(DhcpOptionType, list[str]):
                 data.extend((0xC000 | parent[0]).to_bytes(2, byteorder="big"))
         _data.extend(data)
         return len(data)
-
-    def __repr__(self) -> str:
-        return "\n".join(self)
-
 
 class ClientIdentifier(Bytes):
     @classmethod
