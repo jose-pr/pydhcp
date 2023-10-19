@@ -47,50 +47,28 @@ _T = _ty.TypeVar("_T", bound=DhcpOptionType)
 _C = _ty.TypeVar("_C", bound="DhcpOptionCode")
 
 
-class DhcpOptionCodes(
-    DhcpOptionType, list[_C | int], _ty.Generic[_C], metaclass=_utils.GenericMeta
-):
-    _args_: _ty.ClassVar[tuple[type[_C | int]]]  # type:ignore
-
-    @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
-        self = cls()
-        ty: type[_C] = self._args_[0].__args__[0]
-        for o in option:
-            try:
-                o = ty(o)
-            except:
-                ...
-            self.append(o)
-        return self, len(option)
-
-    def _dhcp_write(self, data: bytearray):
-        data.extend(self)
-        return len(self)
-
-
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
     _args_: _ty.ClassVar[tuple[_T]]  # type:ignore
 
     def __init__(self, *items: _ty.Iterable[_T] | _T):
         for _items in items:
             self.extend(_items if isinstance(_items, (tuple, list)) else (_items,))
+   
+    @classmethod
+    def _normalize(cls, item: _T)->_T:
+        ty = cls._args_[0]
+        return ty(item) if not isinstance(item, ty) else item
 
     def __setitem__(self, idx, item: _T) -> None:
-        ty = self._args_[0]
-        return list.__setitem__(
-            self, idx, ty(item) if not isinstance(item, ty) else item
-        )
+        return list.__setitem__(self, idx, self._normalize(item))
 
     def append(self, item: _T) -> None:
-        ty = self._args_[0]
-        return list.append(self, ty(item) if not isinstance(item, ty) else item)
+        return list.append(self, self._normalize(item))
 
     def extend(self, __iterable: Iterable[_T]) -> None:
-        ty = self._args_[0]
         list.extend(
             self,
-            [(ty(item) if not isinstance(item, ty) else item) for item in __iterable],
+            [self._normalize(item) for item in __iterable],
         )
 
     @classmethod
@@ -109,6 +87,31 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
         for item in self:
             written += item._dhcp_write(data)
         return written
+
+
+class DhcpOptionCodes(List[_C]):
+
+    @classmethod
+    def _normalize(cls, item: _T)->_T:
+        ty = cls._args_[0]
+        if isinstance(item, ty):
+            return item
+        try:
+            return ty(item)
+        except:
+            ...
+        item = int(item)
+        if item > 255:
+            raise ValueError()
+        return item
+    
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+        return cls(option.tolist()), len(option)
+
+    def _dhcp_write(self, data: bytearray):
+        data.extend(self)
+        return len(self)
 
 
 class IPv4Address(DhcpOptionType, _IP):
@@ -350,17 +353,18 @@ class ClientIdentifier(Bytes):
     def __str__(self) -> str:
         return self.hex(":").upper()
 
+
 class OptionOverload(BaseFixedLengthInteger, _enum.Flag):
     @classmethod
     @property
     def NUMBER_OF_BYTES(self):
         return 1
-    
+
     @classmethod
     @property
     def SIGNED(self):
         return False
-    
+
     NONE = 0
     FILE = 1
     SNAME = 2
