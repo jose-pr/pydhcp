@@ -12,6 +12,10 @@ _NULL = 0x00.to_bytes(1)
 
 @_data.dataclass
 class DhcpMessage:
+    MIN_LEGAL_SIZE = _const.DHCP_MIN_LEGAL_PACKET_SIZE - _const.UDP_MIN_PACKET_SIZE
+    MAGIC_COOKIE: _ty.ClassVar[bytes] = 0x63825363.to_bytes(4, "big")
+    """The first four octets of the 'options' field of the DHCP message decimal values: 99, 130, 83 and 99"""
+
     op: _enum.OpCode  # One byte
     """Message op code / message type"""
     htype: _enum.HardwareAddressType
@@ -84,7 +88,7 @@ class DhcpMessage:
         sname = data[44:108]
         file = data[108:236]
 
-        if _const.MAGIC_COOKIE != data[236:240]:
+        if cls.MAGIC_COOKIE != data[236:240]:
             raise Exception("Bad Magic Cookie")
 
         options = DhcpOptions()
@@ -142,7 +146,7 @@ class DhcpMessage:
 
     def encode(self, max_packetsize: int = _const.DHCP_MIN_LEGAL_PACKET_SIZE):
         max_packetsize = int(max_packetsize or _const.DHCP_MIN_LEGAL_PACKET_SIZE)
-        max_options_field_size = max_packetsize - 264 - len(_const.MAGIC_COOKIE)
+        max_options_field_size = max_packetsize - 264 - len(self.MAGIC_COOKIE)
         if max_options_field_size < 0:
             raise Exception(f"{max_packetsize} is to small for a DHCP packet")
 
@@ -214,7 +218,7 @@ class DhcpMessage:
         data.extend(self.chaddr.ljust(16, b"\x00")[:16])
         data.extend(sname.ljust(64, b"\x00")[:64])
         data.extend(file.ljust(128, b"\x00")[:128])
-        data.extend(_const.MAGIC_COOKIE)
+        data.extend(self.MAGIC_COOKIE)
         data.extend(options_field)
         return data
 
@@ -273,5 +277,5 @@ class DhcpMessage:
         return self.options.__contains__(__key)
 
     def log(self, src, dst, level):
-        header = f"{"#" * 10} {self.op.name} Src: {src} Dst: {dst} {"#" * 10}"
+        header = f"{'#' * 10} {self.op.name} Src: {src} Dst: {dst} {'#' * 10}"
         LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")

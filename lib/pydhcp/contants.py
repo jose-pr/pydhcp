@@ -1,10 +1,8 @@
-MAGIC_COOKIE = 0x63825363.to_bytes(4, "big")
-"""The first four octets of the 'options' field of the DHCP message decimal values: 99, 130, 83 and 99"""
 
 INIFINITE_LEASE_TIME = 0xFFFFFFFF
 DHCP_MIN_LEGAL_PACKET_SIZE = 576
-
-
+UDP_MIN_PACKET_SIZE = 28 #IPV4 , 48 for ipv6
+UDP_MAX_PACKET_SIZE =  65_535
 class Missing:
     ...
 
