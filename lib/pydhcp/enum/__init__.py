@@ -13,9 +13,11 @@ class OpCode(_enum.IntEnum):
     BOOTREPLY = 2
     """DHCP message sent from a server to a client."""
 
+
 class DhcpPort(_enum.IntEnum):
     SERVER = 67
     CLIENT = 68
+
 
 class Flags(_enum.Flag):
     UNICAST = 0

@@ -53,7 +53,9 @@ class DhcpListener:
         self,
         listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
         select_timeout=None,
+        max_packet_size = _const.UDP_MAX_PACKET_SIZE
     ) -> None:
+        self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
         self._listen = _parselisteners(listen, self.DEFAULT_PORTS)
@@ -117,7 +119,7 @@ class DhcpListener:
         self.bind()
         listen = True
         rlist: list[_socket.socket]
-        buffer = bytearray(4096)
+        buffer = bytearray(self._max_packet_size)
         view = memoryview(buffer)
         if self._cancelleation_token is None:
             self._cancelleation_token = _thread.Event()
@@ -129,7 +131,7 @@ class DhcpListener:
                 if self._cancelleation_token.is_set():
                     break
                 for socket in rlist:
-                    size, client = socket.recvfrom_into(view, 4096)
+                    size, client = socket.recvfrom_into(view, self._max_packet_size)
                     client = _net.Address(*client)
                     server = _net.Address(*socket.getsockname())
                     try:
@@ -139,7 +141,6 @@ class DhcpListener:
                     except Exception as e:
                         if isinstance(e, KeyboardInterrupt):
                             raise e
-                        raise e
                         LOGGER.error(
                             f"Encounter error handling request from {client} at {server} : {e.__class__.__name__} | {e}"
                         )
