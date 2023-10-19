@@ -1,13 +1,13 @@
 from collections.abc import Iterable
 import typing as _ty
-import types as _types
-import struct as _struct
 from . import _utils
+import enum as _enum
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
+    from ._options import DhcpOptionCode
 
-from .netutils import IPAddress as _IP
+from .netutils import IPv4 as _IP
 
 
 class DhcpOptionType:
@@ -44,6 +44,29 @@ class DhcpOptionType:
 
 
 _T = _ty.TypeVar("_T", bound=DhcpOptionType)
+_C = _ty.TypeVar("_C", bound="DhcpOptionCode")
+
+
+class DhcpOptionCodes(
+    DhcpOptionType, list[_C | int], _ty.Generic[_C], metaclass=_utils.GenericMeta
+):
+    _args_: _ty.ClassVar[tuple[type[_C | int]]]  # type:ignore
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+        self = cls()
+        ty: type[_C] = self._args_[0].__args__[0]
+        for o in option:
+            try:
+                o = ty(o)
+            except:
+                ...
+            self.append(o)
+        return self, len(option)
+
+    def _dhcp_write(self, data: bytearray):
+        data.extend(self)
+        return len(self)
 
 
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
@@ -103,17 +126,17 @@ class IPv4Address(DhcpOptionType, _IP):
 
     def __repr__(self) -> str:
         return str(self)
-    
+
     def _json_(self) -> str:
         return str(self)
 
 
 class Bytes(DhcpOptionType, bytes):
-    def __new__(cls, src=None) -> 'Self':
+    def __new__(cls, src=None) -> "Self":
         if isinstance(src, str):
             return cls.fromhex(src)
         return super().__new__(cls, src)
-    
+
     def __repr__(self) -> str:
         return str(bytes(self))
 
@@ -129,7 +152,7 @@ class Bytes(DhcpOptionType, bytes):
         return len(self)
 
     def _json_(self) -> str:
-        return self.hex(' ')
+        return self.hex(" ")
 
 
 class String(DhcpOptionType, str):
@@ -166,6 +189,7 @@ class Boolean(DhcpOptionType, int):
 
     def _json_(self):
         return self.__bool__()
+
 
 class BaseFixedLengthInteger(DhcpOptionType):
     NUMBER_OF_BYTES: int
@@ -301,3 +325,43 @@ class DomainList(DhcpOptionType, list[str]):
 
     def __repr__(self) -> str:
         return "\n".join(self)
+
+
+class ClientIdentifier(Bytes):
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+        if len(option) < 2:
+            raise ValueError(option)
+        return super()._dhcp_read(option)
+
+    def __repr__(self) -> str:
+        ty = self[0]
+        addr = self[1:]
+        try:
+            from .enum import HardwareAddressType
+
+            ty = HardwareAddressType(ty).name
+        except:
+            ...
+        maybe = f"{ty}({addr.hex(':').upper()})"
+
+        return f"{maybe}|{self}"
+
+    def __str__(self) -> str:
+        return self.hex(":").upper()
+
+class OptionOverload(BaseFixedLengthInteger, _enum.Flag):
+    @classmethod
+    @property
+    def NUMBER_OF_BYTES(self):
+        return 1
+    
+    @classmethod
+    @property
+    def SIGNED(self):
+        return False
+    
+    NONE = 0
+    FILE = 1
+    SNAME = 2
+    BOTH = FILE | SNAME

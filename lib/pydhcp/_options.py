@@ -4,11 +4,11 @@ import struct as _struct
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
-from .netutils import IPAddress as _IP
+from .netutils import IPv4 as _IP
 from .optiontype import Bytes, DhcpOptionType
 
 
-class DhcpOptionCodeMap:
+class DhcpOptionCode:
     def get_type(code) -> "type[DhcpOptionType]":
         return Bytes
 

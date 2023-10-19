@@ -2,18 +2,17 @@ import socket as _socket
 import select as _select
 import threading as _thread
 
-from .netutils import Address, all_ipv4_addresses, IPAddress, ALL_IPS
+from . import netutils as _net, contants as _const, enum as _enum
 from .message import DhcpMessage
 from .log import LOGGER
 import logging as _logging
-from . import iana as _iana
 
 
 def _parselisteners(
-    listen: list[tuple[IPAddress, int] | IPAddress | str] = None,
+    listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
     default_ports: list = [],
 ):
-    _listen: list[Address] = []
+    _listen: list[_net.Address] = []
     listen = listen or []
     if not isinstance(listen, list):
         listen = [listen]
@@ -26,12 +25,12 @@ def _parselisteners(
         if not ip:
             ip = "127.0.0.1"
         elif ip == "*":
-            ip = ALL_IPS
-        if not isinstance(ip, IPAddress):
-            ip = IPAddress(ip)
+            ip = _net.WILDCARD_IPv4
+        if not isinstance(ip, _net.IPv4):
+            ip = _net.IPv4(ip)
 
-        if ip == ALL_IPS:
-            ips = all_ipv4_addresses()
+        if ip == _net.WILDCARD_IPv4:
+            ips = [i.ip for i in _net.host_ip_interfaces() if isinstance(i.ip, _net.IPv4)]
         else:
             ips = [ip]
         for ip in ips:
@@ -41,18 +40,18 @@ def _parselisteners(
                 port = [port]
             for port in port:
                 port = int(port)
-                bind = Address(ip, port)
+                bind = _net.Address(ip, port)
                 if bind not in _listen:
                     _listen.append(bind)
     return _listen
 
 
 class DhcpListener:
-    DEFAULT_PORTS = (_iana.DHCP_SERVER_PORT, _iana.DHCP_CLIENT_PORT)
+    DEFAULT_PORTS = tuple(_enum.DhcpPort)
 
     def __init__(
         self,
-        listen: list[tuple[IPAddress, int] | IPAddress | str] = None,
+        listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
         select_timeout=None,
     ) -> None:
         if listen is None:
@@ -63,7 +62,7 @@ class DhcpListener:
         self._cancelleation_token: _thread.Event = None
 
     def handle(
-        self, msg: DhcpMessage, client: Address, server: Address, socket: _socket.socket
+        self, msg: DhcpMessage, client: _net.Address, server: _net.Address, socket: _socket.socket
     ):
         pass
 
@@ -131,8 +130,8 @@ class DhcpListener:
                     break
                 for socket in rlist:
                     size, client = socket.recvfrom_into(view, 4096)
-                    client = Address(*client)
-                    server = Address(*socket.getsockname())
+                    client = _net.Address(*client)
+                    server = _net.Address(*socket.getsockname())
                     try:
                         msg = DhcpMessage.decode(view[:size])
                         msg.log(client, server, _logging.DEBUG)
