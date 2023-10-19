@@ -128,7 +128,7 @@ class DhcpServer(_Base):
                 )
         requests_params = msg.options.get(
             _enum.IanaDhcpOptionCode.PARAMETER_REQUEST_LIST,
-            decode=_type.DhcpOptionCodes,
+            decode=_type.DhcpOptionCodes[_enum.IanaDhcpOptionCode],
         )
         if requests_params:
             requests_params = [
