@@ -47,13 +47,12 @@ class DhcpServer(_Base):
     def handle(
         self,
         msg: DhcpMessage,
-        client: _net.SocketAddress,
-        server: _net.SocketAddress,
-        socket: _socket.socket,
+        session: _net.SocketSession,
     ):
+        server = session.server
         if msg.op != _enum.OpCode.BOOTREQUEST:
             LOGGER.warning(
-                f"Receive a reply msg from {client} on {server} ignoring it."
+                f"Receive a reply msg from {session.client} on {server} ignoring it."
             )
             return
         client_id = msg.client_id()
@@ -66,14 +65,14 @@ class DhcpServer(_Base):
                 self.release_lease(client_id, server_id, msg)
             else:
                 LOGGER.warning(
-                    f"Receive a message for {server_id} by {client}|{client_id} at {server} ignoring"
+                    f"Receive a message for {server_id} by {session.client}|{client_id} at {server} ignoring"
                 )
             return
         server_id = server.ip
         lease = self.acquire_lease(client_id, server_id, msg)
         if not lease:
             LOGGER.info(
-                f"No lease avaliable for {client}|{client_id} at {server} ignoring"
+                f"No lease avaliable for {session.client}|{client_id} at {server} ignoring"
             )
             return
         resp = DhcpMessage(**msg.__dict__.copy())
@@ -91,7 +90,7 @@ class DhcpServer(_Base):
                 )
             if expires <= 0:
                 LOGGER.info(
-                    f"No lease avaliable for {client}|{client_id} at {server} ignoring"
+                    f"No lease avaliable for {session.client}|{client_id} at {server} ignoring"
                 )
                 return
             resp.options[_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
@@ -124,7 +123,7 @@ class DhcpServer(_Base):
 
             case other:
                 LOGGER.warning(
-                    f"Receive a DHCP Message with message type: {other} from: {client}|{client_id} at: {server}, which we dont handle"
+                    f"Receive a DHCP Message with message type: {other} from: {session.client}|{client_id} at: {server}, which we dont handle"
                 )
         requests_params = msg.options.get(
             _enum.DhcpOptionCode.PARAMETER_REQUEST_LIST,
@@ -171,8 +170,10 @@ class DhcpServer(_Base):
             # We should be sending unicast to mac if BROADCAST not set but socket wont allow setting the mac
             # Protocol allows sending to broadcast as an option
             dest = _net.IPv4("255.255.255.255")
-        resp.log(server, _net.SocketAddress(dest, client.port), _logging.INFO)
+        resp.log(server, _net.SocketAddress(dest, session.client.port), _logging.INFO)
         if __debug__:
             _check = DhcpMessage.decode(memoryview(data))
-            _check.log(server, _net.SocketAddress(dest, client.port), _logging.DEBUG)
-        socket.sendto(data, (str(dest), client.port))
+            _check.log(
+                server, _net.SocketAddress(dest, session.client.port), _logging.DEBUG
+            )
+        session.respond(data, dest)
