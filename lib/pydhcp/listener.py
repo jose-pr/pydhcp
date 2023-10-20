@@ -139,8 +139,8 @@ class DhcpListener:
                         msg.log(client, server, _logging.DEBUG)
                         self.handle(msg, client, server, socket)
                     except Exception as e:
-                        if isinstance(e, KeyboardInterrupt):
-                            raise e
+                        #if isinstance(e, KeyboardInterrupt):
+                        raise e
                         LOGGER.error(
                             f"Encounter error handling request from {client} at {server} : {e.__class__.__name__} | {e}"
                         )

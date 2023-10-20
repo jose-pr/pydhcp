@@ -8,7 +8,7 @@ from .netutils import IPv4 as _IP
 from .optiontype import Bytes, DhcpOptionType
 
 
-class DhcpOptionCode:
+class BaseDhcpOptionCode:
     def get_type(code) -> "type[DhcpOptionType]":
         return Bytes
 

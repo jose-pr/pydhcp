@@ -2,16 +2,16 @@ import typing as _ty
 from ._options import *
 from .optiontype import *
 from . import contants as _const
-from .enum.optioncode import IanaDhcpOptionCode as _ianacodes
+from .enum.optioncode import DhcpOptionCode as _ianacodes
 from math import inf as _inf
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
-C = _ty.TypeVar("C", bound=DhcpOptionCode)
+C = _ty.TypeVar("C", bound=BaseDhcpOptionCode)
 _R = _ty.TypeVar("_R")
 
 
 class DhcpOptions(_ty.MutableMapping[int, bytearray]):
-    def __init__(self, codemap: type[DhcpOptionCode] = None) -> None:
+    def __init__(self, codemap: type[BaseDhcpOptionCode] = None) -> None:
         self._codemap = codemap or _ianacodes
         self._options: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
@@ -167,7 +167,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return self._options.__iter__()
 
     @_ty.overload
-    def items(self) -> _ty.ItemsView[DhcpOptionCode, DhcpOptionType]:
+    def items(self) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]:
         ...
 
     @_ty.overload
@@ -177,14 +177,14 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     @_ty.overload
     def items(
         self, decoded: _ty.Literal[True]
-    ) -> _ty.ItemsView[DhcpOptionCode, DhcpOptionType]:
+    ) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]:
         ...
 
     @_ty.overload
     def items(self, decoded: type[C]) -> _ty.ItemsView[C, DhcpOptionType]:
         ...
 
-    def items(self, decoded: Boolean | type[DhcpOptionCode] = True):
+    def items(self, decoded: Boolean | type[BaseDhcpOptionCode] = True):
         items = self._options.items()
         if decoded is True:
             decoded = self._codemap

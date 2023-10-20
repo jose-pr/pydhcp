@@ -1,4 +1,4 @@
-from .options import DhcpOptions, DhcpOptionCode
+from .options import DhcpOptions, BaseDhcpOptionCode
 from . import optiontype as _type, netutils as _net, enum as _enum, contants as _const
 from .log import LOGGER
 import struct as _struct
@@ -96,7 +96,7 @@ class DhcpMessage:
             raise Exception("Bad Options end")
 
         overload = options.get(
-            _enum.IanaDhcpOptionCode.OPTION_OVERLOAD,
+            _enum.DhcpOptionCode.OPTION_OVERLOAD,
             default=_type.OptionOverload.NONE,
             decode=_type.OptionOverload,
         )
@@ -114,14 +114,14 @@ class DhcpMessage:
             sname = sname.tobytes().split(_NULL, 1)[0].decode()
         else:
             sname = options.get(
-                _enum.IanaDhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
+                _enum.DhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
             )
 
         if file is not None:
             file = file.tobytes().split(_NULL, 1)[0].decode()
         else:
             file = options.get(
-                _enum.IanaDhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
+                _enum.DhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
             )
 
         # opts -> file -> sname
@@ -154,24 +154,24 @@ class DhcpMessage:
         file = self.file.encode()
         options_field = self.options.encode()
         if len(options_field) > max_options_field_size + 128:
-            if self.file and _enum.IanaDhcpOptionCode.BOOTFILE_NAME not in self.options:
-                self.options[_enum.IanaDhcpOptionCode.BOOTFILE_NAME] = self.file
+            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in self.options:
+                self.options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
 
                 self.options._options.move_to_end(
-                    int(_enum.IanaDhcpOptionCode.BOOTFILE_NAME), False
+                    int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
                 )
-            if self.sname and _enum.IanaDhcpOptionCode.TFTP_SERVER not in self.options:
-                self.options[_enum.IanaDhcpOptionCode.TFTP_SERVER] = self.sname
+            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in self.options:
+                self.options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
 
                 self.options._options.move_to_end(
-                    _enum.IanaDhcpOptionCode.TFTP_SERVER, False
+                    _enum.DhcpOptionCode.TFTP_SERVER, False
                 )
             overload = _type.OptionOverload.BOTH
         elif len(options_field) > max_options_field_size:
             if self.file:
-                self.options[_enum.IanaDhcpOptionCode.BOOTFILE_NAME] = self.file
+                self.options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
                 self.options._options.move_to_end(
-                    _enum.IanaDhcpOptionCode.BOOTFILE_NAME, False
+                    _enum.DhcpOptionCode.BOOTFILE_NAME, False
                 )
             overload = _type.OptionOverload.FILE
         else:
@@ -179,17 +179,17 @@ class DhcpMessage:
 
         try:
             self.options._options.move_to_end(
-                _enum.IanaDhcpOptionCode.DHCP_MESSAGE_TYPE, False
+                _enum.DhcpOptionCode.DHCP_MESSAGE_TYPE, False
             )
         except KeyError:
             pass
 
         if overload is not _type.OptionOverload.NONE:
             self.options._options[
-                _enum.IanaDhcpOptionCode.OPTION_OVERLOAD
+                _enum.DhcpOptionCode.OPTION_OVERLOAD
             ] = overload.value
             self.options._options.move_to_end(
-                _enum.IanaDhcpOptionCode.OPTION_OVERLOAD, False
+                _enum.DhcpOptionCode.OPTION_OVERLOAD, False
             )
             options_field, options = self.options.partial_encode(max_options_field_size)
 
@@ -223,7 +223,7 @@ class DhcpMessage:
         return data
 
     def client_id(self, func: _ty.Callable[["DhcpMessage"], bytearray] = None):
-        cid = self.options.get(_enum.IanaDhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
+        cid = self.options.get(_enum.DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:
             if func:
                 cid = func(self)
@@ -232,7 +232,7 @@ class DhcpMessage:
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()
 
-    def dumps(self, codemap: type[DhcpOptionCode] = None):
+    def dumps(self, codemap: type[BaseDhcpOptionCode] = None):
         lines = []
         for name, value in [
             ("OP", self.op.name),
