@@ -17,21 +17,23 @@ WILDCARD_IPv4 = IPv4("0.0.0.0")
 class MACAddress(bytes):
     def __new__(cls, src=None):
         if isinstance(src, str):
-            return cls.fromhex(src.replace("-", ""))
+            src = cls.fromhex(src.replace("-", ""))
+        if len(src) != 6:
+            raise ValueError(src)
         return super().__new__(cls, src)
 
     def __str__(self) -> str:
         return self.hex("-").upper()
 
 
-class _Address(_ty.NamedTuple):
+class _SocketAddress(_ty.NamedTuple):
     ip: IPv4
     port: int
 
 
-class Address(_Address):
+class SocketAddress(_SocketAddress):
     def __new__(cls, ip, port):
-        return super(Address, cls).__new__(cls, IPv4(ip), int(port))
+        return super(SocketAddress, cls).__new__(cls, IPv4(ip), int(port))
 
     def compat(self):
         return (str(self.ip), self.port)
