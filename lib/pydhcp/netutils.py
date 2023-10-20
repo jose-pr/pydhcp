@@ -1,7 +1,7 @@
 import typing as _ty
 import ipaddress as _ip
 import ifaddr as _if
-
+import socket as _socket
 
 IPv4 = _ip.IPv4Address
 IPv6 = _ip.IPv4Address
@@ -31,6 +31,12 @@ class _SocketAddress(_ty.NamedTuple):
     port: int
 
 
+class SocketOption(_ty.NamedTuple):
+    level: int
+    name: int
+    value: int
+
+
 class SocketAddress(_SocketAddress):
     def __new__(cls, ip, port):
         return super(SocketAddress, cls).__new__(cls, IPv4(ip), int(port))
@@ -42,7 +48,42 @@ class SocketAddress(_SocketAddress):
         return f"{self.ip}:{self.port}"
 
     def __repr__(self) -> str:
-        return f"Address(ip={self.ip}, port={self.port})"
+        return f"{self.__class__.__name__}(ip={self.ip}, port={self.port})"
+
+    def listen(
+        self,
+        family: _socket.AddressFamily = -1,
+        kind: _socket.SocketKind = -1,
+        proto: int = -1,
+        fileno: int = None,
+        options: _ty.Iterable[SocketOption] = [],
+    ):
+        socket = _socket.socket(family, kind, proto, fileno)
+        for opt in options:
+            socket.setsockopt(*opt)
+        socket.bind((str(self.ip), self.port))
+        return socket
+
+
+class SocketSession(_ty.NamedTuple):
+    socket: _socket.socket
+    client: SocketAddress
+
+    @property
+    def server(self):
+        return SocketAddress(*self.socket.getsockname())
+
+    def respond(self, data, to: SocketAddress = None):
+        if to is None:
+            to = self.client
+        elif not isinstance(to, (tuple, list)):
+            to = (to, self.client.port)
+        dest, port = to
+        dest = IPv4(dest)
+        port = int(port)
+        if dest == WILDCARD_IPv4:
+            dest = "255.255.255.255"
+        return self.socket.sendto(data, (str(dest), port))
 
 
 APIPA = _ip.ip_network("169.254.0.0/16")

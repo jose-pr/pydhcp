@@ -30,7 +30,9 @@ def _parselisteners(
             ip = _net.IPv4(ip)
 
         if ip == _net.WILDCARD_IPv4:
-            ips = [i.ip for i in _net.host_ip_interfaces() if isinstance(i.ip, _net.IPv4)]
+            ips = [
+                i.ip for i in _net.host_ip_interfaces() if isinstance(i.ip, _net.IPv4)
+            ]
         else:
             ips = [ip]
         for ip in ips:
@@ -53,7 +55,7 @@ class DhcpListener:
         self,
         listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
         select_timeout=None,
-        max_packet_size = _const.UDP_MAX_PACKET_SIZE
+        max_packet_size=_const.UDP_MAX_PACKET_SIZE,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
@@ -63,26 +65,27 @@ class DhcpListener:
         self._select_timeout = select_timeout or 1
         self._cancelleation_token: _thread.Event = None
 
-    def handle(
-        self, msg: DhcpMessage, client: _net.SocketAddress, server: _net.SocketAddress, socket: _socket.socket
-    ):
+    def handle(self, msg: DhcpMessage, session: _net.SocketSession):
         pass
 
     def bind(self):
         active = {socket.getsockname(): socket for socket in self._sockets}
         _listen = []
         for address in self._listen:
-            address = address.compat()
-            _listen.append(address)
-            if address in active:
+            _address = address.compat()
+            _listen.append(_address)
+            if _address in active:
                 continue
             LOGGER.info(f"Listening on: {address}")
-            socket = _socket.socket(
-                _socket.AF_INET, _socket.SOCK_DGRAM, _socket.IPPROTO_UDP
+            socket = address.listen(
+                _socket.AF_INET,
+                _socket.SOCK_DGRAM,
+                _socket.IPPROTO_UDP,
+                options=[
+                    (_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
+                    (_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
+                ],
             )
-            socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-            socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)
-            socket.bind(address)
             self._sockets.append(socket)
         for address, socket in active.items():
             if address not in _listen:
@@ -133,13 +136,14 @@ class DhcpListener:
                 for socket in rlist:
                     size, client = socket.recvfrom_into(view, self._max_packet_size)
                     client = _net.SocketAddress(*client)
-                    server = _net.SocketAddress(*socket.getsockname())
+                    session = _net.SocketSession(socket, client)
+                    server = session.server
                     try:
                         msg = DhcpMessage.decode(view[:size])
                         msg.log(client, server, _logging.DEBUG)
-                        self.handle(msg, client, server, socket)
+                        self.handle(msg, session)
                     except Exception as e:
-                        #if isinstance(e, KeyboardInterrupt):
+                        # if isinstance(e, KeyboardInterrupt):
                         raise e
                         LOGGER.error(
                             f"Encounter error handling request from {client} at {server} : {e.__class__.__name__} | {e}"
