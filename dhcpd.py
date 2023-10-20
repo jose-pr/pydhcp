@@ -15,7 +15,7 @@ LOGGER.addHandler(handler)
 from pydhcp import DhcpServer, log
 from pydhcp.server import DhcpLease
 from pydhcp import netutils, optiontype
-from pydhcp.enum import IanaDhcpOptionCode as DhcpOptionCode
+from pydhcp.enum import DhcpOptionCode
 
 log.LOGGER.setLevel(logging.DEBUG)
 
@@ -29,7 +29,7 @@ class DhcpServer(DhcpServer):
         if not ip:
             if client_id.endswith("CC:7C"):
                 ip = _server.network.network_address + self.offset
-            elif client_id.endswith("C0:DE"):
+            elif client_id.endswith("C0:DF"):
                 ip = _server.network.network_address + self.offset + 1
         options[DhcpOptionCode.ROUTER] = _server.network.network_address + 1
         options[DhcpOptionCode.DNS] = [

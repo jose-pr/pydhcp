@@ -1,4 +1,4 @@
-from .optioncode import IanaDhcpOptionCode
+from .optioncode import DhcpOptionCode
 from .messagetype import DhcpMessageType
 import typing as _ty
 import enum as _enum

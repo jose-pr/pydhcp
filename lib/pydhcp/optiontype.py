@@ -5,9 +5,9 @@ import enum as _enum
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
-    from ._options import DhcpOptionCode
+    from ._options import BaseDhcpOptionCode
 
-from .netutils import IPv4 as _IP
+from .netutils import IPv4 as _IP, IPv4Interface as _Interface, IPv4Network as _Network
 
 
 class DhcpOptionType:
@@ -42,7 +42,7 @@ class DhcpOptionType:
 
 
 _T = _ty.TypeVar("_T", bound=DhcpOptionType)
-_C = _ty.TypeVar("_C", bound="DhcpOptionCode")
+_C = _ty.TypeVar("_C", bound="BaseDhcpOptionCode")
 
 
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
@@ -129,6 +129,31 @@ class IPv4Address(DhcpOptionType, _IP):
 
     def _json_(self) -> str:
         return str(self)
+
+
+class ClasslessRoute(DhcpOptionType):
+    def __init__(self, gateway: _IP, network: _Network) -> None:
+        self.gateway = _IP(gateway)
+        self.network = _Network(network)
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+        cidr = option[0]
+        last, rem = divmod(cidr, 4)
+        last += rem + 1
+        network = option[1:last].tobytes() + b"\x00\x00\x00\x00"
+        network = _Network((network[:4], cidr))
+        return cls(next, option[last : last + 4].tobytes()), last + 4
+
+    def _dhcp_write(self, data: bytearray):
+        cidr = self.network.prefixlen
+        last, rem = divmod(cidr, 4)
+        last += rem
+        network = self.network.network_address.packed[:last]
+        data.append(cidr)
+        data.extend(network)
+        data.extend(self.gateway.packed)
+        return last + 5
 
 
 class Bytes(DhcpOptionType, bytes):
@@ -322,6 +347,7 @@ class DomainList(DhcpOptionType, list[str]):
                 data.extend((0xC000 | parent[0]).to_bytes(2, byteorder="big"))
         _data.extend(data)
         return len(data)
+
 
 class ClientIdentifier(Bytes):
     @classmethod

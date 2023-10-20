@@ -23,7 +23,7 @@ class DhcpServer(_Base):
     def acquire_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage):
         _server = next(_net.host_ip_interfaces(lambda int: int.ip == server_id), None)
         requested_ip = msg.options.get(
-            _enum.IanaDhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            _enum.DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
         expires = _dt.datetime.now() + _dt.timedelta(0, 3600)
         options = DhcpOptions()
@@ -33,10 +33,10 @@ class DhcpServer(_Base):
             ip = msg.ciaddr
         else:
             ip = None
-        options[_enum.IanaDhcpOptionCode.SUBNET_MASK] = _server.network.netmask
+        options[_enum.DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
 
         options[
-            _enum.IanaDhcpOptionCode.BROADCAST_ADDRESS
+            _enum.DhcpOptionCode.BROADCAST_ADDRESS
         ] = _server.network.broadcast_address
 
         return DhcpLease(ip, expires, options)
@@ -58,9 +58,9 @@ class DhcpServer(_Base):
             return
         client_id = msg.client_id()
         server_id = msg.options.get(
-            _enum.IanaDhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
+            _enum.DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
-        msg_ty = msg.options.get(_enum.IanaDhcpOptionCode.DHCP_MESSAGE_TYPE)
+        msg_ty = msg.options.get(_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE)
         if server_id and server_id != server:
             if msg_ty is _enum.DhcpMessageType.DHCPREQUEST:
                 self.release_lease(client_id, server_id, msg)
@@ -94,16 +94,16 @@ class DhcpServer(_Base):
                     f"No lease avaliable for {client}|{client_id} at {server} ignoring"
                 )
                 return
-            resp.options[_enum.IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
+            resp.options[_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
             resp.yiaddr = lease.ip
-        resp.options[_enum.IanaDhcpOptionCode.SERVER_IDENTIFIER] = server_id
+        resp.options[_enum.DhcpOptionCode.SERVER_IDENTIFIER] = server_id
         resp_ty = None
         match msg_ty:
             case _enum.DhcpMessageType.DHCPDISCOVER:
                 resp_ty = _enum.DhcpMessageType.DHCPOFFER
             case _enum.DhcpMessageType.DHCPREQUEST:
                 ip = msg.options.get(
-                    _enum.IanaDhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+                    _enum.DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
                 )
                 if not ip:
                     ip = msg.ciaddr
@@ -118,7 +118,7 @@ class DhcpServer(_Base):
                 self.release_lease(client_id, server_id, msg)
                 return
             case _enum.DhcpMessageType.DHCPINFORM:
-                del resp.options[_enum.IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME]
+                del resp.options[_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
                 resp.yiaddr = _net.WILDCARD_IPv4
                 resp_ty = _enum.DhcpMessageType.DHCPACK
 
@@ -127,23 +127,23 @@ class DhcpServer(_Base):
                     f"Receive a DHCP Message with message type: {other} from: {client}|{client_id} at: {server}, which we dont handle"
                 )
         requests_params = msg.options.get(
-            _enum.IanaDhcpOptionCode.PARAMETER_REQUEST_LIST,
-            decode=_type.DhcpOptionCodes[_enum.IanaDhcpOptionCode],
+            _enum.DhcpOptionCode.PARAMETER_REQUEST_LIST,
+            decode=_type.DhcpOptionCodes[_enum.DhcpOptionCode],
         )
         if requests_params:
             requests_params = [
                 *requests_params,
-                _enum.IanaDhcpOptionCode.IP_ADDRESS_LEASE_TIME,
-                _enum.IanaDhcpOptionCode.SERVER_IDENTIFIER,
+                _enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
+                _enum.DhcpOptionCode.SERVER_IDENTIFIER,
             ]
         if resp_ty is _enum.DhcpMessageType.DHCPNAK:
             requests_params = [
-                _enum.IanaDhcpOptionCode.DHCP_MESSAGE,
-                _enum.IanaDhcpOptionCode.CLIENT_IDENTIFIER,
-                _enum.IanaDhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
-                _enum.IanaDhcpOptionCode.SERVER_IDENTIFIER,
+                _enum.DhcpOptionCode.DHCP_MESSAGE,
+                _enum.DhcpOptionCode.CLIENT_IDENTIFIER,
+                _enum.DhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
+                _enum.DhcpOptionCode.SERVER_IDENTIFIER,
             ]
-            resp[_enum.IanaDhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
+            resp[_enum.DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
                 client_id.replace(":", "")
             )
         if requests_params:
@@ -154,11 +154,11 @@ class DhcpServer(_Base):
             resp.options._options = _ty.OrderedDict(
                 filter(_paramfilter, resp.options.items(decoded=False))
             )
-        resp.options[_enum.IanaDhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        resp.options[_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
 
         data = resp.encode(
             msg.options.get(
-                _enum.IanaDhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE,
+                _enum.DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE,
                 _const.DHCP_MIN_LEGAL_PACKET_SIZE,
             )
         )

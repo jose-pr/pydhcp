@@ -6,12 +6,22 @@ import ifaddr as _if
 IPv4 = _ip.IPv4Address
 IPv6 = _ip.IPv4Address
 IP = IPv4 | IPv6
+IPv4Network = _ip.IPv4Network
+IPv6Network = _ip.IPv6Network
+IPNetwork = IPv4Network | IPv6Network
+IPv4Interface = _ip.IPv4Interface
 
 WILDCARD_IPv4 = IPv4("0.0.0.0")
 
 
-class MACAddress(int):
-    ...
+class MACAddress(bytes):
+    def __new__(cls, src=None):
+        if isinstance(src, str):
+            return cls.fromhex(src.replace("-", ""))
+        return super().__new__(cls, src)
+
+    def __str__(self) -> str:
+        return self.hex("-").upper()
 
 
 class _Address(_ty.NamedTuple):
@@ -36,7 +46,9 @@ class Address(_Address):
 APIPA = _ip.ip_network("169.254.0.0/16")
 
 
-def host_ip_interfaces(filter:_ty.Callable[[_ip.IPv4Interface|_ip.IPv6Interface], bool]|bool=True):
+def host_ip_interfaces(
+    filter: _ty.Callable[[_ip.IPv4Interface | _ip.IPv6Interface], bool] | bool = True
+):
     if filter is True:
         filter = lambda ip: ip.ip not in APIPA
     for adapter in _if.get_adapters():

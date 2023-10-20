@@ -5,19 +5,19 @@ from .. import _options
 from ..optiontype import Bytes
 
 
-class IanaDhcpOptionCode(_options.DhcpOptionCode, _enum.IntEnum):
+class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     __CODEMAP: list[type["_options.DhcpOptionType"]] = [Bytes] * 256
 
     def register_type(code, optiontype: type["_options.DhcpOptionType"]):
-        IanaDhcpOptionCode.__CODEMAP[code] = optiontype
+        DhcpOptionCode.__CODEMAP[code] = optiontype
 
     def get_type(code) -> "type[_options.DhcpOptionType]":
-        return IanaDhcpOptionCode.__CODEMAP[code]
+        return DhcpOptionCode.__CODEMAP[code]
 
     def label(code) -> str:
         label = getattr(code, "name", None)
         if not label:
-            return _options.DhcpOptionCodeMap.label(code)
+            return _options.BaseDhcpOptionCode.label(code)
         return label
 
     #
@@ -821,6 +821,8 @@ class IanaDhcpOptionCode(_options.DhcpOptionCode, _enum.IntEnum):
     VSS = 221
     # 222-223
     # 224-254 PRIVATE USE
+    MSFT_CLASSLESS_STATIC_ROUTE = 249
+    WPAD = 252 
     END = 255
     """The end option marks the end of valid information in the vendor
    field.  Subsequent octets should be filled with pad options.
