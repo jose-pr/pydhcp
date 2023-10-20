@@ -38,7 +38,11 @@ class SocketOption(_ty.NamedTuple):
 
 
 class SocketAddress(_SocketAddress):
-    def __new__(cls, ip, port):
+    def __new__(cls, ip, port=None):
+        if isinstance(ip, _socket.socket):
+            ip, port = ip.getsockname()
+        elif port is None:
+            raise ValueError()
         return super(SocketAddress, cls).__new__(cls, IPv4(ip), int(port))
 
     def compat(self):

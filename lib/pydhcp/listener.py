@@ -69,12 +69,11 @@ class DhcpListener:
         pass
 
     def bind(self):
-        active = {socket.getsockname(): socket for socket in self._sockets}
+        active = {_net.SocketAddress(socket): socket for socket in self._sockets}
         _listen = []
         for address in self._listen:
-            _address = address.compat()
-            _listen.append(_address)
-            if _address in active:
+            _listen.append(address)
+            if address in active:
                 continue
             LOGGER.info(f"Listening on: {address}")
             socket = address.listen(
@@ -143,8 +142,8 @@ class DhcpListener:
                         msg.log(client, server, _logging.DEBUG)
                         self.handle(msg, session)
                     except Exception as e:
-                        # if isinstance(e, KeyboardInterrupt):
-                        raise e
+                        if isinstance(e, KeyboardInterrupt):
+                            raise e
                         LOGGER.error(
                             f"Encounter error handling request from {client} at {server} : {e.__class__.__name__} | {e}"
                         )
