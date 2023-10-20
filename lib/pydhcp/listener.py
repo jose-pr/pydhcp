@@ -12,7 +12,7 @@ def _parselisteners(
     listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
     default_ports: list = [],
 ):
-    _listen: list[_net.Address] = []
+    _listen: list[_net.SocketAddress] = []
     listen = listen or []
     if not isinstance(listen, list):
         listen = [listen]
@@ -40,7 +40,7 @@ def _parselisteners(
                 port = [port]
             for port in port:
                 port = int(port)
-                bind = _net.Address(ip, port)
+                bind = _net.SocketAddress(ip, port)
                 if bind not in _listen:
                     _listen.append(bind)
     return _listen
@@ -64,7 +64,7 @@ class DhcpListener:
         self._cancelleation_token: _thread.Event = None
 
     def handle(
-        self, msg: DhcpMessage, client: _net.Address, server: _net.Address, socket: _socket.socket
+        self, msg: DhcpMessage, client: _net.SocketAddress, server: _net.SocketAddress, socket: _socket.socket
     ):
         pass
 
@@ -132,8 +132,8 @@ class DhcpListener:
                     break
                 for socket in rlist:
                     size, client = socket.recvfrom_into(view, self._max_packet_size)
-                    client = _net.Address(*client)
-                    server = _net.Address(*socket.getsockname())
+                    client = _net.SocketAddress(*client)
+                    server = _net.SocketAddress(*socket.getsockname())
                     try:
                         msg = DhcpMessage.decode(view[:size])
                         msg.log(client, server, _logging.DEBUG)

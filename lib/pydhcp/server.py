@@ -47,8 +47,8 @@ class DhcpServer(_Base):
     def handle(
         self,
         msg: DhcpMessage,
-        client: _net.Address,
-        server: _net.Address,
+        client: _net.SocketAddress,
+        server: _net.SocketAddress,
         socket: _socket.socket,
     ):
         if msg.op != _enum.OpCode.BOOTREQUEST:
@@ -171,8 +171,8 @@ class DhcpServer(_Base):
             # We should be sending unicast to mac if BROADCAST not set but socket wont allow setting the mac
             # Protocol allows sending to broadcast as an option
             dest = _net.IPv4("255.255.255.255")
-        resp.log(server, _net.Address(dest, client.port), _logging.INFO)
+        resp.log(server, _net.SocketAddress(dest, client.port), _logging.INFO)
         if __debug__:
             _check = DhcpMessage.decode(memoryview(data))
-            _check.log(server, _net.Address(dest, client.port), _logging.DEBUG)
+            _check.log(server, _net.SocketAddress(dest, client.port), _logging.DEBUG)
         socket.sendto(data, (str(dest), client.port))
