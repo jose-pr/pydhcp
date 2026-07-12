@@ -1,9 +1,9 @@
 import logging, sys
 import pathlib
 
-_LIB = pathlib.Path(__file__).parent / "lib"
-sys.path.insert(0, _LIB.as_posix())
-from lib.pydhcp.message import DhcpMessage
+_SRC = pathlib.Path(__file__).parent.parent / "src"
+sys.path.insert(0, _SRC.as_posix())
+from pydhcp.message import DhcpMessage
 
 LOGGER = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)

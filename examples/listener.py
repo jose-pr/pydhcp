@@ -5,8 +5,11 @@ handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 LOGGER.addHandler(handler)
+import pathlib
+_SRC = pathlib.Path(__file__).parent.parent / "src"
+sys.path.insert(0, _SRC.as_posix())
 
-from lib.pydhcp import DhcpListener, log
+from pydhcp import DhcpListener, log
 log.LOGGER.setLevel(logging.DEBUG)
 
 dhcpd = DhcpListener()
