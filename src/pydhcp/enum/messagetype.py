@@ -1,28 +1,34 @@
+from __future__ import annotations
 import enum as _enum
-from ..optiontype import BaseFixedLengthInteger
+from ..optiontype import DhcpOptionType
 import typing as _ty
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
 
-class DhcpMessageType(BaseFixedLengthInteger, _enum.IntEnum):
+class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     """DHCP message types"""
 
     @classmethod
-    @property
-    def NUMBER_OF_BYTES(self):
-        return 1
-    
-    @classmethod
-    @property
-    def SIGNED(self):
-        return False
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        option_part = option[:1]
+        if len(option_part) != 1:
+            raise ValueError()
+        return cls(option_part[0]), 1
 
-    def __repr__(self):
+    def _dhcp_write(self, data: bytearray) -> int:
+        data.append(self.value)
+        return 1
+
+    @classmethod
+    def _dhcp_len_hint(cls) -> int | None:
+        return 1
+
+    def __repr__(self) -> str:
         return self.name
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name
 
     DHCPDISCOVER = 1

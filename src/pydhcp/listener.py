@@ -1,6 +1,7 @@
 import socket as _socket
 import select as _select
 import threading as _thread
+import typing as _ty
 
 from . import netutils as _net, contants as _const, enum as _enum
 from .message import DhcpMessage
@@ -9,12 +10,13 @@ import logging as _logging
 
 
 def _parselisteners(
-    listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
-    default_ports: list = [],
-):
+    listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
+    default_ports: _ty.Sequence[int] = (),
+) -> list[_net.SocketAddress]:
     _listen: list[_net.SocketAddress] = []
-    listen = listen or []
-    if not isinstance(listen, list):
+    if listen is None:
+        listen = []
+    elif not isinstance(listen, list):
         listen = [listen]
     for bind in listen:
         if not isinstance(bind, tuple):
@@ -36,26 +38,29 @@ def _parselisteners(
         else:
             ips = [ip]
         for ip in ips:
+            ports: _ty.Sequence[int]
             if not port:
-                port = default_ports
-            if port and not isinstance(port, (list, tuple)):
-                port = [port]
-            for port in port:
-                port = int(port)
-                bind = _net.SocketAddress(ip, port)
-                if bind not in _listen:
-                    _listen.append(bind)
+                ports = default_ports
+            elif not isinstance(port, (list, tuple)):
+                ports = [port]
+            else:
+                ports = port
+            for p in ports:
+                p = int(p)
+                bind_addr = _net.SocketAddress(ip, p)
+                if bind_addr not in _listen:
+                    _listen.append(bind_addr)
     return _listen
 
 
 class DhcpListener:
-    DEFAULT_PORTS = tuple(_enum.DhcpPort)
+    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
 
     def __init__(
         self,
-        listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] = None,
-        select_timeout=None,
-        max_packet_size=_const.UDP_MAX_PACKET_SIZE,
+        listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
+        select_timeout: float | None = None,
+        max_packet_size: int | None = _const.UDP_MAX_PACKET_SIZE,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
@@ -63,12 +68,12 @@ class DhcpListener:
         self._listen = _parselisteners(listen, self.DEFAULT_PORTS)
         self._sockets: list[_socket.socket] = []
         self._select_timeout = select_timeout or 1
-        self._cancelleation_token: _thread.Event = None
+        self._cancelleation_token: _thread.Event | None = None
 
-    def handle(self, msg: DhcpMessage, session: _net.SocketSession):
+    def handle(self, msg: DhcpMessage, session: _net.SocketSession) -> None:
         pass
 
-    def bind(self):
+    def bind(self) -> None:
         active = {_net.SocketAddress(socket): socket for socket in self._sockets}
         _listen = []
         for address in self._listen:
@@ -81,8 +86,8 @@ class DhcpListener:
                 _socket.SOCK_DGRAM,
                 _socket.IPPROTO_UDP,
                 options=[
-                    (_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
-                    (_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
+                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
+                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
                 ],
             )
             self._sockets.append(socket)
@@ -94,21 +99,21 @@ class DhcpListener:
                 except:
                     pass
 
-    def stop(self):
+    def stop(self) -> None:
         if self._cancelleation_token is not None:
             self._cancelleation_token.set()
 
-    def wait(self):
+    def wait(self) -> None:
         while self._cancelleation_token is not None:
             self._cancelleation_token.wait(self._select_timeout)
 
-    def start(self, cancellation_token: _thread.Event = None):
+    def start(self, cancellation_token: _thread.Event | None = None) -> _thread.Thread | None:
         if not self._cancelleation_token:
             thread = _thread.Thread(target=self.listen, args=())
             self._cancelleation_token = cancellation_token or _thread.Event()
             import signal
 
-            def stop(*args):
+            def stop(*args: _ty.Any) -> None:
                 self.stop()
                 LOGGER.info("Stopped listening due to Ctrl-C")
 
@@ -117,7 +122,7 @@ class DhcpListener:
             return thread
         return None
 
-    def listen(self):
+    def listen(self) -> None:
         self.bind()
         listen = True
         rlist: list[_socket.socket]
@@ -133,8 +138,8 @@ class DhcpListener:
                 if self._cancelleation_token.is_set():
                     break
                 for socket in rlist:
-                    size, client = socket.recvfrom_into(view, self._max_packet_size)
-                    client = _net.SocketAddress(*client)
+                    size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
+                    client = _net.SocketAddress(*client_tuple)
                     session = _net.SocketSession(socket, client)
                     server = session.server
                     try:

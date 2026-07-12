@@ -15,10 +15,10 @@ WILDCARD_IPv4 = IPv4("0.0.0.0")
 
 
 class MACAddress(bytes):
-    def __new__(cls, src=None):
+    def __new__(cls, src: _ty.Optional[_ty.Union[str, bytes, bytearray, memoryview]] = None) -> "MACAddress":
         if isinstance(src, str):
             src = cls.fromhex(src.replace("-", ""))
-        if len(src) != 6:
+        if src is None or len(src) != 6:
             raise ValueError(src)
         return super().__new__(cls, src)
 
@@ -38,14 +38,20 @@ class SocketOption(_ty.NamedTuple):
 
 
 class SocketAddress(_SocketAddress):
-    def __new__(cls, ip, port=None):
+    def __new__(
+        cls,
+        ip: _ty.Union[str, IPv4, _socket.socket],
+        port: _ty.Optional[int] = None,
+    ) -> "SocketAddress":
         if isinstance(ip, _socket.socket):
-            ip, port = ip.getsockname()
+            ip_val, port_val = ip.getsockname()
         elif port is None:
             raise ValueError()
-        return super(SocketAddress, cls).__new__(cls, IPv4(ip), int(port))
+        else:
+            ip_val, port_val = ip, port
+        return super(SocketAddress, cls).__new__(cls, IPv4(ip_val), int(port_val))
 
-    def compat(self):
+    def compat(self) -> tuple[str, int]:
         return (str(self.ip), self.port)
 
     def __str__(self) -> str:
@@ -56,17 +62,17 @@ class SocketAddress(_SocketAddress):
 
     def listen(
         self,
-        family: _socket.AddressFamily = -1,
-        kind: _socket.SocketKind = -1,
-        proto: int = -1,
-        fileno: int = None,
-        options: _ty.Iterable[SocketOption] = [],
-    ):
-        socket = _socket.socket(family, kind, proto, fileno)
+        family: _socket.AddressFamily = _socket.AF_INET,
+        kind: _socket.SocketKind = _socket.SOCK_DGRAM,
+        proto: int = 0,
+        fileno: _ty.Optional[int] = None,
+        options: _ty.Iterable[SocketOption] = (),
+    ) -> _socket.socket:
+        sock = _socket.socket(family, kind, proto, fileno)
         for opt in options:
-            socket.setsockopt(*opt)
-        socket.bind((str(self.ip), self.port))
-        return socket
+            sock.setsockopt(*opt)
+        sock.bind((str(self.ip), self.port))
+        return sock
 
 
 class SocketSession(_ty.NamedTuple):
@@ -74,35 +80,46 @@ class SocketSession(_ty.NamedTuple):
     client: SocketAddress
 
     @property
-    def server(self):
-        return SocketAddress(*self.socket.getsockname())
+    def server(self) -> SocketAddress:
+        ip, port = self.socket.getsockname()
+        return SocketAddress(ip, port)
 
-    def respond(self, data, to: SocketAddress = None):
+    def respond(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        to: _ty.Optional[_ty.Union[SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str]] = None,
+    ) -> int:
         if to is None:
-            to = self.client
-        elif not isinstance(to, (tuple, list)):
-            to = (to, self.client.port)
-        dest, port = to
-        dest = IPv4(dest)
-        port = int(port)
-        if dest == WILDCARD_IPv4:
-            dest = "255.255.255.255"
-        return self.socket.sendto(data, (str(dest), port))
+            to_addr: _ty.Union[SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str] = self.client
+        else:
+            to_addr = to
+
+        if not isinstance(to_addr, (tuple, list)):
+            dest: _ty.Union[IPv4, str] = to_addr
+            port: int = self.client.port
+        else:
+            dest, port = to_addr
+
+        dest_ip = IPv4(dest)
+        dest_str = "255.255.255.255" if dest_ip == WILDCARD_IPv4 else str(dest_ip)
+        return self.socket.sendto(data, (dest_str, int(port)))
 
 
 APIPA = _ip.ip_network("169.254.0.0/16")
 
 
 def host_ip_interfaces(
-    filter: _ty.Callable[[_ip.IPv4Interface | _ip.IPv6Interface], bool] | bool = True
-):
+    filter: _ty.Union[_ty.Callable[[_ip.IPv4Interface | _ip.IPv6Interface], bool], bool] = True
+) -> _ty.Iterator[_ip.IPv4Interface | _ip.IPv6Interface]:
     if filter is True:
         filter = lambda ip: ip.ip not in APIPA
     for adapter in _if.get_adapters():
         for ip_ in adapter.ips:
             ip = ip_.ip
             if ip_.is_IPv6:
-                ip = f"{ip[0]}%{ip[2]}"
-            interface = _ip.ip_interface((ip, ip_.network_prefix))
+                ip_str = f"{ip[0]}%{ip[2]}"
+            else:
+                ip_str = str(ip)
+            interface = _ip.ip_interface((ip_str, ip_.network_prefix))
             if not filter or filter(interface):
                 yield interface
