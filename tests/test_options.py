@@ -19,6 +19,7 @@ from pydhcp.optiontype import (
     MoSFqdnList,
     MoSIpv4AddressRecord,
     MoSFqdnRecord,
+    UriList,
 )
 
 def test_options_set_get():
@@ -76,6 +77,7 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.CAPWAP_AC_V4.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.get_type().__name__ == "DomainList"
     assert DhcpOptionCode.IPV4_ADDRESS_ANDSF.get_type()._args_[0] is IPv4Address
+    assert DhcpOptionCode.V4_SZTP_REDIRECT.get_type() is UriList
     assert DhcpOptionCode.V4_DOTS_RI.get_type() is String
     assert DhcpOptionCode.V4_DOTS_ADDRESS.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.TFTP_SERVER_ADDRESS.get_type()._args_[0] is IPv4Address
@@ -128,6 +130,10 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
     opts[DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS] = ["service.example", "config.example"]
     opts[DhcpOptionCode.IPV4_ADDRESS_ANDSF] = ["192.0.2.40", "192.0.2.41"]
+    opts[DhcpOptionCode.V4_SZTP_REDIRECT] = [
+        "https://bootstrap.example/one",
+        "https://bootstrap.example/two",
+    ]
     opts[DhcpOptionCode.V4_DOTS_RI] = "resolver-a"
     opts[DhcpOptionCode.V4_DOTS_ADDRESS] = ["192.0.2.50", "192.0.2.51"]
     opts[DhcpOptionCode.TFTP_SERVER_ADDRESS] = ["192.0.2.60", "192.0.2.61"]
@@ -168,6 +174,10 @@ def test_typed_registrations_and_aliases():
     assert isinstance(opts.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == ["service.example", "config.example"]
     assert isinstance(opts.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
+    assert opts.get(DhcpOptionCode.V4_SZTP_REDIRECT) == UriList([
+        "https://bootstrap.example/one",
+        "https://bootstrap.example/two",
+    ])
     assert opts.get(DhcpOptionCode.V4_DOTS_RI, decode=String) == "resolver-a"
     assert isinstance(opts.get(DhcpOptionCode.V4_DOTS_ADDRESS)[0], IPv4Address)
     assert isinstance(opts.get(DhcpOptionCode.TFTP_SERVER_ADDRESS)[0], IPv4Address)
@@ -259,6 +269,10 @@ def test_registered_option_code_round_trips():
     opts[DhcpOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
     opts[DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS] = ["service.example", "config.example"]
     opts[DhcpOptionCode.IPV4_ADDRESS_ANDSF] = ["192.0.2.40", "192.0.2.41"]
+    opts[DhcpOptionCode.V4_SZTP_REDIRECT] = [
+        "https://bootstrap.example/one",
+        "https://bootstrap.example/two",
+    ]
     opts[DhcpOptionCode.V4_DOTS_RI] = "resolver-a"
     opts[DhcpOptionCode.V4_DOTS_ADDRESS] = ["192.0.2.50", "192.0.2.51"]
     opts[DhcpOptionCode.TFTP_SERVER_ADDRESS] = ["192.0.2.60", "192.0.2.61"]
@@ -320,6 +334,10 @@ def test_registered_option_code_round_trips():
     assert isinstance(decoded.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
     assert decoded.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == ["service.example", "config.example"]
     assert isinstance(decoded.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
+    assert decoded.get(DhcpOptionCode.V4_SZTP_REDIRECT) == UriList([
+        "https://bootstrap.example/one",
+        "https://bootstrap.example/two",
+    ])
     assert decoded.get(DhcpOptionCode.V4_DOTS_RI, decode=String) == "resolver-a"
     assert isinstance(decoded.get(DhcpOptionCode.V4_DOTS_ADDRESS)[0], IPv4Address)
     assert isinstance(decoded.get(DhcpOptionCode.TFTP_SERVER_ADDRESS)[0], IPv4Address)
@@ -424,6 +442,29 @@ def test_raw_wire_decoding_for_new_string_registrations():
 
     assert decoded.get(DhcpOptionCode.DHCP_CAPTIVE_PORTAL, decode=String) == "https://portal.example/login"
     assert decoded.get(DhcpOptionCode.PCODE, decode=String) == "Europe/Berlin"
+
+
+def test_raw_wire_decoding_for_v4_sztp_redirect_registration():
+    first = b"https://bootstrap.example/one"
+    second = b"https://bootstrap.example/two"
+    payload = (
+        len(first).to_bytes(2, "big")
+        + first
+        + len(second).to_bytes(2, "big")
+        + second
+    )
+    encoded = bytearray()
+    encoded.extend([DhcpOptionCode.V4_SZTP_REDIRECT, len(payload)])
+    encoded.extend(payload)
+    encoded.append(255)
+
+    decoded = DhcpOptions()
+    decoded.decode(memoryview(encoded))
+
+    assert decoded.get(DhcpOptionCode.V4_SZTP_REDIRECT) == UriList([
+        "https://bootstrap.example/one",
+        "https://bootstrap.example/two",
+    ])
 
 
 def test_register_type_rejects_invalid_type():

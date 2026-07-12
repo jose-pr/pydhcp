@@ -337,6 +337,64 @@ class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
         return [item.__json__() for item in self]
 
 
+class UriList(DhcpOptionType, list[str]):
+    """List of UTF-8 URIs encoded as repeated U16-length-prefixed entries."""
+
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], list):
+            self.extend(items[0])
+            return
+        for item in items:
+            self.append(item)
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> str:
+        if isinstance(item, str):
+            return item
+        return str(item)
+
+    def append(self, item: _ty.Any) -> None:
+        return list.append(self, self._normalize(item))
+
+    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
+        list.extend(self, [self._normalize(item) for item in __iterable])
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        self = cls()
+        idx = 0
+        size = len(option)
+        while idx < size:
+            if idx + 2 > size:
+                raise ValueError(f"{cls.__name__} option is truncated")
+            length = int.from_bytes(option[idx : idx + 2], "big")
+            idx += 2
+            if idx + length > size:
+                raise ValueError(f"{cls.__name__} option is truncated")
+            payload = option[idx : idx + length].tobytes()
+            try:
+                decoded = payload.decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise ValueError(f"{cls.__name__} option contains invalid UTF-8") from exc
+            self.append(decoded)
+            idx += length
+        return self, size
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        written = 0
+        for item in self:
+            encoded = item.encode("utf-8")
+            if len(encoded) > 0xFFFF:
+                raise ValueError(f"{type(self).__name__} entry exceeds 65535 bytes")
+            data.extend(len(encoded).to_bytes(2, "big"))
+            data.extend(encoded)
+            written += len(encoded) + 2
+        return written
+
+    def __json__(self) -> list[str]:
+        return list(self)
+
+
 class _MoSLabelList(DhcpOptionType, list[str]):
     def __init__(self, *items: _ty.Any):
         if len(items) == 1 and isinstance(items[0], list):
