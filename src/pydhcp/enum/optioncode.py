@@ -5,16 +5,17 @@ from .. import _options
 from ..optiontype import Bytes, DhcpOptionType
 
 
-class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
-    __CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
+_CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
 
+
+class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     def register_type(self, optiontype: type[DhcpOptionType]) -> None:
         if not isinstance(optiontype, type) or not issubclass(optiontype, DhcpOptionType):
             raise TypeError("optiontype must be a DhcpOptionType subclass")
-        DhcpOptionCode.__CODEMAP[self] = optiontype
+        _CODEMAP[self] = optiontype
 
     def get_type(self) -> type[DhcpOptionType]:
-        return DhcpOptionCode.__CODEMAP[self]
+        return _CODEMAP[self]
 
     def label(self) -> str:
         label = getattr(self, "name", None)

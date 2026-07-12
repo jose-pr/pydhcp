@@ -16,7 +16,8 @@ else:
                 return c
             if not isinstance(key_t, tuple):
                 key_t = (key_t,)
-            name = f"{_ty._type_repr(cls)}[{", ".join([_ty._type_repr(a) for a in key_t])}]"
+            args_repr = ", ".join(_ty._type_repr(a) for a in key_t)
+            name = f"{_ty._type_repr(cls)}[{args_repr}]"
             cache[key_t] = c = _types.new_class(
                 name, (cls,), {}, lambda ns: ns.update(_args_=key_t)
             )
