@@ -14,6 +14,18 @@ server = DhcpServer(lease_backend=InMemoryLeaseBackend())
 server.listen()
 ```
 
+## Listening on all interfaces
+
+If you want the server to bind every local IPv4 interface, pass `'*'` or `0.0.0.0`.
+You can also force the portable per-interface path with `per_interface=True`.
+
+```python
+from pydhcp.server import DhcpServer
+
+server = DhcpServer(listen="*", per_interface=True)
+server.listen()
+```
+
 ## Custom options
 
 `DhcpOptions` behaves like an ordered mapping, so you can build option sets explicitly and preserve encode order.
@@ -23,7 +35,7 @@ from pydhcp import DhcpOptions
 from pydhcp.enum import DhcpOptionCode
 
 options = DhcpOptions()
-options[DhcpOptionCode.HOST_NAME] = b"workstation-01"
+options[DhcpOptionCode.HOSTNAME] = b"workstation-01"
 options[DhcpOptionCode.DOMAIN_NAME] = b"example.internal"
 ```
 

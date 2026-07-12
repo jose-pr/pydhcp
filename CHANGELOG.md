@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Expanded DHCP option-type registrations so common well-defined options decode to typed values.
+- Added stricter option-type validation and `ClasslessRoute` truncation checks.
+- Added wildcard listener `per_interface` support and exported `PktInfoUdpTransport`.
+
+### Fixed
+- Made `DhcpMessage.encode()` idempotent and tolerant of reserved flag bits during decode.
+- Corrected `DhcpMessage.dumps()` field labels and `secs` packing behavior.
+
 ## [0.2.0] - 2026-07-12
 
 ### Added
