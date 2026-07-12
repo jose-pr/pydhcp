@@ -96,7 +96,6 @@ def main() -> None:
 
     packet_parser = subparsers.add_parser("packet", help="Decode DHCP packets")
     packet_parser.add_argument("--decode", help="Hex string of packet bytes to decode")
-    packet_parser.add_argument("--encode", help="JSON string to encode")
 
     bench_parser = subparsers.add_parser("bench", help="Run performance benchmarks")
     bench_parser.add_argument(

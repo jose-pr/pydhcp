@@ -16,6 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Extended `pydhcp bench` so the CLI can choose `parse` or `options` benchmarks and optionally
   write structured JSON output.
 
+### Fixed
+- Removed the stale `pydhcp packet --encode` CLI flag so the packet subcommand no longer advertises
+  an unsupported mode.
+
 ## [0.2.1-rc.1] - 2026-07-12
 
 ### Added
