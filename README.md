@@ -75,7 +75,7 @@ workflow.
 
 ### Documentation site
 
-MkDocs builds the API reference from `docs/`, published on every release.
+MkDocs builds the API reference from `docs/`, published on every release. The docs also include a "Common DHCP Options" page with typed examples.
 
 ## License
 
