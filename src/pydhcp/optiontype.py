@@ -957,7 +957,8 @@ class DomainList(DhcpOptionType, list[str]):
             id += 1
             if ptr_or_len == 0x00:
                 components[id - 1] = None
-                domains.append(id)
+                if id < size:
+                    domains.append(id)
                 continue
             is_ptr = ptr_or_len & 0xC0
             if is_ptr:
