@@ -779,6 +779,9 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     PANA_AGENT = 136
     V4_LOST = 137
     CAPWAP_AC_V4 = 138
+    # RFC 5678 MoS sub-options use service-type values 1 (IS), 2 (CS), 3 (ES).
+    # Option 139 carries IPv4 address lists per sub-option; option 140 carries
+    # FQDN label sequences per sub-option with no DNS compression.
     IPV4_ADDRESS_MOS = 139
     IPV4_FQDN_MOS = 140
     SIP_UA_CONFIG_SERVICE_DOMAINS = 141
