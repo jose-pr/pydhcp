@@ -1,4 +1,5 @@
 import argparse
+import pathlib
 import sys
 import typing as _ty
 import logging as _logging
@@ -67,8 +68,15 @@ def cmd_packet(args: argparse.Namespace) -> None:
 def cmd_bench(args: argparse.Namespace) -> None:
     # Import locally to prevent test imports overhead
     sys.path.insert(0, ".")
-    from benchmarks.bench_parse import run_benchmarks
-    run_benchmarks(iterations=5000)
+    iterations = args.iterations if args.iterations is not None else 10000
+    if args.suite == "options":
+        from benchmarks.bench_options import run_benchmarks, write_json_report
+    else:
+        from benchmarks.bench_parse import run_benchmarks, write_json_report
+
+    benchmarks = run_benchmarks(iterations=iterations)
+    if args.json_output:
+        write_json_report(args.json_output, iterations, benchmarks)
 
 
 def main() -> None:
@@ -90,7 +98,23 @@ def main() -> None:
     packet_parser.add_argument("--decode", help="Hex string of packet bytes to decode")
     packet_parser.add_argument("--encode", help="JSON string to encode")
 
-    subparsers.add_parser("bench", help="Run performance benchmarks")
+    bench_parser = subparsers.add_parser("bench", help="Run performance benchmarks")
+    bench_parser.add_argument(
+        "--suite",
+        choices=["parse", "options"],
+        default="parse",
+        help="Benchmark suite to run",
+    )
+    bench_parser.add_argument(
+        "--iterations",
+        type=int,
+        help="Override the benchmark iteration count",
+    )
+    bench_parser.add_argument(
+        "--json-output",
+        type=pathlib.Path,
+        help="Optional path to write structured benchmark results as JSON",
+    )
 
     args = parser.parse_args()
 

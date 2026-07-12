@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added optional JSON benchmark report output for `benchmarks/bench_parse.py` so both benchmark
   entry points now share the same local artifact pattern.
 - Extended the opt-in benchmark workflow to archive both parse and options benchmark JSON reports.
+- Extended `pydhcp bench` so the CLI can choose `parse` or `options` benchmarks and optionally
+  write structured JSON output.
 
 ## [0.2.1-rc.1] - 2026-07-12
 
