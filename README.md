@@ -67,6 +67,11 @@ pydhcp server --listen 127.0.0.1:6767 --log-level debug
 
 See development notes for environment setup, dependency install, and test commands.
 
+For comprehensive validation in GitHub Actions, the test workflow also supports
+manual `workflow_dispatch` runs and safe `ci-*` tags. Benchmarks stay opt-in:
+use the workflow's `run_benchmarks` input or a `ci-bench-*` tag when you want
+the benchmark harness included.
+
 ### Releasing
 
 This project follows [Semantic Versioning](https://semver.org/) and keeps a
