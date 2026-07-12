@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from datetime import timedelta
 
 from pydhcp import DhcpMessage, DhcpOptions
-from pydhcp.cli import cmd_interfaces, cmd_packet, cmd_server, cmd_bench
+from pydhcp.cli import cmd_interfaces, cmd_packet, cmd_server, cmd_bench, main
 from pydhcp.config import load_config
 from pydhcp.enum import OpCode, HardwareAddressType, Flags, DhcpOptionCode, DhcpMessageType
 from pydhcp.netutils import IPv4
@@ -51,6 +51,13 @@ def test_cmd_packet_failure():
     args = argparse.Namespace(decode="invalid_hex")
     with pytest.raises(SystemExit):
         cmd_packet(args)
+
+
+def test_packet_cli_rejects_stale_encode_flag(monkeypatch) -> None:
+    monkeypatch.setattr("sys.argv", ["pydhcp", "packet", "--encode", "{}"])
+    with pytest.raises(SystemExit) as excinfo:
+        main()
+    assert excinfo.value.code == 2
 
 
 def test_load_config(tmp_path):
