@@ -1,4 +1,10 @@
-from .listener import DhcpListener as DhcpListener
+from .listener import (
+    DhcpListener as DhcpListener,
+    AsyncDhcpListener as AsyncDhcpListener,
+    Transport as Transport,
+    UdpTransport as UdpTransport,
+    RequestContext as RequestContext,
+)
 from .message import DhcpMessage as DhcpMessage
 from .options import DhcpOptions as DhcpOptions, DhcpOption as DhcpOption
 from .enum import DhcpOptionCode as DhcpOptionCode
@@ -24,7 +30,14 @@ from .netutils import (
     IPv4Network as IPv4Network,
     MACAddress as MACAddress,
     SocketAddress as SocketAddress,
+    NetworkInterface as NetworkInterface,
 )
-from .server import DhcpServer as DhcpServer, DhcpLease as DhcpLease
+from .server import DhcpServer as DhcpServer, AsyncDhcpServer as AsyncDhcpServer
+from .lease import (
+    DhcpLease as DhcpLease,
+    LeaseBackend as LeaseBackend,
+    InMemoryLeaseBackend as InMemoryLeaseBackend,
+    FileLeaseBackend as FileLeaseBackend,
+)
 
 
