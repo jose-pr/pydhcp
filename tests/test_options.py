@@ -5,13 +5,19 @@ from pydhcp.optiontype import (
     IPv4Address,
     String,
     Boolean,
+    Bytes,
     PolicyFilter,
     StaticRoute,
     UserClass,
     VendorSpecificInformation,
     RelayAgentInformation,
+    ViVendorSpecificInformationRecord,
     ViVendorSpecificInformation,
     RdnssSelection,
+    MoSIpv4AddressList,
+    MoSFqdnList,
+    MoSIpv4AddressRecord,
+    MoSFqdnRecord,
 )
 
 def test_options_set_get():
@@ -70,6 +76,8 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.NAME_SERVICE_SEARCH.get_type().__name__ == "DomainList"
     assert DhcpOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4Address
     assert DhcpOptionCode.RDNSS_SELECTION.get_type() is RdnssSelection
+    assert DhcpOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
+    assert DhcpOptionCode.IPV4_FQDN_MOS.get_type() is MoSFqdnList
 
     opts = DhcpOptions()
     opts[DhcpOptionCode.LOG_SERVER] = ["10.0.0.1", "10.0.0.2"]
@@ -102,22 +110,42 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.STATIC_ROUTE] = StaticRoute([
         ("192.0.2.0", "192.0.2.1"),
     ])
-    opts[DhcpOptionCode.USER_CLASS] = UserClass(["alpha", "beta"])
-    opts[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = VendorSpecificInformation([(1, b"\x01")])
+    opts[DhcpOptionCode.USER_CLASS] = UserClass([b"alpha", b"\x00\xff"])
+    opts[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = VendorSpecificInformation(b"\x00\xff\x02vendor\x10")
     opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([(9, b"\x02")])
-    opts[DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation([(7, b"\x03")])
+    opts[DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation([
+        (32473, b"alpha"),
+        ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+    ])
     opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = ["alpha.example", "beta.example"]
     opts[DhcpOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
     opts[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    opts[DhcpOptionCode.IPV4_ADDRESS_MOS] = [
+        MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+        (99, b"\x01\x02"),
+    ]
+    opts[DhcpOptionCode.IPV4_FQDN_MOS] = [
+        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        (99, b"\x03raw"),
+    ]
     assert opts.get(DhcpOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
     assert opts.get(DhcpOptionCode.STATIC_ROUTE)[0][0] == IPv4Address("192.0.2.0")
-    assert opts.get(DhcpOptionCode.USER_CLASS) == UserClass(["alpha", "beta"])
-    assert opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION)[0].code == 1
+    assert opts.get(DhcpOptionCode.USER_CLASS) == UserClass([b"alpha", b"\x00\xff"])
+    assert opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION) == VendorSpecificInformation(b"\x00\xff\x02vendor\x10")
+    assert isinstance(opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION), Bytes)
     assert opts.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
-    assert opts.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].code == 7
+    assert opts.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].enterprise_number == 32473
     assert opts.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == ["alpha.example", "beta.example"]
     assert opts.get(DhcpOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
     assert opts.get(DhcpOptionCode.RDNSS_SELECTION) == RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    assert opts.get(DhcpOptionCode.IPV4_ADDRESS_MOS) == MoSIpv4AddressList([
+        MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+        (99, b"\x01\x02"),
+    ])
+    assert opts.get(DhcpOptionCode.IPV4_FQDN_MOS) == MoSFqdnList([
+        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        (99, b"\x03raw"),
+    ])
 
 
 def test_registered_option_code_round_trips():
@@ -130,13 +158,24 @@ def test_registered_option_code_round_trips():
     opts[DhcpOptionCode.STATUS_CODE] = 7
     opts[DhcpOptionCode.POLICY_FILTER] = PolicyFilter([("192.0.2.1", "255.255.255.0")])
     opts[DhcpOptionCode.STATIC_ROUTE] = StaticRoute([("192.0.2.0", "192.0.2.1")])
-    opts[DhcpOptionCode.USER_CLASS] = UserClass(["alpha", "beta"])
-    opts[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = VendorSpecificInformation([(1, b"\x01")])
+    opts[DhcpOptionCode.USER_CLASS] = UserClass([b"alpha", b"\x00\xff"])
+    opts[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = VendorSpecificInformation(b"\x00\xff\x02vendor\x10")
     opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([(9, b"\x02")])
-    opts[DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation([(7, b"\x03")])
+    opts[DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation([
+        (32473, b"alpha"),
+        ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+    ])
     opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = ["alpha.example", "beta.example"]
     opts[DhcpOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
     opts[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    opts[DhcpOptionCode.IPV4_ADDRESS_MOS] = [
+        MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+        (99, b"\x01\x02"),
+    ]
+    opts[DhcpOptionCode.IPV4_FQDN_MOS] = [
+        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        (99, b"\x03raw"),
+    ]
 
     encoded = opts.encode()
     decoded = DhcpOptions()
@@ -150,13 +189,50 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DhcpOptionCode.STATUS_CODE) == 7
     assert decoded.get(DhcpOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
     assert decoded.get(DhcpOptionCode.STATIC_ROUTE)[0][1] == IPv4Address("192.0.2.1")
-    assert decoded.get(DhcpOptionCode.USER_CLASS) == UserClass(["alpha", "beta"])
-    assert decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION)[0].code == 1
+    assert decoded.get(DhcpOptionCode.USER_CLASS) == UserClass([b"alpha", b"\x00\xff"])
+    assert decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION) == VendorSpecificInformation(b"\x00\xff\x02vendor\x10")
+    assert isinstance(decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION), Bytes)
     assert decoded.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
-    assert decoded.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].code == 7
+    assert decoded.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].enterprise_number == 32473
     assert decoded.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == ["alpha.example", "beta.example"]
     assert decoded.get(DhcpOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
     assert decoded.get(DhcpOptionCode.RDNSS_SELECTION) == RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    assert decoded.get(DhcpOptionCode.IPV4_ADDRESS_MOS) == MoSIpv4AddressList([
+        MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+        (99, b"\x01\x02"),
+    ])
+    assert decoded.get(DhcpOptionCode.IPV4_FQDN_MOS) == MoSFqdnList([
+        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        (99, b"\x03raw"),
+    ])
+
+
+def test_raw_wire_decoding_for_opaque_and_enterprise_specific_options():
+    vendor_payload = b"\x00\xff\x02vendor\x10"
+    vi_payload = (
+        (32473).to_bytes(4, "big")
+        + b"\x05alpha"
+        + (65537).to_bytes(4, "big")
+        + b"\x02\x00\xff"
+    )
+
+    encoded = bytearray()
+    encoded.extend([DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION, len(vendor_payload)])
+    encoded.extend(vendor_payload)
+    encoded.extend([DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION, len(vi_payload)])
+    encoded.extend(vi_payload)
+    encoded.append(255)
+
+    decoded = DhcpOptions()
+    decoded.decode(memoryview(encoded))
+
+    assert decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION) == VendorSpecificInformation(vendor_payload)
+    assert decoded.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION) == ViVendorSpecificInformation([
+        (32473, b"alpha"),
+        ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+    ])
+    assert DhcpOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
+    assert DhcpOptionCode.IPV4_FQDN_MOS.get_type() is MoSFqdnList
 
 
 def test_register_type_rejects_invalid_type():

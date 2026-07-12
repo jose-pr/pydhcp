@@ -17,9 +17,14 @@ from pydhcp.optiontype import (
     TlvOption,
     VendorSpecificInformation,
     RelayAgentInformation,
+    ViVendorSpecificInformationRecord,
     ViVendorSpecificInformation,
     RdnssSelection,
     I32,
+    MoSIpv4AddressRecord,
+    MoSFqdnRecord,
+    MoSIpv4AddressList,
+    MoSFqdnList,
 )
 from pydhcp.netutils import IPv4
 from ipaddress import ip_network
@@ -198,26 +203,34 @@ def test_static_route_rejects_default_destination_and_round_trip():
     assert length == 16
 
 
-def test_user_class_round_trip_and_truncation():
-    value = UserClass(["alpha", "beta"])
+def test_user_class_round_trip_and_rejects_zero_length_entries():
+    value = UserClass([b"alpha", b"\x00\xff\x10"])
     buf = bytearray()
-    assert value._dhcp_write(buf) == 11
+    assert value._dhcp_write(buf) == 10
+    assert buf == b"\x05alpha\x03\x00\xff\x10"
     decoded, length = UserClass._dhcp_read(memoryview(buf))
     assert decoded == value
-    assert length == 11
+    assert length == 10
+
+    with pytest.raises(ValueError, match="non-empty"):
+        UserClass([b""])
+
+    with pytest.raises(ValueError, match="zero-length"):
+        UserClass._dhcp_read(memoryview(b"\x00"))
 
     with pytest.raises(ValueError, match="truncated"):
         UserClass._dhcp_read(memoryview(b"\x05abc"))
 
 
-def test_encapsulated_option_round_trip_and_tlv_handling():
-    value = VendorSpecificInformation([(1, b"\x01\x02"), (2, b"\x03")])
+def test_vendor_specific_information_preserves_opaque_bytes():
+    payload = b"\x00\xff\x02vendor\x10"
+    value = VendorSpecificInformation(payload)
     buf = bytearray()
-    assert value._dhcp_write(buf) == 7
-    assert buf == b"\x01\x02\x01\x02\x02\x01\x03"
-    decoded, length = VendorSpecificInformation._dhcp_read(memoryview(b"\x00\x01\x02\x01\x02\x00\x02\x01\x03\xff"))
-    assert decoded == VendorSpecificInformation([(1, b"\x01\x02"), (2, b"\x03")])
-    assert length == 10
+    assert value._dhcp_write(buf) == len(payload)
+    assert buf == payload
+    decoded, length = VendorSpecificInformation._dhcp_read(memoryview(payload))
+    assert decoded == value
+    assert length == len(payload)
 
     relay = RelayAgentInformation([TlvOption(1, b"abc")])
     buf = bytearray()
@@ -226,15 +239,37 @@ def test_encapsulated_option_round_trip_and_tlv_handling():
     assert decoded == relay
     assert length == 5
 
-    vi = ViVendorSpecificInformation([(9, b"xyz")])
+def test_vi_vendor_specific_information_uses_enterprise_records():
+    value = ViVendorSpecificInformation(
+        [
+            (32473, b"alpha"),
+            ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+        ]
+    )
     buf = bytearray()
-    assert vi._dhcp_write(buf) == 5
+    assert value._dhcp_write(buf) == 17
+    assert buf == (
+        (32473).to_bytes(4, "big")
+        + b"\x05alpha"
+        + (65537).to_bytes(4, "big")
+        + b"\x02\x00\xff"
+    )
     decoded, length = ViVendorSpecificInformation._dhcp_read(memoryview(buf))
-    assert decoded == vi
-    assert length == 5
+    assert decoded == value
+    assert length == 17
+    assert decoded[0].enterprise_number == 32473
+    assert decoded[0].value == b"alpha"
+    assert decoded[1].enterprise_number == 65537
+    assert decoded[1].value == b"\x00\xff"
 
     with pytest.raises(ValueError, match="truncated"):
-        VendorSpecificInformation._dhcp_read(memoryview(b"\x01"))
+        ViVendorSpecificInformation._dhcp_read(memoryview(b"\x00\x00\x00\x01"))
+
+    with pytest.raises(ValueError, match="32 bits"):
+        ViVendorSpecificInformationRecord(-1, b"a")._dhcp_encode()
+
+    with pytest.raises(ValueError, match="32 bits"):
+        ViVendorSpecificInformationRecord(0x1_0000_0000, b"a")._dhcp_encode()
 
 
 def test_rdnss_selection_round_trip():
@@ -248,6 +283,54 @@ def test_rdnss_selection_round_trip():
 
     with pytest.raises(ValueError, match="truncated"):
         RdnssSelection._dhcp_read(memoryview(b"\x01\x02"))
+
+
+def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
+    value = MoSIpv4AddressList([
+        MoSIpv4AddressRecord(1, ["192.0.2.1", "192.0.2.2"]),
+        (99, b"\x01\x02"),
+    ])
+    buf = bytearray()
+    wrote = value._dhcp_write(buf)
+    assert wrote == len(buf)
+    decoded, length = MoSIpv4AddressList._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == len(buf)
+    assert decoded[0].value == [IPv4Address("192.0.2.1"), IPv4Address("192.0.2.2")]
+    assert decoded[1].code == 99
+    assert decoded[1].value == b"\x01\x02"
+
+    raw = bytes([1, 8]) + IPv4Address("198.51.100.1").packed + IPv4Address("198.51.100.2").packed
+    decoded_raw, length = MoSIpv4AddressList._dhcp_read(memoryview(raw))
+    assert decoded_raw == MoSIpv4AddressList([MoSIpv4AddressRecord(1, ["198.51.100.1", "198.51.100.2"])])
+    assert length == len(raw)
+
+    with pytest.raises(ValueError, match="truncated"):
+        MoSIpv4AddressList._dhcp_read(memoryview(b"\x01\x05\x01\x02\x03"))
+
+
+def test_mos_fqdn_option_round_trip_and_rejects_truncated_labels():
+    value = MoSFqdnList([
+        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        (99, b"\x03raw"),
+    ])
+    buf = bytearray()
+    wrote = value._dhcp_write(buf)
+    assert wrote == len(buf)
+    decoded, length = MoSFqdnList._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == len(buf)
+    assert decoded[0].value == ["alpha.example", "beta.example"]
+    assert decoded[1].code == 99
+    assert decoded[1].value == b"\x03raw"
+
+    raw = b"\x01\x0f\x05alpha\x07example\x00"
+    decoded_raw, length = MoSFqdnList._dhcp_read(memoryview(raw))
+    assert decoded_raw == MoSFqdnList([MoSFqdnRecord(1, ["alpha.example"])])
+    assert length == len(raw)
+
+    with pytest.raises(ValueError, match="truncated"):
+        MoSFqdnList._dhcp_read(memoryview(b"\x01\x04\x03ab"))
 
 
 def test_signed_i32_round_trip():
