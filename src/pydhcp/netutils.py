@@ -1,6 +1,6 @@
 import typing as _ty
 import ipaddress as _ip
-import ifaddr as _if
+from . import _platform_utils as _platform
 import socket as _socket
 
 IPv4 = _ip.IPv4Address
@@ -105,21 +105,34 @@ class SocketSession(_ty.NamedTuple):
         return self.socket.sendto(data, (dest_str, int(port)))
 
 
+class NetworkInterface(_ty.NamedTuple):
+    name: str
+    ip_interface: _ip.IPv4Interface | _ip.IPv6Interface
+    mac: _ty.Optional[MACAddress] = None
+
+    @property
+    def ip(self) -> _ip.IPv4Address | _ip.IPv6Address:
+        return self.ip_interface.ip
+
+    @property
+    def network(self) -> _ip.IPv4Network | _ip.IPv6Network:
+        return self.ip_interface.network
+
+
 APIPA = _ip.ip_network("169.254.0.0/16")
 
 
 def host_ip_interfaces(
-    filter: _ty.Union[_ty.Callable[[_ip.IPv4Interface | _ip.IPv6Interface], bool], bool] = True
-) -> _ty.Iterator[_ip.IPv4Interface | _ip.IPv6Interface]:
+    filter: _ty.Union[_ty.Callable[[NetworkInterface], bool], bool] = True
+) -> _ty.Iterator[NetworkInterface]:
     if filter is True:
-        filter = lambda ip: ip.ip not in APIPA
-    for adapter in _if.get_adapters():
-        for ip_ in adapter.ips:
-            ip = ip_.ip
-            if ip_.is_IPv6:
-                ip_str = f"{ip[0]}%{ip[2]}"
-            else:
-                ip_str = str(ip)
-            interface = _ip.ip_interface((ip_str, ip_.network_prefix))
-            if not filter or filter(interface):
-                yield interface
+        filter = lambda ni: ni.ip not in APIPA
+    for name, ip_interface, mac in _platform.get_interfaces():
+        mac_val = MACAddress(mac) if mac else None
+        ni = NetworkInterface(
+            name=name,
+            ip_interface=ip_interface,
+            mac=mac_val
+        )
+        if not filter or filter(ni):
+            yield ni

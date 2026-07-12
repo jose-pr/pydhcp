@@ -3,6 +3,7 @@ from ._options import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as Dh
 from .optiontype import DhcpOptionType as DhcpOptionType
 from . import contants as _const
 from .enum.optioncode import DhcpOptionCode as _ianacodes
+from .log import LOGGER
 from math import inf as _inf
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
@@ -27,7 +28,23 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
             if code == 255:
                 break
+
+            if len(options) < 2:
+                LOGGER.warning(f"Option {code} is truncated (cannot read length)")
+                options = options[len(options):]
+                break
+
             length = options[1]
+            remaining = len(options) - 2
+            if length > remaining:
+                LOGGER.warning(
+                    f"Option {code} claims {length} bytes but only {remaining} available"
+                )
+                data = options[2:]
+                self._options.setdefault(code, bytearray()).extend(data)
+                options = options[len(options):]
+                continue
+
             next_idx = 2 + length
             data = options[2:next_idx]
             options = options[next_idx:]
@@ -60,7 +77,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             tofill -= 1
 
             while opt_view and tofill >= word_size:
-                slice_data = opt_view[: min(255, int(tofill))]
+                slice_data = opt_view[: int(min(255, tofill))]
                 _len = len(slice_data)
                 options.append(_len)
                 options.extend(slice_data)

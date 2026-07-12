@@ -3,6 +3,7 @@ from collections.abc import Iterable
 import typing as _ty
 from . import _utils
 import enum as _enum
+from .log import LOGGER
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
@@ -188,7 +189,12 @@ class String(DhcpOptionType, str):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
-        return cls(text.decode()), len(option)
+        try:
+            decoded_text = text.decode("utf-8")
+        except UnicodeDecodeError:
+            LOGGER.warning(f"Option contains invalid UTF-8: {text.hex()}")
+            decoded_text = text.decode("utf-8", errors="replace")
+        return cls(decoded_text), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:
         text = self.encode()
@@ -232,6 +238,7 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
         return cls(int.from_bytes(option_part, "big", signed=cls.SIGNED)), cls.NUMBER_OF_BYTES
 
     def _dhcp_write(self, data: bytearray) -> int:
+        self._validate()
         data.extend(self.to_bytes(self.NUMBER_OF_BYTES, "big", signed=self.SIGNED))
         return self.NUMBER_OF_BYTES
 

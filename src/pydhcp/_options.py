@@ -21,6 +21,8 @@ class BaseDhcpOptionCode:
         return cls(code)  # type: ignore[call-arg]
 
     def __int__(self) -> int:
+        if hasattr(self, "value"):
+            return int(self.value)
         return 0
 
     def __repr__(self) -> str:
