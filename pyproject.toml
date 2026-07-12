@@ -22,7 +22,10 @@ classifiers = [
     "Operating System :: OS Independent",
     "Typing :: Typed",
 ]
-dependencies = ["ifaddr"]
+dependencies = []
+
+[project.scripts]
+pydhcp = "pydhcp.cli:main"
 
 [project.optional-dependencies]
 dev = ['build', 'twine', 'hatchling', 'pytest']
