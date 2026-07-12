@@ -11,6 +11,14 @@ from pydhcp.optiontype import (
     U16,
     U32,
     ClasslessRoute,
+    PolicyFilter,
+    StaticRoute,
+    UserClass,
+    TlvOption,
+    VendorSpecificInformation,
+    RelayAgentInformation,
+    ViVendorSpecificInformation,
+    RdnssSelection,
     I32,
 )
 from pydhcp.netutils import IPv4
@@ -158,6 +166,88 @@ def test_classless_route_truncated_and_invalid_prefix():
 
     with pytest.raises(ValueError, match="exceeds 32"):
         ClasslessRoute._dhcp_read(memoryview(b"\x21\x00\x00\x00\x00\x00"))
+
+
+def test_policy_filter_round_trip_and_truncation():
+    value = PolicyFilter([
+        ("192.0.2.1", "255.255.255.0"),
+        ("198.51.100.1", "255.255.255.128"),
+    ])
+    buf = bytearray()
+    assert value._dhcp_write(buf) == 16
+    decoded, length = PolicyFilter._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == 16
+
+    with pytest.raises(ValueError, match="truncated"):
+        PolicyFilter._dhcp_read(memoryview(b"\x00" * 7))
+
+
+def test_static_route_rejects_default_destination_and_round_trip():
+    with pytest.raises(ValueError, match="default-route"):
+        StaticRoute([("0.0.0.0", "192.0.2.1")])
+
+    value = StaticRoute([
+        ("192.0.2.0", "192.0.2.1"),
+        ("198.51.100.0", "198.51.100.1"),
+    ])
+    buf = bytearray()
+    assert value._dhcp_write(buf) == 16
+    decoded, length = StaticRoute._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == 16
+
+
+def test_user_class_round_trip_and_truncation():
+    value = UserClass(["alpha", "beta"])
+    buf = bytearray()
+    assert value._dhcp_write(buf) == 11
+    decoded, length = UserClass._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == 11
+
+    with pytest.raises(ValueError, match="truncated"):
+        UserClass._dhcp_read(memoryview(b"\x05abc"))
+
+
+def test_encapsulated_option_round_trip_and_tlv_handling():
+    value = VendorSpecificInformation([(1, b"\x01\x02"), (2, b"\x03")])
+    buf = bytearray()
+    assert value._dhcp_write(buf) == 7
+    assert buf == b"\x01\x02\x01\x02\x02\x01\x03"
+    decoded, length = VendorSpecificInformation._dhcp_read(memoryview(b"\x00\x01\x02\x01\x02\x00\x02\x01\x03\xff"))
+    assert decoded == VendorSpecificInformation([(1, b"\x01\x02"), (2, b"\x03")])
+    assert length == 10
+
+    relay = RelayAgentInformation([TlvOption(1, b"abc")])
+    buf = bytearray()
+    assert relay._dhcp_write(buf) == 5
+    decoded, length = RelayAgentInformation._dhcp_read(memoryview(buf))
+    assert decoded == relay
+    assert length == 5
+
+    vi = ViVendorSpecificInformation([(9, b"xyz")])
+    buf = bytearray()
+    assert vi._dhcp_write(buf) == 5
+    decoded, length = ViVendorSpecificInformation._dhcp_read(memoryview(buf))
+    assert decoded == vi
+    assert length == 5
+
+    with pytest.raises(ValueError, match="truncated"):
+        VendorSpecificInformation._dhcp_read(memoryview(b"\x01"))
+
+
+def test_rdnss_selection_round_trip():
+    value = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    buf = bytearray()
+    wrote = value._dhcp_write(buf)
+    assert wrote == len(buf)
+    decoded, length = RdnssSelection._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == len(buf)
+
+    with pytest.raises(ValueError, match="truncated"):
+        RdnssSelection._dhcp_read(memoryview(b"\x01\x02"))
 
 
 def test_signed_i32_round_trip():

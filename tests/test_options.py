@@ -1,7 +1,18 @@
 import pytest
 from pydhcp.options import DhcpOptions
 from pydhcp.enum import DhcpOptionCode, DhcpMessageType
-from pydhcp.optiontype import IPv4Address, String, Boolean
+from pydhcp.optiontype import (
+    IPv4Address,
+    String,
+    Boolean,
+    PolicyFilter,
+    StaticRoute,
+    UserClass,
+    VendorSpecificInformation,
+    RelayAgentInformation,
+    ViVendorSpecificInformation,
+    RdnssSelection,
+)
 
 def test_options_set_get():
     opts = DhcpOptions()
@@ -50,6 +61,15 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.MERIT_DUMP_FILE.get_type() is String
     assert DhcpOptionCode.ARP_TIMEOUT.get_type().__name__ == "U32"
     assert DhcpOptionCode.STATUS_CODE.get_type().__name__ == "U8"
+    assert DhcpOptionCode.POLICY_FILTER.get_type() is PolicyFilter
+    assert DhcpOptionCode.STATIC_ROUTE.get_type() is StaticRoute
+    assert DhcpOptionCode.USER_CLASS.get_type() is UserClass
+    assert DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION.get_type() is VendorSpecificInformation
+    assert DhcpOptionCode.RELAY_AGENT_INFORMATION.get_type() is RelayAgentInformation
+    assert DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION.get_type() is ViVendorSpecificInformation
+    assert DhcpOptionCode.NAME_SERVICE_SEARCH.get_type().__name__ == "DomainList"
+    assert DhcpOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4Address
+    assert DhcpOptionCode.RDNSS_SELECTION.get_type() is RdnssSelection
 
     opts = DhcpOptions()
     opts[DhcpOptionCode.LOG_SERVER] = ["10.0.0.1", "10.0.0.2"]
@@ -76,6 +96,29 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.MERIT_DUMP_FILE] = "core.dump"
     assert opts.get(DhcpOptionCode.MERIT_DUMP_FILE, decode=String) == "core.dump"
 
+    opts[DhcpOptionCode.POLICY_FILTER] = PolicyFilter([
+        ("192.0.2.1", "255.255.255.0"),
+    ])
+    opts[DhcpOptionCode.STATIC_ROUTE] = StaticRoute([
+        ("192.0.2.0", "192.0.2.1"),
+    ])
+    opts[DhcpOptionCode.USER_CLASS] = UserClass(["alpha", "beta"])
+    opts[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = VendorSpecificInformation([(1, b"\x01")])
+    opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([(9, b"\x02")])
+    opts[DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation([(7, b"\x03")])
+    opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = ["alpha.example", "beta.example"]
+    opts[DhcpOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
+    opts[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    assert opts.get(DhcpOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
+    assert opts.get(DhcpOptionCode.STATIC_ROUTE)[0][0] == IPv4Address("192.0.2.0")
+    assert opts.get(DhcpOptionCode.USER_CLASS) == UserClass(["alpha", "beta"])
+    assert opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION)[0].code == 1
+    assert opts.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
+    assert opts.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].code == 7
+    assert opts.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == ["alpha.example", "beta.example"]
+    assert opts.get(DhcpOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
+    assert opts.get(DhcpOptionCode.RDNSS_SELECTION) == RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+
 
 def test_registered_option_code_round_trips():
     opts = DhcpOptions()
@@ -85,6 +128,15 @@ def test_registered_option_code_round_trips():
     opts[DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL] = True
     opts[DhcpOptionCode.MERIT_DUMP_FILE] = "crash.dump"
     opts[DhcpOptionCode.STATUS_CODE] = 7
+    opts[DhcpOptionCode.POLICY_FILTER] = PolicyFilter([("192.0.2.1", "255.255.255.0")])
+    opts[DhcpOptionCode.STATIC_ROUTE] = StaticRoute([("192.0.2.0", "192.0.2.1")])
+    opts[DhcpOptionCode.USER_CLASS] = UserClass(["alpha", "beta"])
+    opts[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = VendorSpecificInformation([(1, b"\x01")])
+    opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([(9, b"\x02")])
+    opts[DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation([(7, b"\x03")])
+    opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = ["alpha.example", "beta.example"]
+    opts[DhcpOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
+    opts[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
 
     encoded = opts.encode()
     decoded = DhcpOptions()
@@ -96,6 +148,15 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL) == Boolean(1)
     assert decoded.get(DhcpOptionCode.MERIT_DUMP_FILE, decode=String) == "crash.dump"
     assert decoded.get(DhcpOptionCode.STATUS_CODE) == 7
+    assert decoded.get(DhcpOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
+    assert decoded.get(DhcpOptionCode.STATIC_ROUTE)[0][1] == IPv4Address("192.0.2.1")
+    assert decoded.get(DhcpOptionCode.USER_CLASS) == UserClass(["alpha", "beta"])
+    assert decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION)[0].code == 1
+    assert decoded.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
+    assert decoded.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].code == 7
+    assert decoded.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == ["alpha.example", "beta.example"]
+    assert decoded.get(DhcpOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
+    assert decoded.get(DhcpOptionCode.RDNSS_SELECTION) == RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
 
 
 def test_register_type_rejects_invalid_type():
