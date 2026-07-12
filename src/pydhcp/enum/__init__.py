@@ -4,6 +4,16 @@ import typing as _ty
 import enum as _enum
 from . import _optioncode_types
 
+__all__ = [
+    "DhcpOptionCode",
+    "DhcpMessageType",
+    "OpCode",
+    "DhcpPort",
+    "Flags",
+    "HardwareAddressType",
+]
+
+
 
 class OpCode(_enum.IntEnum):
     """Specifies if the message originates from a server or client"""
@@ -40,9 +50,9 @@ class HardwareAddressType(_enum.IntEnum):
     LOCALTALK = 11
     LOCALNET = 12
 
-    def dumps(self, address: bytes):
+    def dumps(self, address: bytes) -> str:
         match self:
             case HardwareAddressType.ETHERNET:
                 return address.hex(":", 1).upper()
             case _other:
-                return f"{address}"
+                return repr(address)

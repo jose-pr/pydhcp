@@ -1,3 +1,4 @@
+from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
 from . import _utils
@@ -24,8 +25,8 @@ class DhcpOptionType:
         return bytes(encoded)
 
     @classmethod
-    def _dhcp_len_hint(self) -> int | None:
-        None
+    def _dhcp_len_hint(cls) -> int | None:
+        return None
 
     @classmethod
     def _dhcp_decode(cls, option: memoryview | bytes | bytearray) -> "Self":
@@ -46,18 +47,20 @@ _C = _ty.TypeVar("_C", bound="BaseDhcpOptionCode")
 
 
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
-    _args_: _ty.ClassVar[tuple[_T]]  # type:ignore
+    _args_: _ty.ClassVar[tuple[_T]]
 
-    def __init__(self, *items: _ty.Iterable[_T] | _T):
+    def __init__(self, *items: _ty.Any):
         for _items in items:
             self.extend(_items if isinstance(_items, (tuple, list)) else (_items,))
 
     @classmethod
-    def _normalize(cls, item: _T) -> _T:
+    def _normalize(cls, item: _ty.Any) -> _T:
         ty = cls._args_[0]
-        return ty(item) if not isinstance(item, ty) else item
+        if isinstance(item, _ty.cast(_ty.Any, ty)):
+            return _ty.cast(_T, item)
+        return _ty.cast(_T, _ty.cast(_ty.Any, ty)(item))
 
-    def __setitem__(self, idx, item: _T) -> None:
+    def __setitem__(self, idx: _ty.Any, item: _T) -> None:  # type: ignore[override]
         return list.__setitem__(self, idx, self._normalize(item))
 
     def append(self, item: _T) -> None:
@@ -80,48 +83,48 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
             option = option[l:]
         return self, _l
 
-    def _dhcp_write(self, data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         written = 0
         for item in self:
             written += item._dhcp_write(data)
         return written
 
 
-class DhcpOptionCodes(List[_C]):
+class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
     @classmethod
-    def _normalize(cls, item: _T) -> _T:
+    def _normalize(cls, item: _ty.Any) -> _ty.Any:
         ty = cls._args_[0]
-        if isinstance(item, ty):
+        if isinstance(item, _ty.cast(_ty.Any, ty)):
             return item
         try:
-            return ty(item)
+            return _ty.cast(_ty.Any, ty)(item)
         except:
             ...
-        item = int(item)
-        if item > 255:
+        item_int = int(item)
+        if item_int > 255:
             raise ValueError()
-        return item
+        return item_int
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         return cls(option.tolist()), len(option)
 
-    def _dhcp_write(self, data: bytearray):
-        data.extend(self)
+    def _dhcp_write(self, data: bytearray) -> int:
+        data.extend(_ty.cast(_ty.Iterable[int], self))
         return len(self)
 
 
 class IPv4Address(DhcpOptionType, _IP):
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         return cls(option[:4].tobytes()), 4
 
-    def _dhcp_write(self, data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         data.extend(self.packed)
         return 4
 
     @classmethod
-    def _dhcp_len_hint(cls):
+    def _dhcp_len_hint(cls) -> int | None:
         return 4
 
     def __repr__(self) -> str:
@@ -137,18 +140,17 @@ class ClasslessRoute(DhcpOptionType):
         self.network = _Network(network)
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         cidr = option[0]
-        last, rem = divmod(cidr, 4)
-        last += rem + 1
-        network = option[1:last].tobytes() + b"\x00\x00\x00\x00"
-        network = _Network((network[:4], cidr))
-        return cls(next, option[last : last + 4].tobytes()), last + 4
+        last = 1 + (cidr + 7) // 8
+        net_bytes = option[1:last].tobytes() + b"\x00\x00\x00\x00"
+        network = _Network((net_bytes[:4], cidr))
+        gateway = _IP(option[last : last + 4].tobytes())
+        return cls(gateway, network), last + 4
 
-    def _dhcp_write(self, data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         cidr = self.network.prefixlen
-        last, rem = divmod(cidr, 4)
-        last += rem
+        last = (cidr + 7) // 8
         network = self.network.network_address.packed[:last]
         data.append(cidr)
         data.extend(network)
@@ -157,9 +159,11 @@ class ClasslessRoute(DhcpOptionType):
 
 
 class Bytes(DhcpOptionType, bytes):
-    def __new__(cls, src=None) -> "Self":
+    def __new__(cls, src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None) -> Self:
         if isinstance(src, str):
             return cls.fromhex(src)
+        if src is None:
+            return super().__new__(cls)
         return super().__new__(cls, src)
 
     def __repr__(self) -> str:
@@ -169,10 +173,10 @@ class Bytes(DhcpOptionType, bytes):
         return self.hex().upper()
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         return cls(option), len(option)
 
-    def _dhcp_write(self, data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         data.extend(self)
         return len(self)
 
@@ -182,18 +186,18 @@ class Bytes(DhcpOptionType, bytes):
 
 class String(DhcpOptionType, str):
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
         return cls(text.decode()), len(option)
 
-    def _dhcp_write(self, data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         text = self.encode()
         data.extend(text)
         return len(text)
 
 
 class Boolean(DhcpOptionType, int):
-    def __new__(cls, val):
+    def __new__(cls, val: _ty.Any) -> Self:
         if val:
             val = 1
         else:
@@ -201,52 +205,52 @@ class Boolean(DhcpOptionType, int):
         return super().__new__(cls, val)
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         return cls(option[0]), 1
 
-    def _dhcp_write(self, data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         data.append(self)
         return 1
 
     @classmethod
-    def _dhcp_len_hint(self) -> int:
+    def _dhcp_len_hint(cls) -> int | None:
         return 1
 
-    def _json_(self):
+    def _json_(self) -> bool:
         return self.__bool__()
 
 
-class BaseFixedLengthInteger(DhcpOptionType):
+class BaseFixedLengthInteger(DhcpOptionType, int):
     NUMBER_OF_BYTES: int
     SIGNED: bool = False
 
     @classmethod
-    def _dhcp_read(cls: "type[int|Self]", option: memoryview) -> tuple["Self", int]:
-        option = option[: cls.NUMBER_OF_BYTES]
-        if len(option) != cls.NUMBER_OF_BYTES:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        option_part = option[: cls.NUMBER_OF_BYTES]
+        if len(option_part) != cls.NUMBER_OF_BYTES:
             raise ValueError()
-        return cls.from_bytes(option, "big", signed=cls.SIGNED), cls.NUMBER_OF_BYTES
+        return cls(int.from_bytes(option_part, "big", signed=cls.SIGNED)), cls.NUMBER_OF_BYTES
 
-    def _dhcp_write(self: "int|Self", data: bytearray):
+    def _dhcp_write(self, data: bytearray) -> int:
         data.extend(self.to_bytes(self.NUMBER_OF_BYTES, "big", signed=self.SIGNED))
         return self.NUMBER_OF_BYTES
 
     @classmethod
-    def _dhcp_len_hint(self) -> int:
-        return self.NUMBER_OF_BYTES
+    def _dhcp_len_hint(cls) -> int | None:
+        return cls.NUMBER_OF_BYTES
 
-    def _validate(self: "type[int|Self]"):
+    def _validate(self) -> None:
         if self.bit_length() > self.NUMBER_OF_BYTES * 8:
-            raise ValueError("Number is too  big")
+            raise ValueError("Number is too big")
         if not self.SIGNED and self < 0:
             raise ValueError("Value must not be signed")
 
 
-class FixedLengthInteger(BaseFixedLengthInteger, int):
-    def __new__(cls, val):
-        val = super().__new__(cls, val)
-        val._validate()
-        return val
+class FixedLengthInteger(BaseFixedLengthInteger):
+    def __new__(cls, val: _ty.Any) -> Self:
+        val_obj = int.__new__(cls, val)
+        val_obj._validate()
+        return val_obj
 
 
 class U8(FixedLengthInteger):
@@ -266,12 +270,12 @@ class U32(FixedLengthInteger):
 
 class DomainList(DhcpOptionType, list[str]):
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         view = memoryview(option)
         self = cls()
         if not option:
-            return self
-        components: dict[str, str] = _ty.OrderedDict()
+            return self, 0
+        components: dict[int, str | int | None] = _ty.OrderedDict()
         domains: list[int] = [0]
         id = 0
         size = len(view)
@@ -295,7 +299,7 @@ class DomainList(DhcpOptionType, list[str]):
                 components[id - 1] = dc.tobytes().decode()
                 id += ptr_or_len
 
-        def get_dn(id: int):
+        def get_dn(id: int) -> list[str]:
             result = []
             for idx, dc in components.items():
                 if idx >= id:
@@ -311,13 +315,13 @@ class DomainList(DhcpOptionType, list[str]):
             self.append(".".join(get_dn(domain)))
         return self, len(option)
 
-    def _dhcp_write(self, _data: bytearray):
-        components: list[tuple[list[str], int | None]] = []
+    def _dhcp_write(self, _data: bytearray) -> int:
+        components: list[tuple[list[str], int]] = []
         data = bytearray()
-        for domain in self:
-            domain = domain.split(".")
+        for domain_str in self:
+            domain = domain_str.split(".")
             unique = domain
-            parent: tuple[int, int] = None
+            parent: _ty.Optional[tuple[int, int]] = None
             for cn, cidx in components:
                 pair = 1
                 while pair < len(domain):
@@ -337,13 +341,12 @@ class DomainList(DhcpOptionType, list[str]):
                     unique = domain[:-pair]
 
             components.append((domain, len(data)))
-            for cn in unique:
-                data.append(len(cn))
-                data.extend(cn.encode())
+            for comp in unique:
+                data.append(len(comp))
+                data.extend(comp.encode())
             if parent is None:
                 data.append(0x00)
             else:
-                cn
                 data.extend((0xC000 | parent[0]).to_bytes(2, byteorder="big"))
         _data.extend(data)
         return len(data)
@@ -351,21 +354,22 @@ class DomainList(DhcpOptionType, list[str]):
 
 class ClientIdentifier(Bytes):
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 2:
             raise ValueError(option)
         return super()._dhcp_read(option)
 
     def __repr__(self) -> str:
-        ty = self[0]
+        ty_val = self[0]
         addr = self[1:]
+        ty_str = str(ty_val)
         try:
             from .enum import HardwareAddressType
 
-            ty = HardwareAddressType(ty).name
+            ty_str = HardwareAddressType(ty_val).name
         except:
             ...
-        maybe = f"{ty}({addr.hex(':').upper()})"
+        maybe = f"{ty_str}({addr.hex(':').upper()})"
 
         return f"{maybe}|{self}"
 
@@ -373,18 +377,23 @@ class ClientIdentifier(Bytes):
         return self.hex(":").upper()
 
 
-class OptionOverload(BaseFixedLengthInteger, _enum.Flag):
-    @classmethod
-    @property
-    def NUMBER_OF_BYTES(self):
-        return 1
-
-    @classmethod
-    @property
-    def SIGNED(self):
-        return False
-
+class OptionOverload(DhcpOptionType, _enum.IntFlag):
     NONE = 0
     FILE = 1
     SNAME = 2
     BOTH = FILE | SNAME
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        option_part = option[:1]
+        if len(option_part) != 1:
+            raise ValueError()
+        return cls(option_part[0]), 1
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        data.append(self.value)
+        return 1
+
+    @classmethod
+    def _dhcp_len_hint(cls) -> int | None:
+        return 1

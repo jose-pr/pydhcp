@@ -2,22 +2,22 @@ import typing as _ty
 import enum as _enum
 
 from .. import _options
-from ..optiontype import Bytes
+from ..optiontype import Bytes, DhcpOptionType
 
 
 class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
-    __CODEMAP: list[type["_options.DhcpOptionType"]] = [Bytes] * 256
+    __CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
 
-    def register_type(code, optiontype: type["_options.DhcpOptionType"]):
-        DhcpOptionCode.__CODEMAP[code] = optiontype
+    def register_type(self, optiontype: type[DhcpOptionType]) -> None:
+        DhcpOptionCode.__CODEMAP[self] = optiontype
 
-    def get_type(code) -> "type[_options.DhcpOptionType]":
-        return DhcpOptionCode.__CODEMAP[code]
+    def get_type(self) -> type[DhcpOptionType]:
+        return DhcpOptionCode.__CODEMAP[self]
 
-    def label(code) -> str:
-        label = getattr(code, "name", None)
-        if not label:
-            return _options.BaseDhcpOptionCode.label(code)
+    def label(self) -> str:
+        label = getattr(self, "name", None)
+        if not isinstance(label, str):
+            return _options.BaseDhcpOptionCode.label(self)
         return label
 
     #
