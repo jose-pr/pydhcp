@@ -1,2 +1,20 @@
-/**/__pycache__
-/_*
+# Build/dist output and generated docs site
+dist/
+build/
+site/
+
+# Agent/harness tooling
+AGENTS.md
+.agents/
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+
+# Python-specific patterns
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
