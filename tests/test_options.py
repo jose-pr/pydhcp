@@ -1,7 +1,8 @@
 import pytest
+import pytest
 from pydhcp.options import DhcpOptions
 from pydhcp.enum import DhcpOptionCode, DhcpMessageType
-from pydhcp.optiontype import IPv4Address, U8, String, Bytes
+from pydhcp.optiontype import IPv4Address, U8, String, Bytes, Boolean
 
 def test_options_set_get():
     opts = DhcpOptions()
@@ -33,3 +34,21 @@ def test_options_partial_encode():
     decoded_opts.decode(memoryview(encoded))
     assert decoded_opts.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPDISCOVER
     assert decoded_opts.get(DhcpOptionCode.HOSTNAME, decode=String) == "test-host"
+
+
+def test_typed_registrations_and_aliases():
+    assert DhcpOptionCode.TCP_KEEPALIVE_GARBAGE.name == "TCP_KEEPALIVE_GARBAGE"
+    assert DhcpOptionCode.TCP_KEEPALICE_GARBAGE is DhcpOptionCode.TCP_KEEPALIVE_GARBAGE
+    assert DhcpOptionCode.NNTP_SERVER.name == "NNTP_SERVER"
+    assert DhcpOptionCode.NNTP_SREVER is DhcpOptionCode.NNTP_SERVER
+
+    opts = DhcpOptions()
+    opts[DhcpOptionCode.LOG_SERVER] = ["10.0.0.1", "10.0.0.2"]
+    opts[DhcpOptionCode.IP_FORWARDING] = 1
+    assert isinstance(opts.get(DhcpOptionCode.LOG_SERVER)[0], IPv4Address)
+    assert opts.get(DhcpOptionCode.IP_FORWARDING) == Boolean(1)
+
+
+def test_register_type_rejects_invalid_type():
+    with pytest.raises(TypeError):
+        DhcpOptionCode.LOG_SERVER.register_type(int)  # type: ignore[arg-type]

@@ -9,6 +9,8 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     __CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
 
     def register_type(self, optiontype: type[DhcpOptionType]) -> None:
+        if not isinstance(optiontype, type) or not issubclass(optiontype, DhcpOptionType):
+            raise TypeError("optiontype must be a DhcpOptionType subclass")
         DhcpOptionCode.__CODEMAP[self] = optiontype
 
     def get_type(self) -> type[DhcpOptionType]:
@@ -336,7 +338,7 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
 
    The code for this option is 38, and its length is 4."""
 
-    TCP_KEEPALICE_GARBAGE = 39
+    TCP_KEEPALIVE_GARBAGE = 39
     """This option specifies the whether or not the client should send TCP
    keepalive messages with a octet of garbage for compatibility with
    older implementations.  A value of 0 indicates that a garbage octet
@@ -344,6 +346,7 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
    should be sent.
 
    The code for this option is 39, and its length is 1."""
+    TCP_KEEPALICE_GARBAGE = TCP_KEEPALIVE_GARBAGE
 
     #
     #
@@ -505,7 +508,7 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
    The code for the POP3 server option is 70.  The minimum length for
    this option is 4 octets, and the length MUST always be a multiple of
    4."""
-    NNTP_SREVER = 71
+    NNTP_SERVER = 71
     """
    The NNTP server option specifies a list of NNTP available to the
    client.  Servers SHOULD be listed in order of preference.
@@ -513,6 +516,7 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
    The code for the NNTP server option is 71. The minimum length for
    this option is 4 octets, and the length MUST always be a multiple of
    4."""
+    NNTP_SREVER = NNTP_SERVER
     WWW_SERVER = 72
     """The WWW server option specifies a list of WWW available to the
    client.  Servers SHOULD be listed in order of preference.
