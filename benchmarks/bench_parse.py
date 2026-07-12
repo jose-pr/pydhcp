@@ -39,14 +39,14 @@ def build_benchmark_payload() -> bytes:
 
 PAYLOAD_BYTES = build_benchmark_payload()
 
-def run_benchmarks(iterations: int = 10000):
+def run_benchmarks(iterations: int = 10000) -> dict[str, float]:
     print(f"--- Running DHCP Packet Parsing Benchmarks ({iterations:,} iterations) ---")
     
     # 1. Decode Benchmark
     # We use memoryview(PAYLOAD_BYTES) as is typically done in the listener
     payload_mv = memoryview(PAYLOAD_BYTES)
     
-    def test_decode():
+    def test_decode() -> None:
         DhcpMessage.decode(payload_mv)
         
     decode_time = timeit.timeit(test_decode, number=iterations)
@@ -56,7 +56,7 @@ def run_benchmarks(iterations: int = 10000):
     # 2. Encode Benchmark
     msg = DhcpMessage.decode(payload_mv)
     
-    def test_encode():
+    def test_encode() -> None:
         msg.encode()
         
     encode_time = timeit.timeit(test_encode, number=iterations)
