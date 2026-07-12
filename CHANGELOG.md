@@ -10,14 +10,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Created `benchmarks/bench_parse.py` packet parsing and serialization performance benchmarks.
 - Added `benchmarks/README.md` documenting performance baselines.
+- Added `AsyncDhcpListener` and `AsyncDhcpServer` classes implementing asyncio-based event loop integration.
+- Added integration tests for async server in `tests/test_async.py`.
+- Configured MkDocs documentation with Material theme and `mkdocstrings` auto-generated API references.
+- Added `Transport`, `UdpTransport`, and `RequestContext` classes for structured transport-layer abstraction and Interface tracking.
+- Added comprehensive unit testing coverage for packet deserialization and type-safe dictionary operations in `test_message.py` and `test_options.py`.
+- Added integration tests verifying standard client DORA sequences and RFC 2131 routing logic in `tests/integration/test_dora.py`.
+- Added missing `ALL_VPNS` option (Tag 254) to `DhcpOptionCode` after comparing against the latest IANA registry.
+- Populated default `ROUTER` and `DNS` lease options in `DhcpServer.acquire_lease` using the server's interface IP.
+- Added pluggable lease backend API (`LeaseBackend`) and implementations (`InMemoryLeaseBackend`, `FileLeaseBackend`) for state preservation and persistence.
+- Added unit and integration tests for lease backends in `tests/test_lease_backend.py` and `tests/integration/test_dora.py`.
+- Added validation checks for hardware address length (hlen <= 16) during packet decoding.
+- Added socket binding error diagnostics that offer actionable suggestions for permission and address-in-use errors.
+- Added unit tests for binding error handling and malformed packet input in `tests/test_permissions.py` and `tests/test_malformed_packets.py`.
 
 ### Changed
 - Configured strict typechecking configuration in `pyproject.toml` and resolved all mypy type-checking errors across the library.
 - Refactored `DhcpMessageType` and `OptionOverload` to implement the `DhcpOptionType` interface directly and avoid PEP 561 / type conflicts with `BaseFixedLengthInteger` and Enums.
+- Refactored `DhcpServer.handle` to accept `RequestContext` instead of `SocketSession`, split processing into message-type specific handlers (`handle_discover`, etc.), and comply strictly with RFC 2131 routing paths.
+- Enriched `NetworkInterface` and `host_ip_interfaces()` to yield fully detailed adapter metadata.
+- Refactored `DhcpServer` and `AsyncDhcpServer` to accept and delegate lease lifecycle events (allocate, lookup, renew, release) to a configurable `lease_backend`.
+- Refactored options parsing in `DhcpOptions.decode` to handle truncated option lengths gracefully by logging a warning and parsing remaining bytes instead of crashing.
+- Added debug-level logging for packet arrival and lease allocation including client XIDs.
 
 ### Fixed
 - Fixed bug in `ClasslessRoute` destination descriptor parsing/serialization that caused incorrect length calculations for CIDR/8.
 - Fixed forward reference type resolution issue for `DhcpOption` in `_options.py`.
+- Fixed options encoding `OverflowError` when option size limit is infinite.
+- Fixed `BaseDhcpOptionCode.__int__` returning constant zero, correcting enum integer conversion for option codes.
 
 ## [0.1.0] - 2026-07-11
 

@@ -20,11 +20,44 @@ pip install pydhcp
 
 ## Quick start
 
+### Synchronous Server
 ```python
 from pydhcp.server import DhcpServer
 
 server = DhcpServer()
 server.listen()
+```
+
+### Asynchronous Server
+```python
+import asyncio
+from pydhcp.server import AsyncDhcpServer
+
+async def main():
+    server = AsyncDhcpServer()
+    await server.start()
+    # Keep running or handle other async tasks
+    # To stop: await server.stop()
+
+asyncio.run(main())
+```
+
+## Command Line Interface (CLI)
+
+`pydhcp` includes a command line interface for listing network adapters, decoding packets, running benchmarks, and starting servers.
+
+```bash
+# List all network interfaces
+pydhcp interfaces
+
+# Decode a hex-encoded DHCP packet
+pydhcp packet --decode "01010600..."
+
+# Run performance benchmarks
+pydhcp bench
+
+# Start the DHCP server from config
+pydhcp server --config config.json
 ```
 
 ## Development
