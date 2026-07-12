@@ -6,9 +6,9 @@ This directory contains the benchmarks for measuring the serialization and deser
 
 ### Structured output
 
-`benchmarks/bench_options.py` supports an optional `--json-output <path>` flag so local runs and
-opt-in CI runs can archive comparable results without changing the default human-readable console
-output.
+`benchmarks/bench_options.py` and `benchmarks/bench_parse.py` support an optional
+`--json-output <path>` flag so local runs and opt-in CI runs can archive comparable results
+without changing the default human-readable console output.
 
 ### 1. Packet Parsing & Serialization (`benchmarks/bench_parse.py`)
 Measures the operations per second (ops/sec) and total duration for 10,000 iterations of:
@@ -19,6 +19,11 @@ Measures the operations per second (ops/sec) and total duration for 10,000 itera
 From the repository root directory, run:
 ```bash
 python benchmarks/bench_parse.py
+```
+
+To capture structured parse-benchmark results:
+```bash
+python benchmarks/bench_parse.py --iterations 10000 --json-output benchmark-results/bench_parse.json
 ```
 
 To capture structured option-benchmark results:
