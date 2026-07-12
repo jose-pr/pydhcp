@@ -66,12 +66,17 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME.get_type().__name__ == "U32"
     assert DhcpOptionCode.ASSOCIATED_IP.get_type() is IPv4Address
     assert DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE.get_type()._args_[0].__name__ == "U16"
+    assert DhcpOptionCode.PCODE.get_type() is String
+    assert DhcpOptionCode.TCODE.get_type() is String
     assert DhcpOptionCode.IPV6_ONLY.get_type().__name__ == "U32"
     assert DhcpOptionCode.NETINFO_ADDRESS.get_type() is IPv4Address
+    assert DhcpOptionCode.NETINFO_TAG.get_type() is String
+    assert DhcpOptionCode.DHCP_CAPTIVE_PORTAL.get_type() is String
     assert DhcpOptionCode.AUTO_CONFIG.get_type() is Boolean
     assert DhcpOptionCode.CAPWAP_AC_V4.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.get_type().__name__ == "DomainList"
     assert DhcpOptionCode.IPV4_ADDRESS_ANDSF.get_type()._args_[0] is IPv4Address
+    assert DhcpOptionCode.V4_DOTS_RI.get_type() is String
     assert DhcpOptionCode.V4_DOTS_ADDRESS.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.TFTP_SERVER_ADDRESS.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.BASE_TIME.get_type().__name__ == "U32"
@@ -81,7 +86,11 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.DHCP_STATE.get_type().__name__ == "U8"
     assert DhcpOptionCode.DATA_SOURCE.get_type().__name__ == "U8"
     assert DhcpOptionCode.V4_PCP_SERVER.get_type()._args_[0] is IPv4Address
+    assert DhcpOptionCode.MUD_URL_V4.get_type() is String
+    assert DhcpOptionCode.CONFIGURATION_FILE.get_type() is String
+    assert DhcpOptionCode.PATH_PREFIX.get_type() is String
     assert DhcpOptionCode.REBOOT_TIME.get_type().__name__ == "U32"
+    assert DhcpOptionCode.V4_ACCESS_DOMAIN.get_type() is String
     assert DhcpOptionCode.RAPID_COMMIT.get_type() is Boolean
     assert DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL.get_type() is Boolean
     assert DhcpOptionCode.TRAILER_ENCAPSULATION.get_type() is Boolean
@@ -106,18 +115,26 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST] = ["alpha.example", "beta.example"]
     opts[DhcpOptionCode.BCMCS_IPV4_ADDRESS] = ["10.0.0.7", "10.0.0.8"]
     opts[DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE] = [1, 2]
+    opts[DhcpOptionCode.PCODE] = "Europe/Berlin"
+    opts[DhcpOptionCode.TCODE] = "tz.example/ref"
     opts[DhcpOptionCode.RFC868_TIMESERVER] = ["10.0.0.4"]
     opts[DhcpOptionCode.IEN116_NAMESERVER] = ["10.0.0.5"]
     opts[DhcpOptionCode.SWAP_SERVER] = "10.0.0.6"
     opts[DhcpOptionCode.SIP_SERVERS] = ["10.0.0.3"]
     opts[DhcpOptionCode.ASSOCIATED_IP] = "192.0.2.20"
     opts[DhcpOptionCode.NETINFO_ADDRESS] = "192.0.2.21"
+    opts[DhcpOptionCode.NETINFO_TAG] = "lab-a"
+    opts[DhcpOptionCode.DHCP_CAPTIVE_PORTAL] = "https://portal.example/login"
     opts[DhcpOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
     opts[DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS] = ["service.example", "config.example"]
     opts[DhcpOptionCode.IPV4_ADDRESS_ANDSF] = ["192.0.2.40", "192.0.2.41"]
+    opts[DhcpOptionCode.V4_DOTS_RI] = "resolver-a"
     opts[DhcpOptionCode.V4_DOTS_ADDRESS] = ["192.0.2.50", "192.0.2.51"]
     opts[DhcpOptionCode.TFTP_SERVER_ADDRESS] = ["192.0.2.60", "192.0.2.61"]
     opts[DhcpOptionCode.V4_PCP_SERVER] = ["192.0.2.70", "192.0.2.71"]
+    opts[DhcpOptionCode.MUD_URL_V4] = "https://mud.example/policy"
+    opts[DhcpOptionCode.CONFIGURATION_FILE] = "/pxe/config.cfg"
+    opts[DhcpOptionCode.PATH_PREFIX] = "/pxe/"
     opts[DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME] = 1234
     opts[DhcpOptionCode.IPV6_ONLY] = 4321
     opts[DhcpOptionCode.BASE_TIME] = 111
@@ -128,6 +145,7 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.DHCP_STATE] = 7
     opts[DhcpOptionCode.DATA_SOURCE] = 3
     opts[DhcpOptionCode.AUTO_CONFIG] = True
+    opts[DhcpOptionCode.V4_ACCESS_DOMAIN] = "access.example"
     opts[DhcpOptionCode.IP_FORWARDING] = 1
     opts[DhcpOptionCode.RAPID_COMMIT] = True
     opts[DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL] = False
@@ -137,15 +155,20 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example", "beta.example"]
     assert isinstance(opts.get(DhcpOptionCode.BCMCS_IPV4_ADDRESS)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE) == [U16(1), U16(2)]
+    assert opts.get(DhcpOptionCode.PCODE, decode=String) == "Europe/Berlin"
+    assert opts.get(DhcpOptionCode.TCODE, decode=String) == "tz.example/ref"
     assert isinstance(opts.get(DhcpOptionCode.RFC868_TIMESERVER)[0], IPv4Address)
     assert isinstance(opts.get(DhcpOptionCode.IEN116_NAMESERVER)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.SWAP_SERVER) == IPv4Address("10.0.0.6")
     assert isinstance(opts.get(DhcpOptionCode.SIP_SERVERS)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.ASSOCIATED_IP) == IPv4Address("192.0.2.20")
     assert opts.get(DhcpOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
+    assert opts.get(DhcpOptionCode.NETINFO_TAG, decode=String) == "lab-a"
+    assert opts.get(DhcpOptionCode.DHCP_CAPTIVE_PORTAL, decode=String) == "https://portal.example/login"
     assert isinstance(opts.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == ["service.example", "config.example"]
     assert isinstance(opts.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
+    assert opts.get(DhcpOptionCode.V4_DOTS_RI, decode=String) == "resolver-a"
     assert isinstance(opts.get(DhcpOptionCode.V4_DOTS_ADDRESS)[0], IPv4Address)
     assert isinstance(opts.get(DhcpOptionCode.TFTP_SERVER_ADDRESS)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME).__class__.__name__ == "U32"
@@ -158,6 +181,10 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
     assert opts.get(DhcpOptionCode.DATA_SOURCE).__class__.__name__ == "U8"
     assert opts.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
+    assert opts.get(DhcpOptionCode.MUD_URL_V4, decode=String) == "https://mud.example/policy"
+    assert opts.get(DhcpOptionCode.CONFIGURATION_FILE, decode=String) == "/pxe/config.cfg"
+    assert opts.get(DhcpOptionCode.PATH_PREFIX, decode=String) == "/pxe/"
+    assert opts.get(DhcpOptionCode.V4_ACCESS_DOMAIN, decode=String) == "access.example"
     assert opts.get(DhcpOptionCode.IP_FORWARDING) == Boolean(1)
     assert opts.get(DhcpOptionCode.RAPID_COMMIT) == Boolean(1)
     assert opts.get(DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL) == Boolean(0)
@@ -218,16 +245,21 @@ def test_registered_option_code_round_trips():
     opts[DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST] = ["alpha.example", "beta.example"]
     opts[DhcpOptionCode.BCMCS_IPV4_ADDRESS] = ["192.0.2.14", "192.0.2.15"]
     opts[DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE] = [1, 2]
+    opts[DhcpOptionCode.PCODE] = "Europe/Berlin"
+    opts[DhcpOptionCode.TCODE] = "tz.example/ref"
     opts[DhcpOptionCode.RFC868_TIMESERVER] = ["192.0.2.12"]
     opts[DhcpOptionCode.SWAP_SERVER] = "192.0.2.13"
     opts[DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME] = 1234
     opts[DhcpOptionCode.ASSOCIATED_IP] = "192.0.2.20"
     opts[DhcpOptionCode.IPV6_ONLY] = 4321
     opts[DhcpOptionCode.NETINFO_ADDRESS] = "192.0.2.21"
+    opts[DhcpOptionCode.NETINFO_TAG] = "lab-a"
+    opts[DhcpOptionCode.DHCP_CAPTIVE_PORTAL] = "https://portal.example/login"
     opts[DhcpOptionCode.AUTO_CONFIG] = True
     opts[DhcpOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
     opts[DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS] = ["service.example", "config.example"]
     opts[DhcpOptionCode.IPV4_ADDRESS_ANDSF] = ["192.0.2.40", "192.0.2.41"]
+    opts[DhcpOptionCode.V4_DOTS_RI] = "resolver-a"
     opts[DhcpOptionCode.V4_DOTS_ADDRESS] = ["192.0.2.50", "192.0.2.51"]
     opts[DhcpOptionCode.TFTP_SERVER_ADDRESS] = ["192.0.2.60", "192.0.2.61"]
     opts[DhcpOptionCode.BASE_TIME] = 111
@@ -237,7 +269,11 @@ def test_registered_option_code_round_trips():
     opts[DhcpOptionCode.DHCP_STATE] = 7
     opts[DhcpOptionCode.DATA_SOURCE] = 3
     opts[DhcpOptionCode.V4_PCP_SERVER] = ["192.0.2.70", "192.0.2.71"]
+    opts[DhcpOptionCode.MUD_URL_V4] = "https://mud.example/policy"
+    opts[DhcpOptionCode.CONFIGURATION_FILE] = "/pxe/config.cfg"
+    opts[DhcpOptionCode.PATH_PREFIX] = "/pxe/"
     opts[DhcpOptionCode.REBOOT_TIME] = 555
+    opts[DhcpOptionCode.V4_ACCESS_DOMAIN] = "access.example"
     opts[DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL] = True
     opts[DhcpOptionCode.MERIT_DUMP_FILE] = "crash.dump"
     opts[DhcpOptionCode.STATUS_CODE] = 7
@@ -270,16 +306,21 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example", "beta.example"]
     assert isinstance(decoded.get(DhcpOptionCode.BCMCS_IPV4_ADDRESS)[0], IPv4Address)
     assert decoded.get(DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE) == [U16(1), U16(2)]
+    assert decoded.get(DhcpOptionCode.PCODE, decode=String) == "Europe/Berlin"
+    assert decoded.get(DhcpOptionCode.TCODE, decode=String) == "tz.example/ref"
     assert decoded.get(DhcpOptionCode.RFC868_TIMESERVER)[0] == IPv4Address("192.0.2.12")
     assert decoded.get(DhcpOptionCode.SWAP_SERVER) == IPv4Address("192.0.2.13")
     assert decoded.get(DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME).__class__.__name__ == "U32"
     assert decoded.get(DhcpOptionCode.ASSOCIATED_IP) == IPv4Address("192.0.2.20")
     assert decoded.get(DhcpOptionCode.IPV6_ONLY).__class__.__name__ == "U32"
     assert decoded.get(DhcpOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
+    assert decoded.get(DhcpOptionCode.NETINFO_TAG, decode=String) == "lab-a"
+    assert decoded.get(DhcpOptionCode.DHCP_CAPTIVE_PORTAL, decode=String) == "https://portal.example/login"
     assert decoded.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
     assert isinstance(decoded.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
     assert decoded.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == ["service.example", "config.example"]
     assert isinstance(decoded.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
+    assert decoded.get(DhcpOptionCode.V4_DOTS_RI, decode=String) == "resolver-a"
     assert isinstance(decoded.get(DhcpOptionCode.V4_DOTS_ADDRESS)[0], IPv4Address)
     assert isinstance(decoded.get(DhcpOptionCode.TFTP_SERVER_ADDRESS)[0], IPv4Address)
     assert decoded.get(DhcpOptionCode.BASE_TIME).__class__.__name__ == "U32"
@@ -289,7 +330,11 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
     assert decoded.get(DhcpOptionCode.DATA_SOURCE).__class__.__name__ == "U8"
     assert isinstance(decoded.get(DhcpOptionCode.V4_PCP_SERVER)[0], IPv4Address)
+    assert decoded.get(DhcpOptionCode.MUD_URL_V4, decode=String) == "https://mud.example/policy"
+    assert decoded.get(DhcpOptionCode.CONFIGURATION_FILE, decode=String) == "/pxe/config.cfg"
+    assert decoded.get(DhcpOptionCode.PATH_PREFIX, decode=String) == "/pxe/"
     assert decoded.get(DhcpOptionCode.REBOOT_TIME).__class__.__name__ == "U32"
+    assert decoded.get(DhcpOptionCode.V4_ACCESS_DOMAIN, decode=String) == "access.example"
     assert decoded.get(DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL) == Boolean(1)
     assert decoded.get(DhcpOptionCode.MERIT_DUMP_FILE, decode=String) == "crash.dump"
     assert decoded.get(DhcpOptionCode.STATUS_CODE) == 7
@@ -362,6 +407,23 @@ def test_raw_wire_decoding_for_new_primitive_registrations():
     assert decoded.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
     assert decoded.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
     assert decoded.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example"]
+
+
+def test_raw_wire_decoding_for_new_string_registrations():
+    encoded = bytearray()
+    portal = b"https://portal.example/login"
+    pcode = b"Europe/Berlin"
+    encoded.extend([DhcpOptionCode.DHCP_CAPTIVE_PORTAL, len(portal)])
+    encoded.extend(portal)
+    encoded.extend([DhcpOptionCode.PCODE, len(pcode)])
+    encoded.extend(pcode)
+    encoded.append(255)
+
+    decoded = DhcpOptions()
+    decoded.decode(memoryview(encoded))
+
+    assert decoded.get(DhcpOptionCode.DHCP_CAPTIVE_PORTAL, decode=String) == "https://portal.example/login"
+    assert decoded.get(DhcpOptionCode.PCODE, decode=String) == "Europe/Berlin"
 
 
 def test_register_type_rejects_invalid_type():
