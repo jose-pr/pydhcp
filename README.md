@@ -70,7 +70,12 @@ See development notes for environment setup, dependency install, and test comman
 For comprehensive validation in GitHub Actions, the test workflow also supports
 manual `workflow_dispatch` runs and safe `ci-*` tags. Benchmarks stay opt-in:
 use the workflow's `run_benchmarks` input or a `ci-bench-*` tag when you want
-the benchmark harness included.
+the benchmark harness included. The options benchmark can also write a structured
+JSON report for local comparison or CI artifact upload:
+
+```bash
+.\.venv\3.12.10\Scripts\python.exe benchmarks\bench_options.py --iterations 1000 --json-output benchmark-results/bench_options.json
+```
 
 ### Releasing
 
