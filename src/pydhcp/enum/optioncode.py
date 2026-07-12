@@ -346,7 +346,6 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
    should be sent.
 
    The code for this option is 39, and its length is 1."""
-    TCP_KEEPALICE_GARBAGE = TCP_KEEPALIVE_GARBAGE
 
     #
     #
@@ -516,7 +515,6 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
    The code for the NNTP server option is 71. The minimum length for
    this option is 4 octets, and the length MUST always be a multiple of
    4."""
-    NNTP_SREVER = NNTP_SERVER
     WWW_SERVER = 72
     """The WWW server option specifies a list of WWW available to the
    client.  Servers SHOULD be listed in order of preference.
