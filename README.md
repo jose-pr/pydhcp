@@ -53,8 +53,11 @@ pydhcp interfaces
 # Decode a hex-encoded DHCP packet
 pydhcp packet --decode "01010600..."
 
-# Run performance benchmarks
+# Run the parse benchmark
 pydhcp bench
+
+# Run the options benchmark with structured output
+pydhcp bench --suite options --iterations 1000 --json-output benchmark-results/bench-options.json
 
 # Start the DHCP server from JSON or INI config
 pydhcp server --config config.json
