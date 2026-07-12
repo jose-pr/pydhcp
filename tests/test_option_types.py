@@ -1,9 +1,12 @@
 import pytest
 import logging
+import json
 from pydhcp.optiontype import (
+    List,
     IPv4Address,
     String,
     Boolean,
+    Bytes,
     U8,
     U16,
     U32,
@@ -61,6 +64,38 @@ def test_boolean_option():
     assert int(decoded) == 0
 
 
+def test_repr_and_json_value_shapes():
+    route = ClasslessRoute(IPv4("192.168.1.1"), ip_network("10.0.0.0/8"))
+    assert repr(route) == "ClasslessRoute(gateway=192.168.1.1, network=10.0.0.0/8)"
+    assert repr(Boolean(True)) == "Boolean(True)"
+    assert repr(U16(500)) == "U16(500)"
+
+    ipv4 = IPv4Address("192.0.2.1")
+    raw = Bytes(b"\x01\x02\x03")
+    flag = Boolean(1)
+    addrs = List[IPv4Address]([IPv4Address("192.0.2.1"), IPv4Address("198.51.100.2")])
+
+    assert ipv4.__json__() == "192.0.2.1"
+    assert raw.__json__() == "010203"
+    assert flag.__json__() is True
+    assert addrs.__json__() == ["192.0.2.1", "198.51.100.2"]
+    assert route.__json__() == ["192.168.1.1", "10.0.0.0/8"]
+
+
+def test_json_round_trip_shapes():
+    ipv4 = IPv4Address("192.0.2.1")
+    raw = Bytes(b"\x01\x02\x03")
+    flag = Boolean(1)
+    addrs = List[IPv4Address]([IPv4Address("192.0.2.1"), IPv4Address("198.51.100.2")])
+    route = ClasslessRoute(IPv4("192.168.1.1"), ip_network("10.0.0.0/8"))
+
+    assert type(ipv4)(json.loads(json.dumps(ipv4.__json__()))) == ipv4
+    assert type(raw)(json.loads(json.dumps(raw.__json__()))) == raw
+    assert type(flag)(json.loads(json.dumps(flag.__json__()))) == flag
+    assert type(addrs)(json.loads(json.dumps(addrs.__json__()))) == addrs
+    assert ClasslessRoute(*json.loads(json.dumps(route.__json__()))) == route
+
+
 def test_fixed_length_integers():
     # U8 out of range / sign checks
     with pytest.raises(ValueError, match="Number is too big"):
@@ -91,6 +126,11 @@ def test_fixed_length_integers():
     u32._dhcp_write(buf)
     assert buf == b"\x00\x01\x86\xa0"
 
+    assert repr(U8(1)) == "U8(1)"
+    assert repr(U16(1)) == "U16(1)"
+    assert repr(U32(1)) == "U32(1)"
+    assert repr(I32(-1)) == "I32(-1)"
+
 
 def test_classless_route_option():
     gateway = IPv4("192.168.1.1")
@@ -109,6 +149,7 @@ def test_classless_route_option():
     assert decoded.gateway == gateway
     assert decoded.network == network
     assert length == 6
+    assert decoded == route
 
 
 def test_classless_route_truncated_and_invalid_prefix():
