@@ -14,6 +14,8 @@ from pydhcp.optiontype import (
     RelayAgentInformation,
     ViVendorSpecificInformationRecord,
     ViVendorSpecificInformation,
+    ViVendorClassRecord,
+    ViVendorClass,
     RdnssSelection,
     MoSIpv4AddressList,
     MoSFqdnList,
@@ -74,6 +76,7 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.NETINFO_TAG.get_type() is String
     assert DhcpOptionCode.DHCP_CAPTIVE_PORTAL.get_type() is String
     assert DhcpOptionCode.AUTO_CONFIG.get_type() is Boolean
+    assert DhcpOptionCode.VI_VENDOR_CLASS.get_type() is ViVendorClass
     assert DhcpOptionCode.CAPWAP_AC_V4.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.get_type().__name__ == "DomainList"
     assert DhcpOptionCode.IPV4_ADDRESS_ANDSF.get_type()._args_[0] is IPv4Address
@@ -127,6 +130,10 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.NETINFO_ADDRESS] = "192.0.2.21"
     opts[DhcpOptionCode.NETINFO_TAG] = "lab-a"
     opts[DhcpOptionCode.DHCP_CAPTIVE_PORTAL] = "https://portal.example/login"
+    opts[DhcpOptionCode.VI_VENDOR_CLASS] = [
+        ViVendorClassRecord(32473, [b"docsis", b"eRouter"]),
+        (65537, [b"usp", b"agent"]),
+    ]
     opts[DhcpOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
     opts[DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS] = ["service.example", "config.example"]
     opts[DhcpOptionCode.IPV4_ADDRESS_ANDSF] = ["192.0.2.40", "192.0.2.41"]
@@ -171,6 +178,10 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DhcpOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
     assert opts.get(DhcpOptionCode.NETINFO_TAG, decode=String) == "lab-a"
     assert opts.get(DhcpOptionCode.DHCP_CAPTIVE_PORTAL, decode=String) == "https://portal.example/login"
+    assert opts.get(DhcpOptionCode.VI_VENDOR_CLASS) == ViVendorClass([
+        (32473, [b"docsis", b"eRouter"]),
+        (65537, [b"usp", b"agent"]),
+    ])
     assert isinstance(opts.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == ["service.example", "config.example"]
     assert isinstance(opts.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
@@ -266,6 +277,10 @@ def test_registered_option_code_round_trips():
     opts[DhcpOptionCode.NETINFO_TAG] = "lab-a"
     opts[DhcpOptionCode.DHCP_CAPTIVE_PORTAL] = "https://portal.example/login"
     opts[DhcpOptionCode.AUTO_CONFIG] = True
+    opts[DhcpOptionCode.VI_VENDOR_CLASS] = [
+        ViVendorClassRecord(32473, [b"docsis", b"eRouter"]),
+        (65537, [b"usp", b"agent"]),
+    ]
     opts[DhcpOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
     opts[DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS] = ["service.example", "config.example"]
     opts[DhcpOptionCode.IPV4_ADDRESS_ANDSF] = ["192.0.2.40", "192.0.2.41"]
@@ -331,6 +346,10 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DhcpOptionCode.NETINFO_TAG, decode=String) == "lab-a"
     assert decoded.get(DhcpOptionCode.DHCP_CAPTIVE_PORTAL, decode=String) == "https://portal.example/login"
     assert decoded.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
+    assert decoded.get(DhcpOptionCode.VI_VENDOR_CLASS) == ViVendorClass([
+        (32473, [b"docsis", b"eRouter"]),
+        (65537, [b"usp", b"agent"]),
+    ])
     assert isinstance(decoded.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
     assert decoded.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == ["service.example", "config.example"]
     assert isinstance(decoded.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
@@ -464,6 +483,31 @@ def test_raw_wire_decoding_for_v4_sztp_redirect_registration():
     assert decoded.get(DhcpOptionCode.V4_SZTP_REDIRECT) == UriList([
         "https://bootstrap.example/one",
         "https://bootstrap.example/two",
+    ])
+
+
+def test_raw_wire_decoding_for_vi_vendor_class_registration():
+    first = b"\x06docsis\x07eRouter"
+    second = b"\x03usp\x05agent"
+    payload = (
+        (32473).to_bytes(4, "big")
+        + bytes([len(first)])
+        + first
+        + (65537).to_bytes(4, "big")
+        + bytes([len(second)])
+        + second
+    )
+    encoded = bytearray()
+    encoded.extend([DhcpOptionCode.VI_VENDOR_CLASS, len(payload)])
+    encoded.extend(payload)
+    encoded.append(255)
+
+    decoded = DhcpOptions()
+    decoded.decode(memoryview(encoded))
+
+    assert decoded.get(DhcpOptionCode.VI_VENDOR_CLASS) == ViVendorClass([
+        (32473, [b"docsis", b"eRouter"]),
+        (65537, [b"usp", b"agent"]),
     ])
 
 
