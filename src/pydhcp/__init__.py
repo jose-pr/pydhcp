@@ -3,6 +3,7 @@ from .listener import (
     AsyncDhcpListener as AsyncDhcpListener,
     Transport as Transport,
     UdpTransport as UdpTransport,
+    PktInfoUdpTransport as PktInfoUdpTransport,
     RequestContext as RequestContext,
 )
 from .message import DhcpMessage as DhcpMessage
@@ -45,6 +46,7 @@ __all__ = [
     "AsyncDhcpListener",
     "Transport",
     "UdpTransport",
+    "PktInfoUdpTransport",
     "RequestContext",
     "DhcpMessage",
     "DhcpOptions",

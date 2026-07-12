@@ -1,6 +1,7 @@
 import socket as _socket
 import select as _select
 import threading as _thread
+import struct as _struct
 import typing as _ty
 
 from . import netutils as _net, constants as _const, enum as _enum
@@ -8,6 +9,9 @@ from .message import DhcpMessage
 from .log import LOGGER
 from .metrics import METRICS
 import logging as _logging
+
+IP_PKTINFO = getattr(_socket, "IP_PKTINFO", None)
+CMSG_SPACE = getattr(_socket, "CMSG_SPACE", None)
 
 
 class Transport:
@@ -45,16 +49,47 @@ class UdpTransport(Transport):
             return self.socket.sendto(data, ("255.255.255.255", port))
 
 
+class PktInfoUdpTransport(UdpTransport):
+    """POSIX packet-info transport for wildcard routing."""
+
+    def __init__(self, socket: _socket.socket):
+        super().__init__(socket)
+        self.ifindex: int | None = None
+        self.local_ip: _net.IPv4 | None = None
+
+    def send(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest: _net.IPv4,
+        port: int,
+        client_mac: bytes,
+    ) -> int:
+        if hasattr(self.socket, "sendmsg") and self.ifindex is not None and self.local_ip is not None and IP_PKTINFO is not None:
+            pktinfo = _struct.pack("=I4s4s", self.ifindex, _socket.inet_aton(str(self.local_ip)), _socket.inet_aton(str(self.local_ip)))
+            return int(
+                self.socket.sendmsg(
+                    [data],
+                    [(_socket.IPPROTO_IP, IP_PKTINFO, pktinfo)],
+                    0,
+                    (str(dest), port),
+                )
+            )
+        return super().send(data, dest, port, client_mac)
+
+
 class RequestContext(_ty.NamedTuple):
     transport: Transport
     interface: _net.NetworkInterface
     client: _net.SocketAddress
     client_mac: bytes
+    ifindex: int | None = None
+    local_ip: _net.IPv4 | None = None
 
 
 def _parselisteners(
     listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
     default_ports: _ty.Sequence[int] = (),
+    expand_wildcard: bool = True,
 ) -> list[_net.SocketAddress]:
     _listen: list[_net.SocketAddress] = []
     if listen is None:
@@ -74,7 +109,7 @@ def _parselisteners(
         if not isinstance(ip, _net.IPv4):
             ip = _net.IPv4(ip)
 
-        if ip == _net.WILDCARD_IPv4:
+        if ip == _net.WILDCARD_IPv4 and expand_wildcard:
             ips = [
                 i.ip for i in _net.host_ip_interfaces() if isinstance(i.ip, _net.IPv4)
             ]
@@ -127,11 +162,19 @@ class DhcpListener:
         listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
         select_timeout: float | None = None,
         max_packet_size: int | None = _const.UDP_MAX_PACKET_SIZE,
+        per_interface: bool | None = None,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
-        self._listen = _parselisteners(listen, self.DEFAULT_PORTS)
+        self._pktinfo = (
+            per_interface is not True
+            and hasattr(_socket.socket, "recvmsg")
+            and hasattr(_socket, "IP_PKTINFO")
+            and (listen == "*" or listen == _net.WILDCARD_IPv4 or (isinstance(listen, list) and any((not isinstance(item, tuple) and (item == "*" or item == _net.WILDCARD_IPv4)) or (isinstance(item, tuple) and (item[0] == "*" or item[0] == _net.WILDCARD_IPv4)) for item in listen)))
+        )
+        self._listen = _parselisteners(listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo)
+        self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._select_timeout = select_timeout or 1
         self._cancelleation_token: _thread.Event | None = None
@@ -157,6 +200,9 @@ class DhcpListener:
                         _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
                     ],
                 )
+                if self._pktinfo and address.ip == _net.WILDCARD_IPv4:
+                    if IP_PKTINFO is not None:
+                        socket.setsockopt(_socket.IPPROTO_IP, IP_PKTINFO, 1)
             except PermissionError as e:
                 raise PermissionError(
                     f"Permission denied binding to port {address.port}. Port {address.port} requires root; try 6767 for testing."
@@ -223,19 +269,51 @@ class DhcpListener:
                     break
                 for socket in rlist:
                     try:
-                        size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
+                        if self._pktinfo and hasattr(socket, "recvmsg"):
+                            if CMSG_SPACE is None or IP_PKTINFO is None:
+                                raise RuntimeError("packet info support unavailable")
+                            data, ancdata, _, client_tuple = socket.recvmsg(
+                                self._max_packet_size,
+                                CMSG_SPACE(_struct.calcsize("=I4s4s")),
+                            )
+                            size = len(data)
+                            local_ip = None
+                            ifindex = None
+                            for level, ctype, cdata in ancdata:
+                                if level == _socket.IPPROTO_IP and ctype == IP_PKTINFO:
+                                    ifindex, dst1, _ = _struct.unpack(
+                                        "=I4s4s", cdata[: _struct.calcsize("=I4s4s")]
+                                    )
+                                    local_ip = _net.IPv4(_socket.inet_ntoa(dst1))
+                                    break
+                            msg = DhcpMessage.decode(memoryview(data))
+                            client = _net.SocketAddress(*client_tuple)
+                            interface = _resolve_interface(socket)
+                            pkt_transport = PktInfoUdpTransport(socket)
+                            context = RequestContext(
+                                transport=pkt_transport,
+                                interface=interface,
+                                client=client,
+                                client_mac=msg.chaddr,
+                                ifindex=ifindex,
+                                local_ip=local_ip,
+                            )
+                            pkt_transport.ifindex = ifindex
+                            pkt_transport.local_ip = local_ip
+                        else:
+                            size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
+                            client = _net.SocketAddress(*client_tuple)
+                            msg = DhcpMessage.decode(view[:size])
+                            interface = _resolve_interface(socket)
+                            transport = UdpTransport(socket)
+                            context = RequestContext(
+                                transport=transport,
+                                interface=interface,
+                                client=client,
+                                client_mac=msg.chaddr,
+                            )
                         METRICS.packets_received += 1
-                        client = _net.SocketAddress(*client_tuple)
-                        msg = DhcpMessage.decode(view[:size])
                         msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
-                        interface = _resolve_interface(socket)
-                        transport = UdpTransport(socket)
-                        context = RequestContext(
-                            transport=transport,
-                            interface=interface,
-                            client=client,
-                            client_mac=msg.chaddr,
-                        )
                         self.handle(msg, context)
                     except Exception as e:
                         if isinstance(e, KeyboardInterrupt):
@@ -295,11 +373,13 @@ class AsyncDhcpListener:
         self,
         listen: _ty.Optional[_ty.Union[_ty.List[_ty.Union[_ty.Tuple[_net.IPv4, int], _net.IPv4, str]], str]] = None,
         max_packet_size: _ty.Optional[int] = None,
+        per_interface: bool | None = None,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
         self._listen = _parselisteners(listen, self.DEFAULT_PORTS)
+        self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._transports: list[_asyncio.DatagramTransport] = []
 

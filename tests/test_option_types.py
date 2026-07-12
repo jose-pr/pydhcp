@@ -8,6 +8,7 @@ from pydhcp.optiontype import (
     U16,
     U32,
     ClasslessRoute,
+    I32,
 )
 from pydhcp.netutils import IPv4
 from ipaddress import ip_network
@@ -110,6 +111,21 @@ def test_classless_route_option():
     assert length == 6
 
 
+def test_classless_route_truncated_and_invalid_prefix():
+    with pytest.raises(ValueError, match="truncated"):
+        ClasslessRoute._dhcp_read(memoryview(b"\x18\xc0\xa8\x01"))
+
+    with pytest.raises(ValueError, match="exceeds 32"):
+        ClasslessRoute._dhcp_read(memoryview(b"\x21\x00\x00\x00\x00\x00"))
+
+
+def test_signed_i32_round_trip():
+    value = I32(-1)
+    buf = bytearray()
+    assert value._dhcp_write(buf) == 4
+    assert buf == b"\xff\xff\xff\xff"
+
+
 def test_domain_list_option():
     from pydhcp.optiontype import DomainList
     # Encode list of domains
@@ -142,4 +158,3 @@ def test_option_overload_option():
     decoded, length = OptionOverload._dhcp_read(memoryview(b"\x01"))
     assert decoded == OptionOverload.FILE
     assert length == 1
-

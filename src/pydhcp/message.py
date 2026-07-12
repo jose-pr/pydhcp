@@ -82,7 +82,7 @@ class DhcpMessage:
             LOGGER.warning(f"Unknown hardware type {htype}, using ETHERNET")
             htype = _enum.HardwareAddressType.ETHERNET
         secs = _dt.timedelta(seconds=secs)
-        flags = _enum.Flags(flags)
+        flags = _enum.Flags(flags & _enum.Flags.BROADCAST.value)
         ciaddr = _net.IPv4(ciaddr)
         yiaddr = _net.IPv4(yiaddr)
         siaddr = _net.IPv4(siaddr)
@@ -166,34 +166,38 @@ class DhcpMessage:
         if max_options_field_size < 0:
             raise ValueError(f"{max_packetsize} is too small for a DHCP packet")
 
+        options = DhcpOptions(self.options._codemap)
+        options._options = _ty.OrderedDict(
+            (code, bytearray(value)) for code, value in self.options._options.items()
+        )
         sname_bytes: _ty.Union[bytes, bytearray] = self.sname.encode()
         file_bytes: _ty.Union[bytes, bytearray] = self.file.encode()
-        options_field: _ty.Union[bytes, bytearray] = self.options.encode()
+        options_field: _ty.Union[bytes, bytearray] = options.encode()
         if len(options_field) > max_options_field_size + 128 + 64:
             raise OverflowError("DHCP options exceed maximum packet size")
         elif len(options_field) > max_options_field_size + 128:
-            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in self.options:
-                self.options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
-                self.options._options.move_to_end(
+            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in options:
+                options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
+                options._options.move_to_end(
                     int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
                 )
-            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in self.options:
-                self.options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
-                self.options._options.move_to_end(
+            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in options:
+                options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
+                options._options.move_to_end(
                     int(_enum.DhcpOptionCode.TFTP_SERVER), False
                 )
             overload = _type.OptionOverload.BOTH
         elif len(options_field) > max_options_field_size + 64:
-            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in self.options:
-                self.options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
-                self.options._options.move_to_end(
+            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in options:
+                options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
+                options._options.move_to_end(
                     int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
                 )
             overload = _type.OptionOverload.FILE
         elif len(options_field) > max_options_field_size:
-            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in self.options:
-                self.options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
-                self.options._options.move_to_end(
+            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in options:
+                options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
+                options._options.move_to_end(
                     int(_enum.DhcpOptionCode.TFTP_SERVER), False
                 )
             overload = _type.OptionOverload.SNAME
@@ -201,20 +205,20 @@ class DhcpMessage:
             overload = _type.OptionOverload.NONE
 
         try:
-            self.options._options.move_to_end(
+            options._options.move_to_end(
                 int(_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE), False
             )
         except KeyError:
             pass
 
         if overload is not _type.OptionOverload.NONE:
-            self.options._options[
+            options._options[
                 int(_enum.DhcpOptionCode.OPTION_OVERLOAD)
             ] = bytearray([overload.value])
-            self.options._options.move_to_end(
+            options._options.move_to_end(
                 int(_enum.DhcpOptionCode.OPTION_OVERLOAD), False
             )
-            options_field, leftover = self.options.partial_encode(max_options_field_size)
+            options_field, leftover = options.partial_encode(max_options_field_size)
 
             if bool(overload.value & _type.OptionOverload.FILE.value) and leftover is not None:
                 file_bytes, leftover = leftover.partial_encode(128)
@@ -231,7 +235,7 @@ class DhcpMessage:
             self.hlen,
             self.hops,
             self.xid,
-            self.secs.seconds,
+            min(0xFFFF, max(0, int(self.secs.total_seconds()))),
             self.flags.value,
             int(self.ciaddr),
             int(self.yiaddr),
@@ -268,7 +272,8 @@ class DhcpMessage:
             ("Gateway Address", str(self.giaddr)),
             ("Hardware Address", f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
             ("Server Address", str(self.siaddr)),
-            ("Next Server", self.file),
+            ("Next Server", str(self.siaddr)),
+            ("Server Host Name", self.sname),
             ("Bootfile", self.file),
         ]:
             lines.append(f"{name: <40}: {value}")

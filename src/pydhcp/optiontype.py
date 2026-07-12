@@ -13,6 +13,12 @@ from .netutils import IPv4 as _IP, IPv4Interface as _Interface, IPv4Network as _
 
 
 class DhcpOptionType:
+    """Protocol for DHCP option payload codecs.
+
+    Implementations decode with `_dhcp_read`, encode with `_dhcp_write`, and may
+    advertise a fixed size with `_dhcp_len_hint`. The encode/decode pair should
+    round-trip the same Python value.
+    """
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         raise NotImplementedError()
@@ -48,6 +54,7 @@ _C = _ty.TypeVar("_C", bound="BaseDhcpOptionCode")
 
 
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
+    """Typed DHCP option list container."""
     _args_: _ty.ClassVar[tuple[_T]]
 
     def __init__(self, *items: _ty.Any):
@@ -92,6 +99,7 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
 
 
 class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
+    """List of option codes used by parameter-request-list style options."""
     @classmethod
     def _normalize(cls, item: _ty.Any) -> _ty.Any:
         ty = cls._args_[0]
@@ -99,7 +107,7 @@ class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
             return item
         try:
             return _ty.cast(_ty.Any, ty)(item)
-        except:
+        except (TypeError, ValueError):
             ...
         item_int = int(item)
         if item_int > 255:
@@ -116,6 +124,7 @@ class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
 
 
 class IPv4Address(DhcpOptionType, _IP):
+    """A single IPv4 address carried in network byte order."""
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         return cls(option[:4].tobytes()), 4
@@ -136,14 +145,23 @@ class IPv4Address(DhcpOptionType, _IP):
 
 
 class ClasslessRoute(DhcpOptionType):
+    """RFC 3442 classless static route entry."""
     def __init__(self, gateway: _IP, network: _Network) -> None:
         self.gateway = _IP(gateway)
         self.network = _Network(network)
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 1:
+            raise ValueError("ClasslessRoute option is truncated: missing prefix length")
         cidr = option[0]
+        if cidr > 32:
+            raise ValueError(f"ClasslessRoute prefix length {cidr} exceeds 32")
         last = 1 + (cidr + 7) // 8
+        if len(option) < last + 4:
+            raise ValueError(
+                f"ClasslessRoute option is truncated: needs {last + 4} bytes, got {len(option)}"
+            )
         net_bytes = option[1:last].tobytes() + b"\x00\x00\x00\x00"
         network = _Network((net_bytes[:4], cidr))
         gateway = _IP(option[last : last + 4].tobytes())
@@ -160,6 +178,7 @@ class ClasslessRoute(DhcpOptionType):
 
 
 class Bytes(DhcpOptionType, bytes):
+    """Opaque byte payload."""
     def __new__(cls, src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None) -> Self:
         if isinstance(src, str):
             return cls.fromhex(src)
@@ -186,6 +205,7 @@ class Bytes(DhcpOptionType, bytes):
 
 
 class String(DhcpOptionType, str):
+    """RFC 2132 NVT-ASCII string with null termination on the wire."""
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
@@ -203,6 +223,7 @@ class String(DhcpOptionType, str):
 
 
 class Boolean(DhcpOptionType, int):
+    """Boolean option encoded as a single octet."""
     def __new__(cls, val: _ty.Any) -> Self:
         if val:
             val = 1
@@ -261,21 +282,31 @@ class FixedLengthInteger(BaseFixedLengthInteger):
 
 
 class U8(FixedLengthInteger):
+    """Unsigned 8-bit integer."""
     NUMBER_OF_BYTES = 1
     SIGNED = False
 
 
 class U16(FixedLengthInteger):
+    """Unsigned 16-bit integer."""
     NUMBER_OF_BYTES = 2
     SIGNED = False
 
 
 class U32(FixedLengthInteger):
+    """Unsigned 32-bit integer."""
     NUMBER_OF_BYTES = 4
     SIGNED = False
 
 
+class I32(FixedLengthInteger):
+    """Signed 32-bit integer."""
+    NUMBER_OF_BYTES = 4
+    SIGNED = True
+
+
 class DomainList(DhcpOptionType, list[str]):
+    """RFC 1035 domain-name list with compression support."""
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         view = memoryview(option)
@@ -360,6 +391,7 @@ class DomainList(DhcpOptionType, list[str]):
 
 
 class ClientIdentifier(Bytes):
+    """RFC 2132 client identifier."""
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 2:
@@ -374,7 +406,7 @@ class ClientIdentifier(Bytes):
             from .enum import HardwareAddressType
 
             ty_str = HardwareAddressType(ty_val).name
-        except:
+        except ValueError:
             ...
         maybe = f"{ty_str}({addr.hex(':').upper()})"
 
@@ -385,6 +417,7 @@ class ClientIdentifier(Bytes):
 
 
 class OptionOverload(DhcpOptionType, _enum.IntFlag):
+    """RFC 2132 option-overload selector."""
     NONE = 0
     FILE = 1
     SNAME = 2
