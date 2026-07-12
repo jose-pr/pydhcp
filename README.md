@@ -56,8 +56,11 @@ pydhcp packet --decode "01010600..."
 # Run performance benchmarks
 pydhcp bench
 
-# Start the DHCP server from config
+# Start the DHCP server from JSON or INI config
 pydhcp server --config config.json
+
+# Increase logging while debugging
+pydhcp server --listen 127.0.0.1:6767 --log-level debug
 ```
 
 ## Development
