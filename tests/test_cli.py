@@ -1,8 +1,8 @@
 import argparse
+import json
+from pathlib import Path
 import pytest
 from unittest.mock import MagicMock, patch
-import json
-import os
 
 from datetime import timedelta
 
@@ -81,3 +81,26 @@ def test_cmd_server(mock_dhcp_server_cls):
     mock_dhcp_server_cls.assert_called_with(listen="127.0.0.1:6767")
     assert mock_server.bind.called
     assert mock_server.listen.called
+
+
+def test_cmd_bench_parse_writes_json() -> None:
+    args = argparse.Namespace(suite="parse", iterations=123, json_output=Path("bench-parse.json"))
+    with patch("benchmarks.bench_parse.run_benchmarks", return_value={"decode_packet": {}}) as mock_run:
+        with patch("benchmarks.bench_parse.write_json_report") as mock_write:
+            cmd_bench(args)
+
+    mock_run.assert_called_once_with(iterations=123)
+    mock_write.assert_called_once_with(Path("bench-parse.json"), 123, {"decode_packet": {}})
+
+
+def test_cmd_bench_options_default_iterations() -> None:
+    args = argparse.Namespace(suite="options", iterations=None, json_output=None)
+    with patch(
+        "benchmarks.bench_options.run_benchmarks",
+        return_value={"decode_0_options": {}},
+    ) as mock_run:
+        with patch("benchmarks.bench_options.write_json_report") as mock_write:
+            cmd_bench(args)
+
+    mock_run.assert_called_once_with(iterations=10000)
+    mock_write.assert_not_called()
