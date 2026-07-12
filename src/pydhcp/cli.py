@@ -1,11 +1,13 @@
 import argparse
 import sys
 import typing as _ty
+import logging as _logging
 
 from .netutils import host_ip_interfaces
 from .server import DhcpServer
 from .config import load_config
 from .message import DhcpMessage
+from .log import LOGGER
 
 
 def cmd_interfaces(args: argparse.Namespace) -> None:
@@ -18,6 +20,9 @@ def cmd_interfaces(args: argparse.Namespace) -> None:
 
 
 def cmd_server(args: argparse.Namespace) -> None:
+    if args.log_level:
+        LOGGER.setLevel(getattr(_logging, args.log_level.upper()))
+
     config = {}
     if args.config:
         config = load_config(args.config)
@@ -49,7 +54,8 @@ def cmd_packet(args: argparse.Namespace) -> None:
             print(f"  MAC: {msg.chaddr.hex().upper()}")
             print("  Options:")
             for code, opt in msg.options.items(decoded=True):
-                print(f"    {code.name}: {opt}")
+                name = getattr(code, "name", str(code))
+                print(f"    {name}: {opt}")
         except Exception as e:
             print(f"Error decoding packet: {e}", file=sys.stderr)
             sys.exit(1)
@@ -72,8 +78,13 @@ def main() -> None:
     subparsers.add_parser("interfaces", help="List network interfaces")
 
     server_parser = subparsers.add_parser("server", help="Start DHCP server")
-    server_parser.add_argument("--config", help="Path to config file (JSON)")
+    server_parser.add_argument("--config", help="Path to config file (JSON or INI)")
     server_parser.add_argument("--listen", help="Listen address/port spec")
+    server_parser.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error", "critical"],
+        help="Set pydhcp log verbosity",
+    )
 
     packet_parser = subparsers.add_parser("packet", help="Decode DHCP packets")
     packet_parser.add_argument("--decode", help="Hex string of packet bytes to decode")

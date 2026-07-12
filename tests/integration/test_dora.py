@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from pydhcp import DhcpServer, DhcpMessage, DhcpLease, DhcpOptions, RequestContext, NetworkInterface
 from pydhcp.enum import OpCode, DhcpMessageType, DhcpOptionCode, HardwareAddressType, Flags
 from pydhcp.netutils import SocketAddress, IPv4
+from pydhcp.metrics import METRICS
 
 class MockDhcpServer(DhcpServer):
     DEFAULT_PORTS = (6767,)
@@ -22,7 +23,12 @@ class MockDhcpServer(DhcpServer):
 def run_dora_server():
     server = MockDhcpServer(listen=[("127.0.0.1", 0)])
     thread = server.start()
-    time.sleep(0.1)
+    
+    import time
+    start_t = time.time()
+    while not server._sockets and time.time() - start_t < 2.0:
+        time.sleep(0.01)
+        
     yield server
     server.stop()
     if thread:
@@ -99,6 +105,7 @@ def test_dora_sequence(run_dora_server):
         client.close()
 
 def test_routing_rfc2131():
+    METRICS.reset()
     server = MockDhcpServer()
     transport_mock = Mock()
     interface = NetworkInterface("eth0", ipaddress.IPv4Interface(("127.0.0.1", 24)), None)
@@ -134,6 +141,7 @@ def test_routing_rfc2131():
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.1")
     assert args[2] == 67
+    assert METRICS.packets_sent == 1
 
     # Test case 2: ciaddr set (should send to ciaddr on port 68)
     transport_mock.reset_mock()
@@ -143,6 +151,7 @@ def test_routing_rfc2131():
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.15")
     assert args[2] == 68
+    assert METRICS.packets_sent == 2
 
     # Test case 3: broadcast flag set (should send to 255.255.255.255 on port 68)
     transport_mock.reset_mock()
@@ -188,8 +197,12 @@ def test_dora_with_lease_persistence(tmp_path):
     server = MockDhcpServerWithBackend(listen=[("127.0.0.1", 0)], lease_backend=backend)
     
     thread = server.start()
-    time.sleep(0.1)
     
+    import time
+    start_t = time.time()
+    while not server._sockets and time.time() - start_t < 2.0:
+        time.sleep(0.01)
+        
     server_port = server._sockets[0].getsockname()[1]
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
@@ -275,4 +288,3 @@ def test_dora_with_lease_persistence(tmp_path):
         server.stop()
         if thread:
             thread.join(timeout=1.0)
-

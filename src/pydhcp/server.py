@@ -5,6 +5,7 @@ from . import enum as _enum, constants as _const, netutils as _net
 from .options import DhcpOptions
 from . import optiontype as _type
 from .log import LOGGER
+from .metrics import METRICS
 import logging as _logging
 import datetime as _dt
 import typing as _ty
@@ -37,6 +38,7 @@ class DhcpServer(_Base):
             ttl = int(requested_ttl) if requested_ttl is not None else 3600
             renewed = self.lease_backend.renew(client_id, ttl)
             if renewed:
+                METRICS.leases_renewed += 1
                 return renewed
             return existing
 
@@ -62,10 +64,14 @@ class DhcpServer(_Base):
         options[_enum.DhcpOptionCode.DNS] = [server_id]
 
         LOGGER.debug(f"[XID={msg.xid:08x}] Allocating {ip} for {client_id}")
-        return self.lease_backend.allocate(client_id, ip, ttl, options)
+        lease = self.lease_backend.allocate(client_id, ip, ttl, options)
+        if lease is not None:
+            METRICS.leases_allocated += 1
+        return lease
 
     def release_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage) -> None:
-        self.lease_backend.release(client_id)
+        if self.lease_backend.release(client_id):
+            METRICS.leases_released += 1
 
     def handle(
         self,
@@ -266,6 +272,7 @@ class DhcpServer(_Base):
                 context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.DEBUG
             )
         context.transport.send(data, dest, dest_port, context.client_mac)
+        METRICS.packets_sent += 1
 
 
 from .listener import AsyncDhcpListener as _AsyncBase

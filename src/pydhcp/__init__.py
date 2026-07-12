@@ -51,6 +51,8 @@ __all__ = [
     "DhcpOption",
     "DhcpOptionCode",
     "DhcpOptionType",
+    "List",
+    "DhcpOptionCodes",
     "IPv4Address",
     "ClasslessRoute",
     "DomainList",
@@ -75,6 +77,3 @@ __all__ = [
     "InMemoryLeaseBackend",
     "FileLeaseBackend",
 ]
-
-
-

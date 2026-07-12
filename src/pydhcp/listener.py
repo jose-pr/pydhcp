@@ -6,6 +6,7 @@ import typing as _ty
 from . import netutils as _net, constants as _const, enum as _enum
 from .message import DhcpMessage
 from .log import LOGGER
+from .metrics import METRICS
 import logging as _logging
 
 
@@ -81,7 +82,7 @@ def _parselisteners(
             ips = [ip]
         for ip in ips:
             ports: _ty.Sequence[int]
-            if not port:
+            if port is None:
                 ports = default_ports
             elif not isinstance(port, (list, tuple)):
                 ports = [port]
@@ -223,6 +224,7 @@ class DhcpListener:
                 for socket in rlist:
                     try:
                         size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
+                        METRICS.packets_received += 1
                         client = _net.SocketAddress(*client_tuple)
                         msg = DhcpMessage.decode(view[:size])
                         msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
@@ -267,6 +269,7 @@ class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
         try:
             client = _net.SocketAddress(*addr)
             msg = DhcpMessage.decode(memoryview(data))
+            METRICS.packets_received += 1
             msg.log(client, _net.SocketAddress(self.sock), _logging.DEBUG)
             interface = _resolve_interface(self.sock)
             transport = UdpTransport(self.sock)
