@@ -832,6 +832,98 @@ class ViVendorSpecificInformation(DhcpOptionType, list[ViVendorSpecificInformati
         return [item.__json__() for item in self]
 
 
+class ViVendorClassRecord(DhcpOptionType):
+    def __init__(self, enterprise_number: int, value: _ty.Any) -> None:
+        self.enterprise_number = int(enterprise_number)
+        if isinstance(value, UserClass):
+            self.value = value
+        else:
+            self.value = UserClass(value)
+
+    def __repr__(self) -> str:
+        return (
+            f"{type(self).__name__}(enterprise_number={self.enterprise_number}, "
+            f"value={self.value!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ViVendorClassRecord):
+            return NotImplemented
+        return (self.enterprise_number, self.value) == (other.enterprise_number, other.value)
+
+    def __json__(self) -> list[_ty.Any]:
+        return [self.enterprise_number, self.value.__json__()]
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 5:
+            raise ValueError(f"{cls.__name__} option is truncated")
+        enterprise_number = int.from_bytes(option[:4], "big")
+        length = option[4]
+        if len(option) < 5 + length:
+            raise ValueError(f"{cls.__name__} option is truncated")
+        payload, read = UserClass._dhcp_read(option[5 : 5 + length])
+        if read != length:
+            raise ValueError(f"{cls.__name__} option is truncated")
+        return cls(enterprise_number, payload), 5 + length
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
+            raise ValueError(f"{type(self).__name__} enterprise_number must fit in 32 bits")
+        payload = bytearray()
+        payload_len = self.value._dhcp_write(payload)
+        if payload_len > 255:
+            raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+        data.extend(self.enterprise_number.to_bytes(4, "big"))
+        data.append(payload_len)
+        data.extend(payload)
+        return 5 + payload_len
+
+
+class ViVendorClass(DhcpOptionType, list[ViVendorClassRecord]):
+    """RFC 3925 vendor-identifying vendor class records."""
+
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], list):
+            self.extend(items[0])
+            return
+        for item in items:
+            self.append(item)
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> ViVendorClassRecord:
+        if isinstance(item, ViVendorClassRecord):
+            return item
+        enterprise_number, value = item
+        return ViVendorClassRecord(enterprise_number, value)
+
+    def append(self, item: _ty.Any) -> None:
+        return list.append(self, self._normalize(item))
+
+    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
+        list.extend(self, [self._normalize(item) for item in __iterable])
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        self = cls()
+        idx = 0
+        size = len(option)
+        while idx < size:
+            record, read = ViVendorClassRecord._dhcp_read(option[idx:])
+            self.append(record)
+            idx += read
+        return self, size
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        written = 0
+        for item in self:
+            written += item._dhcp_write(data)
+        return written
+
+    def __json__(self) -> list[list[_ty.Any]]:
+        return [item.__json__() for item in self]
+
+
 class RdnssSelection(DhcpOptionType):
     """RFC 6731 RDNSS selection payload."""
 

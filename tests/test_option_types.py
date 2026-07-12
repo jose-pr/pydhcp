@@ -19,6 +19,8 @@ from pydhcp.optiontype import (
     RelayAgentInformation,
     ViVendorSpecificInformationRecord,
     ViVendorSpecificInformation,
+    ViVendorClassRecord,
+    ViVendorClass,
     RdnssSelection,
     UriList,
     I32,
@@ -271,6 +273,27 @@ def test_vi_vendor_specific_information_uses_enterprise_records():
 
     with pytest.raises(ValueError, match="32 bits"):
         ViVendorSpecificInformationRecord(0x1_0000_0000, b"a")._dhcp_encode()
+
+
+def test_vi_vendor_class_uses_enterprise_records_with_opaque_items():
+    value = ViVendorClass(
+        [
+            (32473, [b"docsis", b"eRouter"]),
+            ViVendorClassRecord(65537, [b"usp", b"agent"]),
+        ]
+    )
+    buf = bytearray()
+    assert value._dhcp_write(buf) == 35
+    decoded, length = ViVendorClass._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == 35
+    assert decoded[0].enterprise_number == 32473
+    assert decoded[0].value == UserClass([b"docsis", b"eRouter"])
+    assert decoded[1].enterprise_number == 65537
+    assert decoded[1].value == UserClass([b"usp", b"agent"])
+
+    with pytest.raises(ValueError, match="truncated"):
+        ViVendorClass._dhcp_read(memoryview(b"\x00\x00\x00\x01\x05\x03ab"))
 
 
 def test_rdnss_selection_round_trip():
