@@ -9,6 +9,48 @@ from .log import LOGGER
 import logging as _logging
 
 
+class Transport:
+    def send(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest: _net.IPv4,
+        port: int,
+        client_mac: bytes,
+    ) -> int:
+        raise NotImplementedError()
+
+
+class UdpTransport(Transport):
+    def __init__(self, socket: _socket.socket):
+        self.socket = socket
+
+    def send(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest: _net.IPv4,
+        port: int,
+        client_mac: bytes,
+    ) -> int:
+        dest_ip = dest
+        dest_str = "255.255.255.255" if dest_ip == _net.WILDCARD_IPv4 else str(dest_ip)
+        
+        # Future RawTransport can be plugged in here to craft L2 Ethernet frames targeting client_mac.
+        # Standard UDP sockets can't directly target L2 MAC on UDP if there is no ARP entry,
+        # so we fall back to broadcast if unicast fails.
+        try:
+            return self.socket.sendto(data, (dest_str, port))
+        except Exception as e:
+            LOGGER.warning(f"UDP unicast to {dest_str} failed ({e}), falling back to broadcast.")
+            return self.socket.sendto(data, ("255.255.255.255", port))
+
+
+class RequestContext(_ty.NamedTuple):
+    transport: Transport
+    interface: _net.NetworkInterface
+    client: _net.SocketAddress
+    client_mac: bytes
+
+
 def _parselisteners(
     listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
     default_ports: _ty.Sequence[int] = (),
@@ -53,6 +95,29 @@ def _parselisteners(
     return _listen
 
 
+def _resolve_interface(sock: _socket.socket) -> _net.NetworkInterface:
+    try:
+        local_ip, _ = sock.getsockname()
+    except Exception:
+        local_ip = "127.0.0.1"
+    
+    for i in _net.host_ip_interfaces():
+        if str(i.ip) == local_ip:
+            return i
+            
+    import ipaddress as _ipaddress
+    try:
+        ip_addr = _net.IPv4(local_ip)
+    except Exception:
+        ip_addr = _net.IPv4("127.0.0.1")
+    LOGGER.warning(f"Could not resolve interface for IP {local_ip}; using synthetic interface")
+    return _net.NetworkInterface(
+        name=f"unknown[{local_ip}]",
+        ip_interface=_ipaddress.IPv4Interface((str(ip_addr), 32)),
+        mac=None
+    )
+
+
 class DhcpListener:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
 
@@ -70,7 +135,7 @@ class DhcpListener:
         self._select_timeout = select_timeout or 1
         self._cancelleation_token: _thread.Event | None = None
 
-    def handle(self, msg: DhcpMessage, session: _net.SocketSession) -> None:
+    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         pass
 
     def bind(self) -> None:
@@ -81,15 +146,33 @@ class DhcpListener:
             if address in active:
                 continue
             LOGGER.info(f"Listening on: {address}")
-            socket = address.listen(
-                _socket.AF_INET,
-                _socket.SOCK_DGRAM,
-                _socket.IPPROTO_UDP,
-                options=[
-                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
-                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
-                ],
-            )
+            try:
+                socket = address.listen(
+                    _socket.AF_INET,
+                    _socket.SOCK_DGRAM,
+                    _socket.IPPROTO_UDP,
+                    options=[
+                        _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
+                        _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
+                    ],
+                )
+            except PermissionError as e:
+                raise PermissionError(
+                    f"Permission denied binding to port {address.port}. Port {address.port} requires root; try 6767 for testing."
+                ) from e
+            except OSError as e:
+                import errno
+                if e.errno == errno.EACCES or getattr(e, "winerror", None) == 10013:
+                    raise PermissionError(
+                        f"Permission denied binding to port {address.port}. Port {address.port} requires root; try 6767 for testing."
+                    ) from e
+                elif e.errno == errno.EADDRINUSE or getattr(e, "winerror", None) == 10048:
+                    raise OSError(
+                        e.errno,
+                        f"Port {address.port} already in use; try port {address.port + 1000}."
+                    ) from e
+                else:
+                    raise
             self._sockets.append(socket)
         for address, socket in active.items():
             if address not in _listen:
@@ -138,19 +221,25 @@ class DhcpListener:
                 if self._cancelleation_token.is_set():
                     break
                 for socket in rlist:
-                    size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
-                    client = _net.SocketAddress(*client_tuple)
-                    session = _net.SocketSession(socket, client)
-                    server = session.server
                     try:
+                        size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
+                        client = _net.SocketAddress(*client_tuple)
                         msg = DhcpMessage.decode(view[:size])
-                        msg.log(client, server, _logging.DEBUG)
-                        self.handle(msg, session)
+                        msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
+                        interface = _resolve_interface(socket)
+                        transport = UdpTransport(socket)
+                        context = RequestContext(
+                            transport=transport,
+                            interface=interface,
+                            client=client,
+                            client_mac=msg.chaddr,
+                        )
+                        self.handle(msg, context)
                     except Exception as e:
                         if isinstance(e, KeyboardInterrupt):
                             raise e
                         LOGGER.error(
-                            f"Encounter error handling request from {client} at {server} : {e.__class__.__name__} | {e}"
+                            f"Encounter error handling request: {e.__class__.__name__} | {e}"
                         )
         except KeyboardInterrupt:
             LOGGER.info("Stopped listening due to Ctrl-C")
@@ -162,3 +251,102 @@ class DhcpListener:
 # Key by default is (subnet, mac) unless client identifier option set
 
 #
+
+import asyncio as _asyncio
+
+class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
+    def __init__(self, listener: "AsyncDhcpListener", sock: _socket.socket) -> None:
+        self.listener = listener
+        self.sock = sock
+        self.transport: _ty.Optional[_asyncio.DatagramTransport] = None
+
+    def connection_made(self, transport: _asyncio.BaseTransport) -> None:
+        self.transport = _ty.cast(_asyncio.DatagramTransport, transport)
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        try:
+            client = _net.SocketAddress(*addr)
+            msg = DhcpMessage.decode(memoryview(data))
+            msg.log(client, _net.SocketAddress(self.sock), _logging.DEBUG)
+            interface = _resolve_interface(self.sock)
+            transport = UdpTransport(self.sock)
+            context = RequestContext(
+                transport=transport,
+                interface=interface,
+                client=client,
+                client_mac=msg.chaddr,
+            )
+            self.listener.handle(msg, context)
+        except Exception as e:
+            if isinstance(e, KeyboardInterrupt):
+                raise e
+            LOGGER.error(
+                f"Encounter error handling async request from {addr} : {e.__class__.__name__} | {e}"
+            )
+
+
+class AsyncDhcpListener:
+    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
+
+    def __init__(
+        self,
+        listen: _ty.Optional[_ty.Union[_ty.List[_ty.Union[_ty.Tuple[_net.IPv4, int], _net.IPv4, str]], str]] = None,
+        max_packet_size: _ty.Optional[int] = None,
+    ) -> None:
+        self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
+        if listen is None:
+            listen = "*"
+        self._listen = _parselisteners(listen, self.DEFAULT_PORTS)
+        self._sockets: list[_socket.socket] = []
+        self._transports: list[_asyncio.DatagramTransport] = []
+
+    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
+        pass
+
+    def bind(self) -> None:
+        active = {_net.SocketAddress(socket): socket for socket in self._sockets}
+        _listen = []
+        for address in self._listen:
+            _listen.append(address)
+            if address in active:
+                continue
+            LOGGER.info(f"Listening on (async): {address}")
+            socket = address.listen(
+                _socket.AF_INET,
+                _socket.SOCK_DGRAM,
+                _socket.IPPROTO_UDP,
+                options=[
+                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
+                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
+                ],
+            )
+            self._sockets.append(socket)
+        for address, socket in active.items():
+            if address not in _listen:
+                self._sockets.remove(socket)
+                try:
+                    socket.close()
+                except Exception:
+                    pass
+
+    async def start(self) -> None:
+        self.bind()
+        loop = _asyncio.get_running_loop()
+        for sock in self._sockets:
+            transport, _ = await loop.create_datagram_endpoint(
+                lambda: _DhcpDatagramProtocol(self, sock),
+                sock=sock
+            )
+            self._transports.append(transport)
+
+    async def stop(self) -> None:
+        for transport in self._transports:
+            transport.close()
+        self._transports.clear()
+        for sock in self._sockets:
+            try:
+                sock.close()
+            except Exception:
+                pass
+        self._sockets.clear()
+

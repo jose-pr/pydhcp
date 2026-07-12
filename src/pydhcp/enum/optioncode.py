@@ -823,6 +823,8 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     # 224-254 PRIVATE USE
     MSFT_CLASSLESS_STATIC_ROUTE = 249
     WPAD = 252 
+    ALL_VPNS = 254
+    """All VPNs option"""
     END = 255
     """The end option marks the end of valid information in the vendor
    field.  Subsequent octets should be filled with pad options.

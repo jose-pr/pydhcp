@@ -73,11 +73,14 @@ class DhcpMessage:
             siaddr,
             giaddr,
         ) = _struct.unpack_from("!BBBBIHHIIII", data, 0)
+        if hlen > 16:
+            raise ValueError(f"Hardware address length {hlen} exceeds maximum of 16")
         op = _enum.OpCode(op)
         try:
             htype = _enum.HardwareAddressType(htype)
-        except:
-            pass
+        except ValueError:
+            LOGGER.warning(f"Unknown hardware type {htype}, using ETHERNET")
+            htype = _enum.HardwareAddressType.ETHERNET
         secs = _dt.timedelta(seconds=secs)
         flags = _enum.Flags(flags)
         ciaddr = _net.IPv4(ciaddr)
@@ -89,11 +92,14 @@ class DhcpMessage:
         file_data = data[108:236]
 
         if cls.MAGIC_COOKIE != data[236:240]:
-            raise Exception("Bad Magic Cookie")
+            raise ValueError(
+                f"Invalid magic cookie at offset 236: expected {cls.MAGIC_COOKIE.hex()}, got {data[236:240].hex()}"
+            )
 
         options = DhcpOptions()
-        if options.decode(data[240:])[0] != 255:
-            raise Exception("Bad Options end")
+        remaining_opts = options.decode(data[240:])
+        if remaining_opts and remaining_opts[0] != 255:
+            raise ValueError(f"Bad options terminator: expected 255 (END), got {remaining_opts[0]}")
 
         overload = options.get(
             _enum.DhcpOptionCode.OPTION_OVERLOAD,
@@ -158,32 +164,39 @@ class DhcpMessage:
         max_packetsize = int(max_packetsize or _const.DHCP_MIN_LEGAL_PACKET_SIZE)
         max_options_field_size = max_packetsize - 264 - len(self.MAGIC_COOKIE)
         if max_options_field_size < 0:
-            raise Exception(f"{max_packetsize} is to small for a DHCP packet")
+            raise ValueError(f"{max_packetsize} is too small for a DHCP packet")
 
         sname_bytes: _ty.Union[bytes, bytearray] = self.sname.encode()
         file_bytes: _ty.Union[bytes, bytearray] = self.file.encode()
         options_field: _ty.Union[bytes, bytearray] = self.options.encode()
-        if len(options_field) > max_options_field_size + 128:
+        if len(options_field) > max_options_field_size + 128 + 64:
+            raise OverflowError("DHCP options exceed maximum packet size")
+        elif len(options_field) > max_options_field_size + 128:
             if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in self.options:
                 self.options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
-
                 self.options._options.move_to_end(
                     int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
                 )
             if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in self.options:
                 self.options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
-
                 self.options._options.move_to_end(
                     int(_enum.DhcpOptionCode.TFTP_SERVER), False
                 )
             overload = _type.OptionOverload.BOTH
-        elif len(options_field) > max_options_field_size:
-            if self.file:
+        elif len(options_field) > max_options_field_size + 64:
+            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in self.options:
                 self.options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
                 self.options._options.move_to_end(
                     int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
                 )
             overload = _type.OptionOverload.FILE
+        elif len(options_field) > max_options_field_size:
+            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in self.options:
+                self.options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
+                self.options._options.move_to_end(
+                    int(_enum.DhcpOptionCode.TFTP_SERVER), False
+                )
+            overload = _type.OptionOverload.SNAME
         else:
             overload = _type.OptionOverload.NONE
 
