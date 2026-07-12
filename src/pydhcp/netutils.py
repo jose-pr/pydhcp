@@ -1,14 +1,16 @@
+from __future__ import annotations
+
 import typing as _ty
 import ipaddress as _ip
 from . import _platform_utils as _platform
 import socket as _socket
 
 IPv4 = _ip.IPv4Address
-IPv6 = _ip.IPv4Address
-IP = IPv4 | IPv6
+IPv6 = _ip.IPv6Address
+IP = _ty.Union[IPv4, IPv6]
 IPv4Network = _ip.IPv4Network
 IPv6Network = _ip.IPv6Network
-IPNetwork = IPv4Network | IPv6Network
+IPNetwork = _ty.Union[IPv4Network, IPv6Network]
 IPv4Interface = _ip.IPv4Interface
 
 WILDCARD_IPv4 = IPv4("0.0.0.0")
