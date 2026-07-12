@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as _ty
 from ._options import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as DhcpOption
 from .optiontype import DhcpOptionType as DhcpOptionType

@@ -51,8 +51,6 @@ class HardwareAddressType(_enum.IntEnum):
     LOCALNET = 12
 
     def dumps(self, address: bytes) -> str:
-        match self:
-            case HardwareAddressType.ETHERNET:
-                return address.hex(":", 1).upper()
-            case _other:
-                return repr(address)
+        if self is HardwareAddressType.ETHERNET:
+            return address.hex(":", 1).upper()
+        return repr(address)

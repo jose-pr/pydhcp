@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import socket as _socket
 import select as _select
 import threading as _thread
