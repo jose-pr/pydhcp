@@ -1,4 +1,5 @@
-import logging , sys 
+import logging
+import sys
 LOGGER = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
@@ -12,7 +13,6 @@ sys.path.insert(0, _SRC.as_posix())
 from pydhcp import DhcpListener, log
 log.LOGGER.setLevel(logging.DEBUG)
 
-dhcpd = DhcpListener()
+dhcpd = DhcpListener(listen="*", per_interface=True)
 dhcpd.start()
 dhcpd.wait()
-pass

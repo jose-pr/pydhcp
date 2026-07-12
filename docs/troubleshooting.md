@@ -26,6 +26,12 @@ This page covers the most common things that go sideways when bringing up a DHCP
 - Turn on debug logging to inspect the transaction ID and message type.
 - Validate that any custom options implement the `DhcpOptionType` contract correctly.
 
+## Wildcard listening behaves differently on Windows and Linux
+
+- On Windows, wildcard listening uses one socket per interface so replies keep the correct source IP.
+- On Linux, the same code path is the safe fallback; packet-info routing is only available on platforms that expose the needed socket APIs.
+- If you need deterministic behavior while debugging, set `per_interface=True`.
+
 ## Useful commands
 
 ```bash
