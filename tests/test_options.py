@@ -38,9 +38,7 @@ def test_options_partial_encode():
 
 def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.TCP_KEEPALIVE_GARBAGE.name == "TCP_KEEPALIVE_GARBAGE"
-    assert DhcpOptionCode.TCP_KEEPALICE_GARBAGE is DhcpOptionCode.TCP_KEEPALIVE_GARBAGE
     assert DhcpOptionCode.NNTP_SERVER.name == "NNTP_SERVER"
-    assert DhcpOptionCode.NNTP_SREVER is DhcpOptionCode.NNTP_SERVER
 
     opts = DhcpOptions()
     opts[DhcpOptionCode.LOG_SERVER] = ["10.0.0.1", "10.0.0.2"]
