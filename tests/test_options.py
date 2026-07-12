@@ -361,7 +361,7 @@ def test_raw_wire_decoding_for_new_primitive_registrations():
     assert decoded.get(DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME).__class__.__name__ == "U32"
     assert decoded.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
     assert decoded.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
-    assert decoded.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example", ""]
+    assert decoded.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example"]
 
 
 def test_register_type_rejects_invalid_type():

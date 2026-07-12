@@ -351,6 +351,10 @@ def test_domain_list_option():
     assert list(decoded) == ["example.com", "sub.example.com"]
     assert length == len(buf)
 
+    single, single_length = DomainList._dhcp_read(memoryview(b"\x05alpha\x07example\x00"))
+    assert list(single) == ["alpha.example"]
+    assert single_length == 15
+
 
 def test_client_identifier_option():
     from pydhcp.optiontype import ClientIdentifier
