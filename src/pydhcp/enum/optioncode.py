@@ -726,7 +726,6 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     CLIENT_FQDN = 81
     RELAY_AGENT_INFORMATION = 82
     ISNS = 83
-    # 85 UNASSIGNED
     NDS_SERVERS = 85
     NDS_TREE_NAME = 86
     NDS_CONTEXT = 87
@@ -738,6 +737,9 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     CLIENT_SYSTEM_ARCHITECTURE = 93
     CLIENT_NDI = 94
     LDAP = 95
+    """IANA currently lists option 95 as unassigned/reclaimed per RFC 3679.
+
+   Interoperability with a standards-conformant peer should not be assumed."""
 
     # 96 UNASSIGNED
     UUID = 97
@@ -811,6 +813,10 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     ETHERBOOT = 175
     IP_TELEPHONE = 176
     LEGACY_CCC = 177
+    """This option was historically used for PacketCable/CableHome CCC
+   (Client Configuration for CableHome), later superseded by option 122
+   (CCC). IANA's registry separately lists 177 under a tentative 2005
+   Etherboot assignment as well; do not conflate the two."""
     # 178-207
     PXE_LINUX_MAGIC = 208
     """magic string = F1:00:74:7E"""

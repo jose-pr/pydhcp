@@ -31,6 +31,9 @@ class DhcpOptionType:
         _wrote = self._dhcp_write(encoded)
         return bytes(encoded)
 
+    def __json__(self) -> _ty.Any:
+        return self
+
     @classmethod
     def _dhcp_len_hint(cls) -> int | None:
         return None
@@ -97,6 +100,9 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
             written += item._dhcp_write(data)
         return written
 
+    def __json__(self) -> list[_ty.Any]:
+        return [item.__json__() for item in self]
+
 
 class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
     """List of option codes used by parameter-request-list style options."""
@@ -140,7 +146,7 @@ class IPv4Address(DhcpOptionType, _IP):
     def __repr__(self) -> str:
         return str(self)
 
-    def _json_(self) -> str:
+    def __json__(self) -> str:
         return str(self)
 
 
@@ -176,6 +182,17 @@ class ClasslessRoute(DhcpOptionType):
         data.extend(self.gateway.packed)
         return last + 5
 
+    def __repr__(self) -> str:
+        return f"ClasslessRoute(gateway={self.gateway}, network={self.network})"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ClasslessRoute):
+            return NotImplemented
+        return (self.gateway, self.network) == (other.gateway, other.network)
+
+    def __json__(self) -> list[_ty.Any]:
+        return [str(self.gateway), str(self.network)]
+
 
 class Bytes(DhcpOptionType, bytes):
     """Opaque byte payload."""
@@ -200,8 +217,8 @@ class Bytes(DhcpOptionType, bytes):
         data.extend(self)
         return len(self)
 
-    def _json_(self) -> str:
-        return self.hex(" ")
+    def __json__(self) -> str:
+        return self.hex()
 
 
 class String(DhcpOptionType, str):
@@ -243,7 +260,10 @@ class Boolean(DhcpOptionType, int):
     def _dhcp_len_hint(cls) -> int | None:
         return 1
 
-    def _json_(self) -> bool:
+    def __repr__(self) -> str:
+        return f"Boolean({bool(self)!r})"
+
+    def __json__(self) -> bool:
         return self.__bool__()
 
 
@@ -272,6 +292,9 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
             raise ValueError("Number is too big")
         if not self.SIGNED and self < 0:
             raise ValueError("Value must not be signed")
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({int(self)!r})"
 
 
 class FixedLengthInteger(BaseFixedLengthInteger):

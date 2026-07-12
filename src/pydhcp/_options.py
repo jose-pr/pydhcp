@@ -25,6 +25,9 @@ class BaseDhcpOptionCode:
             return int(self.value)
         return 0
 
+    def __json__(self) -> int:
+        return int(self)
+
     def __repr__(self) -> str:
         code_val = int(self) if isinstance(self, int) else 0
         return f"[{code_val:0>3}]{self.label()}"
