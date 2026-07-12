@@ -1,6 +1,7 @@
 import timeit
 import sys
 import pathlib
+import argparse
 
 # Ensure src/ is in the import path
 SRC_DIR = pathlib.Path(__file__).parent.parent / "src"
@@ -54,5 +55,17 @@ def run_benchmarks(iterations: int = 10000):
     t_mem = timeit.timeit(test_memory_usage, number=100)
     print(f"1000 lease allocations (x100 reps): {t_mem:.4f}s ({100/t_mem:.1f} reps/sec)")
 
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Run DHCP options and lease benchmark samples.")
+    parser.add_argument(
+        "--iterations",
+        type=int,
+        default=10000,
+        help="Number of decode/round-trip iterations to run.",
+    )
+    args = parser.parse_args()
+    run_benchmarks(iterations=args.iterations)
+
+
 if __name__ == "__main__":
-    run_benchmarks()
+    main()

@@ -1,7 +1,22 @@
 name: test
 
 on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to validate
+        required: false
+        type: string
+      run_benchmarks:
+        description: Run the benchmark harness
+        required: false
+        type: boolean
+        default: false
   push:
+    branches:
+      - '**'
+    tags:
+      - ci-*
   pull_request:
 
 jobs:
@@ -14,6 +29,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -30,3 +47,27 @@ jobs:
 
       - name: Build docs
         run: python -m mkdocs build --strict
+
+  benchmark:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_benchmarks) ||
+      startsWith(github.ref, 'refs/tags/ci-bench-')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install benchmark dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev]
+
+      - name: Run benchmarks
+        run: python benchmarks/bench_options.py --iterations 1000
