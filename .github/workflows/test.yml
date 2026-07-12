@@ -70,7 +70,9 @@ jobs:
           python -m pip install -e .[dev]
 
       - name: Run benchmarks
-        run: python benchmarks/bench_options.py --iterations 1000 --json-output benchmark-results/bench_options.json
+        run: |
+          python benchmarks/bench_options.py --iterations 1000 --json-output benchmark-results/bench_options.json
+          python benchmarks/bench_parse.py --iterations 10000 --json-output benchmark-results/bench_parse.json
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v4
