@@ -28,7 +28,7 @@ dependencies = []
 pydhcp = "pydhcp.cli:main"
 
 [project.optional-dependencies]
-dev = ['build', 'twine', 'hatchling', 'pytest']
+dev = ['build', 'twine', 'hatchling', 'mypy', 'pip-audit', 'pytest', 'pytest-cov']
 docs = ['mkdocs', 'mkdocs-material', 'mkdocstrings[python]']
 
 [project.urls]
@@ -51,4 +51,3 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
 # Since it is a library, make sure it is fully type checked
-
