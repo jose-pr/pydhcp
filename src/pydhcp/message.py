@@ -296,9 +296,15 @@ class DhcpMessage:
 
         return "\n".join(lines)
 
+    def log_str(self, src: _ty.Any, dst: _ty.Any) -> str:
+        return (
+            f"{self.op.name} XID={self.xid:08X} Src: {src} Dst: {dst}\n"
+            f"{self.dumps()}"
+        )
+
     def __contains__(self, __key: object) -> bool:
         return self.options.__contains__(__key)
 
     def log(self, src: _ty.Any, dst: _ty.Any, level: int) -> None:
-        header = f"{'#' * 10} {self.op.name} Src: {src} Dst: {dst} {'#' * 10}"
+        header = f"{'#' * 10} {self.op.name} XID={self.xid:08X} Src: {src} Dst: {dst} {'#' * 10}"
         LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")

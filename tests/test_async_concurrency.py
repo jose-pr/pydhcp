@@ -1,26 +1,43 @@
+from __future__ import annotations
+
 import asyncio
 import socket
 import pytest
 import time
 from datetime import timedelta
-from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions
+from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions, IPv4Address
 from pydhcp.enum import OpCode, DhcpMessageType, DhcpOptionCode, HardwareAddressType, Flags
 from pydhcp.netutils import IPv4
 
 class MockAsyncServerForConcurrency(AsyncDhcpServer):
     def acquire_lease(self, client_id, server_id, msg):
-        requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=None)
-        ip = IPv4(requested_ip) if requested_ip else IPv4("192.168.1.1")
+        requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=IPv4Address)
+        ip = requested_ip if requested_ip else IPv4("127.0.0.1")
         options = DhcpOptions()
         return self.lease_backend.allocate(client_id, ip, 3600, options)
 
 
+class ClientProtocol(asyncio.DatagramProtocol):
+    def __init__(self) -> None:
+        self.transport: asyncio.DatagramTransport | None = None
+        self.queue: asyncio.Queue[tuple[bytes, tuple[str, int]]] = asyncio.Queue()
+
+    def connection_made(self, transport: asyncio.BaseTransport) -> None:
+        self.transport = transport  # type: ignore[assignment]
+
+    def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
+        self.queue.put_nowait((data, addr))
+
+
 async def run_client(client_id_int: int, server_port: int):
     mac = bytes([0x00, 0x11, 0x22, 0x33, 0x44, client_id_int])
-    client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    client_sock.bind(("127.0.0.1", 0))
-
     loop = asyncio.get_running_loop()
+    transport, protocol = await loop.create_datagram_endpoint(
+        lambda: ClientProtocol(),
+        local_addr=("127.0.0.1", 0),
+        family=socket.AF_INET,
+    )
+    assert protocol.transport is not None
 
     # 1. Send DISCOVER
     opts = DhcpOptions()
@@ -46,13 +63,10 @@ async def run_client(client_id_int: int, server_port: int):
     )
 
     start_time = time.perf_counter()
-    await loop.run_in_executor(None, client_sock.sendto, discover.encode(), ("127.0.0.1", server_port))
+    protocol.transport.sendto(discover.encode(), ("127.0.0.1", server_port))
 
     # Recv OFFER
-    data, addr = await asyncio.wait_for(
-        loop.run_in_executor(None, client_sock.recvfrom, 2048),
-        timeout=5.0
-    )
+    data, addr = await asyncio.wait_for(protocol.queue.get(), timeout=5.0)
     offer = DhcpMessage.decode(data)
     assert offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
 
@@ -79,18 +93,15 @@ async def run_client(client_id_int: int, server_port: int):
         file='',
         options=req_opts
     )
-    await loop.run_in_executor(None, client_sock.sendto, request.encode(), ("127.0.0.1", server_port))
+    protocol.transport.sendto(request.encode(), ("127.0.0.1", server_port))
 
     # Recv ACK
-    data, addr = await asyncio.wait_for(
-        loop.run_in_executor(None, client_sock.recvfrom, 2048),
-        timeout=5.0
-    )
+    data, addr = await asyncio.wait_for(protocol.queue.get(), timeout=5.0)
     ack = DhcpMessage.decode(data)
     assert ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
     latency = time.perf_counter() - start_time
 
-    client_sock.close()
+    transport.close()
     return latency
 
 
