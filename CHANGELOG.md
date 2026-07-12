@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added a "Common DHCP Options" docs page with typed examples and updated the custom-options example to prefer typed assignment.
 - Added stricter option-type validation and `ClasslessRoute` truncation checks.
 - Added wildcard listener `per_interface` support and exported `PktInfoUdpTransport`.
+- Added typed codecs and registrations for policy filters, static routes, user classes, encapsulated vendor/relay sub-options, name service search, subnet selection, and RDNSS selection.
 
 ### Fixed
 - Made `DhcpMessage.encode()` idempotent and tolerant of reserved flag bits during decode.

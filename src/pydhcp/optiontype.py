@@ -194,6 +194,259 @@ class ClasslessRoute(DhcpOptionType):
         return [str(self.gateway), str(self.network)]
 
 
+class _IPv4PairList(DhcpOptionType, list[tuple[_IP, _IP]]):
+    _SECOND_LABEL: str = "second"
+
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], list):
+            self.extend(items[0])
+            return
+        for item in items:
+            self.append(item)
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> tuple[_IP, _IP]:
+        left, right = item
+        return _IP(left), _IP(right)
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) % 8:
+            raise ValueError(f"{cls.__name__} option is truncated: expected 8-byte records")
+        self = cls()
+        for idx in range(0, len(option), 8):
+            left = _IP(option[idx : idx + 4].tobytes())
+            right = _IP(option[idx + 4 : idx + 8].tobytes())
+            self.append((left, right))
+        return self, len(option)
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        for left, right in self:
+            data.extend(left.packed)
+            data.extend(right.packed)
+        return len(self) * 8
+
+    def append(self, item: _ty.Any) -> None:
+        return list.append(self, self._normalize(item))
+
+    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
+        list.extend(self, [self._normalize(item) for item in __iterable])
+
+    def __json__(self) -> list[list[str]]:
+        return [[str(left), str(right)] for left, right in self]
+
+
+class PolicyFilter(_IPv4PairList):
+    """List of IPv4 destination/mask pairs for policy filtering."""
+
+
+class StaticRoute(_IPv4PairList):
+    """List of IPv4 destination/router pairs for static routing."""
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> tuple[_IP, _IP]:
+        left, right = super()._normalize(item)
+        if left == _IP("0.0.0.0"):
+            raise ValueError("StaticRoute does not allow a default-route destination")
+        return left, right
+
+
+class _LengthPrefixedStringList(DhcpOptionType, list[str]):
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], list):
+            self.extend(items[0])
+            return
+        for item in items:
+            self.append(item)
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> str:
+        return str(item)
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        self = cls()
+        idx = 0
+        size = len(option)
+        while idx < size:
+            length = option[idx]
+            idx += 1
+            if idx + length > size:
+                raise ValueError(f"{cls.__name__} option is truncated")
+            chunk = option[idx : idx + length].tobytes()
+            try:
+                self.append(chunk.decode("utf-8"))
+            except UnicodeDecodeError as exc:
+                raise ValueError(f"{cls.__name__} option contains invalid UTF-8") from exc
+            idx += length
+        return self, size
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        written = 0
+        for item in self:
+            encoded = item.encode("utf-8")
+            if len(encoded) > 255:
+                raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+            data.append(len(encoded))
+            data.extend(encoded)
+            written += len(encoded) + 1
+        return written
+
+    def __json__(self) -> list[str]:
+        return list(self)
+
+
+class UserClass(_LengthPrefixedStringList):
+    """RFC 3004 user-class string list."""
+
+
+class TlvOption(DhcpOptionType):
+    def __init__(self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]) -> None:
+        self.code = int(code)
+        self.value = Bytes(value)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(code={self.code}, value={self.value!r})"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, TlvOption):
+            return NotImplemented
+        return (self.code, self.value) == (other.code, other.value)
+
+    def __json__(self) -> list[_ty.Any]:
+        return [self.code, self.value.__json__()]
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        data.append(self.code)
+        data.append(len(self.value))
+        data.extend(self.value)
+        return len(self.value) + 2
+
+
+class EncapsulatedOptions(DhcpOptionType, list[TlvOption]):
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], list):
+            self.extend(items[0])
+            return
+        for item in items:
+            self.append(item)
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> TlvOption:
+        if isinstance(item, TlvOption):
+            return item
+        code, value = item
+        return TlvOption(code, value)
+
+    def append(self, item: _ty.Any) -> None:
+        return list.append(self, self._normalize(item))
+
+    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
+        list.extend(self, [self._normalize(item) for item in __iterable])
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        self = cls()
+        idx = 0
+        size = len(option)
+        while idx < size:
+            code = option[idx]
+            idx += 1
+            if code == 0:
+                continue
+            if code == 255:
+                break
+            if idx >= size:
+                raise ValueError(f"{cls.__name__} option is truncated: missing length")
+            length = option[idx]
+            idx += 1
+            if idx + length > size:
+                raise ValueError(f"{cls.__name__} option is truncated")
+            self.append(TlvOption(code, option[idx : idx + length]))
+            idx += length
+        return self, idx
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        written = 0
+        for item in self:
+            written += item._dhcp_write(data)
+        return written
+
+    def __json__(self) -> list[list[_ty.Any]]:
+        return [item.__json__() for item in self]
+
+
+class VendorSpecificInformation(EncapsulatedOptions):
+    """Encapsulated vendor-specific sub-options."""
+
+
+class RelayAgentInformation(EncapsulatedOptions):
+    """RFC 3046 relay-agent sub-options."""
+
+
+class ViVendorSpecificInformation(EncapsulatedOptions):
+    """Vendor-specific encapsulated sub-options for option 125."""
+
+
+class RdnssSelection(DhcpOptionType):
+    """RFC 6731 RDNSS selection payload."""
+
+    def __init__(self, flags: int, primary: _IP, secondary: _IP, domains: DomainList | None = None) -> None:
+        self.flags = int(flags)
+        self.primary = _IP(primary)
+        self.secondary = _IP(secondary)
+        self.domains = self._normalize_domains(domains or [])
+
+    @staticmethod
+    def _normalize_domains(domains: _ty.Iterable[str]) -> DomainList:
+        normalized = DomainList(domains)
+        if normalized and normalized[-1] == "":
+            normalized.pop()
+        return normalized
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 9:
+            raise ValueError(f"{cls.__name__} option is truncated")
+        flags = option[0]
+        primary = _IP(option[1:5].tobytes())
+        secondary = _IP(option[5:9].tobytes())
+        domains, read = DomainList._dhcp_read(option[9:])
+        return cls(flags, primary, secondary, domains), 9 + read
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        encoded = self.domains._dhcp_encode()
+        data.append(self.flags)
+        data.extend(self.primary.packed)
+        data.extend(self.secondary.packed)
+        data.extend(encoded)
+        return 9 + len(encoded)
+
+    def __repr__(self) -> str:
+        return (
+            f"RdnssSelection(flags={self.flags!r}, primary={self.primary}, "
+            f"secondary={self.secondary}, domains={self.domains!r})"
+        )
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, RdnssSelection):
+            return NotImplemented
+        return (
+            self.flags,
+            self.primary,
+            self.secondary,
+            list(self.domains),
+        ) == (
+            other.flags,
+            other.primary,
+            other.secondary,
+            list(other.domains),
+        )
+
+    def __json__(self) -> list[_ty.Any]:
+        return [self.flags, str(self.primary), str(self.secondary), self.domains.__json__()]
+
+
 class Bytes(DhcpOptionType, bytes):
     """Opaque byte payload."""
     def __new__(cls, src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None) -> Self:
