@@ -1,7 +1,7 @@
 import typing as _ty
 from ._options import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as DhcpOption
 from .optiontype import DhcpOptionType as DhcpOptionType
-from . import contants as _const
+from . import constants as _const
 from .enum.optioncode import DhcpOptionCode as _ianacodes
 from .log import LOGGER
 from math import inf as _inf

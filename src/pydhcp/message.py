@@ -1,5 +1,5 @@
 from .options import DhcpOptions, BaseDhcpOptionCode
-from . import optiontype as _type, netutils as _net, enum as _enum, contants as _const
+from . import optiontype as _type, netutils as _net, enum as _enum, constants as _const
 from .log import LOGGER
 import struct as _struct
 import typing as _ty

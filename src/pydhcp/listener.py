@@ -3,7 +3,7 @@ import select as _select
 import threading as _thread
 import typing as _ty
 
-from . import netutils as _net, contants as _const, enum as _enum
+from . import netutils as _net, constants as _const, enum as _enum
 from .message import DhcpMessage
 from .log import LOGGER
 import logging as _logging

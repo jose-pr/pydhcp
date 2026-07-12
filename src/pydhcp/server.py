@@ -1,7 +1,7 @@
 import socket as _socket
 from .message import DhcpMessage
 from .listener import DhcpListener as _Base, RequestContext
-from . import enum as _enum, contants as _const, netutils as _net
+from . import enum as _enum, constants as _const, netutils as _net
 from .options import DhcpOptions
 from . import optiontype as _type
 from .log import LOGGER

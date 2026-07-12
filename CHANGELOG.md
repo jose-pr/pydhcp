@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.2.0] - 2026-07-12
 
 ### Added
 - Created `benchmarks/bench_parse.py` packet parsing and serialization performance benchmarks.
@@ -23,6 +23,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Added validation checks for hardware address length (hlen <= 16) during packet decoding.
 - Added socket binding error diagnostics that offer actionable suggestions for permission and address-in-use errors.
 - Added unit tests for binding error handling and malformed packet input in `tests/test_permissions.py` and `tests/test_malformed_packets.py`.
+- Added command-line interface (CLI) with `interfaces`, `server`, `packet`, and `bench` subcommands.
+- Added JSON-based configuration loading support in `config.py`.
+- Added in-process metrics counters (`packets_received`, `packets_sent`, etc.) in `metrics.py` to support observability.
+- Added option parsing and lease allocation performance benchmarks in `benchmarks/bench_options.py`.
+- Added async DHCP server concurrency stress tests under `tests/test_async_concurrency.py`.
 
 ### Changed
 - Configured strict typechecking configuration in `pyproject.toml` and resolved all mypy type-checking errors across the library.
@@ -32,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Refactored `DhcpServer` and `AsyncDhcpServer` to accept and delegate lease lifecycle events (allocate, lookup, renew, release) to a configurable `lease_backend`.
 - Refactored options parsing in `DhcpOptions.decode` to handle truncated option lengths gracefully by logging a warning and parsing remaining bytes instead of crashing.
 - Added debug-level logging for packet arrival and lease allocation including client XIDs.
+- Renamed misspelled `contants.py` to `constants.py` and updated all internal references.
+- Added strict `__all__` public exports list to `src/pydhcp/__init__.py`.
 
 ### Fixed
 - Fixed bug in `ClasslessRoute` destination descriptor parsing/serialization that caused incorrect length calculations for CIDR/8.
@@ -45,5 +52,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.1.0...HEAD
+[0.2.0]: https://github.com/jose-pr/pydhcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jose-pr/pydhcp/releases/tag/v0.1.0

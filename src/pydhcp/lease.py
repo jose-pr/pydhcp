@@ -7,7 +7,7 @@ from math import inf as _inf
 
 from .netutils import IPv4
 from .options import DhcpOptions
-from .contants import INIFINITE_LEASE_TIME
+from .constants import INIFINITE_LEASE_TIME
 
 
 class DhcpLease(_ty.NamedTuple):
