@@ -40,6 +40,7 @@ nav:
   - Home: index.md
   - API Reference: api.md
   - Examples: examples.md
+  - Common DHCP Options: options.md
   - Deployment: deployment.md
   - Troubleshooting: troubleshooting.md
   - FAQ: faq.md

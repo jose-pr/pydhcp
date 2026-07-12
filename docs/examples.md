@@ -35,9 +35,11 @@ from pydhcp import DhcpOptions
 from pydhcp.enum import DhcpOptionCode
 
 options = DhcpOptions()
-options[DhcpOptionCode.HOSTNAME] = b"workstation-01"
-options[DhcpOptionCode.DOMAIN_NAME] = b"example.internal"
+options[DhcpOptionCode.HOSTNAME] = "workstation-01"
+options[DhcpOptionCode.DOMAIN_NAME] = "example.internal"
 ```
+
+For more typed examples across the built-in option families, see [Common DHCP Options](options.md).
 
 ## Inspecting packets
 
