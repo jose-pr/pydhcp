@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ### Added
 - Added optional JSON benchmark report output for `benchmarks/bench_options.py` and uploaded the
   opt-in CI benchmark run as a workflow artifact for easier comparison across iterations.
+- Added optional JSON benchmark report output for `benchmarks/bench_parse.py` so both benchmark
+  entry points now share the same local artifact pattern.
+- Extended the opt-in benchmark workflow to archive both parse and options benchmark JSON reports.
 
 ## [0.2.1-rc.1] - 2026-07-12
 
