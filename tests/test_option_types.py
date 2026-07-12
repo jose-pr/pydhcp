@@ -20,6 +20,7 @@ from pydhcp.optiontype import (
     ViVendorSpecificInformationRecord,
     ViVendorSpecificInformation,
     RdnssSelection,
+    UriList,
     I32,
     MoSIpv4AddressRecord,
     MoSFqdnRecord,
@@ -354,6 +355,30 @@ def test_domain_list_option():
     single, single_length = DomainList._dhcp_read(memoryview(b"\x05alpha\x07example\x00"))
     assert list(single) == ["alpha.example"]
     assert single_length == 15
+
+
+def test_uri_list_option_round_trip_and_truncation():
+    value = UriList(["https://bootstrap.example/one", "https://bootstrap.example/two"])
+    buf = bytearray()
+    wrote = value._dhcp_write(buf)
+    assert wrote == len(buf)
+
+    decoded, length = UriList._dhcp_read(memoryview(buf))
+    assert decoded == value
+    assert length == len(buf)
+
+    joined = (
+        len(b"https://bootstrap.example/one").to_bytes(2, "big")
+        + b"https://bootstrap.example/one"
+        + len(b"https://bootstrap.example/two").to_bytes(2, "big")
+        + b"https://bootstrap.example/two"
+    )
+    decoded_joined, joined_length = UriList._dhcp_read(memoryview(joined))
+    assert decoded_joined == value
+    assert joined_length == len(joined)
+
+    with pytest.raises(ValueError, match="truncated"):
+        UriList._dhcp_read(memoryview(b"\x00\x10short"))
 
 
 def test_client_identifier_option():
