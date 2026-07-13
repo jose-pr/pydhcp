@@ -1223,3 +1223,30 @@ class OptionOverload(DhcpOptionType, _enum.IntFlag):
     @classmethod
     def _dhcp_len_hint(cls) -> int | None:
         return 1
+
+
+from .ccc import (  # noqa: E402
+    CccOption,
+    CccSubOption,
+    CccPrimaryDhcpServerAddress,
+    CccSecondaryDhcpServerAddress,
+    CccProvisioningServerAddress,
+    CccProvisioningServerFqdn,
+    CccKerberosRealmName,
+    CccAsReqAsRepBackoffRetry,
+    CccApReqApRepBackoffRetry,
+    CccTicketGrantingServerUtilization,
+    CccProvisioningTimer,
+    CccSecurityTicketControl,
+    CccKdcServerAddressList,
+    CccPrimaryDhcpServerAddressSubOption,
+    CccSecondaryDhcpServerAddressSubOption,
+    CccProvisioningServerAddressSubOption,
+    CccAsReqAsRepBackoffRetrySubOption,
+    CccApReqApRepBackoffRetrySubOption,
+    CccKerberosRealmNameSubOption,
+    CccTicketGrantingServerUtilizationSubOption,
+    CccProvisioningTimerSubOption,
+    CccSecurityTicketControlSubOption,
+    CccKdcServerAddressSubOption,
+)

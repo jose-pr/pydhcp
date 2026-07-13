@@ -22,6 +22,17 @@ from pydhcp.optiontype import (
     MoSIpv4AddressRecord,
     MoSFqdnRecord,
     UriList,
+    CccOption,
+    CccPrimaryDhcpServerAddressSubOption,
+    CccSecondaryDhcpServerAddressSubOption,
+    CccProvisioningServerAddressSubOption,
+    CccAsReqAsRepBackoffRetrySubOption,
+    CccApReqApRepBackoffRetrySubOption,
+    CccKerberosRealmNameSubOption,
+    CccTicketGrantingServerUtilizationSubOption,
+    CccProvisioningTimerSubOption,
+    CccSecurityTicketControlSubOption,
+    CccKdcServerAddressSubOption,
 )
 
 def test_options_set_get():
@@ -509,6 +520,35 @@ def test_raw_wire_decoding_for_vi_vendor_class_registration():
         (32473, [b"docsis", b"eRouter"]),
         (65537, [b"usp", b"agent"]),
     ])
+
+
+def test_ccc_option_code_registration_and_round_trip():
+    assert DhcpOptionCode.CCC.get_type() is CccOption
+
+    value = CccOption([
+        CccPrimaryDhcpServerAddressSubOption(1, "192.0.2.1"),
+        CccSecondaryDhcpServerAddressSubOption(2, "192.0.2.2"),
+        CccProvisioningServerAddressSubOption(3, ("fqdn", "tsp.example")),
+        CccAsReqAsRepBackoffRetrySubOption(4, (1, 2, 3)),
+        CccApReqApRepBackoffRetrySubOption(5, (4, 5, 6)),
+        CccKerberosRealmNameSubOption(6, "EXAMPLE.COM"),
+        CccTicketGrantingServerUtilizationSubOption(7, True),
+        CccProvisioningTimerSubOption(8, 9),
+        CccSecurityTicketControlSubOption(9, 3),
+        CccKdcServerAddressSubOption(10, ["192.0.2.10", "192.0.2.11"]),
+        (99, b"\x01\x02\x03"),
+    ])
+
+    opts = DhcpOptions()
+    opts[DhcpOptionCode.CCC] = value
+    encoded = opts.encode()
+
+    decoded = DhcpOptions()
+    decoded.decode(memoryview(encoded))
+
+    assert decoded.get(DhcpOptionCode.CCC) == value
+    assert decoded.get(DhcpOptionCode.CCC)[-1].code == 99
+    assert decoded.get(DhcpOptionCode.CCC)[-1].value == b"\x01\x02\x03"
 
 
 def test_register_type_rejects_invalid_type():
