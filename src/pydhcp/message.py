@@ -2,12 +2,80 @@ from .options import DhcpOptions, BaseDhcpOptionCode
 from . import optiontype as _type, netutils as _net, enum as _enum, constants as _const
 from .log import LOGGER
 import struct as _struct
+import enum as _enum_base
 import typing as _ty
 import dataclasses as _data
 import datetime as _dt
 import textwrap as _tw
 
 _NULL = 0x00.to_bytes(1, "big")
+_FIXED_HEADER_SIZE = 236
+_MAGIC_COOKIE_END = 240
+
+
+def _strip_hex_text(value: str) -> str:
+    return "".join(ch for ch in value if ch not in " \t\r\n:")
+
+
+def _enum_name(value: _ty.Any) -> _ty.Any:
+    if isinstance(value, _enum_base.Enum):
+        return value.name
+    return value
+
+
+def _coerce_enum_value(enum_type: type[_ty.Any], value: _ty.Any) -> _ty.Any:
+    if isinstance(value, str):
+        try:
+            return enum_type[value]
+        except KeyError:
+            pass
+    return enum_type(value)
+
+
+def _coerce_int(value: _ty.Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    return int(value)
+
+
+def _coerce_chaddr(value: _ty.Any) -> bytes:
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return bytes(value)
+    if not isinstance(value, str):
+        raise TypeError("chaddr must be text or bytes-like")
+    return bytes.fromhex(_strip_hex_text(value))
+
+
+def _decode_option_value(code: int, value: bytearray, codemap: type[BaseDhcpOptionCode]) -> _ty.Any:
+    try:
+        option_code = codemap.from_code(code)
+    except Exception:
+        return _type.Bytes(value).__json__()
+    option_type = option_code.get_type()
+    decoded = option_type._dhcp_decode(value)
+    return _enum_name(decoded.__json__() if isinstance(decoded, _type.DhcpOptionType) else decoded)
+
+
+def _coerce_option_value(
+    option_type: type[_type.DhcpOptionType],
+    value: _ty.Any,
+) -> _ty.Any:
+    if isinstance(value, str) and issubclass(option_type, _enum_base.Enum):
+        return _coerce_enum_value(option_type, value)
+    return value
+
+
+def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDhcpOptionCode]) -> int:
+    if isinstance(raw_code, int):
+        return raw_code
+    if isinstance(raw_code, str):
+        if raw_code.isdigit():
+            return int(raw_code)
+        try:
+            return int(codemap[raw_code])
+        except Exception:
+            pass
+    return int(raw_code)
 
 
 @_data.dataclass
@@ -56,10 +124,91 @@ class DhcpMessage:
     options: DhcpOptions
     """Optional parameters field."""
 
+    def to_mapping(self) -> dict[str, _ty.Any]:
+        options: dict[str, _ty.Any] = {}
+        for code, value in self.options._options.items():
+            try:
+                code_obj = self.options._codemap.from_code(code)
+                key = code_obj.name
+                option_type = code_obj.get_type()
+                decoded = option_type._dhcp_decode(value)
+                option_value = decoded.__json__() if isinstance(decoded, _type.DhcpOptionType) else decoded
+            except Exception:
+                key = str(code)
+                option_value = _type.Bytes(value).__json__()
+            options[key] = _enum_name(option_value)
+
+        return {
+            "op": self.op.name,
+            "htype": self.htype.name,
+            "hlen": self.hlen,
+            "hops": self.hops,
+            "xid": self.xid,
+            "secs": int(self.secs.total_seconds()),
+            "flags": self.flags.name,
+            "ciaddr": str(self.ciaddr),
+            "yiaddr": str(self.yiaddr),
+            "siaddr": str(self.siaddr),
+            "giaddr": str(self.giaddr),
+            "chaddr": self.chaddr.hex(":").upper(),
+            "sname": self.sname,
+            "file": self.file,
+            "options": options,
+        }
+
+    @classmethod
+    def from_mapping(cls, data: _ty.Mapping[str, _ty.Any]) -> "DhcpMessage":
+        options = DhcpOptions()
+        raw_options = data.get("options", {})
+        if not isinstance(raw_options, _ty.Mapping):
+            raise TypeError("options must be a mapping")
+
+        for raw_code, raw_value in raw_options.items():
+            code = _coerce_option_code(raw_code, options._codemap)
+            try:
+                code_obj = options._codemap.from_code(code)
+                option_type = code_obj.get_type()
+                value = _coerce_option_value(option_type, raw_value)
+                options[code] = value
+            except Exception:
+                if isinstance(raw_value, str):
+                    raw_bytes = bytearray.fromhex(_strip_hex_text(raw_value))
+                elif isinstance(raw_value, (bytes, bytearray, memoryview)):
+                    raw_bytes = bytearray(raw_value)
+                else:
+                    raise TypeError(f"Unsupported value for unknown option {raw_code!r}") from None
+                options[code] = raw_bytes
+
+        return cls(
+            op=_coerce_enum_value(_enum.OpCode, data["op"]),
+            htype=_coerce_enum_value(_enum.HardwareAddressType, data["htype"]),
+            hlen=_coerce_int(data["hlen"]),
+            hops=_coerce_int(data["hops"]),
+            xid=_coerce_int(data["xid"]),
+            secs=_dt.timedelta(seconds=_coerce_int(data["secs"])),
+            flags=_coerce_enum_value(_enum.Flags, data["flags"]),
+            ciaddr=_net.IPv4(data["ciaddr"]),
+            yiaddr=_net.IPv4(data["yiaddr"]),
+            siaddr=_net.IPv4(data["siaddr"]),
+            giaddr=_net.IPv4(data["giaddr"]),
+            chaddr=_coerce_chaddr(data["chaddr"]),
+            sname=str(data["sname"]),
+            file=str(data["file"]),
+            options=options,
+        )
+
     @classmethod
     def decode(cls, data: _ty.Union[bytes, bytearray, memoryview]) -> "DhcpMessage":
         if not isinstance(data, memoryview):
             data = memoryview(data)
+        if len(data) < _FIXED_HEADER_SIZE:
+            raise ValueError(
+                f"Packet is too short for DHCP fixed header: got {len(data)} bytes, need at least {_FIXED_HEADER_SIZE}"
+            )
+        if len(data) < _MAGIC_COOKIE_END:
+            raise ValueError(
+                f"Packet is too short for DHCP magic cookie at offset 236: got {len(data)} bytes, need at least {_MAGIC_COOKIE_END}"
+            )
         (
             op,
             htype,
@@ -97,7 +246,7 @@ class DhcpMessage:
             )
 
         options = DhcpOptions()
-        remaining_opts = options.decode(data[240:])
+        remaining_opts = options.decode(data[240:], base_offset=240)
         if remaining_opts and remaining_opts[0] != 255:
             raise ValueError(f"Bad options terminator: expected 255 (END), got {remaining_opts[0]}")
 
@@ -109,13 +258,13 @@ class DhcpMessage:
 
         # rfc3396 order
         if overload is not None and bool(overload.value & _type.OptionOverload.FILE.value):
-            options.decode(file_data)
+            options.decode(file_data, base_offset=108)
             file_raw: _ty.Optional[memoryview] = None
         else:
             file_raw = file_data
 
         if overload is not None and bool(overload.value & _type.OptionOverload.SNAME.value):
-            options.decode(sname_data)
+            options.decode(sname_data, base_offset=44)
             sname_raw: _ty.Optional[memoryview] = None
         else:
             sname_raw = sname_data

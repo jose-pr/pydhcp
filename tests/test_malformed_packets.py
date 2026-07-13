@@ -37,6 +37,16 @@ def test_invalid_hlen():
         DhcpMessage.decode(packet)
 
 
+def test_packet_shorter_than_fixed_header():
+    with pytest.raises(ValueError, match="too short for DHCP fixed header: got 10 bytes, need at least 236"):
+        DhcpMessage.decode(bytearray(10))
+
+
+def test_packet_shorter_than_magic_cookie():
+    with pytest.raises(ValueError, match="too short for DHCP magic cookie at offset 236: got 238 bytes, need at least 240"):
+        DhcpMessage.decode(bytearray(238))
+
+
 def test_invalid_htype_warning(caplog):
     packet = get_valid_packet_bytes()
     # Modify htype (offset 1) to an invalid value, e.g. 99
@@ -69,4 +79,4 @@ def test_truncated_options(caplog):
     with caplog.at_level(logging.WARNING):
         decoded = DhcpMessage.decode(packet)
     
-    assert "Option 1 claims 4 bytes but only 0 available" in caplog.text
+    assert "Option 1 at offset 243 claims 4 bytes but only 0 available" in caplog.text

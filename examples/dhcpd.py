@@ -1,48 +1,61 @@
-import logging, sys
-import pathlib
+from __future__ import annotations
 
-_SRC = pathlib.Path(__file__).parent.parent / "src"
-sys.path.insert(0, _SRC.as_posix())
+import datetime as dt
+import logging
+import sys
+
+from pydhcp import DhcpOptions, DhcpServer, log, netutils
+from pydhcp.enum import DhcpOptionCode
 from pydhcp.message import DhcpMessage
+from pydhcp.server import DhcpLease
+
 
 LOGGER = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(formatter)
+handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
 LOGGER.addHandler(handler)
-
-from pydhcp import DhcpServer, log
-from pydhcp.server import DhcpLease
-from pydhcp import netutils, optiontype
-from pydhcp.enum import DhcpOptionCode
-
 log.LOGGER.setLevel(logging.DEBUG)
 
 
-class DhcpServer(DhcpServer):
+class ExampleDhcpServer(DhcpServer):
     offset = 60
 
-    def acquire_lease(self, client_id: str, server_id: netutils.IPv4, msg: DhcpMessage):
-        ip, expires, options = super().acquire_lease(client_id, server_id, msg)
-        _server = next(netutils.host_ip_interfaces(lambda ip: ip.ip == server_id), None)
-        if not ip:
-            if client_id.endswith("CC:7C"):
-                ip = _server.network.network_address + self.offset
-            elif client_id.endswith("C0:DF"):
-                ip = _server.network.network_address + self.offset + 1
-        options[DhcpOptionCode.ROUTER] = _server.network.network_address + 1
+    def acquire_lease(
+        self,
+        client_id: str,
+        server_id: netutils.IPv4,
+        msg: DhcpMessage,
+    ) -> DhcpLease | None:
+        lease = super().acquire_lease(client_id, server_id, msg)
+        if lease is not None:
+            return lease
+
+        server_interface = next(
+            netutils.host_ip_interfaces(lambda interface: interface.ip == server_id),
+            None,
+        )
+        if server_interface is None:
+            return None
+
+        ip = None
+        if client_id.endswith("CC:7C"):
+            ip = server_interface.network.network_address + self.offset
+        elif client_id.endswith("C0:DF"):
+            ip = server_interface.network.network_address + self.offset + 1
+        if ip is None:
+            return None
+
+        options = DhcpOptions()
+        options[DhcpOptionCode.ROUTER] = server_interface.network.network_address + 1
         options[DhcpOptionCode.DNS] = [
-            _server.network.network_address + 1,
+            server_interface.network.network_address + 1,
             "8.8.8.8",
             "1.1.1.1",
         ]
-        if ip is None:
-            return
-        return DhcpLease(ip, expires, options)
+        return DhcpLease(ip, dt.datetime.now() + dt.timedelta(hours=1), options)
 
 
-dhcpd = DhcpServer()
-dhcpd.listen()
-# dhcpd.wait()
-pass
+if __name__ == "__main__":
+    dhcpd = ExampleDhcpServer()
+    dhcpd.listen()
