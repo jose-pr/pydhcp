@@ -7,6 +7,7 @@ This page covers the most common things that go sideways when bringing up a DHCP
 - Check whether another process is already bound to the UDP port.
 - On Windows, verify the process has permission to open the socket.
 - On Linux, confirm you are running with the privileges required for the binding mode you selected.
+- Remember that the package is pure Python, but DHCP serving still depends on OS socket privileges and UDP broadcast behavior.
 
 ## No interfaces are listed
 
@@ -26,11 +27,30 @@ This page covers the most common things that go sideways when bringing up a DHCP
 - Turn on debug logging to inspect the transaction ID and message type.
 - Validate that any custom options implement the `DhcpOptionType` contract correctly.
 
+Decode packet hex to structured JSON when you want tooling-friendly output.
+
+```bash
+pydhcp packet --decode --stdin --json
+```
+
+Use summary output when you want a compact terminal view while troubleshooting captures.
+
+```bash
+pydhcp packet --decode --stdin --summary
+```
+
+If TOML packet encoding or decoding reports that TOML support is unavailable, install the
+optional TOML extra for the environment running the CLI: `pip install pydhcp[toml]`.
+
 ## Wildcard listening behaves differently on Windows and Linux
 
-- On Windows, wildcard listening uses one socket per interface so replies keep the correct source IP.
-- On Linux, the same code path is the safe fallback; packet-info routing is only available on platforms that expose the needed socket APIs.
-- If you need deterministic behavior while debugging, set `per_interface=True`.
+- Packet-info routing is opportunistic and only used on platforms that expose the needed socket APIs.
+- `per_interface=True` is the portable deterministic path when you need one socket per interface.
+- Explicit endpoint lists avoid interface-enumeration surprises while debugging.
+
+```bash
+pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768 --log-level debug
+```
 
 ## Useful commands
 

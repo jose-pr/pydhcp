@@ -1,6 +1,6 @@
 # Deployment
 
-`pydhcp` is a pure-Python library, so deployment is mostly about running it with the right permissions and network layout.
+`pydhcp` is a pure-Python library, so deployment is mostly about running it with the right permissions and network layout. Packet parsing and structured packet tooling are portable; DHCP serving depends on the host OS allowing the needed UDP binds and broadcasts.
 
 ## Production checklist
 
@@ -8,6 +8,11 @@
 2. Make sure the host can bind the DHCP ports you expect to use.
 3. Confirm the selected interface has the address range you want to serve.
 4. Keep lease persistence enabled if you need stable client assignment across restarts.
+5. Implement address-pool policy in a `DhcpServer` subclass or custom lease backend before serving a real network.
+
+The built-in server is a base implementation, not a full IPAM system. It is useful for
+simple deployments, tests, and custom services, but production pools, reservations, and
+site policy should live in your own subclass or backend.
 
 ## systemd
 
