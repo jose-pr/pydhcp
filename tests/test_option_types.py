@@ -28,6 +28,28 @@ from pydhcp.optiontype import (
     MoSFqdnRecord,
     MoSIpv4AddressList,
     MoSFqdnList,
+    CccOption,
+    CccPrimaryDhcpServerAddress,
+    CccSecondaryDhcpServerAddress,
+    CccProvisioningServerAddress,
+    CccProvisioningServerFqdn,
+    CccKerberosRealmName,
+    CccAsReqAsRepBackoffRetry,
+    CccApReqApRepBackoffRetry,
+    CccTicketGrantingServerUtilization,
+    CccProvisioningTimer,
+    CccSecurityTicketControl,
+    CccKdcServerAddressList,
+    CccPrimaryDhcpServerAddressSubOption,
+    CccSecondaryDhcpServerAddressSubOption,
+    CccProvisioningServerAddressSubOption,
+    CccAsReqAsRepBackoffRetrySubOption,
+    CccApReqApRepBackoffRetrySubOption,
+    CccKerberosRealmNameSubOption,
+    CccTicketGrantingServerUtilizationSubOption,
+    CccProvisioningTimerSubOption,
+    CccSecurityTicketControlSubOption,
+    CccKdcServerAddressSubOption,
 )
 from pydhcp.netutils import IPv4
 from ipaddress import ip_network
@@ -424,3 +446,78 @@ def test_option_overload_option():
     decoded, length = OptionOverload._dhcp_read(memoryview(b"\x01"))
     assert decoded == OptionOverload.FILE
     assert length == 1
+
+
+def test_ccc_payload_round_trips_and_unknown_records():
+    primary = CccPrimaryDhcpServerAddress("192.0.2.1")
+    secondary = CccSecondaryDhcpServerAddress("192.0.2.2")
+    provisioning_ipv4 = CccProvisioningServerAddress(("ipv4", "192.0.2.3"))
+    provisioning_fqdn = CccProvisioningServerAddress(("fqdn", CccProvisioningServerFqdn("tsp.example")))
+    as_retry = CccAsReqAsRepBackoffRetry(1, 2, 3)
+    ap_retry = CccApReqApRepBackoffRetry(4, 5, 6)
+    realm = CccKerberosRealmName("EXAMPLE.COM")
+    tgs = CccTicketGrantingServerUtilization(True)
+    timer = CccProvisioningTimer(7)
+    control = CccSecurityTicketControl(3)
+    kdc = CccKdcServerAddressList(["192.0.2.10", "192.0.2.11"])
+
+    for value in [
+        primary,
+        secondary,
+        provisioning_ipv4.value,
+        provisioning_fqdn.value,
+        as_retry,
+        ap_retry,
+        realm,
+        tgs,
+        timer,
+        control,
+        kdc,
+    ]:
+        buf = bytearray()
+        wrote = value._dhcp_write(buf)
+        decoded, length = type(value)._dhcp_read(memoryview(buf))
+        assert decoded == value
+        assert length == wrote
+
+    buf = bytearray()
+    provisioning_ipv4._dhcp_write(buf)
+    decoded_ipv4, length = CccProvisioningServerAddress._dhcp_read(memoryview(buf))
+    assert decoded_ipv4 == provisioning_ipv4
+    assert length == len(buf)
+
+    buf = bytearray()
+    provisioning_fqdn._dhcp_write(buf)
+    decoded_fqdn, length = CccProvisioningServerAddress._dhcp_read(memoryview(buf))
+    assert decoded_fqdn == provisioning_fqdn
+    assert length == len(buf)
+
+    with pytest.raises(ValueError, match="reserved bits"):
+        CccSecurityTicketControl(0x0004)._dhcp_write(bytearray())
+
+
+def test_ccc_option_container_preserves_unknown_records():
+    option = CccOption(
+        [
+            CccPrimaryDhcpServerAddressSubOption(1, "192.0.2.1"),
+            CccSecondaryDhcpServerAddressSubOption(2, "192.0.2.2"),
+            CccProvisioningServerAddressSubOption(3, ("fqdn", "tsp.example")),
+            CccAsReqAsRepBackoffRetrySubOption(4, (1, 2, 3)),
+            CccApReqApRepBackoffRetrySubOption(5, (4, 5, 6)),
+            CccKerberosRealmNameSubOption(6, "EXAMPLE.COM"),
+            CccTicketGrantingServerUtilizationSubOption(7, True),
+            CccProvisioningTimerSubOption(8, 9),
+            CccSecurityTicketControlSubOption(9, 3),
+            CccKdcServerAddressSubOption(10, ["192.0.2.10", "192.0.2.11"]),
+            (99, b"\x01\x02\x03"),
+        ]
+    )
+
+    buf = bytearray()
+    wrote = option._dhcp_write(buf)
+    decoded, length = CccOption._dhcp_read(memoryview(buf))
+
+    assert decoded == option
+    assert length == wrote
+    assert decoded[-1].code == 99
+    assert decoded[-1].value == b"\x01\x02\x03"
