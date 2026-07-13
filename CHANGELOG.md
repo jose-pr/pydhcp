@@ -7,18 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-13
+
 ### Added
+- Added CCC option codec coverage and registered `DhcpOptionCode.CCC` for typed round trips.
+- Clarified `DhcpServer` customization hooks, added DHCPINFORM option-only responses, and
+  repaired examples so they match the current lease API.
+- Made TOML packet support optional at import time, with clear `NotImplementedError` messages
+  when `tomli` or `tomli-w` is unavailable.
+- Added stricter short-packet diagnostics and `pydhcp packet --decode --summary` for compact
+  DHCP capture inspection.
+- Added multi-endpoint listener parsing for host:port strings, comma-separated CLI listen specs, and
+  one-address/many-port tuples, plus `per_interface` constructor parity on sync and async servers.
 - Added optional JSON benchmark report output for `benchmarks/bench_options.py` and uploaded the
   opt-in CI benchmark run as a workflow artifact for easier comparison across iterations.
 - Added optional JSON benchmark report output for `benchmarks/bench_parse.py` so both benchmark
   entry points now share the same local artifact pattern.
 - Extended the opt-in benchmark workflow to archive both parse and options benchmark JSON reports.
-- Extended `pydhcp bench` so the CLI can choose `parse` or `options` benchmarks and optionally
-  write structured JSON output.
+- Added the repo-local `benchmarks/run.py` wrapper so maintainers can choose `parse` or `options`
+  benchmarks and optionally write structured JSON output without expanding the released package CLI.
+- Added structured packet I/O for `pydhcp packet` with JSON, YAML, TOML, and INI round trips plus
+  explicit stdin, inline, file, and output-file handling.
 
 ### Fixed
-- Removed the stale `pydhcp packet --encode` CLI flag so the packet subcommand no longer advertises
-  an unsupported mode.
+- Removed the stale `pydhcp packet --encode` CLI flag and replaced it with a real packet encoding
+  mode backed by structured packet helpers.
 
 ## [0.2.1-rc.1] - 2026-07-12
 
@@ -80,5 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Initial release.
 
+[0.3.0]: https://github.com/jose-pr/pydhcp/compare/v0.2.1-rc.1...v0.3.0
+[0.2.1-rc.1]: https://github.com/jose-pr/pydhcp/compare/v0.2.0...v0.2.1-rc.1
 [0.2.0]: https://github.com/jose-pr/pydhcp/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jose-pr/pydhcp/releases/tag/v0.1.0
