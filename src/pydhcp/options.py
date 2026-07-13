@@ -21,18 +21,20 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({list(self._options.keys())})"
 
-    def decode(self, options: memoryview) -> memoryview:
+    def decode(self, options: memoryview, base_offset: int = 0) -> memoryview:
+        offset = base_offset
         while options:
             code = options[0]
             if code == 0:
                 options = options[1:]
+                offset += 1
                 continue
 
             if code == 255:
                 break
 
             if len(options) < 2:
-                LOGGER.warning(f"Option {code} is truncated (cannot read length)")
+                LOGGER.warning(f"Option {code} at offset {offset} is truncated (cannot read length)")
                 options = options[len(options):]
                 break
 
@@ -40,7 +42,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             remaining = len(options) - 2
             if length > remaining:
                 LOGGER.warning(
-                    f"Option {code} claims {length} bytes but only {remaining} available"
+                    f"Option {code} at offset {offset} claims {length} bytes but only {remaining} available"
                 )
                 data = options[2:]
                 self._options.setdefault(code, bytearray()).extend(data)
@@ -50,6 +52,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             next_idx = 2 + length
             data = options[2:next_idx]
             options = options[next_idx:]
+            offset += next_idx
             self._options.setdefault(code, bytearray()).extend(data)
         return options
 

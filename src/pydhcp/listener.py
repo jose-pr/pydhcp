@@ -5,6 +5,7 @@ import select as _select
 import threading as _thread
 import struct as _struct
 import typing as _ty
+from collections.abc import Sequence as _Sequence
 
 from . import netutils as _net, constants as _const, enum as _enum
 from .message import DhcpMessage
@@ -14,6 +15,11 @@ import logging as _logging
 
 IP_PKTINFO = getattr(_socket, "IP_PKTINFO", None)
 CMSG_SPACE = getattr(_socket, "CMSG_SPACE", None)
+
+ListenAddress = _ty.Union[_net.IPv4, str]
+ListenPort = _ty.Union[int, _ty.Sequence[int]]
+ListenBinding = _ty.Union[ListenAddress, tuple[ListenAddress, ListenPort]]
+ListenSpec = _ty.Optional[_ty.Union[ListenBinding, _ty.Sequence[ListenBinding]]]
 
 
 class Transport:
@@ -88,21 +94,63 @@ class RequestContext(_ty.NamedTuple):
     local_ip: _net.IPv4 | None = None
 
 
+def _split_listen_string(value: str) -> list[str]:
+    return [part.strip() for part in value.split(",") if part.strip()]
+
+
+def _split_host_port(value: str) -> tuple[str, int | None]:
+    if value.count(":") == 1:
+        host, port_text = value.rsplit(":", 1)
+        if port_text:
+            return host or "0.0.0.0", int(port_text)
+    return value, None
+
+
+def _iter_listen_bindings(listen: ListenSpec) -> _ty.Iterator[ListenBinding]:
+    if listen is None:
+        return
+    if isinstance(listen, str):
+        for part in _split_listen_string(listen):
+            yield part
+        return
+    if isinstance(listen, tuple):
+        yield listen
+        return
+    if isinstance(listen, _net.IPv4):
+        yield listen
+        return
+    for binding in listen:
+        if isinstance(binding, str) and "," in binding:
+            for part in _split_listen_string(binding):
+                yield part
+        else:
+            yield binding
+
+
+def _is_wildcard_binding(binding: ListenBinding) -> bool:
+    ip = binding[0] if isinstance(binding, tuple) else binding
+    return ip == "*" or ip == _net.WILDCARD_IPv4 or ip == "0.0.0.0"
+
+
+def _listen_uses_wildcard(listen: ListenSpec) -> bool:
+    return any(_is_wildcard_binding(binding) for binding in _iter_listen_bindings(listen))
+
+
 def _parselisteners(
-    listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
+    listen: ListenSpec = None,
     default_ports: _ty.Sequence[int] = (),
     expand_wildcard: bool = True,
 ) -> list[_net.SocketAddress]:
     _listen: list[_net.SocketAddress] = []
-    if listen is None:
-        listen = []
-    elif not isinstance(listen, list):
-        listen = [listen]
-    for bind in listen:
+    for bind in _iter_listen_bindings(listen):
         if not isinstance(bind, tuple):
-            ip, port = (bind, None)
+            ip, port = _split_host_port(bind) if isinstance(bind, str) else (bind, None)
         else:
             ip, port = bind
+            if isinstance(ip, str):
+                ip, parsed_port = _split_host_port(ip)
+                if port is None:
+                    port = parsed_port
 
         if not ip:
             ip = "127.0.0.1"
@@ -121,10 +169,10 @@ def _parselisteners(
             ports: _ty.Sequence[int]
             if port is None:
                 ports = default_ports
-            elif not isinstance(port, (list, tuple)):
-                ports = [port]
-            else:
+            elif isinstance(port, _Sequence) and not isinstance(port, (str, bytes, bytearray)):
                 ports = port
+            else:
+                ports = [port]
             for p in ports:
                 p = int(p)
                 bind_addr = _net.SocketAddress(ip, p)
@@ -161,7 +209,7 @@ class DhcpListener:
 
     def __init__(
         self,
-        listen: list[tuple[_net.IPv4, int] | _net.IPv4 | str] | str | None = None,
+        listen: ListenSpec = None,
         select_timeout: float | None = None,
         max_packet_size: int | None = _const.UDP_MAX_PACKET_SIZE,
         per_interface: bool | None = None,
@@ -173,7 +221,7 @@ class DhcpListener:
             per_interface is not True
             and hasattr(_socket.socket, "recvmsg")
             and hasattr(_socket, "IP_PKTINFO")
-            and (listen == "*" or listen == _net.WILDCARD_IPv4 or (isinstance(listen, list) and any((not isinstance(item, tuple) and (item == "*" or item == _net.WILDCARD_IPv4)) or (isinstance(item, tuple) and (item[0] == "*" or item[0] == _net.WILDCARD_IPv4)) for item in listen)))
+            and _listen_uses_wildcard(listen)
         )
         self._listen = _parselisteners(listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo)
         self._per_interface = per_interface
@@ -373,14 +421,15 @@ class AsyncDhcpListener:
 
     def __init__(
         self,
-        listen: _ty.Optional[_ty.Union[_ty.List[_ty.Union[_ty.Tuple[_net.IPv4, int], _net.IPv4, str]], str]] = None,
+        listen: ListenSpec = None,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: bool | None = None,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
-        self._listen = _parselisteners(listen, self.DEFAULT_PORTS)
+        self._pktinfo = False
+        self._listen = _parselisteners(listen, self.DEFAULT_PORTS, expand_wildcard=True)
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._transports: list[_asyncio.DatagramTransport] = []
