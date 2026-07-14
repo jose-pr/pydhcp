@@ -6,7 +6,7 @@ This page shows the typed option workflow: assign native Python values to `DhcpO
 
 ```python
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 options = DhcpOptions()
 options[DhcpOptionCode.SERVER_IDENTIFIER] = "192.0.2.1"
@@ -16,7 +16,7 @@ options[DhcpOptionCode.SERVER_IDENTIFIER] = "192.0.2.1"
 
 ```python
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 options = DhcpOptions()
 options[DhcpOptionCode.DNS] = ["192.0.2.53", "192.0.2.54"]
@@ -26,7 +26,7 @@ options[DhcpOptionCode.DNS] = ["192.0.2.53", "192.0.2.54"]
 
 ```python
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 options = DhcpOptions()
 options[DhcpOptionCode.RAPID_COMMIT] = True
@@ -36,7 +36,7 @@ options[DhcpOptionCode.RAPID_COMMIT] = True
 
 ```python
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 options = DhcpOptions()
 options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
@@ -46,7 +46,7 @@ options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
 
 ```python
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 options = DhcpOptions()
 options[DhcpOptionCode.HOSTNAME] = "workstation-01"
@@ -58,9 +58,9 @@ options[DhcpOptionCode.HOSTNAME] = "workstation-01"
 from ipaddress import ip_network
 
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
-from pydhcp.netutils import IPv4
-from pydhcp.optiontype import ClasslessRoute
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
+from pydhcp.options.type import ClasslessRoute
 
 options = DhcpOptions()
 options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = ClasslessRoute(
@@ -73,7 +73,7 @@ options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = ClasslessRoute(
 
 ```python
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 options = DhcpOptions()
 options[DhcpOptionCode.DOMAIN_SEARCH] = ["example.internal", "lab.example.internal"]
@@ -87,9 +87,9 @@ options[DhcpOptionCode.DOMAIN_SEARCH] = ["example.internal", "lab.example.intern
 from ipaddress import ip_network
 
 from pydhcp import DhcpOptions
-from pydhcp.enum import DhcpOptionCode
-from pydhcp.netutils import IPv4
-from pydhcp.optiontype import Boolean, ClasslessRoute
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
+from pydhcp.options.type import Boolean, ClasslessRoute
 
 options = DhcpOptions()
 options[DhcpOptionCode.RAPID_COMMIT] = True

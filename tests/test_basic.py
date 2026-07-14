@@ -1,5 +1,5 @@
 import pytest
-from pydhcp.netutils import MACAddress, SocketAddress, IPv4
+from pydhcp.network import MACAddress, SocketAddress, IPv4
 
 def test_mac_address():
     mac = MACAddress("00-11-22-33-44-55")
@@ -18,8 +18,8 @@ def test_socket_address():
 
 
 def test_classless_route():
-    from pydhcp.optiontype import ClasslessRoute
-    from pydhcp.netutils import IPv4Network
+    from pydhcp.options.type import ClasslessRoute
+    from pydhcp.network import IPv4Network
     # 24-bit subnet, router 192.168.1.1, network 192.168.1.0/24
     net = IPv4Network("192.168.1.0/24")
     gw = IPv4("192.168.1.1")
@@ -37,4 +37,3 @@ def test_classless_route():
     decoded = ClasslessRoute._dhcp_decode(encoded)
     assert decoded.network == net
     assert decoded.gateway == gw
-

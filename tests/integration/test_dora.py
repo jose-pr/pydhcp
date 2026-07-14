@@ -6,9 +6,9 @@ import ipaddress
 from datetime import timedelta
 from unittest.mock import Mock
 from pydhcp import DhcpServer, DhcpMessage, DhcpLease, DhcpOptions, RequestContext, NetworkInterface
-from pydhcp.enum import OpCode, DhcpMessageType, DhcpOptionCode, HardwareAddressType, Flags
-from pydhcp.netutils import SocketAddress, IPv4
-from pydhcp.metrics import METRICS
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import SocketAddress, IPv4
 
 class MockDhcpServer(DhcpServer):
     DEFAULT_PORTS = (6767,)
@@ -101,11 +101,13 @@ def test_dora_sequence(run_dora_server):
         assert ack.op == OpCode.BOOTREPLY
         assert ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
         assert ack.yiaddr == IPv4("127.0.0.1")
+
+        assert run_dora_server.metrics.packets_received > 0
+        assert run_dora_server.metrics.packets_sent > 0
     finally:
         client.close()
 
 def test_routing_rfc2131():
-    METRICS.reset()
     server = MockDhcpServer()
     transport_mock = Mock()
     interface = NetworkInterface("eth0", ipaddress.IPv4Interface(("127.0.0.1", 24)), None)
@@ -141,7 +143,7 @@ def test_routing_rfc2131():
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.1")
     assert args[2] == 67
-    assert METRICS.packets_sent == 1
+    assert server.metrics.packets_sent == 1
 
     # Test case 2: ciaddr set (should send to ciaddr on port 68)
     transport_mock.reset_mock()
@@ -151,7 +153,7 @@ def test_routing_rfc2131():
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.15")
     assert args[2] == 68
-    assert METRICS.packets_sent == 2
+    assert server.metrics.packets_sent == 2
 
     # Test case 3: broadcast flag set (should send to 255.255.255.255 on port 68)
     transport_mock.reset_mock()
@@ -163,11 +165,59 @@ def test_routing_rfc2131():
     assert args[2] == 68
 
 
+def test_relay_agent_information_echoed_in_reply():
+    from pydhcp.packet.message import DhcpMessage as _DhcpMessage
+    from pydhcp.options.type import RelayAgentInformation, TlvOption
+
+    server = MockDhcpServer()
+    transport_mock = Mock()
+    interface = NetworkInterface("eth0", ipaddress.IPv4Interface(("127.0.0.1", 24)), None)
+    context = RequestContext(
+        transport=transport_mock,
+        interface=interface,
+        client=SocketAddress("127.0.0.1", 68),
+        client_mac=b'\x11\x22\x33\x44\x55\x66'
+    )
+
+    opts = DhcpOptions()
+    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    relay_info = RelayAgentInformation([TlvOption(1, b"circuit-id")])
+    opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
+    msg = DhcpMessage(
+        op=OpCode.BOOTREQUEST,
+        htype=HardwareAddressType.ETHERNET,
+        hlen=6,
+        hops=0,
+        xid=0x12345678,
+        secs=timedelta(seconds=0),
+        flags=Flags.UNICAST,
+        ciaddr=IPv4('0.0.0.0'),
+        yiaddr=IPv4('0.0.0.0'),
+        siaddr=IPv4('0.0.0.0'),
+        giaddr=IPv4('192.168.1.1'),
+        chaddr=b'\x11\x22\x33\x44\x55\x66',
+        sname='',
+        file='',
+        options=opts
+    )
+
+    server.handle(msg, context)
+    args, kwargs = transport_mock.send.call_args
+    assert args[1] == IPv4("192.168.1.1")
+    assert args[2] == 67
+
+    reply = _DhcpMessage.decode(memoryview(args[0]))
+    replied_relay_info = reply.options.get(
+        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+    )
+    assert replied_relay_info == relay_info
+
+
 class MockDhcpServerWithBackend(DhcpServer):
     DEFAULT_PORTS = (6767,)
 
     def acquire_lease(self, client_id, server_id, msg):
-        from pydhcp.optiontype import IPv4Address, U32
+        from pydhcp.options.type import IPv4Address, U32
         existing = self.lease_backend.lookup(client_id)
         if existing:
             requested_ttl = msg.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=U32)

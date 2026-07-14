@@ -1,11 +1,12 @@
 import pytest
 from datetime import datetime, timedelta
-from pydhcp.message import DhcpMessage
-from pydhcp.enum import OpCode, HardwareAddressType, Flags, DhcpOptionCode, DhcpMessageType
-from pydhcp.netutils import IPv4
+from pydhcp.packet.message import DhcpMessage
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
 from pydhcp.options import DhcpOptions
 from pydhcp.server import DhcpServer, DhcpLease
-from pydhcp.optiontype import U16, U32, String
+from pydhcp.options.type import U16, U32, String
 from math import inf as _inf
 
 def build_dhcp_packet(htype=1, cookie=b"\x63\x82\x53\x63") -> bytearray:

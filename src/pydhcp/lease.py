@@ -5,9 +5,9 @@ import os as _os
 import typing as _ty
 from math import inf as _inf
 
-from .netutils import IPv4
+from .network import IPv4
 from .options import DhcpOptions
-from .constants import INIFINITE_LEASE_TIME
+from .constants import INFINITE_LEASE_TIME
 
 
 class DhcpLease(_ty.NamedTuple):

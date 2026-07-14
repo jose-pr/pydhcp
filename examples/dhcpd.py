@@ -5,8 +5,8 @@ import logging
 import sys
 
 from pydhcp import DhcpOptions, DhcpServer, log, netutils
-from pydhcp.enum import DhcpOptionCode
-from pydhcp.message import DhcpMessage
+from pydhcp.options import DhcpOptionCode
+from pydhcp.packet.message import DhcpMessage
 from pydhcp.server import DhcpLease
 
 

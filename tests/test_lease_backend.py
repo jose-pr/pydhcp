@@ -12,7 +12,7 @@ from pydhcp import (
     IPv4,
     IPv4Address,
 )
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 
 
 def test_in_memory_lease_backend():

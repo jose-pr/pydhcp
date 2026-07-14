@@ -1,8 +1,9 @@
 import pytest
 from datetime import timedelta
-from pydhcp.message import DhcpMessage
-from pydhcp.enum import OpCode, HardwareAddressType, Flags, DhcpOptionCode, DhcpMessageType
-from pydhcp.netutils import IPv4
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet.message import DhcpMessage
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
 from pydhcp.options import DhcpOptions
 
 def test_message_encode_decode():
@@ -74,4 +75,3 @@ def test_message_edge_cases():
     # String representations
     log_str = msg.log_str(IPv4('192.168.1.1'), IPv4('192.168.1.10'))
     assert "XID=11112222" in log_str
-

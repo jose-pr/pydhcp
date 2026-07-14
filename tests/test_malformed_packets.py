@@ -1,9 +1,10 @@
 import pytest
 from datetime import timedelta
 import logging
-from pydhcp.message import DhcpMessage
-from pydhcp.enum import OpCode, HardwareAddressType, Flags, DhcpOptionCode, DhcpMessageType
-from pydhcp.netutils import IPv4
+from pydhcp.packet.message import DhcpMessage
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
 from pydhcp.options import DhcpOptions
 
 def get_valid_packet_bytes() -> bytearray:

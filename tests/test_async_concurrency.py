@@ -6,8 +6,9 @@ import pytest
 import time
 from datetime import timedelta
 from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions, IPv4Address
-from pydhcp.enum import OpCode, DhcpMessageType, DhcpOptionCode, HardwareAddressType, Flags
-from pydhcp.netutils import IPv4
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
 
 class MockAsyncServerForConcurrency(AsyncDhcpServer):
     def acquire_lease(self, client_id, server_id, msg):

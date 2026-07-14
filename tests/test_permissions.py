@@ -2,7 +2,7 @@ import pytest
 import errno
 from unittest.mock import MagicMock
 from pydhcp import DhcpServer
-from pydhcp.netutils import SocketAddress, IPv4
+from pydhcp.network import SocketAddress, IPv4
 
 
 def test_bind_permission_error():

@@ -1,6 +1,6 @@
 import pytest
 from ipaddress import IPv4Address, IPv6Address
-from pydhcp.netutils import host_ip_interfaces, NetworkInterface
+from pydhcp.network import host_ip_interfaces, NetworkInterface
 
 def test_pure_python_interfaces() -> None:
     """Verify interfaces enumerate and have required attributes."""

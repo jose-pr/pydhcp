@@ -30,7 +30,7 @@ dependencies = [
 pydhcp = "pydhcp.cli:main"
 
 [project.optional-dependencies]
-dev = ['build', 'twine', 'hatchling', 'mypy', 'pip-audit', 'pytest', 'pytest-cov']
+dev = ['build', 'twine', 'hatchling', 'mypy', 'pip-audit', 'pytest', 'pytest-cov', 'hypothesis>=6.100']
 docs = ['mkdocs', 'mkdocs-material', 'mkdocstrings[python]']
 toml = ['tomli-w>=1.2.0', 'tomli>=2.4.0; python_version < "3.11"']
 
