@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import typing as _ty
 
-from . import netutils as _net
-from .optiontype import Boolean, Bytes, DhcpOptionType, IPv4Address, List, U8
+from .. import network as _net
+from .type import Boolean, Bytes, DhcpOptionType, IPv4Address, List, U8
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
@@ -126,11 +126,11 @@ class CccProvisioningServerAddress(DhcpOptionType):
     def _dhcp_write(self, data: bytearray) -> int:
         data.append(1 if self.kind == "ipv4" else 0)
         if self.kind == "ipv4":
-            payload = _ty.cast(IPv4Address, self.value)
-            data.extend(payload.packed)
+            ipv4_payload = _ty.cast(IPv4Address, self.value)
+            data.extend(ipv4_payload.packed)
             return 5
-        payload = _ty.cast(CccProvisioningServerFqdn, self.value)
-        encoded = payload._dhcp_encode()
+        fqdn_payload = _ty.cast(CccProvisioningServerFqdn, self.value)
+        encoded = fqdn_payload._dhcp_encode()
         data.extend(encoded)
         return len(encoded) + 1
 
@@ -315,7 +315,7 @@ class _CccFixedPayloadSubOption(CccSubOption):
             return value
         if isinstance(value, (list, tuple)):
             return cls._PAYLOAD_TYPE(*value)
-        return cls._PAYLOAD_TYPE(value)
+        return cls._PAYLOAD_TYPE(value)  # type: ignore[call-arg]
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:

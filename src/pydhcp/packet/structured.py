@@ -8,18 +8,18 @@ import typing as _ty
 from .message import DhcpMessage
 
 try:
-    import tomllib as _tomllib
+    import tomllib as _tomllib  # type: ignore[import-not-found]
 except ImportError:  # pragma: no cover - Python < 3.11
     try:
-        import tomli as _tomllib  # type: ignore[no-redef]
+        import tomli as _tomllib
     except ImportError:  # pragma: no cover - optional dependency absent
-        _tomllib = None  # type: ignore[assignment]
+        _tomllib = None
 
 try:
     import tomli_w as _tomli_w
 except ImportError:  # pragma: no cover - optional dependency absent
     _tomli_w = None  # type: ignore[assignment]
-import yaml as _yaml
+import yaml as _yaml  # type: ignore[import-untyped]
 
 
 _StructuredFormat = _ty.Literal["json", "yaml", "toml", "ini"]
@@ -59,7 +59,7 @@ def load_mapping(text: str, format: str) -> dict[str, _ty.Any]:
         return _ensure_mapping(_tomllib.loads(text))
 
     parser = _configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str
+    parser.optionxform = str  # type: ignore[method-assign,assignment]
     parser.read_string(text)
     if not parser.has_section("message"):
         raise ValueError("INI packet data must include a [message] section")
@@ -77,7 +77,7 @@ def dump_mapping(data: dict[str, _ty.Any], format: str) -> str:
     if normalized == "json":
         return _json.dumps(data, indent=2) + "\n"
     if normalized == "yaml":
-        return _yaml.safe_dump(data, sort_keys=False)
+        return _ty.cast(str, _yaml.safe_dump(data, sort_keys=False))
     if normalized == "toml":
         if _tomli_w is None:
             raise NotImplementedError(
@@ -86,7 +86,7 @@ def dump_mapping(data: dict[str, _ty.Any], format: str) -> str:
         return _tomli_w.dumps(data)
 
     parser = _configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str
+    parser.optionxform = str  # type: ignore[method-assign,assignment]
     message = {key: _json.dumps(value) for key, value in data.items() if key != "options"}
     options = {
         key: _json.dumps(value) for key, value in _ty.cast(dict[str, _ty.Any], data.get("options", {})).items()

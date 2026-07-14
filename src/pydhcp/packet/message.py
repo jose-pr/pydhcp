@@ -1,6 +1,8 @@
-from .options import DhcpOptions, BaseDhcpOptionCode
-from . import optiontype as _type, netutils as _net, enum as _enum, constants as _const
-from .log import LOGGER
+from ..options import DhcpOptionCode, DhcpOptions, BaseDhcpOptionCode
+from ..options import type as _type
+from .. import network as _net, constants as _const
+from . import enums as _enum
+from ..log import LOGGER
 import struct as _struct
 import enum as _enum_base
 import typing as _ty
@@ -11,6 +13,7 @@ import textwrap as _tw
 _NULL = 0x00.to_bytes(1, "big")
 _FIXED_HEADER_SIZE = 236
 _MAGIC_COOKIE_END = 240
+_HEADER_STRUCT = _struct.Struct("!BBBBIHHIIII")
 
 
 def _strip_hex_text(value: str) -> str:
@@ -72,7 +75,7 @@ def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDhcpOptionCode]) ->
         if raw_code.isdigit():
             return int(raw_code)
         try:
-            return int(codemap[raw_code])
+            return int(codemap[raw_code])  # type: ignore[index]
         except Exception:
             pass
     return int(raw_code)
@@ -129,7 +132,7 @@ class DhcpMessage:
         for code, value in self.options._options.items():
             try:
                 code_obj = self.options._codemap.from_code(code)
-                key = code_obj.name
+                key = code_obj.label()
                 option_type = code_obj.get_type()
                 decoded = option_type._dhcp_decode(value)
                 option_value = decoded.__json__() if isinstance(decoded, _type.DhcpOptionType) else decoded
@@ -221,7 +224,7 @@ class DhcpMessage:
             yiaddr,
             siaddr,
             giaddr,
-        ) = _struct.unpack_from("!BBBBIHHIIII", data, 0)
+        ) = _HEADER_STRUCT.unpack_from(data, 0)
         if hlen > 16:
             raise ValueError(f"Hardware address length {hlen} exceeds maximum of 16")
         op = _enum.OpCode(op)
@@ -251,7 +254,7 @@ class DhcpMessage:
             raise ValueError(f"Bad options terminator: expected 255 (END), got {remaining_opts[0]}")
 
         overload = options.get(
-            _enum.DhcpOptionCode.OPTION_OVERLOAD,
+            DhcpOptionCode.OPTION_OVERLOAD,
             default=_type.OptionOverload.NONE,
             decode=_type.OptionOverload,
         )
@@ -274,7 +277,7 @@ class DhcpMessage:
             sname_str = sname_raw.tobytes().split(_NULL, 1)[0].decode()
         else:
             tftp_val = options.get(
-                _enum.DhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
+                DhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
             )
             if tftp_val is not None:
                 sname_str = str(tftp_val)
@@ -284,7 +287,7 @@ class DhcpMessage:
             file_str = file_raw.tobytes().split(_NULL, 1)[0].decode()
         else:
             bootfile_val = options.get(
-                _enum.DhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
+                DhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
             )
             if bootfile_val is not None:
                 file_str = str(bootfile_val)
@@ -325,29 +328,29 @@ class DhcpMessage:
         if len(options_field) > max_options_field_size + 128 + 64:
             raise OverflowError("DHCP options exceed maximum packet size")
         elif len(options_field) > max_options_field_size + 128:
-            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in options:
-                options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
+            if self.file and DhcpOptionCode.BOOTFILE_NAME not in options:
+                options[DhcpOptionCode.BOOTFILE_NAME] = self.file
                 options._options.move_to_end(
-                    int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
+                    int(DhcpOptionCode.BOOTFILE_NAME), False
                 )
-            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in options:
-                options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
+            if self.sname and DhcpOptionCode.TFTP_SERVER not in options:
+                options[DhcpOptionCode.TFTP_SERVER] = self.sname
                 options._options.move_to_end(
-                    int(_enum.DhcpOptionCode.TFTP_SERVER), False
+                    int(DhcpOptionCode.TFTP_SERVER), False
                 )
             overload = _type.OptionOverload.BOTH
         elif len(options_field) > max_options_field_size + 64:
-            if self.file and _enum.DhcpOptionCode.BOOTFILE_NAME not in options:
-                options[_enum.DhcpOptionCode.BOOTFILE_NAME] = self.file
+            if self.file and DhcpOptionCode.BOOTFILE_NAME not in options:
+                options[DhcpOptionCode.BOOTFILE_NAME] = self.file
                 options._options.move_to_end(
-                    int(_enum.DhcpOptionCode.BOOTFILE_NAME), False
+                    int(DhcpOptionCode.BOOTFILE_NAME), False
                 )
             overload = _type.OptionOverload.FILE
         elif len(options_field) > max_options_field_size:
-            if self.sname and _enum.DhcpOptionCode.TFTP_SERVER not in options:
-                options[_enum.DhcpOptionCode.TFTP_SERVER] = self.sname
+            if self.sname and DhcpOptionCode.TFTP_SERVER not in options:
+                options[DhcpOptionCode.TFTP_SERVER] = self.sname
                 options._options.move_to_end(
-                    int(_enum.DhcpOptionCode.TFTP_SERVER), False
+                    int(DhcpOptionCode.TFTP_SERVER), False
                 )
             overload = _type.OptionOverload.SNAME
         else:
@@ -355,17 +358,17 @@ class DhcpMessage:
 
         try:
             options._options.move_to_end(
-                int(_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE), False
+                int(DhcpOptionCode.DHCP_MESSAGE_TYPE), False
             )
         except KeyError:
             pass
 
         if overload is not _type.OptionOverload.NONE:
             options._options[
-                int(_enum.DhcpOptionCode.OPTION_OVERLOAD)
+                int(DhcpOptionCode.OPTION_OVERLOAD)
             ] = bytearray([overload.value])
             options._options.move_to_end(
-                int(_enum.DhcpOptionCode.OPTION_OVERLOAD), False
+                int(DhcpOptionCode.OPTION_OVERLOAD), False
             )
             options_field, leftover = options.partial_encode(max_options_field_size)
 
@@ -375,8 +378,7 @@ class DhcpMessage:
                 sname_bytes, leftover = leftover.partial_encode(64)
 
         data = bytearray(28)
-        _struct.pack_into(
-            "!BBBBIHHIIII",
+        _HEADER_STRUCT.pack_into(
             data,
             0,
             self.op.value,
@@ -399,7 +401,7 @@ class DhcpMessage:
         return data
 
     def client_id(self, func: _ty.Optional[_ty.Callable[["DhcpMessage"], bytearray]] = None) -> str:
-        cid = self.options.get(_enum.DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
+        cid = self.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:
             if func:
                 cid = func(self)

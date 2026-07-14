@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import typing as _ty
-from ._options import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as DhcpOption
-from .optiontype import DhcpOptionType as DhcpOptionType
-from . import constants as _const
-from .enum.optioncode import DhcpOptionCode as _ianacodes
-from .log import LOGGER
+import builtins as _builtins
+from .base import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as DhcpOption
+from .type import DhcpOptionType as DhcpOptionType
+from .type import *  # noqa: F403
+from .code import DhcpOptionCode as DhcpOptionCode
+from .. import constants as _const
+from ..log import LOGGER
 from math import inf as _inf
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
@@ -15,7 +17,11 @@ _R = _ty.TypeVar("_R")
 
 class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def __init__(self, codemap: _ty.Optional[type[BaseDhcpOptionCode]] = None) -> None:
-        self._codemap = codemap or _ianacodes
+        if codemap is None:
+            codemap = DhcpOptionCode
+        self._codemap = codemap
+        if codemap is DhcpOptionCode:
+            DhcpOptionCode.ensure_registered()
         self._options: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
     def __repr__(self) -> str:
@@ -150,7 +156,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             else:
                 target_decoder = decode
             
-            if isinstance(target_decoder, type) and issubclass(target_decoder, DhcpOptionType):
+            if isinstance(target_decoder, _builtins.type) and issubclass(target_decoder, DhcpOptionType):
                 return target_decoder._dhcp_decode(value)
             return _ty.cast(_ty.Callable[[bytearray], _ty.Any], target_decoder)(value)
         else:
