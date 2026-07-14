@@ -153,7 +153,9 @@ def test_client_dora_against_real_server() -> None:
     client_thread = client.start()
     _wait_bound(client)
     try:
-        ack = client.dora(CHADDR, timeout=2.0, retries=1, destination="127.0.0.1", port=server_port)
+        ack = client.dora(
+            CHADDR, timeout=2.0, retries=1, destination="127.0.0.1", port=server_port, broadcast=False
+        )
         assert ack is not None
         assert ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
         assert ack.yiaddr == IPv4("127.0.0.1")

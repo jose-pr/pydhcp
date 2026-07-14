@@ -41,7 +41,9 @@ def test_full_dora_through_relay() -> None:
     _wait_bound(client)
 
     try:
-        ack = client.dora(CHADDR, timeout=2.0, retries=1, destination="127.0.0.1", port=relay_port)
+        ack = client.dora(
+            CHADDR, timeout=2.0, retries=1, destination="127.0.0.1", port=relay_port, broadcast=False
+        )
         assert ack is not None
         assert ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
         assert ack.yiaddr == IPv4("127.0.0.1")
