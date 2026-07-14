@@ -1,7 +1,8 @@
 import pytest
+from pydhcp.packet import DhcpMessageType
 from pydhcp.options import DhcpOptions
-from pydhcp.enum import DhcpOptionCode, DhcpMessageType
-from pydhcp.optiontype import (
+from pydhcp.options import DhcpOptionCode
+from pydhcp.options.type import (
     IPv4Address,
     String,
     Boolean,
@@ -45,7 +46,7 @@ def test_options_set_get():
     # Test setting raw bytes
     opts[DhcpOptionCode.ROUTER] = b"\xc0\xa8\x01\x01" # 192.168.1.1
     # Test decoding with type
-    from pydhcp.netutils import IPv4
+    from pydhcp.network import IPv4
     assert opts.get(DhcpOptionCode.ROUTER, decode=IPv4Address) == IPv4("192.168.1.1")
     
     # Test missing / default

@@ -15,6 +15,7 @@ socket permissions and platform-specific UDP behavior.
 
 - **DHCP Packet Parsing** — Full support for parsing and constructing DHCP packets.
 - **DHCP Server Base** — A simple, async-friendly server foundation with overrideable lease and option policy hooks.
+- **DHCP Client & Capture Tools** — Basic packet-client builders and a tshark-like capture command for troubleshooting.
 
 ## Installation
 
@@ -60,6 +61,19 @@ async def main():
 asyncio.run(main())
 ```
 
+### Basic Packet Client
+
+`DhcpClient` is a packet-level helper for tests and troubleshooting. It sends DHCP
+messages and queues matching replies, but it does not configure host network interfaces.
+
+```python
+from pydhcp.client import DhcpClient
+
+client = DhcpClient(listen=("127.0.0.1", 6768))
+discover = client.build_discover(b"\x00\x11\x22\x33\x44\x55")
+client.send(discover, destination="127.0.0.1", port=6767)
+```
+
 ## Command Line Interface (CLI)
 
 `pydhcp` includes a command line interface for listing network adapters, decoding packets, and starting servers.
@@ -69,13 +83,22 @@ asyncio.run(main())
 pydhcp interfaces
 
 # Decode a hex-encoded DHCP packet from stdin as JSON
-pydhcp packet --decode --stdin --json
+pydhcp packet --decode --input - --format json
 
 # Decode a hex-encoded DHCP packet from stdin as a compact text summary
-pydhcp packet --decode --stdin --summary
+pydhcp packet --decode --input - --format summary
 
 # Encode structured packet text back to hex
-pydhcp packet --encode --input-file packet.json --json --output-file packet.hex
+pydhcp packet --encode --input packet.json --format json --output packet.hex
+
+# Capture DHCPDISCOVER packets as newline-delimited JSON on stdout
+pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
+
+# Write one structured file per capture
+pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --output-mode per-capture --format json
+
+# Invoke a trusted local command hook with each captured packet on stdin
+pydhcp capture --listen 127.0.0.1:6767 --hook ./on-dhcp-capture
 
 # Start the DHCP server from JSON or INI config
 pydhcp server --config config.json

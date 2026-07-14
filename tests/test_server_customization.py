@@ -3,8 +3,9 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 from pydhcp import DhcpLease, DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
-from pydhcp.enum import DhcpMessageType, DhcpOptionCode, Flags, HardwareAddressType, OpCode
-from pydhcp.netutils import IPv4, SocketAddress
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4, SocketAddress
 from pydhcp.server import DhcpServer
 
 

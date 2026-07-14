@@ -10,9 +10,9 @@ from typing import Any
 SRC_DIR = pathlib.Path(__file__).parent.parent / "src"
 sys.path.insert(0, SRC_DIR.as_posix())
 
-from pydhcp.enum import DhcpOptionCode
+from pydhcp.options import DhcpOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.netutils import IPv4
+from pydhcp.network import IPv4
 from pydhcp.options import DhcpOptions
 
 

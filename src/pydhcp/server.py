@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import socket as _socket
-from .message import DhcpMessage
+from .packet.message import DhcpMessage
 from .listener import DhcpListener as _Base, ListenSpec, RequestContext
-from . import enum as _enum, constants as _const, netutils as _net
-from .options import DhcpOptions
-from . import optiontype as _type
+from . import constants as _const, network as _net
+from .packet import enums as _enum
+from .options import DhcpOptionCode, DhcpOptions
+from .options import type as _type
 from .log import LOGGER
-from .metrics import METRICS
 import logging as _logging
 import datetime as _dt
 import typing as _ty
@@ -49,18 +49,18 @@ class DhcpServer(_Base):
 
         existing = self.lease_backend.lookup(client_id)
         if existing:
-            requested_ttl = msg.options.get(_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32)
+            requested_ttl = msg.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32)
             ttl = int(requested_ttl) if requested_ttl is not None else 3600
             renewed = self.lease_backend.renew(client_id, ttl)
             if renewed:
-                METRICS.leases_renewed += 1
+                self.metrics.leases_renewed += 1
                 return renewed
             return existing
 
         requested_ip = msg.options.get(
-            _enum.DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
-        requested_ttl = msg.options.get(_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32)
+        requested_ttl = msg.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32)
         ttl = int(requested_ttl) if requested_ttl is not None else 3600
 
         ip: _ty.Optional[_net.IPv4] = None
@@ -73,15 +73,15 @@ class DhcpServer(_Base):
             return None
 
         options = DhcpOptions()
-        options[_enum.DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
-        options[_enum.DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
-        options[_enum.DhcpOptionCode.ROUTER] = [server_id]
-        options[_enum.DhcpOptionCode.DNS] = [server_id]
+        options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
+        options[DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
+        options[DhcpOptionCode.ROUTER] = [server_id]
+        options[DhcpOptionCode.DNS] = [server_id]
 
         LOGGER.debug(f"[XID={msg.xid:08x}] Allocating {ip} for {client_id}")
         lease = self.lease_backend.allocate(client_id, ip, ttl, options)
         if lease is not None:
-            METRICS.leases_allocated += 1
+            self.metrics.leases_allocated += 1
         return lease
 
     def release_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage) -> None:
@@ -91,7 +91,7 @@ class DhcpServer(_Base):
         quarantine declined addresses, or emit custom audit records.
         """
         if self.lease_backend.release(client_id):
-            METRICS.leases_released += 1
+            self.metrics.leases_released += 1
 
     def get_inform_options(self, server_id: _net.IPv4, msg: DhcpMessage) -> DhcpOptions:
         """Return configuration options for DHCPINFORM responses.
@@ -102,10 +102,10 @@ class DhcpServer(_Base):
         options = DhcpOptions()
         _server = next(_net.host_ip_interfaces(lambda interface: interface.ip == server_id), None)
         if _server is not None:
-            options[_enum.DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
-            options[_enum.DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
-            options[_enum.DhcpOptionCode.ROUTER] = [server_id]
-            options[_enum.DhcpOptionCode.DNS] = [server_id]
+            options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
+            options[DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
+            options[DhcpOptionCode.ROUTER] = [server_id]
+            options[DhcpOptionCode.DNS] = [server_id]
         return options
 
     def handle(
@@ -119,13 +119,13 @@ class DhcpServer(_Base):
             )
             return
         client_id = msg.client_id()
-        msg_ty = msg.options.get(_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         msg_ty_name = msg_ty.name if (msg_ty is not None and hasattr(msg_ty, "name")) else str(msg_ty)
         LOGGER.debug(f"[XID={msg.xid:08x}] Received {msg_ty_name} from {context.client.ip}")
         server_id: _ty.Optional[_net.IPv4] = msg.options.get(
-            _enum.DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
+            DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
-        msg_ty = msg.options.get(_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
 
         if server_id is not None and server_id != actual_server_id:
@@ -178,7 +178,7 @@ class DhcpServer(_Base):
             )
             return
         ip_req: _ty.Optional[_net.IPv4] = msg.options.get(
-            _enum.DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
         if not ip_req:
             ip_req = msg.ciaddr
@@ -212,12 +212,12 @@ class DhcpServer(_Base):
         if not lease:
             lease = DhcpLease(
                 _net.WILDCARD_IPv4,
-                None,
+                _inf,
                 self.get_inform_options(actual_server_id, msg),
             )
         resp = self._create_response(msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPACK)
-        if _enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
-            del resp.options[_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
+        if DhcpOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
+            del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
         resp.yiaddr = _net.WILDCARD_IPv4
         self._filter_and_send(msg, resp, context, _enum.DhcpMessageType.DHCPACK)
 
@@ -235,15 +235,18 @@ class DhcpServer(_Base):
         resp.secs = _dt.timedelta(seconds=0)
         if lease.ip:
             if lease.expires is None or lease.expires == _inf or not isinstance(lease.expires, _dt.datetime):
-                expires = _const.INIFINITE_LEASE_TIME
+                expires = _const.INFINITE_LEASE_TIME
             else:
                 expires = int((lease.expires - _dt.datetime.now()).total_seconds())
-                expires = min(expires, _const.INIFINITE_LEASE_TIME)
+                expires = min(expires, _const.INFINITE_LEASE_TIME)
             if expires > 0:
-                resp.options[_enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
+                resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
                 resp.yiaddr = lease.ip
-        resp.options[_enum.DhcpOptionCode.SERVER_IDENTIFIER] = actual_server_id
-        resp.options[_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        resp.options[DhcpOptionCode.SERVER_IDENTIFIER] = actual_server_id
+        resp.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        relay_info = msg.options.get(DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False)
+        if relay_info is not None:
+            resp.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
         return resp
 
     def _filter_and_send(
@@ -254,24 +257,24 @@ class DhcpServer(_Base):
         resp_ty: _enum.DhcpMessageType,
     ) -> None:
         requests_params_raw = msg.options.get(
-            _enum.DhcpOptionCode.PARAMETER_REQUEST_LIST,
-            decode=_type.DhcpOptionCodes[_enum.DhcpOptionCode],
+            DhcpOptionCode.PARAMETER_REQUEST_LIST,
+            decode=_type.DhcpOptionCodes[DhcpOptionCode],
         )
-        requests_params: _ty.List[_enum.DhcpOptionCode] = []
+        requests_params: _ty.List[DhcpOptionCode] = []
         if requests_params_raw:
             requests_params = [
                 *requests_params_raw,
-                _enum.DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
-                _enum.DhcpOptionCode.SERVER_IDENTIFIER,
+                DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
+                DhcpOptionCode.SERVER_IDENTIFIER,
             ]
         if resp_ty is _enum.DhcpMessageType.DHCPNAK:
             requests_params = [
-                _enum.DhcpOptionCode.DHCP_MESSAGE,
-                _enum.DhcpOptionCode.CLIENT_IDENTIFIER,
-                _enum.DhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
-                _enum.DhcpOptionCode.SERVER_IDENTIFIER,
+                DhcpOptionCode.DHCP_MESSAGE,
+                DhcpOptionCode.CLIENT_IDENTIFIER,
+                DhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
+                DhcpOptionCode.SERVER_IDENTIFIER,
             ]
-            resp.options[_enum.DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
+            resp.options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
                 msg.client_id().replace(":", "")
             )
         if requests_params:
@@ -280,10 +283,10 @@ class DhcpServer(_Base):
             resp.options._options = _ty.OrderedDict(
                 filter(_paramfilter, resp.options.items(decoded=False))
             )
-        resp.options[_enum.DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        resp.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
 
         max_size_opt = msg.options.get(
-            _enum.DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE,
+            DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE,
             default=_const.DHCP_MIN_LEGAL_PACKET_SIZE,
             decode=_type.U16,
         )
@@ -313,7 +316,7 @@ class DhcpServer(_Base):
                 context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.DEBUG
             )
         context.transport.send(data, dest, dest_port, context.client_mac)
-        METRICS.packets_sent += 1
+        self.metrics.packets_sent += 1
 
 
 from .listener import AsyncDhcpListener as _AsyncBase

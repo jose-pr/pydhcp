@@ -2,8 +2,9 @@ import asyncio
 import socket
 import pytest
 from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions
-from pydhcp.enum import OpCode, DhcpMessageType, DhcpOptionCode
-from pydhcp.netutils import SocketAddress, IPv4
+from pydhcp.packet import DhcpMessageType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import SocketAddress, IPv4
 
 class MockAsyncDhcpServer(AsyncDhcpServer):
     def acquire_lease(self, client_id, server_id, msg):
@@ -23,7 +24,7 @@ def test_async_server_lifecycle():
         
         # Construct a DHCP DISCOVER message
         from datetime import timedelta
-        from pydhcp.enum import HardwareAddressType, Flags
+        from pydhcp.packet import HardwareAddressType, Flags
         
         options = DhcpOptions()
         options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER

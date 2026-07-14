@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Added a basic listener-based `DhcpClient` for building, sending, and collecting DHCP client packets without configuring OS interfaces.
+- Added reusable DHCP capture primitives and a `pydhcp capture` CLI with safe `and` filters, structured output streams/files/per-capture files, and trusted Python or command hooks.
+- `pydhcp.config.load_config` (and `pydhcp server --config`) now accepts YAML and TOML in addition to JSON and INI, matching the formats already supported by `pydhcp.packet.structured`.
+- Added `DhcpClient.discover_offer()` and `DhcpClient.dora()` to run a full DISCOVER/OFFER/REQUEST/ACK exchange (with retries and a timeout) in a single call, instead of hand-building each message.
+- `DhcpServer` now echoes `RELAY_AGENT_INFORMATION` (option 82) unchanged from request to reply per RFC 3046 §2.2, when a relay agent includes it.
+- Added Hypothesis-based property round-trip tests for the core option codecs (`U8`/`U16`/`U32`/`I32`, `Boolean`, `String`, `Bytes`, `List[IPv4Address]`, `DomainList`, `ClasslessRoute`) in `tests/test_property_roundtrip.py`, plus `hypothesis` as a `dev` extra.
+- Documented `pydhcp.client`, `pydhcp.capture`, `pydhcp.packet`, `pydhcp.network`, and `pydhcp.lease` on the API reference site, and added FAQ entries for running a DORA handshake and picking a config file format.
+- Added `DhcpRelay`, an RFC 1542 / RFC 2131 §4.1 / RFC 3046 DHCP relay agent: forwards client broadcasts to one or more configured upstream servers (stamping `giaddr`, incrementing `hops`, dropping packets past a configurable `max_hops`) and forwards server replies back to the original client, with optional `RELAY_AGENT_INFORMATION` (option 82) circuit-id/remote-id tagging. Includes a `pydhcp relay` CLI subcommand.
+
+### Changed
+- Reorganized package internals into clearer `packet`, `options`, and `network` subpackages; `DhcpOptionCode` now lives under `pydhcp.options`, and option codec classes live under `pydhcp.options.type`.
+- Moved the message-level enums (`DhcpMessageType`, `OpCode`, `Flags`, `DhcpPort`, `HardwareAddressType`) from `pydhcp.enum` to `pydhcp.packet.enums`, re-exported from `pydhcp.packet`; the `pydhcp.enum` package is gone.
+- Renamed the misspelled `pydhcp.constants.INIFINITE_LEASE_TIME` constant to `INFINITE_LEASE_TIME`.
+- Split the 1,252-line `pydhcp.options.type` module into a subpackage (`base`, `net`, `scalar`, `vendor`, `mos` submodules); the public import path `pydhcp.options.type` and every name it exposes are unchanged.
+- **Breaking**: removed the global mutable `pydhcp.metrics.METRICS` singleton. `DhcpListener` (and `DhcpServer`/`DhcpClient`) now own a per-instance `self.metrics: DhcpMetrics`, so counters no longer leak across independent listeners/servers in the same process (e.g. in tests). Added `DhcpMetrics.snapshot() -> dict[str, int]`.
+- Precompiled the DHCP fixed-header `struct.Struct` in `pydhcp.packet.message` instead of re-parsing the format string on every encode/decode call, roughly 5x faster packet parsing (see `benchmarks/README.md`-style JSON reports under `.agents/plans/post_refactor_polish/bench_{baseline,after}_parse.json`).
+- **Breaking**: standardized the `pydhcp packet` CLI on the same conventions `capture` already used: `--input <path>` and `--output <path>` each accept `-` for stdin/stdout (POSIX convention) and default to `-`, and the five separate `--json`/`--yaml`/`--toml`/`--ini`/`--summary` flags collapsed into one `--format <fmt>` flag (default `json`). Removed `--stdin`, `--input-file`, `--output-file`, and inline `--input <text>` (unused/undocumented) — use `--input -` for stdin and a path for files.
+
+### Fixed
+- `mypy --strict` now passes cleanly across the whole package (was 40 errors in 8 files), surfacing and fixing one real bug along the way: a synthetic DHCPINFORM lease built with `expires=None` instead of the established "does not expire" sentinel `math.inf`.
+- Fixed `DomainList` decoding silently dropping domains that follow a compression-pointer-terminated domain in the same option (affects `DOMAIN_SEARCH` and any other option backed by `DomainList`); found by the new Hypothesis property tests.
+
 ## [0.3.0] - 2026-07-13
 
 ### Added

@@ -1,7 +1,7 @@
 import pytest
 import logging
 import json
-from pydhcp.optiontype import (
+from pydhcp.options.type import (
     List,
     IPv4Address,
     String,
@@ -51,7 +51,7 @@ from pydhcp.optiontype import (
     CccSecurityTicketControlSubOption,
     CccKdcServerAddressSubOption,
 )
-from pydhcp.netutils import IPv4
+from pydhcp.network import IPv4
 from ipaddress import ip_network
 
 def test_ipv4address_option():
@@ -387,7 +387,7 @@ def test_signed_i32_round_trip():
 
 
 def test_domain_list_option():
-    from pydhcp.optiontype import DomainList
+    from pydhcp.options.type import DomainList
     # Encode list of domains
     dl = DomainList(["example.com", "sub.example.com"])
     buf = bytearray()
@@ -400,6 +400,20 @@ def test_domain_list_option():
     single, single_length = DomainList._dhcp_read(memoryview(b"\x05alpha\x07example\x00"))
     assert list(single) == ["alpha.example"]
     assert single_length == 15
+
+
+def test_domain_list_survives_domain_after_pointer_terminated_domain():
+    # Regression test: a domain following one that ends in a compression
+    # pointer (rather than a literal 0x00) must not be silently dropped.
+    from pydhcp.options.type import DomainList
+
+    dl = DomainList(["0", "0.0", "0"])
+    buf = bytearray()
+    dl._dhcp_write(buf)
+
+    decoded, length = DomainList._dhcp_read(memoryview(buf))
+    assert list(decoded) == ["0", "0.0", "0"]
+    assert length == len(buf)
 
 
 def test_uri_list_option_round_trip_and_truncation():
@@ -427,7 +441,7 @@ def test_uri_list_option_round_trip_and_truncation():
 
 
 def test_client_identifier_option():
-    from pydhcp.optiontype import ClientIdentifier
+    from pydhcp.options.type import ClientIdentifier
     with pytest.raises(ValueError):
         ClientIdentifier._dhcp_read(memoryview(b"\x01")) # Too short
 
@@ -437,7 +451,7 @@ def test_client_identifier_option():
 
 
 def test_option_overload_option():
-    from pydhcp.optiontype import OptionOverload
+    from pydhcp.options.type import OptionOverload
     oo = OptionOverload.BOTH
     buf = bytearray()
     oo._dhcp_write(buf)

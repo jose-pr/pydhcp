@@ -4,10 +4,11 @@ import pytest
 from datetime import timedelta
 
 from pydhcp import DhcpMessage, DhcpOptions
-from pydhcp.enum import OpCode, HardwareAddressType, Flags, DhcpOptionCode, DhcpMessageType
-from pydhcp.netutils import IPv4
-from pydhcp.structured import dump_message, load_mapping, load_message
-from pydhcp import structured
+from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DhcpOptionCode
+from pydhcp.network import IPv4
+from pydhcp.packet.structured import dump_message, load_mapping, load_message
+from pydhcp.packet import structured
 
 
 def _sample_packet() -> DhcpMessage:

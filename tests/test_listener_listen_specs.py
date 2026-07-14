@@ -1,7 +1,7 @@
 import ipaddress
 
 from pydhcp.listener import _parselisteners
-from pydhcp.netutils import IPv4, NetworkInterface, SocketAddress
+from pydhcp.network import IPv4, NetworkInterface, SocketAddress
 from pydhcp.server import AsyncDhcpServer, DhcpServer
 
 
