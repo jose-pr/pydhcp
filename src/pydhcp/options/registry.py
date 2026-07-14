@@ -1,6 +1,6 @@
-from .optioncode import DhcpOptionCode
-from .messagetype import DhcpMessageType
-from ..optiontype import *
+from .code import DhcpOptionCode
+from ..packet.enums import DhcpMessageType
+from .type import *
 
 DhcpOptionCode.TIME_OFFSET.register_type(I32)
 DhcpOptionCode.RFC868_TIMESERVER.register_type(List[IPv4Address])

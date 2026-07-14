@@ -1,20 +1,29 @@
 import typing as _ty
 import enum as _enum
 
-from .. import _options
-from ..optiontype import Bytes, DhcpOptionType
+from . import base as _options
+from .type import Bytes, DhcpOptionType
 
 
 _CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
+_REGISTRY_LOADED = False
 
 
 class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
+    @classmethod
+    def ensure_registered(cls) -> None:
+        global _REGISTRY_LOADED
+        if not _REGISTRY_LOADED:
+            _REGISTRY_LOADED = True
+            from . import registry as _registry  # noqa: F401
+
     def register_type(self, optiontype: type[DhcpOptionType]) -> None:
         if not isinstance(optiontype, type) or not issubclass(optiontype, DhcpOptionType):
             raise TypeError("optiontype must be a DhcpOptionType subclass")
         _CODEMAP[self] = optiontype
 
     def get_type(self) -> type[DhcpOptionType]:
+        self.ensure_registered()
         return _CODEMAP[self]
 
     def label(self) -> str:

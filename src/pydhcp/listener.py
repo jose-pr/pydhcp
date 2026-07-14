@@ -5,12 +5,12 @@ import select as _select
 import threading as _thread
 import struct as _struct
 import typing as _ty
-from collections.abc import Sequence as _Sequence
 
-from . import netutils as _net, constants as _const, enum as _enum
-from .message import DhcpMessage
+from . import network as _net, constants as _const
+from .packet import enums as _enum
+from .packet.message import DhcpMessage
 from .log import LOGGER
-from .metrics import METRICS
+from .metrics import DhcpMetrics
 import logging as _logging
 
 IP_PKTINFO = getattr(_socket, "IP_PKTINFO", None)
@@ -143,6 +143,7 @@ def _parselisteners(
 ) -> list[_net.SocketAddress]:
     _listen: list[_net.SocketAddress] = []
     for bind in _iter_listen_bindings(listen):
+        port: _ty.Optional[_ty.Union[int, _ty.Sequence[int]]]
         if not isinstance(bind, tuple):
             ip, port = _split_host_port(bind) if isinstance(bind, str) else (bind, None)
         else:
@@ -169,10 +170,10 @@ def _parselisteners(
             ports: _ty.Sequence[int]
             if port is None:
                 ports = default_ports
-            elif isinstance(port, _Sequence) and not isinstance(port, (str, bytes, bytearray)):
-                ports = port
-            else:
+            elif isinstance(port, int):
                 ports = [port]
+            else:
+                ports = port
             for p in ports:
                 p = int(p)
                 bind_addr = _net.SocketAddress(ip, p)
@@ -228,6 +229,7 @@ class DhcpListener:
         self._sockets: list[_socket.socket] = []
         self._select_timeout = select_timeout or 1
         self._cancelleation_token: _thread.Event | None = None
+        self.metrics = DhcpMetrics()
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         pass
@@ -362,7 +364,7 @@ class DhcpListener:
                                 client=client,
                                 client_mac=msg.chaddr,
                             )
-                        METRICS.packets_received += 1
+                        self.metrics.packets_received += 1
                         msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
                         self.handle(msg, context)
                     except Exception as e:
@@ -397,7 +399,7 @@ class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
         try:
             client = _net.SocketAddress(*addr)
             msg = DhcpMessage.decode(memoryview(data))
-            METRICS.packets_received += 1
+            self.listener.metrics.packets_received += 1
             msg.log(client, _net.SocketAddress(self.sock), _logging.DEBUG)
             interface = _resolve_interface(self.sock)
             transport = UdpTransport(self.sock)
@@ -433,6 +435,7 @@ class AsyncDhcpListener:
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._transports: list[_asyncio.DatagramTransport] = []
+        self.metrics = DhcpMetrics()
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         pass

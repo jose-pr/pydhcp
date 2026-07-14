@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typing as _ty
 import ipaddress as _ip
-from . import _platform_utils as _platform
+from . import platform as _platform
 import socket as _socket
 
 IPv4 = _ip.IPv4Address

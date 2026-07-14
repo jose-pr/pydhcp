@@ -5,8 +5,8 @@ import struct as _struct
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
-from .netutils import IPv4 as _IP
-from .optiontype import Bytes, DhcpOptionType
+from ..network import IPv4 as _IP
+from .type import Bytes, DhcpOptionType
 
 
 class BaseDhcpOptionCode:
