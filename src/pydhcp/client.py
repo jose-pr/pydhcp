@@ -185,11 +185,18 @@ class DhcpClient(DhcpListener):
         retries: int = 2,
         destination: _net.IPv4 | str = _net.IPv4("255.255.255.255"),
         port: int = int(_enum.DhcpPort.SERVER),
+        broadcast: bool = True,
         **discover_kwargs: _ty.Any,
     ) -> DhcpMessage | None:
         """Run a full DISCOVER/OFFER/REQUEST/ACK exchange and return the DHCPACK, or None."""
         offer = self.discover_offer(
-            chaddr, timeout=timeout, retries=retries, destination=destination, port=port, **discover_kwargs
+            chaddr,
+            timeout=timeout,
+            retries=retries,
+            destination=destination,
+            port=port,
+            broadcast=broadcast,
+            **discover_kwargs,
         )
         if offer is None:
             return None
@@ -201,6 +208,7 @@ class DhcpClient(DhcpListener):
             xid=offer.xid,
             requested_ip=offer.yiaddr,
             server_identifier=server_identifier,
+            broadcast=broadcast,
         )
         for _attempt in range(retries + 1):
             self.send(request, destination, port)
