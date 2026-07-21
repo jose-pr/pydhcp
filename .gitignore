@@ -5,7 +5,7 @@ site/
 benchmark-results/
 
 # Agent/harness tooling
-.agents/
+.agents
 CLAUDE.md
 CLAUDE.local.md
 .claude/
