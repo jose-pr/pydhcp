@@ -6,6 +6,7 @@ benchmark-results/
 
 # Agent/harness tooling
 .agents
+*.local.md
 CLAUDE.md
 CLAUDE.local.md
 .claude/
