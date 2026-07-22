@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-22
+
 ### Changed
 
 - **Network enumeration now comes from `netimps`.** `network/platform.py` --
