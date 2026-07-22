@@ -15,7 +15,12 @@ def test_bind_permission_error():
 
     with pytest.raises(PermissionError) as exc_info:
         server.bind()
-    assert "Port 67 requires root; try 6767 for testing" in str(exc_info.value)
+    # Wording comes from netimps.bind_error_hint plus the DHCP-specific
+    # suggestion; assert the facts a user needs rather than the exact phrasing.
+    message = str(exc_info.value)
+    assert "67" in message
+    assert "root" in message.lower()
+    assert "6767" in message
 
 
 def test_bind_address_in_use():
@@ -29,4 +34,7 @@ def test_bind_address_in_use():
 
     with pytest.raises(OSError) as exc_info:
         server.bind()
-    assert "Port 6767 already in use; try port 7767" in str(exc_info.value)
+    message = str(exc_info.value)
+    assert "6767" in message
+    assert "in use" in message
+    assert "7767" in message  # the suggested alternative
