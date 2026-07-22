@@ -3,7 +3,7 @@
 Header-file-style reference for the top-level `pydhcp` package: every
 `pydhcp/__init__.py` export with its signature, arguments, contract, and
 gotchas, so this module can be consumed without reading its source. For the
-project overview, install, and CLI, see the repo-root `AGENTS.md`. The
+project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 `network`, `options`, and `packet` subpackages have their own headers
 (`src/pydhcp/{network,options,packet}/AGENTS.md`); `pydhcp/__init__.py`
 re-exports everything from those subpackages too, so `from pydhcp import
