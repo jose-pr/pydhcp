@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import socket as _socket
+
+import netimps as _netimps
 import select as _select
 import threading as _thread
 import struct as _struct
@@ -99,11 +101,20 @@ def _split_listen_string(value: str) -> list[str]:
 
 
 def _split_host_port(value: str) -> tuple[str, int | None]:
-    if value.count(":") == 1:
-        host, port_text = value.rsplit(":", 1)
-        if port_text:
-            return host or "0.0.0.0", int(port_text)
-    return value, None
+    """Split ``host:port``, defaulting an empty host to the IPv4 wildcard.
+
+    Delegates to :func:`netimps.normalize_host`, which handles the IPv6 forms
+    the previous implementation could not: ``[::1]:67`` now yields
+    ``("::1", 67)`` rather than silently dropping the port, and a bare ``::1``
+    stays an address instead of being read as host ``::`` port ``1``.
+    """
+    # ":67" means "wildcard, port 67" here, but is an empty host to a strict
+    # parser -- normalize it before delegating rather than losing the form.
+    if value.startswith(":") and not value.startswith("::"):
+        value = "0.0.0.0" + value
+
+    host, port = _netimps.normalize_host(value)
+    return host or "0.0.0.0", port
 
 
 def _iter_listen_bindings(listen: ListenSpec) -> _ty.Iterator[ListenBinding]:
@@ -183,15 +194,24 @@ def _parselisteners(
 
 
 def _resolve_interface(sock: _socket.socket) -> _net.NetworkInterface:
+    """Find the NetworkInterface a bound socket sits on.
+
+    Falls back to a synthetic host-route entry when no local interface owns the
+    address -- which happens for a wildcard bind, where getsockname() reports
+    0.0.0.0. The synthetic entry keeps callers from having to special-case it.
+    """
     try:
         local_ip, _ = sock.getsockname()
     except Exception:
         local_ip = "127.0.0.1"
-    
-    for i in _net.host_ip_interfaces():
+
+    # Matched against pydhcp's own per-address view, since the caller expects a
+    # NetworkInterface. netimps.interface_for() answers the same question but
+    # returns its own Interface type, which is the wrong shape here.
+    for i in _net.host_ip_interfaces(family=None):
         if str(i.ip) == local_ip:
             return i
-            
+
     import ipaddress as _ipaddress
     try:
         ip_addr = _net.IPv4(local_ip)
@@ -255,23 +275,22 @@ class DhcpListener:
                 if self._pktinfo and address.ip == _net.WILDCARD_IPv4:
                     if IP_PKTINFO is not None:
                         socket.setsockopt(_socket.IPPROTO_IP, IP_PKTINFO, 1)
-            except PermissionError as e:
-                raise PermissionError(
-                    f"Permission denied binding to port {address.port}. Port {address.port} requires root; try 6767 for testing."
-                ) from e
             except OSError as e:
-                import errno
-                if e.errno == errno.EACCES or getattr(e, "winerror", None) == 10013:
-                    raise PermissionError(
-                        f"Permission denied binding to port {address.port}. Port {address.port} requires root; try 6767 for testing."
-                    ) from e
-                elif e.errno == errno.EADDRINUSE or getattr(e, "winerror", None) == 10048:
-                    raise OSError(
-                        e.errno,
-                        f"Port {address.port} already in use; try port {address.port + 1000}."
-                    ) from e
-                else:
+                # netimps recognises the POSIX errnos *and* the Windows
+                # WinError codes, which differ; the DHCP-specific suggestion
+                # is appended rather than replacing the generic diagnosis.
+                hint = _netimps.bind_error_hint(e, address.port)
+                if hint is None:
                     raise
+                if isinstance(e, PermissionError) or "permission" in hint.lower():
+                    raise PermissionError(
+                        f"{hint}. Try 6767 for testing."
+                    ) from e
+                if "in use" in hint:
+                    raise OSError(
+                        e.errno, f"{hint}; try port {address.port + 1000}."
+                    ) from e
+                raise OSError(e.errno, hint) from e
             self._sockets.append(socket)
         for address, socket in active.items():
             if address not in _listen:

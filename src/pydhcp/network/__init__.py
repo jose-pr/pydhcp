@@ -87,11 +87,34 @@ class SocketAddress(_SocketAddress):
         fileno: _ty.Optional[int] = None,
         options: _ty.Iterable[SocketOption] = (),
     ) -> _socket.socket:
-        sock = _socket.socket(family, kind, proto, fileno)
-        for opt in options:
-            sock.setsockopt(*opt)
-        sock.bind((str(self.ip), self.port))
-        return sock
+        """Create and bind a socket at this address.
+
+        ``options`` are ``(level, name, value)`` triples applied before the
+        bind. Delegates to :func:`netimps.bind`, which closes the socket before
+        any exception propagates -- so a failed bind leaks nothing.
+
+        ``reuse_address`` is left off: this has never set ``SO_REUSEADDR``
+        implicitly, and turning it on now would let a socket bind a port still
+        in ``TIME_WAIT``. Callers that want it pass it in ``options``, as
+        ``listener.py`` does.
+        """
+        if fileno is not None:
+            # netimps.bind() creates the socket itself, so an existing fd has
+            # to keep the direct path.
+            sock = _socket.socket(family, kind, proto, fileno)
+            for opt in options:
+                sock.setsockopt(*opt)
+            sock.bind((str(self.ip), self.port))
+            return sock
+
+        return _netimps.bind(
+            str(self.ip),
+            self.port,
+            family=family,
+            kind=kind,
+            reuse_address=False,
+            options=tuple(options),
+        )
 
 
 class SocketSession(_ty.NamedTuple):
