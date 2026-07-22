@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Network enumeration now comes from `netimps`.** `network/platform.py` --
+  503 lines of ctypes (`GetAdaptersInfo`, `getifaddrs` with hand-written
+  sockaddr structs, plus `ipconfig`/`ip addr` text-scraping fallbacks) -- is
+  deleted. Every address the old code found is still found, with identical
+  prefixes and MACs, verified against a captured baseline before switching.
+  - Adapter names are now **human-readable** (`"Wi-Fi"`) rather than Windows
+    GUIDs.
+  - **Loopback is now enumerated**, so a loopback-bound socket resolves to a
+    real interface with its true `/8` instead of falling through to a
+    synthetic `/32`.
+  - `host_ip_interfaces()` gains `family=4` as the default, preserving the
+    IPv4-only behaviour callers relied on.
+- `MACAddress` is now a `netimps.MACAddress` subclass. The uppercase-hyphenated
+  rendering is unchanged; it is no longer a `bytes` subclass, so use `.packed`
+  for raw bytes (`.hex()` is kept as a passthrough). It gains `.oui`,
+  `.is_multicast`, `.is_local` and ordering.
+- `SocketAddress.listen()` delegates to `netimps.bind()`, which closes the
+  socket before any exception propagates.
+- Bind failures use `netimps.bind_error_hint`, which recognises the POSIX
+  errnos *and* the Windows `WinError` codes. The DHCP-specific suggestions are
+  appended rather than replacing the diagnosis.
+
+### Fixed
+
+- `_split_host_port` mis-parsed IPv6 listen specs: `"[::1]:67"` returned
+  `("[::1]:67", None)`, silently dropping the port. It now delegates to
+  `netimps.normalize_host`.
+
 ## [0.4.0] - 2026-07-14
 
 ### Added
