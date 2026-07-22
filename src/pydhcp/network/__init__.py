@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import typing as _ty
 import ipaddress as _ip
+
+import netimps as _netimps
 from . import platform as _platform
 import socket as _socket
 
@@ -16,16 +18,32 @@ IPv4Interface = _ip.IPv4Interface
 WILDCARD_IPv4 = IPv4("0.0.0.0")
 
 
-class MACAddress(bytes):
-    def __new__(cls, src: _ty.Optional[_ty.Union[str, bytes, bytearray, memoryview]] = None) -> "MACAddress":
-        if isinstance(src, str):
-            src = cls.fromhex(src.replace("-", ""))
-        if src is None or len(src) != 6:
-            raise ValueError(src)
-        return super().__new__(cls, src)
+class MACAddress(_netimps.MACAddress):
+    """A hardware address rendered the way DHCP tooling expects.
+
+    Only the *presentation* differs from :class:`netimps.MACAddress`:
+    uppercase-hyphenated (``00-11-22-33-44-55``) rather than lowercase-colon,
+    because that is the form this project's CLI and logs have always used.
+    Parsing, comparison and hashing are inherited unchanged, so instances
+    compare equal to the base type and interoperate with it as dict keys.
+
+    Note this is a *display* type. The wire hardware address (``chaddr``,
+    option 61) is raw ``bytes`` throughout ``packet/`` and never passes through
+    here -- deliberately, since ``chaddr`` permits ``hlen`` up to 16 for
+    non-Ethernet ``htype`` while a MAC is exactly 6.
+    """
 
     def __str__(self) -> str:
-        return self.hex("-").upper()
+        return self.as_str("-", upper=True)
+
+    def hex(self, *args, **kwargs) -> str:
+        """``bytes.hex`` passthrough.
+
+        The base type is a value object exposing ``.packed`` rather than a
+        ``bytes`` subclass, so this method is not inherited -- but callers
+        (and tests) predating that reasonably expect it.
+        """
+        return self.packed.hex(*args, **kwargs)
 
 
 class _SocketAddress(_ty.NamedTuple):
