@@ -4,7 +4,6 @@ import typing as _ty
 import ipaddress as _ip
 
 import netimps as _netimps
-from . import platform as _platform
 import socket as _socket
 
 IPv4 = _ip.IPv4Address
