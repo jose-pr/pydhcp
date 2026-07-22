@@ -139,20 +139,37 @@ class NetworkInterface(_ty.NamedTuple):
         return self.ip_interface.network
 
 
-APIPA = _ip.ip_network("169.254.0.0/16")
+#: RFC 3927 link-local. A host assigns itself one of these when DHCP fails, so
+#: their presence usually means "no lease" -- which is why they are filtered by
+#: default. Re-exported from netimps so the definition lives in one place.
+APIPA = _netimps.APIPA
 
 
 def host_ip_interfaces(
-    filter: _ty.Union[_ty.Callable[[NetworkInterface], bool], bool] = True
+    filter: _ty.Union[_ty.Callable[[NetworkInterface], bool], bool] = True,
+    family: _ty.Optional[int] = 4,
 ) -> _ty.Iterator[NetworkInterface]:
+    """Yield one :class:`NetworkInterface` per local address.
+
+    One entry *per address*, not per adapter, since callers here select and
+    filter by address. ``filter`` defaults to excluding APIPA; pass ``False``
+    for everything, or a predicate of your own.
+
+    ``family`` defaults to **4**: this is a DHCPv4 implementation, and the
+    enumeration it replaced was IPv4-only, so yielding IPv6 addresses would
+    silently change what existing callers iterate over. Pass ``None`` for both
+    families or ``6`` for IPv6 only.
+
+    Enumeration comes from :func:`netimps.iter_addresses`, which reports real
+    prefix lengths and human-readable adapter names on every platform.
+    """
     if filter is True:
         filter = lambda ni: ni.ip not in APIPA
-    for name, ip_interface, mac in _platform.get_interfaces():
-        mac_val = MACAddress(mac) if mac else None
+    for iface, address in _netimps.iter_addresses(family=family):
         ni = NetworkInterface(
-            name=name,
-            ip_interface=ip_interface,
-            mac=mac_val
+            name=iface.name,
+            ip_interface=address,
+            mac=MACAddress(iface.mac) if iface.mac else None,
         )
         if not filter or filter(ni):
             yield ni
