@@ -13,15 +13,16 @@ from datetime import datetime, timedelta, timezone
 
 from pydhcp import CaptureEvent, DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
 from pydhcp.cli import (
+    App,
+    Capture,
+    Interfaces,
+    Packet,
+    Relay,
+    Server,
     _infer_capture_format,
     _load_capture_hook,
     _parse_server_address,
     _write_capture_record,
-    cmd_capture,
-    cmd_interfaces,
-    cmd_packet,
-    cmd_relay,
-    cmd_server,
     main,
 )
 from pydhcp.config import load_config
@@ -32,10 +33,8 @@ from pydhcp.network import IPv4, SocketAddress
 
 
 def test_cmd_interfaces():
-    # Verify it runs without exceptions
-    args = argparse.Namespace()
     with patch("builtins.print") as mock_print:
-        cmd_interfaces(args)
+        Interfaces()()
         assert mock_print.called
 
 
@@ -77,30 +76,20 @@ def _capture_event() -> CaptureEvent:
 
 def test_cmd_packet_decode_from_stdin_json(capsys, monkeypatch) -> None:
     packet = _sample_packet()
-    args = argparse.Namespace(
-        mode="decode",
-        packet_format="json",
-        input="-",
-        output="-",
-    )
+    cmd = Packet(mode=True, packet_format="json", input="-", output="-")
     monkeypatch.setattr("sys.stdin", io.StringIO(packet.encode().hex()))
 
-    cmd_packet(args)
+    cmd()
 
     assert json.loads(capsys.readouterr().out) == packet.to_mapping()
 
 
 def test_cmd_packet_decode_summary(capsys, monkeypatch) -> None:
     packet = _sample_packet()
-    args = argparse.Namespace(
-        mode="decode",
-        packet_format="summary",
-        input="-",
-        output="-",
-    )
+    cmd = Packet(mode=True, packet_format="summary", input="-", output="-")
     monkeypatch.setattr("sys.stdin", io.StringIO(packet.encode().hex()))
 
-    cmd_packet(args)
+    cmd()
 
     output = capsys.readouterr().out
     assert "BOOTREQUEST XID=12345678 Src: capture Dst: decoded" in output
@@ -108,16 +97,11 @@ def test_cmd_packet_decode_summary(capsys, monkeypatch) -> None:
 
 
 def test_cmd_packet_malformed_exits_with_error(capsys, monkeypatch) -> None:
-    args = argparse.Namespace(
-        mode="decode",
-        packet_format="json",
-        input="-",
-        output="-",
-    )
+    cmd = Packet(mode=True, packet_format="json", input="-", output="-")
     monkeypatch.setattr("sys.stdin", io.StringIO("00"))
 
     with pytest.raises(SystemExit) as exc_info:
-        cmd_packet(args)
+        cmd()
 
     assert exc_info.value.code == 1
     assert "too short for DHCP fixed header" in capsys.readouterr().err
@@ -128,14 +112,9 @@ def test_cmd_packet_encode_from_file(tmp_path) -> None:
     source = tmp_path / "packet.json"
     source.write_text(dump_message(packet, "json"), encoding="utf-8")
     output = tmp_path / "packet.hex"
-    args = argparse.Namespace(
-        mode="encode",
-        packet_format="json",
-        input=str(source),
-        output=str(output),
-    )
+    cmd = Packet(mode=False, packet_format="json", input=str(source), output=str(output))
 
-    cmd_packet(args)
+    cmd()
 
     assert output.read_text(encoding="utf-8") == packet.encode().hex()
 
@@ -148,8 +127,10 @@ def test_packet_cli_main_encode_from_stdin(monkeypatch, capsys) -> None:
     )
     monkeypatch.setattr("sys.stdin", io.StringIO(dump_message(packet, "json")))
 
-    main()
+    with pytest.raises(SystemExit) as exc_info:
+        main()
 
+    assert exc_info.value.code == 0
     assert capsys.readouterr().out.strip() == packet.encode().hex()
 
 
@@ -270,21 +251,19 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
             self.stopped = True
 
     monkeypatch.setattr("pydhcp.cli.DhcpCapture", FakeCapture)
-    args = argparse.Namespace(
+    cmd = Capture(
         listen="127.0.0.1:6767",
         packet_filter="msg_type=DHCPDISCOVER",
         packet_format="json",
-        output=argparse.Namespace(__str__=lambda self: "-"),
+        output="-",
         output_mode="stream",
         count=1,
         hook=None,
         hook_fail_fast=False,
-        log_level=None,
         per_interface=False,
     )
-    args.output = "-"
 
-    cmd_capture(args)
+    cmd()
 
     assert json.loads(capsys.readouterr().out)["options"]["DHCP_MESSAGE_TYPE"] == "DHCPDISCOVER"
 
@@ -335,8 +314,8 @@ def test_cmd_server(mock_dhcp_server_cls):
     mock_server = MagicMock()
     mock_dhcp_server_cls.return_value = mock_server
 
-    args = argparse.Namespace(config=None, listen="127.0.0.1:6767", log_level=None)
-    cmd_server(args)
+    cmd = Server(config=None, listen="127.0.0.1:6767")
+    cmd()
 
     mock_dhcp_server_cls.assert_called_with(listen="127.0.0.1:6767")
     assert mock_server.bind.called
@@ -356,16 +335,15 @@ def test_cmd_relay(mock_dhcp_relay_cls):
     mock_relay = MagicMock()
     mock_dhcp_relay_cls.return_value = mock_relay
 
-    args = argparse.Namespace(
+    cmd = Relay(
         listen="127.0.0.1:6767",
         server=["192.0.2.1", "192.0.2.2:6768"],
         max_hops=10,
         insert_relay_agent_info=True,
         circuit_id="aabb",
         remote_id=None,
-        log_level=None,
     )
-    cmd_relay(args)
+    cmd()
 
     mock_dhcp_relay_cls.assert_called_with(
         listen="127.0.0.1:6767",
@@ -386,3 +364,10 @@ def test_relay_cli_relay_help(monkeypatch, capsys) -> None:
     captured = capsys.readouterr()
     assert "--server" in captured.out
     assert "--max-hops" in captured.out
+
+
+def test_app_parses_relay_subcommand() -> None:
+    parser = App._parser_()
+    instance = parser.parse_args(["relay", "--server", "192.0.2.1"])
+    assert isinstance(instance, Relay)
+    assert instance.server == ["192.0.2.1"]

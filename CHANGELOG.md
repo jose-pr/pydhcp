@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-07-24
+
+### Changed
+
+- **`cli.py` is rewritten on [`duho`](https://pypi.org/project/duho/)**, a
+  declarative CLI framework, replacing hand-built `argparse`. Each subcommand
+  (`interfaces`, `server`, `relay`, `packet`, `capture`) is now a `duho.Cmd`
+  class with annotated fields instead of `add_argument` calls. Behavior and
+  flags are preserved, with additions:
+  - `pydhcp --version` now works (resolved from installed package metadata).
+  - Per-subcommand `--log-level` is replaced by duho's shared verbosity
+    scheme: `-v`/`-q` (repeatable) and `--loglevel KEY=VALUE`.
+  - New short flags: `packet` gains `-i`/`-o`/`-f` (`--input`/`--output`/
+    `--format`); `capture` gains `-l`/`-o`/`-f`/`-c` (`--listen`/`--output`/
+    `--format`/`--count`); `server` and `relay` gain `-l` (`--listen`);
+    `relay` also gains `-s` (`--server`).
+  - `--help` now shows `(default: X)` next to any option with a non-empty
+    default.
+- Added `duho` as a runtime dependency.
+
 ## [0.4.1] - 2026-07-22
 
 ### Changed

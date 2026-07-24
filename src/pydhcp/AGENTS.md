@@ -207,20 +207,68 @@ IPv6-only interface can break at runtime.
 
 ## CLI (`cli.py`)
 
+Built on [`duho`](https://pypi.org/project/duho/) (a declarative CLI
+framework: `duho.Cli`/`duho.Cmd` classes with annotated fields instead of
+hand-built `argparse`). Each subcommand is a `Cmd` subclass — a data class of
+CLI fields plus a `__call__(self)` entrypoint — registered on the root
+`App(Cli)`'s `_subcommands_`. Every subcommand mixes in `duho.LoggingArgs`
+for logging (`-v`/`-q`/`--loglevel`, `self._logger_`); there is no
+per-subcommand `--log-level` flag anymore (superseded by duho's verbosity
+scheme). `App._logger_name_ = "pydhcp"` so `self._logger_` resolves the same
+`pydhcp` logger every subcommand previously reached via `pydhcp.log.LOGGER`.
+
 - **`main() -> None`** — the `pydhcp` console-script entry point
-  (`[project.scripts]` in `pyproject.toml`). Subcommands: `interfaces`,
-  `server` (`--config`, `--listen`, `--log-level`), `relay` (`--listen`,
+  (`[project.scripts]` in `pyproject.toml`); calls `duho.main(App)`. Subcommands:
+  `interfaces`, `server` (`--config`, `--listen`), `relay` (`--listen`,
   `--server` repeatable, `--max-hops`, `--insert-relay-agent-info`,
-  `--circuit-id`, `--remote-id`, `--log-level`), `packet` (`--decode`/
-  `--encode`, `--input`/`--output` accepting `-` for stdio, `--format
+  `--circuit-id`, `--remote-id`), `packet` (`--decode`/`--encode` mutually
+  exclusive+required, `--input`/`--output` accepting `-` for stdio, `--format
   json|yaml|toml|ini|summary`), `capture` (`--listen`, `--filter`,
   `--format`, `--output` file/pattern/`-`, `--output-mode
   stream|single|per-capture`, `--count`, `--hook` `module:function` or an
-  executable path, `--hook-fail-fast`, `--per-interface`, `--log-level`).
-  Not designed to be imported and called with custom `argv` — it parses
-  `sys.argv` directly.
+  executable path, `--hook-fail-fast`, `--per-interface`). Also gets
+  `--version` (via `App._version_ = duho.AUTO`, resolved from installed
+  package metadata) for free. Not designed to be imported and called with
+  custom `argv` — it parses `sys.argv` directly.
+- `Relay.server` has no CLI-level `required=True`: an empty/omitted
+  `--server` simply reaches `DhcpRelay(...)`, which already raises
+  `ValueError("DhcpRelay requires at least one server address")` — no need
+  to duplicate that validation at the argparse layer.
 
-**Gotcha**: capture's newline-delimited JSON stream output (`--format json`
-in `stream`/`single` mode) is compact JSON by design (one object per line);
-use `dump_message(..., "json")` directly only for single structured packet
-files where pretty JSON is acceptable.
+**Gotchas (duho field declarations, Python 3.9 target)**:
+- A **class-body field annotation** (not a bare function annotation) is
+  resolved by duho via `typing.get_type_hints` at parser-build time — even
+  when quoted as a string (`"str | None"`) and even under `from __future__
+  import annotations`. On Python 3.9 the PEP 604 `X | Y` syntax fails there
+  (`TypeError: unsupported operand type(s) for |`) because `get_type_hints`
+  actually evaluates the string. Use `typing.Optional[str]` (or
+  `typing.Union[...]`) for any optional CLI field instead of `str | None`.
+  Plain function signatures elsewhere in the module are unaffected since
+  duho never introspects those.
+- The **trailing flags tuple** after a field's docstring (e.g. `("--foo",)`)
+  is parsed via `ast.literal_eval` on the class's *source* — it must be a
+  literal (strings/numbers/tuples), never a call like `Meta(...)` or
+  `NS(...)`. Putting a call in that tuple silently drops the entire
+  metadata run for that field (including the flags!) rather than erroring,
+  because `_class_constants` treats a non-literal expression as "end of this
+  field's metadata" and resets attribution. Any option that needs `Meta(...)`
+  (`choices=`, `conflicts=`, `required=`, `dest=` overrides, etc.) belongs in
+  `typing.Annotated[T, Meta(...)]` on the annotation itself, not in the
+  flags tuple.
+- `Meta(dest=...)` is a declared `Meta` field but is **not** read by duho's
+  `ArgumentBuilder._kwargs()` — that method always recomputes
+  `dest = self.name` and only a raw-escape-hatch `kwargs={...}` override
+  (`Meta(kwargs={"dest": "mode"})`) actually reaches `add_argument`. Needed
+  for `Packet.decode`/`Packet.encode`: two `store_const` bool fields sharing
+  one parsed attribute (`self.mode`) via a `conflicts=`-grouped
+  mutually-exclusive pair, the flags-shape `packet --decode`/`--encode`
+  requires.
+- `App._help_formatter_ = duho.DefaultsFormatter` auto-appends `(default: X)`
+  to `--help` output for any option whose default isn't `None`/`""`/`False`
+  (skips the noise of an unset optional or an off `store_true` flag) — don't
+  hand-write "(default: ...)" in a field's docstring, it's redundant and can
+  drift out of sync with the real default.
+- Capture's newline-delimited JSON stream output (`--format json` in
+  `stream`/`single` mode) is compact JSON by design (one object per line);
+  use `dump_message(..., "json")` directly only for single structured packet
+  files where pretty JSON is acceptable.
