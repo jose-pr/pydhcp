@@ -67,6 +67,8 @@ jobs:
     name: Build documentation site
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      pages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +79,9 @@ jobs:
           python-version: "3.x"
 
       - uses: actions/configure-pages@v5
+        with:
+          # Turn Pages on for a fresh repo or fork where it was never enabled.
+          enablement: true
 
       - name: Install package with docs tooling
         run: python -m pip install -e ".[dev,docs,toml]"
@@ -149,6 +154,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name }}
+          # Pin the release to the commit being released; without this the
+          # release object points at the default branch and breaks on a rename.
+          target_commitish: ${{ github.sha }}
           files: dist/*
           generate_release_notes: true
           prerelease: ${{ contains(github.event_name == 'workflow_dispatch' && inputs.ref || github.ref_name, '-') }}
