@@ -248,7 +248,7 @@ class DhcpListener:
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._select_timeout = select_timeout or 1
-        self._cancelleation_token: _thread.Event | None = None
+        self._cancellation_token: _thread.Event | None = None
         self.metrics = DhcpMetrics()
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
@@ -297,21 +297,21 @@ class DhcpListener:
                 self._sockets.remove(socket)
                 try:
                     socket.close()
-                except:
+                except Exception:
                     pass
 
     def stop(self) -> None:
-        if self._cancelleation_token is not None:
-            self._cancelleation_token.set()
+        if self._cancellation_token is not None:
+            self._cancellation_token.set()
 
     def wait(self) -> None:
-        while self._cancelleation_token is not None:
-            self._cancelleation_token.wait(self._select_timeout)
+        while self._cancellation_token is not None:
+            self._cancellation_token.wait(self._select_timeout)
 
     def start(self, cancellation_token: _thread.Event | None = None) -> _thread.Thread | None:
-        if not self._cancelleation_token:
+        if not self._cancellation_token:
             thread = _thread.Thread(target=self.listen, args=())
-            self._cancelleation_token = cancellation_token or _thread.Event()
+            self._cancellation_token = cancellation_token or _thread.Event()
             import signal
 
             def stop(*args: _ty.Any) -> None:
@@ -329,14 +329,14 @@ class DhcpListener:
         rlist: list[_socket.socket]
         buffer = bytearray(self._max_packet_size)
         view = memoryview(buffer)
-        if self._cancelleation_token is None:
-            self._cancelleation_token = _thread.Event()
+        if self._cancellation_token is None:
+            self._cancellation_token = _thread.Event()
         try:
-            while listen and not self._cancelleation_token.is_set():
+            while listen and not self._cancellation_token.is_set():
                 rlist, _, _ = _select.select(
                     list(self._sockets), [], [], self._select_timeout
                 )
-                if self._cancelleation_token.is_set():
+                if self._cancellation_token.is_set():
                     break
                 for socket in rlist:
                     try:
@@ -387,21 +387,15 @@ class DhcpListener:
                         msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
                         self.handle(msg, context)
                     except Exception as e:
-                        if isinstance(e, KeyboardInterrupt):
-                            raise e
                         LOGGER.error(
                             f"Encounter error handling request: {e.__class__.__name__} | {e}"
                         )
         except KeyboardInterrupt:
             LOGGER.info("Stopped listening due to Ctrl-C")
-            self._cancelleation_token.set()
+            self._cancellation_token.set()
         finally:
-            self._cancelleation_token = None
+            self._cancellation_token = None
 
-
-# Key by default is (subnet, mac) unless client identifier option set
-
-#
 
 import asyncio as _asyncio
 
@@ -430,8 +424,6 @@ class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
             )
             self.listener.handle(msg, context)
         except Exception as e:
-            if isinstance(e, KeyboardInterrupt):
-                raise e
             LOGGER.error(
                 f"Encounter error handling async request from {addr} : {e.__class__.__name__} | {e}"
             )

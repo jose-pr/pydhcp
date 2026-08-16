@@ -419,8 +419,7 @@ class DhcpMessage:
             ("Allocated Address", str(self.yiaddr)),
             ("Gateway Address", str(self.giaddr)),
             ("Hardware Address", f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
-            ("Server Address", str(self.siaddr)),
-            ("Next Server", str(self.siaddr)),
+            ("Next Server (siaddr)", str(self.siaddr)),
             ("Server Host Name", self.sname),
             ("Bootfile", self.file),
         ]:

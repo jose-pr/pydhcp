@@ -27,6 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `InMemoryLeaseBackend.renew` carries the same object across renewals and
   `FileLeaseBackend` persisted the damage to disk. The response now takes
   `lease.options.copy()`.
+- **`DhcpRelay._pending_clients` is bounded.** The `xid -> original client
+  address` map grew without limit for xids whose replies never arrived, leaking
+  memory in a long-running relay. It is now capped at
+  `DhcpRelay.MAX_PENDING_CLIENTS` (1024) entries, oldest evicted first; an
+  evicted entry only costs the port-68 fallback a real client listens on.
+- `MACAddress.hex()` carries the real `bytes.hex` signature it forwards to
+  (it had untyped `*args, **kwargs`, which also left its body unchecked).
+- Removed two dead `isinstance(e, KeyboardInterrupt)` re-raise branches in
+  `listener.py`: `KeyboardInterrupt` does not subclass `Exception`, so neither
+  could ever run. The interrupt already propagates to the outer handler.
+- `listener.py`'s socket-close bare `except:` is now `except Exception:`.
+- `DhcpMessage.dumps()` printed `siaddr` twice, as "Server Address" and "Next
+  Server"; it is one field and now prints once as "Next Server (siaddr)".
 
 ## [0.5.0] - 2026-07-24
 

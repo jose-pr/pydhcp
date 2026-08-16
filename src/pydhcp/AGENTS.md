@@ -147,7 +147,12 @@ port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
 `DhcpRelay` tracks `xid -> original client SocketAddress` in
 `self._pending_clients` (populated on forward, consumed on reply) so clients
 on non-standard ports still get routed correctly; falls back to port 68 if
-the xid was never observed by this relay instance.
+the xid was never observed by this relay instance. That map is bounded at
+`DhcpRelay.MAX_PENDING_CLIENTS` (1024) entries, oldest evicted first, so xids
+whose replies never arrive cannot grow it without limit; an evicted entry only
+costs the port-68 fallback, which is where a real client listens anyway. Raise
+the class attribute if a deployment genuinely has more than 1024 exchanges in
+flight at once.
 
 ## Capture (`capture.py`)
 

@@ -29,9 +29,19 @@ class DhcpRelay(_Base):
     `hops`. Forwards server replies (unicast back to this relay) on to the
     client, applying the same destination rules a server uses on its own
     client-facing side (broadcast flag, else `yiaddr`/`ciaddr`).
+
+    The `xid -> original client address` map used to route a reply back to a
+    client on a non-standard port is bounded at `MAX_PENDING_CLIENTS` entries,
+    evicting the oldest first: an xid whose reply never arrives would otherwise
+    stay forever and leak memory in a long-running relay. Evicting an entry is
+    not a dropped reply -- a reply for a forgotten xid still goes out, to the
+    well-known client port 68, which is where a real client listens.
     """
 
     DEFAULT_PORTS = (_enum.DhcpPort.SERVER,)
+
+    #: Upper bound on in-flight `xid -> client address` entries.
+    MAX_PENDING_CLIENTS = 1024
 
     def __init__(
         self,
@@ -58,7 +68,9 @@ class DhcpRelay(_Base):
         self.insert_relay_agent_info = insert_relay_agent_info
         self.circuit_id = circuit_id
         self.remote_id = remote_id
-        self._pending_clients: dict[int, _net.SocketAddress] = {}
+        self._pending_clients: _ty.OrderedDict[int, _net.SocketAddress] = (
+            _ty.OrderedDict()
+        )
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         if msg.op == _enum.OpCode.BOOTREQUEST:
@@ -82,6 +94,9 @@ class DhcpRelay(_Base):
             forwarded.giaddr = _ty.cast(_net.IPv4, context.interface.ip)
 
         self._pending_clients[msg.xid] = context.client
+        self._pending_clients.move_to_end(msg.xid)
+        while len(self._pending_clients) > self.MAX_PENDING_CLIENTS:
+            self._pending_clients.popitem(last=False)
         self._insert_relay_agent_info(forwarded)
 
         data = forwarded.encode()

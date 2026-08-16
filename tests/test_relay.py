@@ -232,3 +232,39 @@ def test_forward_to_client_uses_original_client_port_when_known():
     data, dest, port, mac = reply_context.transport.send.call_args.args
     assert dest == IPv4("10.0.0.50")
     assert port == 54321
+
+
+def test_pending_clients_map_is_bounded_and_evicts_oldest_first():
+    relay = DhcpRelay(server_addresses=["10.0.0.2"])
+    relay.MAX_PENDING_CLIENTS = 4
+
+    for xid in range(10):
+        msg = _discover()
+        msg.xid = xid
+        relay.handle(msg, _context(client_port=40000 + xid))
+
+    assert len(relay._pending_clients) == 4
+    # Oldest evicted, most recent four kept, insertion order preserved.
+    assert list(relay._pending_clients) == [6, 7, 8, 9]
+    assert relay._pending_clients[9].port == 40009
+
+
+def test_reply_for_an_evicted_xid_falls_back_to_the_well_known_client_port():
+    relay = DhcpRelay(server_addresses=["10.0.0.2"])
+    relay.MAX_PENDING_CLIENTS = 1
+
+    first = _discover()
+    first.xid = 1
+    relay.handle(first, _context(client_port=45000))
+    second = _discover()
+    second.xid = 2
+    relay.handle(second, _context(client_port=45001))
+    assert 1 not in relay._pending_clients
+
+    reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
+    reply.xid = 1
+    context = _context()
+    relay.handle(reply, context)
+
+    _data, _dest, port, _mac = context.transport.send.call_args.args
+    assert port == 68
