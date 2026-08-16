@@ -35,14 +35,20 @@ class MACAddress(_netimps.MACAddress):
     def __str__(self) -> str:
         return self.as_str("-", upper=True)
 
-    def hex(self, *args, **kwargs) -> str:
+    def hex(
+        self, sep: _ty.Union[str, bytes, None] = None, bytes_per_sep: int = 1
+    ) -> str:
         """``bytes.hex`` passthrough.
 
         The base type is a value object exposing ``.packed`` rather than a
         ``bytes`` subclass, so this method is not inherited -- but callers
-        (and tests) predating that reasonably expect it.
+        (and tests) predating that reasonably expect it. ``sep`` and
+        ``bytes_per_sep`` mean what they do on :meth:`bytes.hex`; omitting
+        ``sep`` gives the unseparated form.
         """
-        return self.packed.hex(*args, **kwargs)
+        if sep is None:
+            return self.packed.hex()
+        return self.packed.hex(sep, bytes_per_sep)
 
 
 class _SocketAddress(_ty.NamedTuple):

@@ -52,7 +52,7 @@ class Server(LoggingArgs, Cmd):
     ("--listen", "-l")
 
     def __call__(self) -> None:
-        config: dict = {}
+        config: _ty.Dict[str, _ty.Any] = {}
         if self.config:
             config = load_config(self.config)
 

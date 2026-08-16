@@ -20,7 +20,8 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
   uppercase hyphen-separated (`"AA-BB-CC-DD-EE-FF"`), which is the only thing
   this subclass changes.
   - **Not a `bytes` subclass** (the base type is a value object) — use
-    `.packed` for the raw bytes. `.hex()` is kept as a passthrough.
+    `.packed` for the raw bytes. `.hex(sep=None, bytes_per_sep=1)` is kept as
+    a `bytes.hex` passthrough; omitting `sep` gives the unseparated form.
   - Inherits `.oui`, `.is_multicast`, `.is_local` and ordering, and compares
     equal to a base `netimps.MACAddress` with the same bytes.
   - **A display type.** The wire hardware address (`chaddr`, option 61) is raw
