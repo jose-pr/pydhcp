@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-08-16
+
+### Changed
+
+- **`duho` is now required as `>=0.5.0,<0.6`** (was `>=0.4.1`). The old floor
+  predated duho 0.5.0, which changed how a `list`/`set`/`tuple` field used as an
+  option parses: `--x a b` used to accumulate both values in one occurrence
+  (`nargs="*"`), and an option field now takes one value per occurrence. The CLI
+  declares `server: List[str]` as `--server`/`-s` on the `relay` subcommand and
+  documents it as "(repeatable)", so a resolver was free to install a duho where
+  that flag did not behave the way its own help text describes. The upper bound
+  is the pre-1.0 rule that a minor bump means the documented API broke.
+- **`netimps` is now required as `>=0.2.0,<0.3`** (was `>=0.2.2`), normalising it
+  to the same minor-series form. Nothing this package calls (`normalize_host`,
+  `bind`, `bind_error_hint`, `iter_addresses`, `APIPA`, `MACAddress`) was added
+  after 0.2.0, so the exact-patch floor was stricter than the code justified.
+
 ## [0.5.1] - 2026-08-16
 
 ### Added
@@ -213,7 +230,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/jose-pr/pydhcp/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jose-pr/pydhcp/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jose-pr/pydhcp/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/jose-pr/pydhcp/compare/v0.4.0...v0.4.1
