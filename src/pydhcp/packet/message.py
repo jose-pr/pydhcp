@@ -318,10 +318,7 @@ class DhcpMessage:
         if max_options_field_size < 0:
             raise ValueError(f"{max_packetsize} is too small for a DHCP packet")
 
-        options = DhcpOptions(self.options._codemap)
-        options._options = _ty.OrderedDict(
-            (code, bytearray(value)) for code, value in self.options._options.items()
-        )
+        options = self.options.copy()
         sname_bytes: _ty.Union[bytes, bytearray] = self.sname.encode()
         file_bytes: _ty.Union[bytes, bytearray] = self.file.encode()
         options_field: _ty.Union[bytes, bytearray] = options.encode()

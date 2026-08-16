@@ -110,6 +110,19 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         encoded, _ = self.partial_encode(None, word_size)
         return encoded
 
+    def copy(self) -> "DhcpOptions":
+        """Return an independent copy sharing no mutable state with `self`.
+
+        The codemap is preserved and every payload is copied into a fresh
+        `bytearray`, so mutating either container (or a payload handed out by
+        `get(..., decode=False)`) cannot write through to the other.
+        """
+        copied = DhcpOptions(self._codemap)
+        copied._options = _ty.OrderedDict(
+            (code, bytearray(value)) for code, value in self._options.items()
+        )
+        return copied
+
     def __getitem__(self, _key: int) -> bytearray:
         return self._options[_key]
 

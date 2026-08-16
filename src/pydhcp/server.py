@@ -229,7 +229,10 @@ class DhcpServer(_Base):
         resp_ty: _enum.DhcpMessageType,
     ) -> DhcpMessage:
         resp = DhcpMessage(**msg.__dict__.copy())
-        resp.options = lease.options
+        # Never alias the stored lease's options: the response pipeline injects
+        # bookkeeping options and PARAMETER_REQUEST_LIST filtering deletes
+        # entries, which would otherwise write straight through to the backend.
+        resp.options = lease.options.copy()
         resp.op = _enum.OpCode.BOOTREPLY
         resp.hops = 0
         resp.secs = _dt.timedelta(seconds=0)

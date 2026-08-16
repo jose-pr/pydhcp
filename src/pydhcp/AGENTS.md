@@ -85,6 +85,12 @@ client build helpers below to keep the exchange unicast.
     broadcasts if the client's `BROADCAST` flag is set, else `yiaddr`,
     falling back to `255.255.255.255`. `RELAY_AGENT_INFORMATION` (option 82)
     on the request is echoed back unmodified on the reply, per RFC 3046 §2.2.
+  - The reply is built from `lease.options.copy()`, never the lease's own
+    container: the response pipeline injects bookkeeping options and the
+    `PARAMETER_REQUEST_LIST` filter deletes everything the client did not
+    ask for — all of which used to write through to the lease backend. An
+    `.acquire_lease()` override returning a lease whose options it also keeps
+    a reference to is therefore safe.
 - **`AsyncDhcpServer(listen=None, max_packet_size=None, lease_backend=None,
   per_interface=None)`** — same allocation logic as `DhcpServer`, running on
   `AsyncDhcpListener`.

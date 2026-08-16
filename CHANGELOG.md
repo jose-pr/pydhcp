@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`DhcpOptions.copy()`** — returns an independent container: the codemap is
+  preserved and every payload is copied into a fresh `bytearray`, so neither
+  structural edits nor in-place mutation of a payload obtained from
+  `get(..., decode=False)` can write through to the original.
+
+### Fixed
+
+- **Server responses no longer mutate the stored lease.**
+  `DhcpServer._create_response` assigned `resp.options = lease.options`, so the
+  response and the lease backend shared one `DhcpOptions` object. Everything the
+  response pipeline did to it edited the allocation store: `IP_ADDRESS_LEASE_TIME`,
+  `SERVER_IDENTIFIER`, `DHCP_MESSAGE_TYPE` and the echoed
+  `RELAY_AGENT_INFORMATION` (option 82) were injected into the lease;
+  `PARAMETER_REQUEST_LIST` filtering **permanently deleted** from the lease every
+  option the client did not ask for; and `handle_inform` stripped the lease time.
+  `InMemoryLeaseBackend.renew` carries the same object across renewals and
+  `FileLeaseBackend` persisted the damage to disk. The response now takes
+  `lease.options.copy()`.
+
 ## [0.5.0] - 2026-07-24
 
 ### Changed

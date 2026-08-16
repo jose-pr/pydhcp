@@ -36,6 +36,11 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
     TLV bytes; `partial_encode` stops once `maxsize` is reached and returns
     the leftover options as a second `DhcpOptions`, used by
     `DhcpMessage.encode`'s RFC 3396 packing.
+  - **`.copy() -> DhcpOptions`** — independent copy: same codemap, every
+    payload copied into a fresh `bytearray`. Use this before handing an
+    options bag to code that mutates it (a response pipeline, an encoder);
+    a plain assignment aliases the container *and* its payload buffers, so
+    the mutations write straight back into the source.
 
 ## Option codes (`code.py`, `base.py`)
 

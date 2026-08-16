@@ -555,3 +555,25 @@ def test_ccc_option_code_registration_and_round_trip():
 def test_register_type_rejects_invalid_type():
     with pytest.raises(TypeError):
         DhcpOptionCode.LOG_SERVER.register_type(int)  # type: ignore[arg-type]
+
+
+def test_copy_shares_no_mutable_state_with_the_original():
+    original = DhcpOptions()
+    original[DhcpOptionCode.ROUTER] = [IPv4Address("192.0.2.1")]
+    original[DhcpOptionCode.DNS] = [IPv4Address("192.0.2.53")]
+
+    copied = original.copy()
+    assert copied is not original
+    assert copied._codemap is original._codemap
+    assert dict(copied.items(decoded=False)) == dict(original.items(decoded=False))
+
+    # Structural edits on the copy leave the original alone ...
+    del copied[DhcpOptionCode.DNS]
+    copied[DhcpOptionCode.SUBNET_MASK] = IPv4Address("255.255.255.0")
+    assert DhcpOptionCode.DNS in original
+    assert DhcpOptionCode.SUBNET_MASK not in original
+
+    # ... and so do in-place edits of a payload handed out by get(decode=False),
+    # which a shallow dict copy would still share.
+    copied.get(DhcpOptionCode.ROUTER, decode=False).extend(b"\x00\x00\x00\x00")
+    assert len(original[DhcpOptionCode.ROUTER]) == 4
