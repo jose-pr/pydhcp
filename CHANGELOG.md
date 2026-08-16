@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-08-16
+
 ### Added
 
 - **`DhcpOptions.copy()`** — returns an independent container: the codemap is
   preserved and every payload is copied into a fresh `bytearray`, so neither
   structural edits nor in-place mutation of a payload obtained from
   `get(..., decode=False)` can write through to the original.
+
+### Changed
+
+- The `netimps` requirement floor is raised to `>=0.2.2`. The previous
+  `>=0.0.1` predated the API this package actually calls (`normalize_host`,
+  `bind`, `bind_error_hint`, `iter_addresses`, `APIPA`, `MACAddress`), so a
+  resolver was free to install a release that could not satisfy it.
 
 ### Fixed
 
@@ -204,6 +213,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - Initial release.
 
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/jose-pr/pydhcp/compare/v0.5.0...v0.5.1
+[0.5.0]: https://github.com/jose-pr/pydhcp/compare/v0.4.1...v0.5.0
+[0.4.1]: https://github.com/jose-pr/pydhcp/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/jose-pr/pydhcp/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jose-pr/pydhcp/compare/v0.2.1-rc.1...v0.3.0
 [0.2.1-rc.1]: https://github.com/jose-pr/pydhcp/compare/v0.2.0...v0.2.1-rc.1
 [0.2.0]: https://github.com/jose-pr/pydhcp/compare/v0.1.0...v0.2.0
