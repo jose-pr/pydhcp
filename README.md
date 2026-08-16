@@ -24,7 +24,8 @@ pip install pydhcp
 ```
 
 TOML packet encode/decode support is optional. Install `pydhcp[toml]` if you want
-`pydhcp packet --toml`; JSON, YAML, and INI support remain available with the base package.
+`pydhcp packet --format toml`; JSON, YAML, and INI support remain available with the
+base package.
 
 ## Quick start
 
@@ -106,8 +107,9 @@ pydhcp server --config config.json
 # Listen on multiple explicit endpoints while debugging
 pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768
 
-# Increase logging while debugging
-pydhcp server --listen 127.0.0.1:6767 --log-level debug
+# Increase logging while debugging (-v is repeatable; --loglevel targets one logger)
+pydhcp server --listen 127.0.0.1:6767 -v
+pydhcp server --listen 127.0.0.1:6767 --loglevel pydhcp=DEBUG
 ```
 
 ## Development
