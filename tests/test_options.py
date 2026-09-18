@@ -4,6 +4,8 @@ from pydhcp.options import DhcpOptions
 from pydhcp.options import DhcpOptionCode
 from pydhcp.options.type import (
     IPv4Address,
+    SipServers,
+    ClientFqdn,
     String,
     Boolean,
     Flag,
@@ -76,7 +78,9 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.SWAP_SERVER.get_type() is IPv4Address
     assert DhcpOptionCode.NETBIOS_SCOPE.get_type() is String
     assert DhcpOptionCode.LOG_SERVER.get_type()._args_[0] is IPv4Address
-    assert DhcpOptionCode.SIP_SERVERS.get_type()._args_[0] is IPv4Address
+    # RFC 3361 s3.1: an encoding octet selects names (0) or addresses (1),
+    # so this is not a bare address list.
+    assert DhcpOptionCode.SIP_SERVERS.get_type() is SipServers
     assert DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST.get_type().__name__ == "DomainList"
     assert DhcpOptionCode.BCMCS_IPV4_ADDRESS.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME.get_type().__name__ == "U32"
@@ -125,7 +129,8 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION.get_type() is VendorSpecificInformation
     assert DhcpOptionCode.RELAY_AGENT_INFORMATION.get_type() is RelayAgentInformation
     assert DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION.get_type() is ViVendorSpecificInformation
-    assert DhcpOptionCode.NAME_SERVICE_SEARCH.get_type().__name__ == "DomainList"
+    # RFC 2937 s3: 16-bit name service option codes, not domain names.
+    assert DhcpOptionCode.NAME_SERVICE_SEARCH.get_type()._args_[0].__name__ == "U16"
     assert DhcpOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4Address
     assert DhcpOptionCode.RDNSS_SELECTION.get_type() is RdnssSelection
     assert DhcpOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
@@ -141,7 +146,7 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.RFC868_TIMESERVER] = ["10.0.0.4"]
     opts[DhcpOptionCode.IEN116_NAMESERVER] = ["10.0.0.5"]
     opts[DhcpOptionCode.SWAP_SERVER] = "10.0.0.6"
-    opts[DhcpOptionCode.SIP_SERVERS] = ["10.0.0.3"]
+    opts[DhcpOptionCode.SIP_SERVERS] = ["10.0.0.3"]  # inferred as encoding 1
     opts[DhcpOptionCode.ASSOCIATED_IP] = "192.0.2.20"
     opts[DhcpOptionCode.NETINFO_ADDRESS] = "192.0.2.21"
     opts[DhcpOptionCode.NETINFO_TAG] = "lab-a"
@@ -189,7 +194,8 @@ def test_typed_registrations_and_aliases():
     assert isinstance(opts.get(DhcpOptionCode.RFC868_TIMESERVER)[0], IPv4Address)
     assert isinstance(opts.get(DhcpOptionCode.IEN116_NAMESERVER)[0], IPv4Address)
     assert opts.get(DhcpOptionCode.SWAP_SERVER) == IPv4Address("10.0.0.6")
-    assert isinstance(opts.get(DhcpOptionCode.SIP_SERVERS)[0], IPv4Address)
+    sip = opts.get(DhcpOptionCode.SIP_SERVERS)
+    assert sip == SipServers(["10.0.0.3"], SipServers.ENCODING_ADDRESS)
     assert opts.get(DhcpOptionCode.ASSOCIATED_IP) == IPv4Address("192.0.2.20")
     assert opts.get(DhcpOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
     assert opts.get(DhcpOptionCode.NETINFO_TAG, decode=String) == "lab-a"
@@ -244,7 +250,7 @@ def test_typed_registrations_and_aliases():
         (32473, b"alpha"),
         ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
     ])
-    opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = ["alpha.example", "beta.example"]
+    opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = [6, 44]  # DNS, then NetBIOS name server
     opts[DhcpOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
     opts[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
     opts[DhcpOptionCode.IPV4_ADDRESS_MOS] = [
@@ -263,7 +269,7 @@ def test_typed_registrations_and_aliases():
     assert isinstance(opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION), Bytes)
     assert opts.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
     assert opts.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].enterprise_number == 32473
-    assert opts.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == ["alpha.example", "beta.example"]
+    assert opts.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
     assert opts.get(DhcpOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
     assert opts.get(DhcpOptionCode.RDNSS_SELECTION) == RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
     assert opts.get(DhcpOptionCode.V4_PCP_SERVER)[0] == IPv4Address("192.0.2.70")
@@ -332,7 +338,7 @@ def test_registered_option_code_round_trips():
         (32473, b"alpha"),
         ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
     ])
-    opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = ["alpha.example", "beta.example"]
+    opts[DhcpOptionCode.NAME_SERVICE_SEARCH] = [6, 44]  # DNS, then NetBIOS name server
     opts[DhcpOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
     opts[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
     opts[DhcpOptionCode.IPV4_ADDRESS_MOS] = [
@@ -348,7 +354,7 @@ def test_registered_option_code_round_trips():
     decoded = DhcpOptions()
     decoded.decode(memoryview(encoded))
 
-    assert decoded.get(DhcpOptionCode.SIP_SERVERS)[0] == IPv4Address("192.0.2.10")
+    assert decoded.get(DhcpOptionCode.SIP_SERVERS).values[0] == "192.0.2.10"
     assert decoded.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example", "beta.example"]
     assert isinstance(decoded.get(DhcpOptionCode.BCMCS_IPV4_ADDRESS)[0], IPv4Address)
     assert decoded.get(DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE) == [U16(1), U16(2)]
@@ -400,7 +406,7 @@ def test_registered_option_code_round_trips():
     assert isinstance(decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION), Bytes)
     assert decoded.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
     assert decoded.get(DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION)[0].enterprise_number == 32473
-    assert decoded.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == ["alpha.example", "beta.example"]
+    assert decoded.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
     assert decoded.get(DhcpOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
     assert decoded.get(DhcpOptionCode.RDNSS_SELECTION) == RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
     assert decoded.get(DhcpOptionCode.V4_PCP_SERVER)[0] == IPv4Address("192.0.2.70")

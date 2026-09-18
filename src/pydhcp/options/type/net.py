@@ -329,3 +329,262 @@ class RdnssSelection(DhcpOptionType):
 
     def __json__(self) -> list[_ty.Any]:
         return [self.flags, str(self.primary), str(self.secondary), self.domains.__json__()]
+
+
+# RFC 1035 name encoding without compression. `ccc.py` and `type/mos.py` each
+# carry their own copy of this pair; converging all three is finding
+# options-codecs-18, which is not attempted here because `options.type` and
+# `options.ccc` already import each other and only work by statement order
+# (finding neatness-9).
+
+
+def _encode_domain_name(name: str) -> bytes:
+    labels = name.rstrip(".").split(".") if name else []
+    data = bytearray()
+    for label in labels:
+        if not label:
+            raise ValueError("domain name must not contain empty labels")
+        encoded = label.encode("utf-8")
+        if len(encoded) > 63:
+            raise ValueError(f"domain label exceeds 63 octets: {label!r}")
+        data.append(len(encoded))
+        data.extend(encoded)
+    data.append(0)
+    if len(data) > 255:
+        raise ValueError("domain name exceeds 255 octets")
+    return bytes(data)
+
+
+def _decode_domain_name(option: memoryview, start: int = 0) -> tuple[str, int]:
+    labels: list[str] = []
+    idx = start
+    size = len(option)
+    while True:
+        if idx >= size:
+            raise ValueError("domain name is truncated")
+        length = option[idx]
+        idx += 1
+        if length == 0:
+            return ".".join(labels), idx - start
+        if length & 0xC0:
+            # RFC 4702 s3.1 and RFC 3361 s3.1 both forbid compression here, and
+            # there is no enclosing message to resolve a pointer against anyway.
+            raise ValueError("compression pointers are not allowed in this option")
+        if idx + length > size:
+            raise ValueError("domain name is truncated")
+        labels.append(option[idx : idx + length].tobytes().decode("utf-8"))
+        idx += length
+
+
+class ClientFqdn(DhcpOptionType):
+    """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
+
+    Registering this as a plain `String` lost data silently rather than loudly:
+    `String` splits at the first NUL, so the form every Windows client sends
+    (`00 00 00` then the name) decoded to the empty string, and a server reading
+    it for DDNS saw no name at all. Emitting was the mirror image -- the first
+    three characters of the name were read by the client as Flags/RCODE1/RCODE2.
+    """
+
+    #: The client requests that the server update the A RR (RFC 4702 s2.1).
+    FLAG_S = 0x01
+    #: The server overrode the client's S bit.
+    FLAG_O = 0x02
+    #: The name is in DNS wire format rather than ASCII.
+    FLAG_E = 0x04
+    #: The server should not perform any DNS update.
+    FLAG_N = 0x08
+
+    # Declared so the instance-accepting constructor can read `other.name`
+    # without mypy hitting a circular inference.
+    name: str
+    flags: int
+    rcode1: int
+    rcode2: int
+
+    def __init__(
+        self,
+        name: _ty.Any = "",
+        flags: int = 0,
+        rcode1: int = 0,
+        rcode2: int = 0,
+    ) -> None:
+        if isinstance(name, ClientFqdn):
+            name, flags, rcode1, rcode2 = name.name, name.flags, name.rcode1, name.rcode2
+        elif isinstance(name, _ty.Mapping):
+            mapping = name
+            name = mapping.get("name", "")
+            flags = int(mapping.get("flags", 0))
+            rcode1 = int(mapping.get("rcode1", 0))
+            rcode2 = int(mapping.get("rcode2", 0))
+        for label, value in (("flags", flags), ("rcode1", rcode1), ("rcode2", rcode2)):
+            if not 0 <= int(value) <= 0xFF:
+                raise ValueError(f"ClientFqdn {label} must fit in one octet")
+        self.name = str(name)
+        self.flags = int(flags)
+        self.rcode1 = int(rcode1)
+        self.rcode2 = int(rcode2)
+
+    @property
+    def encoded(self) -> bool:
+        """Whether the name is carried in DNS wire format (the E bit)."""
+        return bool(self.flags & self.FLAG_E)
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 3:
+            raise ValueError("ClientFqdn option is truncated: needs at least 3 octets")
+        flags, rcode1, rcode2 = option[0], option[1], option[2]
+        if flags & 0xF0:
+            raise ValueError(f"ClientFqdn reserved flag bits set: {flags:#04x}")
+        rest = option[3:]
+        if flags & cls.FLAG_E:
+            name, read = _decode_domain_name(rest)
+            if read != len(rest):
+                raise ValueError("ClientFqdn has trailing data after the name")
+        else:
+            name = rest.tobytes().split(b"\x00", 1)[0].decode("utf-8")
+        return cls(name, flags, rcode1, rcode2), len(option)
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        start = len(data)
+        data.append(self.flags)
+        data.append(self.rcode1)
+        data.append(self.rcode2)
+        if self.encoded:
+            data.extend(_encode_domain_name(self.name))
+        else:
+            data.extend(self.name.encode("utf-8"))
+        return len(data) - start
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ClientFqdn):
+            return NotImplemented
+        return (self.name, self.flags, self.rcode1, self.rcode2) == (
+            other.name,
+            other.flags,
+            other.rcode1,
+            other.rcode2,
+        )
+
+    def __hash__(self) -> int:
+        return hash((self.name, self.flags, self.rcode1, self.rcode2))
+
+    def __repr__(self) -> str:
+        return (
+            f"ClientFqdn(name={self.name!r}, flags={self.flags:#04x}, "
+            f"rcode1={self.rcode1}, rcode2={self.rcode2})"
+        )
+
+    def __json__(self) -> dict[str, _ty.Any]:
+        return {
+            "name": self.name,
+            "flags": self.flags,
+            "rcode1": self.rcode1,
+            "rcode2": self.rcode2,
+        }
+
+
+class SipServers(DhcpOptionType):
+    """RFC 3361 SIP servers: an encoding octet, then names or addresses.
+
+    Encoding 0 is a list of RFC 1035 names, encoding 1 a list of IPv4 addresses.
+    Registering this as a bare address list meant a conformant option could not
+    be decoded at all, and an emitted one had no encoding octet -- so a SIP phone
+    read the first address octet as the encoding and rejected the option.
+    """
+
+    ENCODING_DOMAIN = 0
+    ENCODING_ADDRESS = 1
+
+    # See ClientFqdn: declared to keep mypy out of a circular inference.
+    encoding: int
+    values: list[str]
+
+    def __init__(self, values: _ty.Any = (), encoding: _ty.Optional[int] = None) -> None:
+        if isinstance(values, SipServers):
+            values, encoding = list(values.values), values.encoding
+        elif isinstance(values, _ty.Mapping):
+            mapping = values
+            values = mapping.get("values", ())
+            raw_encoding = mapping.get("encoding")
+            if isinstance(raw_encoding, str):
+                raw_encoding = (
+                    self.ENCODING_ADDRESS
+                    if raw_encoding == "address"
+                    else self.ENCODING_DOMAIN
+                )
+            encoding = raw_encoding
+        if isinstance(values, (str, bytes)):
+            values = [values]
+        items = [str(value) for value in values]
+        if encoding is None:
+            # Infer, so SipServers(["192.0.2.1"]) does the obvious thing.
+            encoding = self.ENCODING_ADDRESS
+            for item in items:
+                try:
+                    _IP(item)
+                except Exception:
+                    encoding = self.ENCODING_DOMAIN
+                    break
+        if encoding not in (self.ENCODING_DOMAIN, self.ENCODING_ADDRESS):
+            raise ValueError(f"SipServers encoding must be 0 or 1, got {encoding}")
+        if encoding == self.ENCODING_ADDRESS:
+            items = [str(_IP(item)) for item in items]
+        self.encoding = int(encoding)
+        self.values = items
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 1:
+            raise ValueError("SipServers option is truncated: missing encoding octet")
+        encoding = option[0]
+        body = option[1:]
+        if encoding == cls.ENCODING_ADDRESS:
+            if len(body) % 4:
+                raise ValueError(
+                    "SipServers address list length must be a multiple of 4 plus one"
+                )
+            values = [
+                str(_IP(body[idx : idx + 4].tobytes()))
+                for idx in range(0, len(body), 4)
+            ]
+        elif encoding == cls.ENCODING_DOMAIN:
+            values = []
+            idx = 0
+            while idx < len(body):
+                name, read = _decode_domain_name(body, idx)
+                values.append(name)
+                idx += read
+        else:
+            raise ValueError(f"SipServers encoding must be 0 or 1, got {encoding}")
+        return cls(values, encoding), len(option)
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        start = len(data)
+        data.append(self.encoding)
+        if self.encoding == self.ENCODING_ADDRESS:
+            for value in self.values:
+                data.extend(_IP(value).packed)
+        else:
+            for value in self.values:
+                data.extend(_encode_domain_name(value))
+        return len(data) - start
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, SipServers):
+            return NotImplemented
+        return (self.encoding, self.values) == (other.encoding, other.values)
+
+    def __hash__(self) -> int:
+        return hash((self.encoding, tuple(self.values)))
+
+    def __repr__(self) -> str:
+        kind = "address" if self.encoding == self.ENCODING_ADDRESS else "domain"
+        return f"SipServers({kind}, {self.values!r})"
+
+    def __json__(self) -> dict[str, _ty.Any]:
+        return {
+            "encoding": "address" if self.encoding == self.ENCODING_ADDRESS else "domain",
+            "values": list(self.values),
+        }

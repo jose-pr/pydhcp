@@ -10,6 +10,8 @@ from .net import (
     StaticRoute as StaticRoute,
     DomainList as DomainList,
     RdnssSelection as RdnssSelection,
+    ClientFqdn as ClientFqdn,
+    SipServers as SipServers,
 )
 from .scalar import (
     Bytes as Bytes,
@@ -80,6 +82,8 @@ __all__ = [
     "StaticRoute",
     "DomainList",
     "RdnssSelection",
+    "ClientFqdn",
+    "SipServers",
     "Bytes",
     "UriList",
     "String",

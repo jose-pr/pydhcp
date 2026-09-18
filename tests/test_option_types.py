@@ -595,3 +595,100 @@ def test_domainlist_still_follows_backward_pointers():
 
     assert list(decoded) == ["example.com", "sub.example.com"]
     assert length == len(payload)
+
+
+# --- RFC 4702 client FQDN (81), RFC 3361 SIP servers (120), RFC 2937 search (117) ---
+
+
+def test_client_fqdn_decodes_the_form_windows_clients_send():
+    """Flags/RCODE1/RCODE2 then an ASCII name, flags = 0.
+
+    Registered as a plain String this decoded to the EMPTY STRING -- String
+    splits at the first NUL -- so a server reading option 81 for DDNS saw no
+    name at all, with no error to notice.
+    """
+    from pydhcp.options.type import ClientFqdn
+
+    wire = bytes([0x00, 0x00, 0x00]) + b"DESKTOP-K7N2A91"
+    decoded = ClientFqdn._dhcp_decode(bytearray(wire))
+
+    assert decoded.name == "DESKTOP-K7N2A91"
+    assert decoded.flags == 0 and not decoded.encoded
+    assert bytes(decoded._dhcp_encode()) == wire
+
+
+def test_client_fqdn_round_trips_the_canonical_encoded_form():
+    """E bit set means RFC 1035 wire format (RFC 4702 s2.1)."""
+    from pydhcp.options.type import ClientFqdn
+
+    value = ClientFqdn("pc-lab7.example.com", flags=ClientFqdn.FLAG_E | ClientFqdn.FLAG_S)
+    wire = bytes(value._dhcp_encode())
+
+    assert wire[:3] == bytes([0x05, 0x00, 0x00])
+    assert wire[3:] == bytes([7]) + b"pc-lab7" + bytes([7]) + b"example" + bytes([3]) + b"com" + bytes([0])
+    assert ClientFqdn._dhcp_decode(bytearray(wire)) == value
+
+
+def test_client_fqdn_rejects_malformed_input():
+    from pydhcp.options.type import ClientFqdn
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        ClientFqdn._dhcp_decode(bytearray([0x00, 0x00]))          # shorter than 3
+    with _pytest.raises(ValueError):
+        ClientFqdn._dhcp_decode(bytearray([0xF0, 0x00, 0x00]))     # reserved bits set
+    with _pytest.raises(ValueError):
+        # E bit set, but a compression pointer, which RFC 4702 s3.1 forbids
+        ClientFqdn._dhcp_decode(bytearray([0x04, 0x00, 0x00, 0xC0, 0x00]))
+
+
+def test_sip_servers_carries_the_encoding_octet():
+    """RFC 3361 s3.1: enc 1 is an address list, and its length must be a
+    multiple of 4 plus one. Without the octet, a phone reads the first address
+    byte as the encoding and rejects the option."""
+    from pydhcp.options.type import SipServers
+
+    value = SipServers(["192.0.2.1", "192.0.2.2"])
+    wire = bytes(value._dhcp_encode())
+
+    assert wire[0] == SipServers.ENCODING_ADDRESS
+    assert len(wire) % 4 == 1
+    assert SipServers._dhcp_decode(bytearray(wire)) == value
+    assert value.__json__() == {"encoding": "address", "values": ["192.0.2.1", "192.0.2.2"]}
+
+
+def test_sip_servers_domain_encoding():
+    from pydhcp.options.type import SipServers
+
+    value = SipServers(["sip.example.com"], SipServers.ENCODING_DOMAIN)
+    wire = bytes(value._dhcp_encode())
+
+    assert wire[0] == SipServers.ENCODING_DOMAIN
+    assert SipServers._dhcp_decode(bytearray(wire)) == value
+    # Inference picks domain encoding for something that is not an address.
+    assert SipServers(["sip.example.com"]).encoding == SipServers.ENCODING_DOMAIN
+
+
+def test_sip_servers_rejects_bad_encodings_and_lengths():
+    from pydhcp.options.type import SipServers
+    import pytest as _pytest
+
+    with _pytest.raises(ValueError):
+        SipServers._dhcp_decode(bytearray())                        # no encoding octet
+    with _pytest.raises(ValueError):
+        SipServers._dhcp_decode(bytearray([0x0A, 0x01, 0x02]))       # reserved encoding
+    with _pytest.raises(ValueError):
+        SipServers._dhcp_decode(bytearray([0x01, 0xC0, 0x00, 0x02]))  # not a multiple of 4
+
+
+def test_name_service_search_is_a_list_of_option_codes():
+    """RFC 2937 s3: 16-bit name service option codes, not domain names."""
+    from pydhcp.options import DhcpOptions, DhcpOptionCode
+
+    options = DhcpOptions()
+    options[DhcpOptionCode.NAME_SERVICE_SEARCH] = [6, 44]
+
+    assert bytes(options.get(DhcpOptionCode.NAME_SERVICE_SEARCH, decode=False)) == bytes(
+        [0x00, 0x06, 0x00, 0x2C]
+    )
+    assert options.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == [6, 44]

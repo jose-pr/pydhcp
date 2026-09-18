@@ -10,7 +10,9 @@ DhcpOptionCode.MERIT_DUMP_FILE.register_type(String)
 DhcpOptionCode.BROADCAST_ADDRESS.register_type(IPv4Address)
 DhcpOptionCode.BOOTFILE_NAME.register_type(String)
 DhcpOptionCode.BOOT_FILE_SIZE.register_type(U16)
-DhcpOptionCode.CLIENT_FQDN.register_type(String)
+# RFC 4702 s2.1: Flags, RCODE1, RCODE2, then the name -- not a bare string,
+# which silently dropped the name every Windows client sends.
+DhcpOptionCode.CLIENT_FQDN.register_type(ClientFqdn)
 # RFC 3442: the option carries one or more destination/router pairs, and a
 # server sending it SHOULD include the default route -- so real options
 # nearly always hold more than one.
@@ -77,7 +79,8 @@ DhcpOptionCode.NIS_SERVERS.register_type(List[IPv4Address])
 DhcpOptionCode.NTP_SERVERS.register_type(List[IPv4Address])
 DhcpOptionCode.OPTION_OVERLOAD.register_type(OptionOverload)
 DhcpOptionCode.PARAMETER_REQUEST_LIST.register_type(DhcpOptionCodes[DhcpOptionCode])
-DhcpOptionCode.NAME_SERVICE_SEARCH.register_type(DomainList)
+# RFC 2937 s3: a list of 16-bit name service option codes, not domain names.
+DhcpOptionCode.NAME_SERVICE_SEARCH.register_type(List[U16])
 DhcpOptionCode.SUBNET_SELECTION_OPTION.register_type(IPv4Address)
 DhcpOptionCode.REQUESTED_IP.register_type(IPv4Address)
 DhcpOptionCode.REBINDING_TIME.register_type(U32)
@@ -115,7 +118,8 @@ DhcpOptionCode.FINGER_SERVER.register_type(List[IPv4Address])
 DhcpOptionCode.IRC_SERVER.register_type(List[IPv4Address])
 DhcpOptionCode.STREETTALK_SERVER.register_type(List[IPv4Address])
 DhcpOptionCode.STDA_SERVER.register_type(List[IPv4Address])
-DhcpOptionCode.SIP_SERVERS.register_type(List[IPv4Address])
+# RFC 3361 s3.1: a leading encoding octet selects names (0) or addresses (1).
+DhcpOptionCode.SIP_SERVERS.register_type(SipServers)
 DhcpOptionCode.ARP_TIMEOUT.register_type(U32)
 DhcpOptionCode.IPV4_ADDRESS_MOS.register_type(MoSIpv4AddressList)
 DhcpOptionCode.IPV4_FQDN_MOS.register_type(MoSFqdnList)
