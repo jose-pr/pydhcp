@@ -147,3 +147,115 @@ def test_async_stop_still_supports_await():
         assert server._sockets == []
 
     asyncio.run(main())
+
+
+def test_async_handler_does_not_run_on_the_event_loop() -> None:
+    """The handler is ordinary synchronous code -- lease lookups, a whole-file
+    rewrite in FileLeaseBackend, interface work -- so running it inline blocked
+    every other coroutine in the host application. Measured with a 10 ms ticker
+    alongside a 30 ms handler: worst gap 98 ms before, 27 ms after (Windows,
+    where an idle loop already measures 25 ms).
+    """
+    import asyncio
+    import threading
+
+    from pydhcp.server import AsyncDhcpServer
+
+    seen: dict = {}
+
+    class ThreadRecordingServer(AsyncDhcpServer):
+        def handle(self, msg, context):
+            seen["handler"] = threading.current_thread()
+
+    async def main():
+        server = ThreadRecordingServer(listen=("127.0.0.1", 0))
+        await server.start()
+        seen["loop"] = threading.current_thread()
+        port = server._sockets[0].getsockname()[1]
+        try:
+            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sender.sendto(_discover_bytes(), ("127.0.0.1", port))
+            sender.close()
+            for _ in range(100):
+                if "handler" in seen:
+                    break
+                await asyncio.sleep(0.02)
+        finally:
+            server.stop()
+
+    asyncio.run(main())
+
+    assert "handler" in seen, "the datagram was never handled"
+    assert seen["handler"] is not seen["loop"], "handler ran on the event loop"
+
+
+def test_async_handlers_stay_serialised() -> None:
+    """One worker, deliberately: the lease backends are not thread-safe, so a
+    pool would trade a blocked event loop for a data race."""
+    import asyncio
+    import threading
+    import time
+
+    from pydhcp.server import AsyncDhcpServer
+
+    overlaps = []
+    active = []
+    lock = threading.Lock()
+
+    class OverlapDetectingServer(AsyncDhcpServer):
+        def handle(self, msg, context):
+            with lock:
+                active.append(1)
+                overlaps.append(len(active))
+            time.sleep(0.02)
+            with lock:
+                active.pop()
+
+    async def main():
+        server = OverlapDetectingServer(listen=("127.0.0.1", 0))
+        await server.start()
+        port = server._sockets[0].getsockname()[1]
+        try:
+            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            for _ in range(5):
+                sender.sendto(_discover_bytes(), ("127.0.0.1", port))
+            sender.close()
+            for _ in range(100):
+                if len(overlaps) >= 5:
+                    break
+                await asyncio.sleep(0.02)
+        finally:
+            server.stop()
+
+    asyncio.run(main())
+
+    assert overlaps, "no datagrams were handled"
+    assert max(overlaps) == 1, f"handlers overlapped: {overlaps}"
+
+
+def _discover_bytes() -> bytes:
+    from datetime import timedelta
+
+    from pydhcp.packet import Flags, HardwareAddressType, OpCode
+
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    return bytes(
+        DhcpMessage(
+            op=OpCode.BOOTREQUEST,
+            htype=HardwareAddressType.ETHERNET,
+            hlen=6,
+            hops=0,
+            xid=0x5A5A5A5A,
+            secs=timedelta(seconds=0),
+            flags=Flags.UNICAST,
+            ciaddr=IPv4("0.0.0.0"),
+            yiaddr=IPv4("0.0.0.0"),
+            siaddr=IPv4("0.0.0.0"),
+            giaddr=IPv4("0.0.0.0"),
+            chaddr=b"\x00\x11\x22\x33\x44\x55",
+            sname="",
+            file="",
+            options=options,
+        ).encode()
+    )

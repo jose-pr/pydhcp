@@ -6,6 +6,7 @@ import netimps as _netimps
 import select as _select
 import threading as _thread
 import struct as _struct
+import concurrent.futures as _futures
 import typing as _ty
 
 from . import network as _net, constants as _const
@@ -549,23 +550,23 @@ class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
         self.transport = _ty.cast(_asyncio.DatagramTransport, transport)
 
     def datagram_received(self, data: bytes, addr: tuple[str, int]) -> None:
-        try:
-            client = _net.SocketAddress(*addr)
-            msg = DhcpMessage.decode(memoryview(data))
-            self.listener.metrics.packets_received += 1
-            msg.log(client, _net.SocketAddress(self.sock), _logging.DEBUG)
-            interface = _resolve_interface(self.sock)
-            transport = UdpTransport(self.sock)
-            context = RequestContext(
-                transport=transport,
-                interface=interface,
-                client=client,
-                client_mac=msg.chaddr,
-            )
-            self.listener.handle(msg, context)
-        except Exception as e:
+        # Hand off rather than handle here. This runs on the event loop, and the
+        # handler is ordinary synchronous code -- lease lookups, a whole-file
+        # rewrite in FileLeaseBackend, interface work -- so doing it inline
+        # blocked every other coroutine in the host application for the duration
+        # and made the server strictly serial anyway.
+        self.listener._dispatch(data, addr, self.sock)
+
+    def error_received(self, exc: Exception) -> None:
+        # Without this, a UDP error (an ICMP port-unreachable from a previous
+        # send, typically) is swallowed by asyncio's default handler.
+        LOGGER.warning(f"Async listener socket error: {exc.__class__.__name__} | {exc}")
+
+    def connection_lost(self, exc: _ty.Optional[Exception]) -> None:
+        if exc is not None:
             LOGGER.error(
-                f"Encounter error handling async request from {addr} : {e.__class__.__name__} | {e}"
+                f"Async listener endpoint closed unexpectedly: "
+                f"{exc.__class__.__name__} | {exc}"
             )
 
 
@@ -586,7 +587,54 @@ class AsyncDhcpListener:
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._transports: list[_asyncio.DatagramTransport] = []
+        self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
         self.metrics = DhcpMetrics()
+
+    def _dispatch(
+        self, data: bytes, addr: tuple[str, int], sock: _socket.socket
+    ) -> None:
+        """Run one datagram's handling off the event loop.
+
+        Exactly one worker thread, so handlers still run one at a time and in
+        arrival order. That matters: the lease backends are not thread-safe, so a
+        pool here would trade a blocked event loop for a data race.
+        """
+        worker = self._worker
+        if worker is None:  # not started through start(); keep working anyway
+            self._handle_datagram(data, addr, sock)
+            return
+        future = worker.submit(self._handle_datagram, data, addr, sock)
+        future.add_done_callback(self._report_worker_result)
+
+    @staticmethod
+    def _report_worker_result(future: "_futures.Future[None]") -> None:
+        error = future.exception()
+        if error is not None:  # pragma: no cover - _handle_datagram catches
+            LOGGER.error(
+                f"Unhandled error in async handler: "
+                f"{error.__class__.__name__} | {error}"
+            )
+
+    def _handle_datagram(
+        self, data: bytes, addr: tuple[str, int], sock: _socket.socket
+    ) -> None:
+        try:
+            client = _net.SocketAddress(*addr)
+            msg = DhcpMessage.decode(memoryview(data))
+            self.metrics.packets_received += 1
+            msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
+            context = RequestContext(
+                transport=UdpTransport(sock),
+                interface=_resolve_interface(sock),
+                client=client,
+                client_mac=msg.chaddr,
+            )
+            self.handle(msg, context)
+        except Exception as e:
+            LOGGER.error(
+                f"Encounter error handling async request from {addr} : "
+                f"{e.__class__.__name__} | {e}"
+            )
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         pass
@@ -620,6 +668,10 @@ class AsyncDhcpListener:
 
     async def start(self) -> None:
         self.bind()
+        if self._worker is None:
+            self._worker = _futures.ThreadPoolExecutor(
+                max_workers=1, thread_name_prefix="pydhcp-async-handler"
+            )
         loop = _asyncio.get_running_loop()
         for sock in self._sockets:
             transport, _ = await loop.create_datagram_endpoint(
@@ -641,6 +693,12 @@ class AsyncDhcpListener:
         for transport in self._transports:
             transport.close()
         self._transports.clear()
+        worker, self._worker = self._worker, None
+        if worker is not None:
+            # Don't wait: stop() is called from the event loop, and a handler in
+            # flight may be doing exactly the blocking work this worker exists to
+            # keep off it.
+            worker.shutdown(wait=False)
         for sock in self._sockets:
             try:
                 sock.close()
