@@ -1,3 +1,4 @@
+import json
 import logging
 import pytest
 from datetime import timedelta
@@ -229,3 +230,46 @@ def test_decode_tolerates_non_utf8_sname_and_file():
         DhcpMessageType.DHCPDISCOVER
     )
     assert decoded.sname and decoded.file
+
+
+def test_non_utf8_sname_and_file_survive_a_re_encode():
+    """Tolerating the field is not enough -- a relay must forward it unchanged.
+
+    `file` is the PXE boot filename. Decoding with errors="replace" kept the
+    packet but destroyed the bytes: each octet became the three of U+FFFD, so
+    the forwarded name differed from the one the server sent, and near the fixed
+    64/128-octet width it was truncated as well. The client then asks its TFTP
+    server for a file that does not exist.
+    """
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    wire = bytearray(message.encode())
+    sname = b"caf\xe9-srv"
+    file = b"b\xfcte.cfg"
+    wire[44:108] = sname.ljust(64, b"\x00")
+    wire[108:236] = file.ljust(128, b"\x00")
+
+    decoded = DhcpMessage.decode(bytearray(wire))
+    out = bytes(decoded.encode())
+
+    assert out[44:108] == sname.ljust(64, b"\x00"), "sname octets were not preserved"
+    assert out[108:236] == file.ljust(128, b"\x00"), "file octets were not preserved"
+
+    # Rendering stays safe: no preserved octet reaches a terminal or serializer.
+    decoded.dumps().encode("utf-8")
+    mapping = decoded.to_mapping()
+    assert "�" in mapping["sname"] and "�" in mapping["file"]
+    json.dumps(mapping, ensure_ascii=False).encode("utf-8")
+
+
+def test_valid_utf8_sname_is_unchanged_by_the_preserving_path():
+    """The ordinary case must not move."""
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    wire = bytearray(message.encode())
+    name = "münchen-srv".encode("utf-8")
+    wire[44:108] = name.ljust(64, b"\x00")
+
+    decoded = DhcpMessage.decode(bytearray(wire))
+
+    assert decoded.sname == "münchen-srv"
+    assert bytes(decoded.encode())[44:108] == name.ljust(64, b"\x00")
+    assert decoded.to_mapping()["sname"] == "münchen-srv"

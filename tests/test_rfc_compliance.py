@@ -115,9 +115,22 @@ def test_u32_validation_on_encode():
 
 
 def test_string_invalid_utf8():
-    """Bug 8: String decoding handles invalid UTF-8 gracefully using replacements."""
+    """Bug 8: String decoding handles invalid UTF-8 without losing the packet.
+
+    It also must not lose the *octets*: replacing them made a relay re-encode a
+    different hostname or boot filename than it received. They are preserved on
+    the value and shown as U+FFFD only where it is rendered.
+    """
     data = memoryview(b"\xff\xfe\x00padding")
     s, length = String._dhcp_read(data)
     assert isinstance(s, str)
     assert len(s) > 0
-    assert "\ufffd" in s
+
+    # the wire bytes survive a round trip
+    buf = bytearray()
+    s._dhcp_write(buf)
+    assert bytes(buf) == b"\xff\xfe"
+
+    # and the rendered form is safe to print or serialize
+    assert "\ufffd" in s.__json__()
+    s.__json__().encode("utf-8")

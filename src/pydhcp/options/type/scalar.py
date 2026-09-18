@@ -3,6 +3,7 @@ from collections.abc import Iterable
 import typing as _ty
 import enum as _enum
 from ...log import LOGGER
+from ... import nvt as _nvt
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
@@ -101,22 +102,25 @@ class UriList(DhcpOptionType, list[str]):
 
 
 class String(DhcpOptionType, str):
-    """RFC 2132 NVT-ASCII string with null termination on the wire."""
+    """RFC 2132 NVT-ASCII string with null termination on the wire.
+
+    Octets that are not valid UTF-8 are preserved rather than replaced, so a
+    hostname or boot filename in another encoding survives a decode/encode round
+    trip intact; `__json__` renders the display form. See `pydhcp.nvt`.
+    """
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
-        try:
-            decoded_text = text.decode("utf-8")
-        except UnicodeDecodeError:
-            LOGGER.warning(f"Option contains invalid UTF-8: {text.hex()}")
-            decoded_text = text.decode("utf-8", errors="replace")
-        return cls(decoded_text), len(option)
+        return cls(_nvt.decode(text, "Option string")), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:
-        text = self.encode()
+        text = _nvt.encode(self)
         data.extend(text)
         return len(text)
+
+    def __json__(self) -> str:
+        return _nvt.display(self)
 
 
 class Boolean(DhcpOptionType, int):

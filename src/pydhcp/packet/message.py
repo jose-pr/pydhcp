@@ -1,6 +1,6 @@
 from ..options import DhcpOptionCode, DhcpOptions, BaseDhcpOptionCode
 from ..options import type as _type
-from .. import network as _net, constants as _const
+from .. import network as _net, constants as _const, nvt as _nvt
 from . import enums as _enum
 from ..log import LOGGER
 import struct as _struct
@@ -91,19 +91,12 @@ def _decode_bootp_field(raw: memoryview, field: str) -> str:
     RFC 2131 specifies NVT ASCII for `sname` and `file`, but senders do put other
     encodings there, and rejecting the field threw away the whole packet -- its
     message type and client id included -- over a name the receiver usually does
-    not read. This matches the tolerance `String` already applies to option
-    payloads: warn and substitute. Byte fidelity is not preserved across a
-    re-encode when this fires.
+    not read. Undecodable octets are preserved rather than replaced, so a relay
+    re-encoding the message emits the name it received; `pydhcp.nvt` explains
+    why that matters most for `file`, which is the PXE boot filename.
     """
     text = raw.tobytes().split(_NULL, 1)[0]
-    try:
-        return text.decode()
-    except UnicodeDecodeError:
-        LOGGER.warning(
-            f"BOOTP {field} field contains invalid UTF-8, decoding with "
-            f"replacement: {text.hex()}"
-        )
-        return text.decode("utf-8", errors="replace")
+    return _nvt.decode(text, f"BOOTP {field} field")
 
 
 @_data.dataclass
@@ -183,8 +176,10 @@ class DhcpMessage:
             "siaddr": str(self.siaddr),
             "giaddr": str(self.giaddr),
             "chaddr": self.chaddr.hex(":").upper(),
-            "sname": self.sname,
-            "file": self.file,
+            # Display form: a mapping is written out as JSON/YAML/TOML/INI, and
+            # a preserved octet cannot be encoded by a strict serializer.
+            "sname": _nvt.display(self.sname),
+            "file": _nvt.display(self.file),
             "options": options,
         }
 
@@ -365,8 +360,8 @@ class DhcpMessage:
         # literal server name and boot file that decode moved out of them.
         if int(DhcpOptionCode.OPTION_OVERLOAD) in options:
             del options[int(DhcpOptionCode.OPTION_OVERLOAD)]
-        sname_bytes: _ty.Union[bytes, bytearray] = self.sname.encode()
-        file_bytes: _ty.Union[bytes, bytearray] = self.file.encode()
+        sname_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.sname)
+        file_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.file)
         options_field: _ty.Union[bytes, bytearray] = options.encode()
         if len(options_field) > max_options_field_size + 128 + 64:
             raise OverflowError("DHCP options exceed maximum packet size")
@@ -471,8 +466,8 @@ class DhcpMessage:
             ("Gateway Address", str(self.giaddr)),
             ("Hardware Address", f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
             ("Next Server (siaddr)", str(self.siaddr)),
-            ("Server Host Name", self.sname),
-            ("Bootfile", self.file),
+            ("Server Host Name", _nvt.display(self.sname)),
+            ("Bootfile", _nvt.display(self.file)),
         ]:
             lines.append(f"{name: <40}: {value}")
         lines.append(f"OPTIONS:")

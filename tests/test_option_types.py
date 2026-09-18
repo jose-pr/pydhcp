@@ -81,11 +81,15 @@ def test_string_option(caplog):
     assert decoded == "hello"
     assert length == 11
 
-    # UTF-8 decoding errors
+    # UTF-8 decoding errors are warned about, and the octets are kept so the
+    # value re-encodes to exactly what arrived.
     bad_bytes = b"\xff\xfe\xff"
     with caplog.at_level(logging.WARNING):
         decoded_bad, _ = String._dhcp_read(memoryview(bad_bytes))
-    assert "Option contains invalid UTF-8" in caplog.text
+    assert "not valid UTF-8" in caplog.text
+    round_tripped = bytearray()
+    decoded_bad._dhcp_write(round_tripped)
+    assert bytes(round_tripped) == bad_bytes
 
 
 def test_boolean_option():
