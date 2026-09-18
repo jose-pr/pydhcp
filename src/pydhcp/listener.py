@@ -193,17 +193,42 @@ def _parselisteners(
     return _listen
 
 
-def _resolve_interface(sock: _socket.socket) -> _net.NetworkInterface:
-    """Find the NetworkInterface a bound socket sits on.
+def _resolve_interface(
+    sock: _socket.socket,
+    pkt_local_ip: _ty.Optional[_net.IPv4] = None,
+    pkt_ifindex: _ty.Optional[int] = None,
+) -> _net.NetworkInterface:
+    """Find the NetworkInterface a datagram actually arrived on.
 
-    Falls back to a synthetic host-route entry when no local interface owns the
-    address -- which happens for a wildcard bind, where getsockname() reports
-    0.0.0.0. The synthetic entry keeps callers from having to special-case it.
+    ``pkt_local_ip``/``pkt_ifindex`` come from the ``IP_PKTINFO`` control message
+    and are authoritative when present: the pktinfo path only runs on a wildcard
+    bind, where ``getsockname()`` reports 0.0.0.0 -- precisely the information
+    pktinfo exists to supply. Use both, in order: the index picks the adapter,
+    the address picks which of its addresses (a NIC may hold several, and the
+    reply's SERVER_IDENTIFIER must be the right one).
+
+    Falls back to a synthetic host-route entry when nothing matches, which keeps
+    callers from having to special-case it.
     """
-    try:
-        local_ip, _ = sock.getsockname()
-    except Exception:
-        local_ip = "127.0.0.1"
+    if pkt_ifindex:
+        fallback: _ty.Optional[_net.NetworkInterface] = None
+        for index, interface in _net._iter_indexed_interfaces(family=4):
+            if index != pkt_ifindex:
+                continue
+            if pkt_local_ip is not None and interface.ip == pkt_local_ip:
+                return interface
+            if fallback is None:
+                fallback = interface
+        if fallback is not None and pkt_local_ip is None:
+            return fallback
+
+    if pkt_local_ip is not None:
+        local_ip = str(pkt_local_ip)
+    else:
+        try:
+            local_ip, _ = sock.getsockname()
+        except Exception:
+            local_ip = "127.0.0.1"
 
     # Matched against pydhcp's own per-address view, since the caller expects a
     # NetworkInterface. netimps.interface_for() answers the same question but
@@ -359,7 +384,7 @@ class DhcpListener:
                                     break
                             msg = DhcpMessage.decode(memoryview(data))
                             client = _net.SocketAddress(*client_tuple)
-                            interface = _resolve_interface(socket)
+                            interface = _resolve_interface(socket, local_ip, ifindex)
                             pkt_transport = PktInfoUdpTransport(socket)
                             context = RequestContext(
                                 transport=pkt_transport,

@@ -193,11 +193,26 @@ def host_ip_interfaces(
     """
     if filter is True:
         filter = lambda ni: ni.ip not in APIPA
+    for _index, ni in _iter_indexed_interfaces(family=family):
+        if not filter or filter(ni):
+            yield ni
+
+
+def _iter_indexed_interfaces(
+    family: _ty.Optional[int] = 4,
+) -> _ty.Iterator[tuple[int, NetworkInterface]]:
+    """Yield ``(if_index, NetworkInterface)`` once per local address.
+
+    Internal: :class:`NetworkInterface` is keyed by address and deliberately
+    carries no interface index, but the ``IP_PKTINFO`` receive path needs the
+    index to pick the adapter a datagram arrived on. Keeping the construction
+    here means :func:`host_ip_interfaces` and that path cannot drift apart.
+
+    ``if_index`` is netimps' ``if_nametoindex`` value, or ``0`` if unknown.
+    """
     for iface, address in _netimps.iter_addresses(family=family):
-        ni = NetworkInterface(
+        yield iface.index, NetworkInterface(
             name=iface.name,
             ip_interface=address,
             mac=MACAddress(iface.mac) if iface.mac else None,
         )
-        if not filter or filter(ni):
-            yield ni
