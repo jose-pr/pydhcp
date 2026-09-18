@@ -1,3 +1,4 @@
+import pytest
 import ipaddress
 from datetime import datetime, timedelta
 from unittest.mock import Mock
@@ -351,3 +352,105 @@ def test_inform_uses_the_documented_allocation_free_hook() -> None:
 
     reply, _dest, _port = _sent(transport)
     assert reply.options.get(DhcpOptionCode.DNS) == [IPv4("9.9.9.9")]
+
+
+# --- Stock allocator safety (RFC 2131 4.3.1/4.3.3) ---
+
+
+class _LoopbackServer(DhcpServer):
+    """Stock allocator, but with a served interface that exists in tests.
+
+    The real acquire_lease resolves server_id against the host's interfaces;
+    pinning one keeps the address-validation logic under test without depending
+    on whatever this machine happens to have configured.
+    """
+
+    NETWORK = ipaddress.IPv4Interface("10.0.0.1/24")
+
+    def acquire_lease(self, client_id, server_id, msg):
+        interface = NetworkInterface("test0", self.NETWORK)
+        requested = msg.options.get(DhcpOptionCode.REQUESTED_IP)
+        ip = IPv4(str(requested)) if requested is not None else msg.ciaddr
+        refusal = self._address_refusal(ip, interface, client_id)
+        if refusal is not None:
+            return None
+        return self.lease_backend.allocate(client_id, ip, 3600)
+
+
+def _request_for(ip: str, client: bytes = b"\x01\x02\x03") -> DhcpMessage:
+    msg = _message(DhcpMessageType.DHCPDISCOVER)
+    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4(ip)
+    msg.options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(client)
+    return msg
+
+
+@pytest.mark.parametrize(
+    "address,reason",
+    [
+        ("192.168.5.5", "outside the served network"),
+        ("10.0.0.1", "the server's own address"),
+        ("10.0.0.0", "the network address"),
+        ("10.0.0.255", "the broadcast address"),
+    ],
+)
+def test_allocator_refuses_addresses_it_must_not_hand_out(address, reason) -> None:
+    server = _LoopbackServer()
+
+    assert server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for(address)) is None
+
+
+def test_allocator_refuses_an_address_another_client_holds() -> None:
+    server = _LoopbackServer()
+    server.lease_backend.allocate("client-a", IPv4("10.0.0.50"), 3600)
+
+    assert server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50")) is None
+    # The holder itself is still served.
+    assert server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.50")) is not None
+
+
+def test_allocator_grants_a_free_in_subnet_address() -> None:
+    server = _LoopbackServer()
+
+    lease = server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.50"))
+
+    assert lease is not None and lease.ip == IPv4("10.0.0.50")
+
+
+def test_declined_address_is_quarantined_and_not_reoffered() -> None:
+    """RFC 2131 4.3.3: the client found the address in use, so the server must
+    not hand it out again -- releasing the binding alone left it first in line."""
+    server = _LoopbackServer()
+    server.lease_backend.allocate("client-a", IPv4("10.0.0.50"), 3600)
+
+    decline = _message(DhcpMessageType.DHCPDECLINE)
+    decline.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")
+    server.handle(decline, _context(Mock()))
+
+    assert IPv4("10.0.0.50") in server._declined
+    assert server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50")) is None
+
+
+def test_quarantine_is_bounded_and_expires() -> None:
+    server = _LoopbackServer()
+    server.MAX_DECLINED_ADDRESSES = 3
+    for last in range(5):
+        server.quarantine_address(IPv4(f"10.0.0.{10 + last}"))
+    assert len(server._declined) == 3
+    assert IPv4("10.0.0.10") not in server._declined
+
+    server.DECLINE_QUARANTINE_SECONDS = -1.0  # already elapsed
+    server.quarantine_address(IPv4("10.0.0.60"))
+    assert server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.60")) is not None
+
+
+def test_client_identifier_is_echoed() -> None:
+    """RFC 6842: when the client sends option 61 the server MUST return it."""
+    server = _LoopbackServer()
+    transport = Mock()
+
+    server.handle(_request_for("10.0.0.50", client=b"\x01\xaa\xbb"), _context(transport))
+
+    reply, _dest, _port = _sent(transport)
+    assert reply.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False) == bytearray(
+        b"\x01\xaa\xbb"
+    )

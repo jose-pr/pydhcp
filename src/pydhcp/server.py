@@ -10,6 +10,7 @@ from .options import type as _type
 from .log import LOGGER
 import logging as _logging
 import datetime as _dt
+import time as _time
 import typing as _ty
 from math import inf as _inf
 
@@ -17,6 +18,13 @@ from .lease import DhcpLease, LeaseBackend
 
 class DhcpServer(_Base):
     DEFAULT_PORTS = (_enum.DhcpPort.SERVER,)
+
+    #: How long a DHCPDECLINEd address stays out of the pool.
+    DECLINE_QUARANTINE_SECONDS: float = 600.0
+
+    #: Upper bound on quarantined addresses, so a DECLINE flood cannot grow
+    #: memory without limit; the oldest entry is evicted first.
+    MAX_DECLINED_ADDRESSES = 1024
 
     def __init__(
         self,
@@ -34,6 +42,7 @@ class DhcpServer(_Base):
         )
         from .lease import InMemoryLeaseBackend
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
+        self._declined: _ty.OrderedDict[_net.IPv4, float] = _ty.OrderedDict()
 
     def acquire_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage) -> _ty.Optional[DhcpLease]:
         """Return a lease for a client message.
@@ -72,6 +81,13 @@ class DhcpServer(_Base):
         if ip is None:
             return None
 
+        refusal = self._address_refusal(ip, _server, client_id)
+        if refusal is not None:
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] Refusing {ip} for {client_id}: {refusal}"
+            )
+            return None
+
         options = DhcpOptions()
         options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
         options[DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
@@ -84,11 +100,66 @@ class DhcpServer(_Base):
             self.metrics.leases_allocated += 1
         return lease
 
+    def _address_refusal(
+        self,
+        ip: _net.IPv4,
+        interface: _net.NetworkInterface,
+        client_id: str,
+    ) -> _ty.Optional[str]:
+        """Say why `ip` must not be handed to `client_id`, or None if it may be.
+
+        The base allocator takes the client's requested address, and took it on
+        trust: any client could claim the server's own address, the broadcast
+        address, something on a different subnet, or an address another client is
+        already using -- and the server would record the binding and confirm it.
+        """
+        network = interface.network
+        if ip not in network:
+            return f"outside the served network {network}"
+        if ip == interface.ip:
+            return "this is the server's own address"
+        if network.prefixlen < 31:
+            # /31 and /32 have no network or broadcast address to reserve
+            # (RFC 3021), so the check would wrongly exclude both usable hosts.
+            if ip == network.network_address:
+                return "this is the network address"
+            if ip == network.broadcast_address:
+                return "this is the broadcast address"
+
+        declined_until = self._declined.get(ip)
+        if declined_until is not None:
+            if declined_until > _time.monotonic():
+                return "address is quarantined after a DHCPDECLINE"
+            del self._declined[ip]
+
+        lookup_by_ip = getattr(self.lease_backend, "lookup_by_ip", None)
+        if lookup_by_ip is not None:
+            holder = lookup_by_ip(ip)
+            if holder is not None and holder != client_id:
+                return f"already leased to {holder}"
+        return None
+
+    def quarantine_address(self, ip: _net.IPv4) -> None:
+        """Stop offering `ip` for `DECLINE_QUARANTINE_SECONDS`.
+
+        RFC 2131 4.3.3: a DHCPDECLINE says the client found the address already
+        in use, so the server MUST NOT hand it out again. Releasing the binding
+        alone left it first in line to be offered to the next client, which
+        would collide with whatever is really using it. The map is bounded, and
+        entries expire, so a DECLINE flood cannot exhaust memory or permanently
+        consume a pool.
+        """
+        self._declined[ip] = _time.monotonic() + self.DECLINE_QUARANTINE_SECONDS
+        self._declined.move_to_end(ip)
+        while len(self._declined) > self.MAX_DECLINED_ADDRESSES:
+            self._declined.popitem(last=False)
+
     def release_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage) -> None:
         """Release any lease associated with `client_id`.
 
-        Override this method when lease release needs to update an external store,
-        quarantine declined addresses, or emit custom audit records.
+        Override this method when lease release needs to update an external store
+        or emit custom audit records. Quarantining a declined address is handled
+        by `quarantine_address`, which `handle_decline` calls before this.
         """
         if self.lease_backend.release(client_id):
             self.metrics.leases_released += 1
@@ -214,6 +285,16 @@ class DhcpServer(_Base):
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
         LOGGER.warning(f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}")
+        declined: _ty.Optional[_net.IPv4] = msg.options.get(
+            DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+        )
+        if declined is None and msg.ciaddr != _net.WILDCARD_IPv4:
+            declined = msg.ciaddr
+        if declined is None:
+            existing = self.lease_backend.lookup(client_id)
+            declined = existing.ip if existing is not None else None
+        if declined is not None:
+            self.quarantine_address(declined)
         self.release_lease(client_id, actual_server_id, msg)
 
     def handle_release(self, msg: DhcpMessage, context: RequestContext) -> None:
@@ -284,6 +365,14 @@ class DhcpServer(_Base):
         relay_info = msg.options.get(DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False)
         if relay_info is not None:
             resp.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
+        client_identifier = msg.options.get(
+            DhcpOptionCode.CLIENT_IDENTIFIER, decode=False
+        )
+        if client_identifier is not None:
+            # RFC 6842 updates RFC 2131: when the client sends a client
+            # identifier the server MUST return it unchanged. Clients that key
+            # their state on it otherwise cannot match the reply to the request.
+            resp.options[DhcpOptionCode.CLIENT_IDENTIFIER] = client_identifier
         return resp
 
     def _filter_and_send(

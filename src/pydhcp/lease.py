@@ -62,6 +62,21 @@ class InMemoryLeaseBackend:
             return None
         return lease
 
+    def lookup_by_ip(self, ip: IPv4) -> _ty.Optional[str]:
+        """Return the client currently holding `ip`, if any.
+
+        Optional backend extension, not part of the `LeaseBackend` Protocol: a
+        backend that does not provide it simply skips the allocator's
+        already-in-use check. Without it there is no way to ask "who holds this
+        address", so a server had no way to avoid handing one client an address
+        another client is already using.
+        """
+        for client_id in list(self._leases):
+            lease = self.lookup(client_id)
+            if lease is not None and lease.ip == ip:
+                return client_id
+        return None
+
     def release(self, client_id: str) -> bool:
         if client_id in self._leases:
             del self._leases[client_id]
