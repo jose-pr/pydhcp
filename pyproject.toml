@@ -75,6 +75,7 @@ target-version = ["py39"]
 # accepts, not a choice. Static checking therefore uses 3.10 semantics while the
 # floor is verified by actually running the suite on 3.9, which the test matrix
 # and release gate both do. Do not "fix" this to 3.9; mypy will refuse to start.
+# Owner decision, 2026-09-18: keep the 3.9 floor, check types at >=3.10.
 python_version = "3.10"
 strict = true
 warn_return_any = true
