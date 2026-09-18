@@ -171,6 +171,26 @@ class DhcpServer(_Base):
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
         LOGGER.info(f"[XID={msg.xid:08x}] DHCPREQUEST from {context.client}|{client_id}")
+
+        # INIT-REBOOT: no server identifier, a requested address, and ciaddr 0.
+        # RFC 2131 4.3.2 -- "If the server has no record of this client, then it
+        # MUST remain silent, and MAY output a warning". Allocating here instead
+        # makes the server answer for clients that belong to another server on
+        # the same segment, i.e. behave as a rogue.
+        if (
+            msg.options.get(DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address)
+            is None
+            and msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address)
+            is not None
+            and msg.ciaddr == _net.WILDCARD_IPv4
+            and self.lease_backend.lookup(client_id) is None
+        ):
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] INIT-REBOOT from {context.client}|{client_id} "
+                "with no record of this client, remaining silent"
+            )
+            return
+
         lease = self.acquire_lease(client_id, actual_server_id, msg)
         if not lease:
             LOGGER.info(
@@ -208,13 +228,17 @@ class DhcpServer(_Base):
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
         LOGGER.info(f"[XID={msg.xid:08x}] DHCPINFORM from {context.client}|{client_id}")
-        lease = self.acquire_lease(client_id, actual_server_id, msg)
-        if not lease:
-            lease = DhcpLease(
-                _net.WILDCARD_IPv4,
-                _inf,
-                self.get_inform_options(actual_server_id, msg),
-            )
+        # RFC 2131 4.3.5: a DHCPINFORM client already has its address and is
+        # asking only for configuration. Routing this through acquire_lease
+        # created or renewed a binding for a client that never asked for one --
+        # so an INFORM flood grew the lease store -- and bypassed the
+        # allocation-free hook documented for exactly this path whenever a
+        # binding happened to exist.
+        lease = DhcpLease(
+            _net.WILDCARD_IPv4,
+            _inf,
+            self.get_inform_options(actual_server_id, msg),
+        )
         resp = self._create_response(msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPACK)
         if DhcpOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
             del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]

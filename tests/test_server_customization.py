@@ -189,8 +189,16 @@ class _NakServer(DhcpServer):
 
 
 def _nak_request(giaddr: str = "0.0.0.0", requested: str = "10.0.0.99") -> DhcpMessage:
+    """A SELECTING DHCPREQUEST asking for an address the server will not grant.
+
+    The server identifier names this server, which is what puts the request in
+    SELECTING rather than INIT-REBOOT: an INIT-REBOOT request from a client the
+    server has no record of must be answered with silence, not a NAK
+    (RFC 2131 4.3.2).
+    """
     msg = _message(DhcpMessageType.DHCPREQUEST)
     msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4(requested)
+    msg.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("127.0.0.1")
     msg.giaddr = IPv4(giaddr)
     return msg
 
@@ -269,3 +277,77 @@ def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() ->
     assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
     assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
     assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in reply.options
+
+
+# --- RFC 2131 4.3.2 / 4.3.5: INIT-REBOOT silence and DHCPINFORM ---
+
+
+def test_init_reboot_from_an_unknown_client_is_answered_with_silence() -> None:
+    """RFC 2131 4.3.2: with no record of the client the server MUST remain
+    silent. Answering makes it a rogue server for clients that belong to another
+    server on the same segment."""
+    msg = _message(DhcpMessageType.DHCPREQUEST)
+    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.99")  # no server id
+    transport = Mock()
+
+    _NakServer().handle(msg, _context(transport))
+
+    transport.send.assert_not_called()
+
+
+def test_init_reboot_from_a_known_client_is_answered() -> None:
+    """The silence rule keys on having no record, not on the message shape."""
+    server = _NakServer()
+    msg = _message(DhcpMessageType.DHCPREQUEST)
+    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
+    server.lease_backend.allocate(msg.client_id(), IPv4("10.0.0.10"), 3600)
+    transport = Mock()
+
+    server.handle(msg, _context(transport))
+
+    reply, _dest, _port = _sent(transport)
+    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+
+
+def test_inform_does_not_create_a_lease() -> None:
+    """RFC 2131 4.3.5: an INFORM client already has its address and is asking
+    only for configuration. Allocating let an INFORM flood grow the store."""
+    class AllocatingServer(DhcpServer):
+        """Allocates through the backend, as the stock acquire_lease does."""
+
+        def acquire_lease(self, client_id, server_id, msg):
+            return self.lease_backend.allocate(client_id, IPv4("10.0.0.10"), 3600)
+
+    server = AllocatingServer()
+    msg = _message(DhcpMessageType.DHCPINFORM)
+    msg.ciaddr = IPv4("10.0.0.77")
+    transport = Mock()
+
+    server.handle(msg, _context(transport))
+
+    reply, _dest, _port = _sent(transport)
+    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+    assert reply.yiaddr == IPv4("0.0.0.0")
+    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
+    assert server.lease_backend.lookup(msg.client_id()) is None
+
+
+def test_inform_uses_the_documented_allocation_free_hook() -> None:
+    """get_inform_options is documented as the INFORM path's hook, but a client
+    that happened to hold a lease bypassed it entirely."""
+    class InformServer(_NakServer):
+        def get_inform_options(self, server_id, msg):
+            options = DhcpOptions()
+            options[DhcpOptionCode.DNS] = [IPv4("9.9.9.9")]
+            return options
+
+    server = InformServer()
+    msg = _message(DhcpMessageType.DHCPINFORM)
+    msg.ciaddr = IPv4("10.0.0.77")
+    server.lease_backend.allocate(msg.client_id(), IPv4("10.0.0.10"), 3600)
+    transport = Mock()
+
+    server.handle(msg, _context(transport))
+
+    reply, _dest, _port = _sent(transport)
+    assert reply.options.get(DhcpOptionCode.DNS) == [IPv4("9.9.9.9")]
