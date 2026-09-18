@@ -263,6 +263,9 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
             self.sink = sink
             self.hook = hook
             self.stopped = False
+            # Part of the contract the CLI reads after listen() returns, to tell
+            # a hook failure from an ordinary shutdown.
+            self.hook_error = None
 
         def bind(self):
             pass
@@ -467,3 +470,30 @@ def test_capture_allows_toml_per_capture(tmp_path) -> None:
 
     written = list(tmp_path.glob("*.toml"))
     assert len(written) == 1
+
+
+def test_capture_stdout_stream_flushes_each_record(monkeypatch) -> None:
+    """Piped into `jq` or `tee`, stdout is block-buffered: a live capture showed
+    nothing for ~8 KB or until it exited, and lost whatever was buffered if it
+    was killed."""
+    import io
+
+    class CountingStdout(io.StringIO):
+        flushes = 0
+
+        def flush(self) -> None:
+            type(self).flushes += 1
+
+    stdout = CountingStdout()
+    monkeypatch.setattr(sys, "stdout", stdout)
+
+    for _ in range(3):
+        _write_capture_record(
+            _capture_event(),
+            output=None,
+            output_mode="stream",
+            packet_format="json",
+            state={"first": True},
+        )
+
+    assert CountingStdout.flushes >= 3, "records are not flushed as they are written"

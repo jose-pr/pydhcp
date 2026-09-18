@@ -282,6 +282,10 @@ def _write_capture_record(
         sys.stdout.write(record)
         if not record.endswith("\n"):
             sys.stdout.write("\n")
+        # Flush per record: piped into `jq` or `tee`, stdout is block-buffered,
+        # so a live capture showed nothing for ~8 KB or until it exited -- and
+        # lost whatever was still buffered if it was killed.
+        sys.stdout.flush()
         return payload
 
     path = pathlib.Path(target)
@@ -380,6 +384,7 @@ class Capture(LoggingArgs, Cmd):
     ("--hook",)
 
     hook_fail_fast: bool = False
+    "Stop capturing and exit non-zero on the first hook failure"
     ("--hook-fail-fast",)
 
     per_interface: bool = False
@@ -434,6 +439,14 @@ class Capture(LoggingArgs, Cmd):
             )
             capture.bind()
             capture.listen()
+            if capture.hook_error is not None:
+                # --hook-fail-fast asked for this: say why it stopped, and do
+                # not report success.
+                print(
+                    f"Capture stopped: hook failed ({capture.hook_error})",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
         except Exception as e:
             print(f"Error capturing packets: {e}", file=sys.stderr)
             sys.exit(1)

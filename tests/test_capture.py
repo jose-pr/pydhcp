@@ -169,3 +169,44 @@ def test_dhcp_capture_hook_fail_fast_raises() -> None:
 
     with pytest.raises(RuntimeError):
         capture.handle(_message(), _context())
+
+
+def test_dhcp_capture_hook_fail_fast_stops_the_capture() -> None:
+    """Re-raising alone changed nothing.
+
+    handle() runs inside the listener's per-packet try, which logs and carries
+    on, so a capture with --hook-fail-fast kept running through every packet and
+    still exited 0. Measured on loopback before this: the hook fired for all
+    three packets and the listener thread was still alive.
+    """
+
+    def bad_hook(event):
+        raise RuntimeError("boom")
+
+    import threading
+
+    capture = DhcpCapture(
+        listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
+    )
+    # listen() creates this; the token is what stop() acts on, so the loop has to
+    # look like it is running for the test to say anything about stopping it.
+    capture._cancellation_token = threading.Event()
+
+    with pytest.raises(RuntimeError):
+        capture.handle(_message(), _context())
+
+    # the loop is asked to stop, and the reason is recorded so a caller can tell
+    # this from an ordinary shutdown
+    assert isinstance(capture.hook_error, RuntimeError)
+    assert capture._cancellation_token.is_set()
+
+
+def test_dhcp_capture_hook_error_stays_none_without_fail_fast() -> None:
+    def bad_hook(event):
+        raise RuntimeError("boom")
+
+    capture = DhcpCapture(listen=("127.0.0.1", 6767), hook=bad_hook)
+
+    capture.handle(_message(), _context())
+
+    assert capture.hook_error is None

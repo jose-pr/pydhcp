@@ -116,6 +116,11 @@ class DhcpCapture(DhcpListener):
         self.sink = sink
         self.hook = hook
         self.hook_fail_fast = hook_fail_fast
+        #: The hook failure that stopped the capture, if `hook_fail_fast` is set.
+        #: Lets a caller distinguish "stopped because the hook failed" from
+        #: "stopped because it was asked to", which an exception swallowed by the
+        #: listener loop could not.
+        self.hook_error: _ty.Optional[BaseException] = None
         self.accepted_count = 0
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
@@ -132,9 +137,16 @@ class DhcpCapture(DhcpListener):
         if self.hook is not None:
             try:
                 self.hook(event)
-            except Exception:
+            except Exception as exc:
                 LOGGER.exception("Capture hook failed")
                 if self.hook_fail_fast:
+                    # Re-raising alone achieved nothing: handle() runs inside the
+                    # listener's per-packet try, which logs and carries on, so
+                    # capture kept running and still exited 0. Record the failure
+                    # and stop the loop, so a caller can tell that it ended
+                    # because of the hook rather than because it was asked to.
+                    self.hook_error = exc
+                    self.stop()
                     raise
 
 
