@@ -1,15 +1,28 @@
+# Category rule: nothing dot-prefixed at the repo root gets tracked except the
+# files re-included below (a category beats a list -- same philosophy as Cargo's
+# exclude = [".*"]). Root-anchored on purpose; nested dotfiles are governed by
+# the specific rules below.
+/.*
+!/.gitignore
+!/.gitattributes
+!/.github/
+
+# Private agent config. No trailing slash on .agents on purpose: it is often a
+# symlink, which git treats as a file, so a directory-only `.agents/` would not
+# match it. These stay even though /.* covers the root: they also catch nested
+# copies. *.local.* is the unshared, machine- or user-specific override and must
+# never be committed -- nor packaged, which the build excludes enforce
+# separately in pyproject.toml.
+.agents
+*.local.*
+CLAUDE*
+.claude
+
 # Build/dist output and generated docs site
-dist/
 build/
+dist/
 site/
 benchmark-results/
-
-# Agent/harness tooling
-.agents
-*.local.md
-CLAUDE.md
-CLAUDE.local.md
-.claude/
 
 # Python-specific patterns
 __pycache__/
@@ -22,3 +35,10 @@ __pycache__/
 htmlcov/
 *.egg-info/
 .venv/
+.pyvenv/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -51,7 +51,13 @@ Issues = "https://github.com/jose-pr/pydhcp/issues"
 "README.md" = "pydhcp/README.md"
 
 [tool.hatch.build.targets.sdist]
-exclude = ["/.*"]
+# "*.local.*" is not covered by "/.*": the name does not start with a dot, so a
+# personal override such as src/pydhcp/settings.local.json shipped to PyPI --
+# where it cannot be recalled -- carrying one machine's paths or hostnames.
+exclude = ["/.*", "*.local.*"]
+
+[tool.hatch.build.targets.wheel]
+exclude = ["*.local.*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
