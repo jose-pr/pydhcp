@@ -141,6 +141,52 @@ class Boolean(DhcpOptionType, int):
         return self.__bool__()
 
 
+class Flag(DhcpOptionType):
+    """Zero-length presence option.
+
+    Some options carry their whole meaning in being present at all -- RFC 4039's
+    Rapid Commit is "Code 80, Len 0". Encoding such an option as a one-octet
+    Boolean both rejects conformant packets on decode and emits a malformed
+    option on encode.
+    """
+
+    def __init__(self, value: _ty.Any = True) -> None:
+        # A zero-length option says everything by being there, so there is no
+        # false to encode. Rejecting a falsy value keeps `opts[code] = False`
+        # from reading as "off" while actually setting the flag.
+        if not value:
+            raise ValueError(
+                f"{type(self).__name__} is a presence-only option; delete the "
+                "option to express absence instead of assigning a false value"
+            )
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        return cls(), 0
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        return 0
+
+    @classmethod
+    def _dhcp_len_hint(cls) -> int | None:
+        return 0
+
+    def __bool__(self) -> bool:
+        return True
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, Flag)
+
+    def __hash__(self) -> int:
+        return hash(type(self))
+
+    def __json__(self) -> bool:
+        return True
+
+    def __repr__(self) -> str:
+        return "Flag()"
+
+
 class BaseFixedLengthInteger(DhcpOptionType, int):
     NUMBER_OF_BYTES: int
     SIGNED: bool = False

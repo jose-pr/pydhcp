@@ -31,10 +31,37 @@ class IPv4Address(DhcpOptionType, _IP):
 
 
 class ClasslessRoute(DhcpOptionType):
-    """RFC 3442 classless static route entry."""
-    def __init__(self, gateway: _IP, network: _Network) -> None:
-        self.gateway = _IP(gateway)
-        self.network = _Network(network)
+    """RFC 3442 classless static route entry.
+
+    Accepts either ``ClasslessRoute(gateway, network)`` or a single
+    ``(gateway, network)`` pair / existing instance, so that the option's list
+    container can normalize routes coming from JSON, YAML or a config file.
+    """
+
+    # Declared here so the pair-accepting constructor below can read
+    # `other.gateway` without mypy hitting a circular inference.
+    gateway: _IP
+    network: _Network
+
+    def __init__(
+        self, gateway: _ty.Any, network: _ty.Optional[_ty.Any] = None
+    ) -> None:
+        gw: _ty.Any
+        net: _ty.Any
+        if network is not None:
+            gw, net = gateway, network
+        elif isinstance(gateway, ClasslessRoute):
+            gw, net = gateway.gateway, gateway.network
+        else:
+            try:
+                gw, net = gateway
+            except (TypeError, ValueError):
+                raise TypeError(
+                    "ClasslessRoute takes (gateway, network) or a single "
+                    f"(gateway, network) pair, got {gateway!r}"
+                ) from None
+        self.gateway = _IP(gw)
+        self.network = _Network(net)
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:

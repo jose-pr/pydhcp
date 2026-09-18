@@ -6,6 +6,7 @@ from pydhcp.options.type import (
     IPv4Address,
     String,
     Boolean,
+    Flag,
     Bytes,
     U16,
     PolicyFilter,
@@ -108,7 +109,8 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.PATH_PREFIX.get_type() is String
     assert DhcpOptionCode.REBOOT_TIME.get_type().__name__ == "U32"
     assert DhcpOptionCode.V4_ACCESS_DOMAIN.get_type() is String
-    assert DhcpOptionCode.RAPID_COMMIT.get_type() is Boolean
+    # RFC 4039 s4: "Code 80, Len 0" -- presence-only, not a one-octet boolean.
+    assert DhcpOptionCode.RAPID_COMMIT.get_type() is Flag
     assert DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL.get_type() is Boolean
     assert DhcpOptionCode.TRAILER_ENCAPSULATION.get_type() is Boolean
     assert DhcpOptionCode.FORCERENEW_NONCE_CAPABLE.get_type() is Boolean
@@ -117,7 +119,9 @@ def test_typed_registrations_and_aliases():
     assert DhcpOptionCode.STATUS_CODE.get_type().__name__ == "U8"
     assert DhcpOptionCode.POLICY_FILTER.get_type() is PolicyFilter
     assert DhcpOptionCode.STATIC_ROUTE.get_type() is StaticRoute
-    assert DhcpOptionCode.USER_CLASS.get_type() is UserClass
+    # Opaque by default like option 43: iPXE sends option 77 unframed, and a
+    # strict RFC 3004 codec rejects those packets. UserClass stays opt-in.
+    assert DhcpOptionCode.USER_CLASS.get_type() is Bytes
     assert DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION.get_type() is VendorSpecificInformation
     assert DhcpOptionCode.RELAY_AGENT_INFORMATION.get_type() is RelayAgentInformation
     assert DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION.get_type() is ViVendorSpecificInformation
@@ -219,7 +223,7 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DhcpOptionCode.PATH_PREFIX, decode=String) == "/pxe/"
     assert opts.get(DhcpOptionCode.V4_ACCESS_DOMAIN, decode=String) == "access.example"
     assert opts.get(DhcpOptionCode.IP_FORWARDING) == Boolean(1)
-    assert opts.get(DhcpOptionCode.RAPID_COMMIT) == Boolean(1)
+    assert opts.get(DhcpOptionCode.RAPID_COMMIT) == Flag()
     assert opts.get(DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL) == Boolean(0)
     assert opts.get(DhcpOptionCode.TRAILER_ENCAPSULATION) == Boolean(1)
     assert opts.get(DhcpOptionCode.FORCERENEW_NONCE_CAPABLE) == Boolean(1)
@@ -253,7 +257,8 @@ def test_typed_registrations_and_aliases():
     ]
     assert opts.get(DhcpOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
     assert opts.get(DhcpOptionCode.STATIC_ROUTE)[0][0] == IPv4Address("192.0.2.0")
-    assert opts.get(DhcpOptionCode.USER_CLASS) == UserClass([b"alpha", b"\x00\xff"])
+    assert opts.get(DhcpOptionCode.USER_CLASS, decode=UserClass) == UserClass([b"alpha", b"\x00\xff"])
+    assert isinstance(opts.get(DhcpOptionCode.USER_CLASS), Bytes)
     assert opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION) == VendorSpecificInformation(b"\x00\xff\x02vendor\x10")
     assert isinstance(opts.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION), Bytes)
     assert opts.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"
@@ -389,7 +394,8 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DhcpOptionCode.STATUS_CODE) == 7
     assert decoded.get(DhcpOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
     assert decoded.get(DhcpOptionCode.STATIC_ROUTE)[0][1] == IPv4Address("192.0.2.1")
-    assert decoded.get(DhcpOptionCode.USER_CLASS) == UserClass([b"alpha", b"\x00\xff"])
+    assert decoded.get(DhcpOptionCode.USER_CLASS, decode=UserClass) == UserClass([b"alpha", b"\x00\xff"])
+    assert isinstance(decoded.get(DhcpOptionCode.USER_CLASS), Bytes)
     assert decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION) == VendorSpecificInformation(b"\x00\xff\x02vendor\x10")
     assert isinstance(decoded.get(DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION), Bytes)
     assert decoded.get(DhcpOptionCode.RELAY_AGENT_INFORMATION)[0].value == b"\x02"

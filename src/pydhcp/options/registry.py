@@ -11,7 +11,10 @@ DhcpOptionCode.BROADCAST_ADDRESS.register_type(IPv4Address)
 DhcpOptionCode.BOOTFILE_NAME.register_type(String)
 DhcpOptionCode.BOOT_FILE_SIZE.register_type(U16)
 DhcpOptionCode.CLIENT_FQDN.register_type(String)
-DhcpOptionCode.CLASSLESS_STATIC_ROUTE.register_type(ClasslessRoute)
+# RFC 3442: the option carries one or more destination/router pairs, and a
+# server sending it SHOULD include the default route -- so real options
+# nearly always hold more than one.
+DhcpOptionCode.CLASSLESS_STATIC_ROUTE.register_type(List[ClasslessRoute])
 DhcpOptionCode.CLIENT_IDENTIFIER.register_type(ClientIdentifier)
 DhcpOptionCode.DHCP_MESSAGE_TYPE.register_type(DhcpMessageType)
 DhcpOptionCode.DHCP_MESSAGE.register_type(String)
@@ -28,7 +31,7 @@ DhcpOptionCode.INTERFACE_MTU.register_type(U16)
 DhcpOptionCode.LOG_SERVER.register_type(List[IPv4Address])
 DhcpOptionCode.MAX_DATAGRAM_REASSEMBLY_SIZE.register_type(U16)
 DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE.register_type(U16)
-DhcpOptionCode.MSFT_CLASSLESS_STATIC_ROUTE.register_type(ClasslessRoute)
+DhcpOptionCode.MSFT_CLASSLESS_STATIC_ROUTE.register_type(List[ClasslessRoute])
 DhcpOptionCode.MTU_TIMEOUT.register_type(U32)
 DhcpOptionCode.MTU_PLATEAU.register_type(List[U16])
 DhcpOptionCode.MASK_DISCOVERY.register_type(Boolean)
@@ -117,12 +120,17 @@ DhcpOptionCode.ARP_TIMEOUT.register_type(U32)
 DhcpOptionCode.IPV4_ADDRESS_MOS.register_type(MoSIpv4AddressList)
 DhcpOptionCode.IPV4_FQDN_MOS.register_type(MoSFqdnList)
 DhcpOptionCode.CCC.register_type(CccOption)
-DhcpOptionCode.USER_CLASS.register_type(UserClass)
+# Opaque by default, like VENDOR_SPECIFIC_INFORMATION (43): iPXE and several
+# PXE ROMs send option 77 unframed rather than in RFC 3004's length-prefixed
+# form, and a strict codec here rejects those packets outright. Ask for the
+# structured form explicitly with options.get(77, decode=UserClass).
+DhcpOptionCode.USER_CLASS.register_type(Bytes)
 DhcpOptionCode.RELAY_AGENT_INFORMATION.register_type(RelayAgentInformation)
 DhcpOptionCode.VI_VENDOR_SPECIFIC_INFORMATION.register_type(ViVendorSpecificInformation)
 DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL.register_type(Boolean)
 DhcpOptionCode.TRAILER_ENCAPSULATION.register_type(Boolean)
-DhcpOptionCode.RAPID_COMMIT.register_type(Boolean)
+# RFC 4039 s4: "Code 80, Len 0" -- presence is the whole message.
+DhcpOptionCode.RAPID_COMMIT.register_type(Flag)
 DhcpOptionCode.FORCERENEW_NONCE_CAPABLE.register_type(Boolean)
 DhcpOptionCode.RDNSS_SELECTION.register_type(RdnssSelection)
 DhcpOptionCode.STATUS_CODE.register_type(U8)

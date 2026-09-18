@@ -39,7 +39,10 @@ class DhcpOptionType:
         hint = cls._dhcp_len_hint()
         todecode = len(option)
         option = memoryview(option) if not isinstance(option, memoryview) else option
-        if hint:
+        # `is not None`, not truthiness: a hint of 0 is a real constraint (a
+        # zero-length presence option such as RFC 4039 Rapid Commit must reject
+        # any payload), and `if hint:` silently skipped it.
+        if hint is not None:
             if todecode != hint:
                 raise ValueError("Wrong option size")
         decoded, read = cls._dhcp_read(option)
