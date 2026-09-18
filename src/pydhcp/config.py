@@ -22,7 +22,12 @@ def load_config(filepath: str) -> _ty.Dict[str, _ty.Any]:
     lowered = filepath.lower()
     if lowered.endswith(".ini"):
         parser = _configparser.ConfigParser()
-        parser.read(filepath, encoding="utf-8")
+        # ConfigParser.read() ignores a path that does not exist and returns the
+        # list it did read, so a typo in --config silently produced an empty
+        # config and a server on its defaults -- while the same typo in a .yaml
+        # or .json path raised. Make every format fail the same way.
+        if not parser.read(filepath, encoding="utf-8"):
+            raise FileNotFoundError(filepath)
         return {section: dict(parser.items(section)) for section in parser.sections()}
 
     if lowered.endswith(".yaml") or lowered.endswith(".yml"):

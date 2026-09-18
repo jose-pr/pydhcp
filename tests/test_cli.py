@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import logging
 import os
 import sys
 import ipaddress
@@ -497,3 +498,73 @@ def test_capture_stdout_stream_flushes_each_record(monkeypatch) -> None:
         )
 
     assert CountingStdout.flushes >= 3, "records are not flushed as they are written"
+
+
+def test_verbosity_flags_reach_the_library_logger() -> None:
+    """-v has to raise the level of 'pydhcp', which is where the library logs.
+
+    duho resolves the logger on the parsed subcommand instance, so the name has
+    to be set there. Set only on App, -v raised a logger named after the
+    subcommand ('server', 'relay', ...) and `pydhcp server -v` showed nothing
+    from the server at all -- only the undocumented `--loglevel pydhcp:DEBUG`
+    worked.
+    """
+    for argv in (
+        ["server", "-v"],
+        ["relay", "-v"],
+        ["capture", "-v"],
+        ["interfaces", "-v"],
+        ["packet", "-v", "--decode"],
+    ):
+        parsed = App._parser_().parse_args(argv)
+        assert parsed._logger_.name == "pydhcp", argv
+        assert parsed._set_loglevels_() == {"pydhcp": logging.DEBUG}, argv
+
+
+def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
+    """CLI over config, as every other tool does. The other order gave no way to
+    override a shared config for a single run."""
+    config = tmp_path / "server.json"
+    config.write_text(json.dumps({"server": {"listen": "127.0.0.1:47001"}}), "utf-8")
+    captured = {}
+
+    class FakeServer:
+        def __init__(self, listen):
+            captured["listen"] = listen
+
+        def bind(self):
+            pass
+
+        def listen(self):
+            raise KeyboardInterrupt
+
+        def stop(self):
+            pass
+
+    monkeypatch.setattr("pydhcp.cli.DhcpServer", FakeServer)
+
+    command = Server()
+    command.config = str(config)
+    command.listen = "127.0.0.1:47002"
+    command()
+    assert (
+        captured["listen"] == "127.0.0.1:47002"
+    ), "the config overrode an explicit flag"
+
+    # and without the flag the config is still used
+    command = Server()
+    command.config = str(config)
+    command.listen = None
+    command()
+    assert captured["listen"] == "127.0.0.1:47001"
+
+
+def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> None:
+    """ConfigParser.read() ignores a path that does not exist, so a typo'd
+    --config silently started a server on its defaults -- while the same typo in
+    a .yaml or .json path raised."""
+    from pydhcp.config import load_config
+
+    for suffix in (".ini", ".json", ".yaml"):
+        with pytest.raises((FileNotFoundError, OSError)):
+            load_config(str(tmp_path / ("missing" + suffix)))

@@ -24,7 +24,22 @@ PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 CAPTURE_FORMATS = ("json", "yaml", "toml", "ini")
 
 
-class Interfaces(LoggingArgs, Cmd):
+class _Command(LoggingArgs, Cmd):
+    """Base for every subcommand, carrying the logger name.
+
+    `_logger_name_` has to be on the *parsed* subcommand instance: duho resolves
+    the logger as `getattr(self, "_logger_name_", self._parsername_)` on that
+    instance, and it is the subcommand that gets parsed, not `App`. Setting it
+    only on `App` meant `-v` configured a logger named after the subcommand --
+    "server", "relay", "capture" -- while the library logs to "pydhcp", which
+    stayed at the root level. So `pydhcp server -v` printed one line from the
+    command itself and nothing at all from the server.
+    """
+
+    _logger_name_ = "pydhcp"
+
+
+class Interfaces(_Command):
     """List network interfaces"""
 
     _parsername_ = "interfaces"
@@ -38,7 +53,7 @@ class Interfaces(LoggingArgs, Cmd):
             print(f"  Net:  {interface.network}")
 
 
-class Server(LoggingArgs, Cmd):
+class Server(_Command):
     """Start DHCP server"""
 
     _parsername_ = "server"
@@ -57,7 +72,18 @@ class Server(LoggingArgs, Cmd):
             config = load_config(self.config)
 
         server_config = config.get("server", {})
-        listen = server_config.get("listen", self.listen or "*")
+        # An explicit flag beats the config file. The other order meant
+        # `--config shared.yaml --listen 127.0.0.1:6767` bound whatever the file
+        # said, which is the opposite of what every other CLI does and gives no
+        # way to override a shared config for one run.
+        listen = self.listen or server_config.get("listen") or "*"
+        unknown = sorted(set(server_config) - {"listen"})
+        if unknown:
+            self._logger_.warning(
+                "Ignoring unsupported key(s) under [server] in %s: %s",
+                self.config,
+                ", ".join(unknown),
+            )
 
         self._logger_.info("Starting DHCP server, listening on: %s...", listen)
         server = DhcpServer(listen=listen)
@@ -76,7 +102,7 @@ def _parse_server_address(value: str) -> "tuple[str, int] | str":
     return value
 
 
-class Relay(LoggingArgs, Cmd):
+class Relay(_Command):
     """Start DHCP relay agent"""
 
     _parsername_ = "relay"
@@ -131,7 +157,7 @@ class Relay(LoggingArgs, Cmd):
             relay.stop()
 
 
-class Packet(LoggingArgs, Cmd):
+class Packet(_Command):
     """Encode or decode DHCP packets"""
 
     _parsername_ = "packet"
@@ -347,7 +373,7 @@ def _load_capture_hook(
     return command_hook
 
 
-class Capture(LoggingArgs, Cmd):
+class Capture(_Command):
     """Capture DHCP packets"""
 
     _parsername_ = "capture"

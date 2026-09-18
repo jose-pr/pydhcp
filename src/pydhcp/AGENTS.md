@@ -229,8 +229,13 @@ CLI fields plus a `__call__(self)` entrypoint — registered on the root
 `App(Cli)`'s `_subcommands_`. Every subcommand mixes in `duho.LoggingArgs`
 for logging (`-v`/`-q`/`--loglevel`, `self._logger_`); there is no
 per-subcommand `--log-level` flag anymore (superseded by duho's verbosity
-scheme). `App._logger_name_ = "pydhcp"` so `self._logger_` resolves the same
-`pydhcp` logger every subcommand previously reached via `pydhcp.log.LOGGER`.
+scheme). Every subcommand derives from an internal `_Command` base that sets
+`_logger_name_ = "pydhcp"`, so `self._logger_` resolves the same `pydhcp`
+logger the library itself writes to via `pydhcp.log.LOGGER`, and `-v`/`-q`
+change that logger's level. The attribute has to live on the subcommand: duho
+resolves the logger on the *parsed* instance, so setting it only on `App` left
+`-v` raising the level of a logger named after the subcommand while `pydhcp`
+stayed at the root level and the library's output never appeared.
 
 - **`main() -> None`** — the `pydhcp` console-script entry point
   (`[project.scripts]` in `pyproject.toml`); calls `duho.main(App)`. Subcommands:
