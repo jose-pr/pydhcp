@@ -258,7 +258,13 @@ def test_forward_to_client_ciaddr():
     assert port == 68
 
 
-def test_forward_to_client_yiaddr_fallback():
+def test_forward_to_client_without_ciaddr_is_broadcast():
+    """A client with no address cannot answer ARP for yiaddr.
+
+    The relay used to unicast there, which the kernel drops with no error -- the
+    same trap DhcpServer.UNICAST_TO_UNCONFIGURED_CLIENT documents. Confirmed with
+    ISC dhclient through this relay, which never saw an OFFER.
+    """
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     context = _server_context()
     reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.60")
@@ -266,7 +272,7 @@ def test_forward_to_client_yiaddr_fallback():
     relay.handle(reply, context)
 
     data, dest, port, mac = context.transport.send.call_args.args
-    assert dest == IPv4("10.0.0.60")
+    assert dest == IPv4("255.255.255.255")
     assert port == 68
 
 
@@ -301,7 +307,7 @@ def test_pending_clients_map_is_bounded_and_evicts_oldest_first():
     assert len(relay._pending_clients) == 4
     # Oldest evicted, most recent four kept, insertion order preserved.
     assert list(relay._pending_clients) == [6, 7, 8, 9]
-    assert relay._pending_clients[9].port == 40009
+    assert relay._pending_clients[9].client.port == 40009
 
 
 def test_reply_for_an_evicted_xid_falls_back_to_the_well_known_client_port():
@@ -393,3 +399,72 @@ def test_forwarding_a_request_does_not_mutate_the_callers_message():
     assert msg.giaddr == IPv4("0.0.0.0")
     assert msg.hops == 0
     assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in msg.options
+
+
+# --- Which interface a relayed datagram leaves by ---
+#
+# A relay forwards across interfaces, the one case the IP_PKTINFO source pin
+# gets wrong: it is set from the packet that just arrived. Reusing it to reach
+# the upstream server pins the client-facing interface for a destination that is
+# not on that link, and the datagram is dropped with no error. Reusing it for
+# the reply pins the server-facing interface, so a broadcast leaves by the
+# default route and never reaches the client's segment. Both were measured with
+# ISC dhclient through this relay.
+
+
+def test_upstream_forward_drops_the_pktinfo_pin():
+    from pydhcp.listener import PktInfoUdpTransport, UdpTransport
+
+    pinned = PktInfoUdpTransport(Mock())
+    pinned.ifindex, pinned.local_ip = 7, IPv4("10.99.0.1")
+
+    routed = DhcpRelay._routed_transport(pinned)
+
+    assert type(routed) is UdpTransport
+    assert routed.socket is pinned.socket
+
+
+def test_reply_is_pinned_to_the_interface_the_request_arrived_on():
+    from pydhcp.listener import PktInfoUdpTransport
+    from pydhcp.relay import PendingClient
+
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    arrived_on_server_side = PktInfoUdpTransport(Mock())
+    arrived_on_server_side.ifindex, arrived_on_server_side.local_ip = 9, IPv4("10.98.0.1")
+    pending = PendingClient(SocketAddress("10.99.0.50", 68), 3, IPv4("10.99.0.1"))
+
+    out = relay._client_transport(arrived_on_server_side, pending)
+
+    assert isinstance(out, PktInfoUdpTransport)
+    assert out.ifindex == 3
+    assert out.local_ip == IPv4("10.99.0.1")
+
+
+def test_reply_without_a_recorded_ingress_falls_back_to_plain_routing():
+    from pydhcp.listener import PktInfoUdpTransport, UdpTransport
+
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    transport = PktInfoUdpTransport(Mock())
+    transport.ifindex, transport.local_ip = 9, IPv4("10.98.0.1")
+
+    out = relay._client_transport(transport, None)
+
+    assert type(out) is UdpTransport
+
+
+def test_pending_map_records_the_ingress_interface():
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    context = RequestContext(
+        transport=Mock(),
+        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None),
+        client=SocketAddress("10.0.0.50", 68),
+        client_mac=CHADDR,
+        ifindex=4,
+        local_ip=IPv4("10.0.0.1"),
+    )
+
+    relay.handle(_discover(), context)
+
+    pending = relay._pending_clients[0x12345678]
+    assert pending.ifindex == 4
+    assert pending.local_ip == IPv4("10.0.0.1")
