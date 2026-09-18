@@ -577,3 +577,101 @@ def test_copy_shares_no_mutable_state_with_the_original():
     # which a shallow dict copy would still share.
     copied.get(DhcpOptionCode.ROUTER, decode=False).extend(b"\x00\x00\x00\x00")
     assert len(original[DhcpOptionCode.ROUTER]) == 4
+
+
+# --- Encoder wire vectors (RFC 3396 framing, zero-length options, size budget) ---
+#
+# These paths had no coverage at all, which is why three encoder defects survived:
+# every existing test checked the library against its own encoder rather than
+# against expected bytes.
+
+
+def test_zero_length_option_keeps_its_length_byte():
+    """RFC 4039 RAPID_COMMIT is legally zero-length.
+
+    Omitting the length octet makes the receiver read the *next* option's code as
+    this option's length, swallowing everything after it.
+    """
+    options = DhcpOptions()
+    options[DhcpOptionCode.RAPID_COMMIT] = bytearray()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray([DhcpMessageType.DHCPDISCOVER])
+
+    assert bytes(options.encode()) == b"\x50\x00\x35\x01\x01\xff"
+
+    roundtrip = DhcpOptions()
+    roundtrip.decode(options.encode())
+    assert dict(roundtrip.items(decoded=False)) == {
+        DhcpOptionCode.RAPID_COMMIT: bytearray(),
+        DhcpOptionCode.DHCP_MESSAGE_TYPE: bytearray([DhcpMessageType.DHCPDISCOVER]),
+    }
+
+
+@pytest.mark.parametrize("size", [0, 1, 254, 255, 256, 300, 510, 511, 600])
+def test_long_options_repeat_the_code_byte_on_every_fragment(size):
+    """RFC 3396 s4: a long option is split into multiple instances of the same code,
+    each carrying its own length octet."""
+    payload = bytes(range(256)) * ((size // 256) + 1)
+    payload = payload[:size]
+    options = DhcpOptions()
+    options[224] = bytearray(payload)
+
+    wire = bytes(options.encode())
+
+    # Walk the encoded bytes and assert every fragment is a full code/len/data frame.
+    fragments = []
+    index = 0
+    while index < len(wire) and wire[index] != 0xFF:
+        code, length = wire[index], wire[index + 1]
+        fragments.append((code, length))
+        index += 2 + length
+    assert fragments, "expected at least one fragment"
+    assert all(code == 224 for code, _ in fragments)
+    assert sum(length for _, length in fragments) == size
+
+    roundtrip = DhcpOptions()
+    roundtrip.decode(bytearray(wire))
+    assert bytes(roundtrip.get(224, decode=False)) == payload
+
+
+@pytest.mark.parametrize(
+    "maxsize,count,datalen",
+    [(10, 1, 20), (20, 3, 5), (64, 8, 6), (312, 20, 14), (576, 40, 12)],
+)
+def test_partial_encode_never_exceeds_maxsize(maxsize, count, datalen):
+    """The length octet must be charged against the budget like the code octet is,
+    or an overloaded reply overruns the client's advertised maximum message size."""
+    options = DhcpOptions()
+    for index in range(count):
+        options[200 + index] = bytearray(b"D" * datalen)
+
+    encoded, leftover = options.partial_encode(maxsize)
+
+    assert len(encoded) <= maxsize
+    encoded_codes = {code for code, _ in _walk(encoded)}
+    leftover_codes = (
+        {int(code) for code, _ in leftover.items(decoded=False)} if leftover else set()
+    )
+    # Nothing is silently lost: every option is either encoded or handed back.
+    assert encoded_codes | leftover_codes == {200 + index for index in range(count)}
+
+
+def test_zero_length_option_that_does_not_fit_is_carried_to_the_leftover():
+    options = DhcpOptions()
+    options[224] = bytearray(b"X" * 8)
+    options[DhcpOptionCode.RAPID_COMMIT] = bytearray()
+
+    encoded, leftover = options.partial_encode(12)
+
+    assert len(encoded) <= 12
+    assert leftover is not None
+    assert DhcpOptionCode.RAPID_COMMIT in leftover
+
+
+def _walk(wire):
+    """Yield (code, payload) frames from an encoded options field."""
+    index = 0
+    wire = bytes(wire)
+    while index < len(wire) and wire[index] != 0xFF:
+        code, length = wire[index], wire[index + 1]
+        yield code, wire[index + 2 : index + 2 + length]
+        index += 2 + length

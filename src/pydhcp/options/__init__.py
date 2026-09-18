@@ -79,23 +79,30 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         _extraoptions: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
         for code, option in self._options.items():
-            if not tofill or tofill < 3:
-                _extraoptions[code] = option
-                continue
-
-            options.append(int(code))
             opt_view = memoryview(option)
-            tofill -= 1
+            written = False
 
-            while opt_view and tofill >= word_size:
-                slice_data = opt_view[: int(min(255, tofill))]
-                _len = len(slice_data)
+            # Every fragment is a complete code/length/data instance. RFC 3396 s4
+            # requires a long option to be split into multiple instances of the *same
+            # code*, each with its own length octet -- writing the code once leaves the
+            # receiver reading continuation data as new options. A zero-length option
+            # (e.g. RAPID_COMMIT, RFC 4039) still gets its length octet, or the next
+            # option's code byte is read as this option's length and everything after
+            # it is swallowed. Both octets are charged against `tofill`.
+            while tofill >= 3:
+                take = int(min(255, tofill - 2))
+                chunk = opt_view[:take]
+                _len = len(chunk)
+                options.append(int(code))
                 options.append(_len)
-                options.extend(slice_data)
-                options.extend(b"\x00" * (word_size - _len))
+                options.extend(chunk)
+                tofill -= 2 + _len
                 opt_view = opt_view[_len:]
-                tofill -= _len
-            if opt_view:
+                written = True
+                if not opt_view:
+                    break
+
+            if opt_view or not written:
                 _extraoptions[code] = bytearray(opt_view)
 
         options.extend(endbytes)
