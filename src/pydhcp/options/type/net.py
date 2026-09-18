@@ -7,7 +7,7 @@ if _ty.TYPE_CHECKING:
 
 from ...network import IPv4 as _IP, IPv4Interface as _Interface, IPv4Network as _Network
 from .base import DhcpOptionType
-from .domain import decode_domain_name, encode_domain_name
+from .domain import decode_domain_name, encode_domain_name, split_domain_name
 
 
 class IPv4Address(DhcpOptionType, _IP):
@@ -248,7 +248,11 @@ class DomainList(DhcpOptionType, list[str]):
         components: list[tuple[list[str], int]] = []
         data = bytearray()
         for domain_str in self:
-            domain = domain_str.split(".")
+            # Same rules as every other name in the package, even though the
+            # encoding below is compressed and theirs is not: without this an
+            # over-long label's length prefix sets the pointer flag bits and
+            # this encoder emits bytes its own decoder rejects.
+            domain = split_domain_name(domain_str, "search-list entry", allow_root=True)
             unique = domain
             parent: _ty.Optional[tuple[int, int]] = None
             for cn, cidx in components:

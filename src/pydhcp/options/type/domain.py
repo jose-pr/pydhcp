@@ -23,38 +23,59 @@ MAX_NAME_OCTETS = 255
 _POINTER_MASK = 0xC0
 
 
+def split_domain_name(
+    name: str,
+    what: str = "domain name",
+    allow_root: bool = False,
+) -> list[str]:
+    """Validate `name` and return its labels.
+
+    Split out from `encode_domain_name` because the compressed encoder in
+    `options.type.net` cannot share the *encoding* -- it emits pointers, which
+    is a different algorithm -- but must share the *rules*. It did not, and so
+    accepted labels longer than a length octet can express: the length prefix it
+    then wrote set the compression-pointer flag bits, producing wire bytes its
+    own decoder rejects. Limits belong to the name, not to one encoder.
+
+    `allow_root` permits the empty name, which is a bare root label -- RFC 4702
+    lets a client send option 81 with no name at all, and a search list may
+    legitimately contain the root. It is off by default because for most options
+    an empty name is a caller mistake, and these codecs rejected it before.
+    """
+    parts = name.rstrip(".").split(".") if name else []
+    labels = [label for label in parts if label != ""]
+    if not labels and not allow_root:
+        raise ValueError(f"{what} must not be empty")
+    if any(label == "" for label in parts):
+        raise ValueError(f"{what} must not contain empty labels")
+
+    octets = 1  # the terminating root label
+    for label in labels:
+        encoded = len(label.encode("utf-8"))
+        if encoded > MAX_LABEL_OCTETS:
+            raise ValueError(
+                f"{what} label exceeds {MAX_LABEL_OCTETS} octets: {label!r}"
+            )
+        octets += 1 + encoded
+    if octets > MAX_NAME_OCTETS:
+        # Measured on the uncompressed form, per RFC 1035: how many octets a
+        # given encoder saves with pointers is not the name's business.
+        raise ValueError(f"{what} exceeds {MAX_NAME_OCTETS} octets")
+    return labels
+
+
 def encode_domain_name(
     name: str,
     what: str = "domain name",
     allow_root: bool = False,
 ) -> bytes:
-    """Encode `name` as length-prefixed labels terminated by a root label.
-
-    `allow_root` permits the empty name, which encodes as a bare root label --
-    RFC 4702 lets a client send option 81 with no name at all. It is off by
-    default because for most options an empty name is a caller mistake, and
-    these codecs rejected it before this helper existed.
-    """
-    labels = (
-        [label for label in name.rstrip(".").split(".") if label != ""] if name else []
-    )
-    if not labels and not allow_root:
-        raise ValueError(f"{what} must not be empty")
-    if name and any(label == "" for label in name.rstrip(".").split(".")):
-        raise ValueError(f"{what} must not contain empty labels")
-
+    """Encode `name` as length-prefixed labels terminated by a root label."""
     data = bytearray()
-    for label in labels:
+    for label in split_domain_name(name, what, allow_root):
         encoded = label.encode("utf-8")
-        if len(encoded) > MAX_LABEL_OCTETS:
-            raise ValueError(
-                f"{what} label exceeds {MAX_LABEL_OCTETS} octets: {label!r}"
-            )
         data.append(len(encoded))
         data.extend(encoded)
     data.append(0)
-    if len(data) > MAX_NAME_OCTETS:
-        raise ValueError(f"{what} exceeds {MAX_NAME_OCTETS} octets")
     return bytes(data)
 
 

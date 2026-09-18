@@ -806,3 +806,51 @@ def test_ccc_and_mos_inherit_the_shared_checks():
     # and the ordinary case still works
     record = MoSFqdnRecord(1, ["alpha.example"])
     assert list(MoSFqdnList([record])) == [record]
+
+
+# --- the search list obeys the same name rules as every other option ---
+
+
+def test_domainlist_enforces_the_shared_rfc1035_limits() -> None:
+    """The compressed encoder has its own algorithm, not its own rules.
+
+    A length octet is six bits of length plus two flag bits, so a label of 64+
+    octets writes a prefix that sets the compression-pointer flags: DomainList
+    accepted such a label, emitted 0x40 (or 0xC0, an actual pointer) as its
+    length, and its own decoder then rejected what it had just written. The
+    limits now come from the same helper the uncompressed codecs use.
+    """
+    from pydhcp.options.type import DomainList
+
+    for label_len in (64, 192):
+        with pytest.raises(ValueError, match="63 octets"):
+            DomainList(["a" * label_len + ".example.com"])._dhcp_write(bytearray())
+
+    with pytest.raises(ValueError, match="255 octets"):
+        DomainList([".".join(["label"] * 50)])._dhcp_write(bytearray())
+
+    # The longest legal label is still accepted and still round-trips.
+    longest = "x" * 63 + ".example.com"
+    buf = bytearray()
+    DomainList([longest])._dhcp_write(buf)
+    decoded, _ = DomainList._dhcp_read(memoryview(bytes(buf)))
+    assert list(decoded) == [longest]
+
+
+def test_domainlist_root_entry_round_trips() -> None:
+    """A root name is one zero octet, not an empty label plus a terminator.
+
+    Writing both made it decode as *two* names, so a search list containing the
+    root gained an entry on every encode/decode cycle.
+    """
+    from pydhcp.options.type import DomainList
+
+    for case in ([""], ["example.com", ""]):
+        buf = bytearray()
+        DomainList(case)._dhcp_write(buf)
+        decoded, _ = DomainList._dhcp_read(memoryview(bytes(buf)))
+        assert list(decoded) == case, f"{case!r} did not survive a round trip"
+
+    buf = bytearray()
+    DomainList([""])._dhcp_write(buf)
+    assert bytes(buf) == b"\x00"
