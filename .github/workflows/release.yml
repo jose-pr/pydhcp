@@ -22,7 +22,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.9", "3.13"]
+        python-version: ["3.9", "3.14"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -63,12 +63,14 @@ jobs:
           name: dist
           path: dist/
 
-  docs-build:
-    name: Build documentation site
+  # Gate only: a broken docs build must block the release, but this workflow does
+  # not deploy Pages. docs.yml owns every deploy, and is triggered by the release
+  # object being published. Deliberately NOT in the build -> release -> publish
+  # chain, so a docs-only problem can never block a package that passed its tests.
+  docs-gate:
+    name: Build documentation site (gate)
     needs: test
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -78,36 +80,11 @@ jobs:
         with:
           python-version: "3.x"
 
-      - uses: actions/configure-pages@v5
-        with:
-          # Turn Pages on for a fresh repo or fork where it was never enabled.
-          enablement: true
-
       - name: Install package with docs tooling
         run: python -m pip install -e ".[dev,docs,toml]"
 
       - name: Build docs
         run: mkdocs build --strict
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site/
-
-  docs-deploy:
-    name: Deploy documentation to GitHub Pages
-    needs: docs-build
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
 
   github-release:
     name: Create GitHub Release
@@ -180,3 +157,7 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          # Re-running a partially uploaded release skips what is already there
+          # instead of hard-failing: PyPI never replaces a version.
+          skip-existing: true
