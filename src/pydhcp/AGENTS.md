@@ -225,6 +225,27 @@ IPv6-only interface can break at runtime.
   `.reset() -> None` zeroes all counters; `.snapshot() -> dict[str, int]`
   returns a plain dict copy.
 
+## NVT text (`nvt.py`)
+
+The fields RFC 2131/2132 call NVT ASCII — `sname`, `file`, and the `String`
+options — carry other encodings in practice. Three helpers keep such a value
+lossless on the wire and safe on a screen; use them rather than calling
+`bytes.decode`/`str.encode` on these fields directly.
+
+- **`decode(raw: bytes, what="text") -> str`** — UTF-8, with undecodable octets
+  preserved via `surrogateescape` (logged once, naming `what`). Replacing them
+  meant a relay forwarded a *different* boot filename than it received.
+- **`encode(text: str) -> bytes`** — restores those octets exactly. Valid UTF-8
+  is unaffected in both directions.
+- **`display(text: str) -> str`** — the lossy step, at the boundary where a
+  value is shown rather than parsed: surrogates become U+FFFD, so the result is
+  safe for a terminal, a log, or a strict serializer.
+
+**Gotcha**: a string from `decode()` may hold surrogates, so
+`str.encode("utf-8")` on it raises and `json.dumps(..., ensure_ascii=False)`
+fails at write time. Anything rendering one must call `display()` first —
+`DhcpMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
+
 ## Config loading (`config.py`)
 
 - **`load_config(filepath: str) -> dict[str, Any]`** — dispatches on the

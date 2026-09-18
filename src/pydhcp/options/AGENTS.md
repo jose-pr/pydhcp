@@ -97,8 +97,12 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 
 - **`Bytes(src=None)`** — opaque byte payload; `src` a `str` (hex),
   bytes-like, or `None`. The default codec fallback for unregistered codes.
-- **`String`** — RFC 2132 NVT-ASCII text, null-terminated on the wire;
-  invalid UTF-8 decodes with `errors="replace"` (logged).
+- **`String`** — RFC 2132 NVT-ASCII text, null-terminated on the wire.
+  Octets that are not valid UTF-8 are **preserved**, not replaced (logged), so
+  the value re-encodes to exactly what arrived — a hostname or boot filename in
+  another encoding survives being forwarded. They are held as surrogates, so
+  such a value cannot go to a strict encoder: `__json__()` returns the display
+  form, with U+FFFD, and is what structured output uses. See `pydhcp.nvt`.
 - **`UriList`** — list of UTF-8 URI strings, each U16-length-prefixed on the
   wire.
 - **`Boolean(val)`** — single-octet boolean (`bool()` truthiness of `val`).
