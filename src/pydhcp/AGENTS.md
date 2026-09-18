@@ -162,7 +162,11 @@ flight at once.
   either a filter-expression string (compiled via `compile_capture_filter`)
   or a `Callable[[CaptureEvent], bool]`; `sink` gets every accepted event;
   `hook` also gets every accepted event but exceptions are only logged
-  unless `hook_fail_fast=True` (then re-raised). `self.accepted_count` tracks
+  unless `hook_fail_fast=True`, in which case the failure is re-raised, stored
+  on `self.hook_error` and the receive loop is stopped. Check `hook_error`
+  after `listen()` returns to tell a hook failure from an ordinary shutdown --
+  re-raising alone does not reach the caller, because `handle()` runs inside
+  the listener's per-packet exception handler. `self.accepted_count` tracks
   how many events passed the filter.
 - **`CaptureEvent`** (frozen dataclass) — `message: DhcpMessage`, `context:
   RequestContext`, `captured_at: datetime`. Properties: `.source` /
