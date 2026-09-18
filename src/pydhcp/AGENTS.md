@@ -47,6 +47,9 @@ DhcpMessage` etc. all work directly off the top-level package.
     is ordinary blocking code, so running it inline stalled every other
     coroutine in the host application. One worker, so handlers still run one
     at a time in arrival order — the lease backends are not thread-safe.
+  - `await .wait() -> None` — returns when `.stop()` is called; returns
+    immediately if never started. `.listen()` raises `NotImplementedError`
+    (there is no blocking loop to enter — use `start()` then `wait()`).
   - On loops without socket readability (Windows' default proactor loop) it
     falls back to a `DatagramProtocol` endpoint per socket. That path cannot
     carry `IP_PKTINFO`, which is absent on those platforms anyway.
