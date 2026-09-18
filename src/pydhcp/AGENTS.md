@@ -225,6 +225,28 @@ IPv6-only interface can break at runtime.
   `.reset() -> None` zeroes all counters; `.snapshot() -> dict[str, int]`
   returns a plain dict copy.
 
+## Constants (`constants.py`)
+
+Not re-exported from the top-level package — import from `pydhcp.constants`.
+
+- **`BOOTP_MIN_PACKET_SIZE`** (300) — the minimal BOOTP message (RFC 951's
+  fixed header plus its 64-octet vend field). `DhcpMessage.encode()` pads to
+  it: RFC 1542 §2.1 has a relay agent check a datagram can hold this and
+  "silently discard" it otherwise, so a shorter message is droppable, not
+  merely unusual.
+- **`DHCP_MIN_LEGAL_PACKET_SIZE`** (576) — the smallest message every client
+  must accept (RFC 2131 §2), and `encode()`'s default `max_packetsize`.
+  Exceeding it needs the client's option 57 (`MAXIMUM_DHCP_MESSAGE_SIZE`);
+  `DhcpRelay._encode_for_forward` reads that option rather than shrinking a
+  reply it is only forwarding.
+- **`UDP_MIN_PACKET_SIZE`** (28) — IPv4 + UDP headers, subtracted from a
+  message-size limit to get the DHCP payload budget.
+- **`UDP_MAX_PACKET_SIZE`** (65535) — the listeners' default
+  `max_packet_size`.
+- **`INFINITE_LEASE_TIME`** (`0xFFFFFFFF`) — RFC 2131's "infinite" lease.
+- **`MISSING`** / **`Missing`** — sentinel for "argument not supplied", where
+  `None` is a meaningful value.
+
 ## NVT text (`nvt.py`)
 
 The fields RFC 2131/2132 call NVT ASCII — `sname`, `file`, and the `String`

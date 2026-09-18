@@ -29,7 +29,9 @@ top-level package header.
     `max_packetsize` is too small for even a bare packet, and
     `OverflowError` if options still don't fit after using RFC 3396 overload
     packing into `file`/`sname`. `DHCP_MESSAGE_TYPE` is always moved to the
-    front of the options field.
+    front of the options field. The result is padded with PAD octets (after
+    END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC 1542 §2.1 lets a relay
+    agent require — never past a `max_packetsize` smaller than that.
   - **`.to_mapping() -> dict[str, Any]`** / **`DhcpMessage.from_mapping(data:
     Mapping[str, Any]) -> DhcpMessage`** — structured round-trip to/from a
     plain dict (option keys are the option's label when known, else its
