@@ -1,3 +1,4 @@
+import logging
 import pytest
 from datetime import timedelta
 from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
@@ -75,3 +76,81 @@ def test_message_edge_cases():
     # String representations
     log_str = msg.log_str(IPv4('192.168.1.1'), IPv4('192.168.1.10'))
     assert "XID=11112222" in log_str
+
+
+# --- Packet logging must never cost a packet its handler or its reply ---
+#
+# The listener calls msg.log() before handle(), and the server calls it before
+# transport.send(), so anything that raises here is a silent packet drop.
+
+
+def _discover_with(code, payload):
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPDISCOVER.value]
+    )
+    options[code] = bytearray(payload)
+    return DhcpMessage(
+        op=OpCode.BOOTREQUEST,
+        htype=HardwareAddressType.ETHERNET,
+        hlen=6,
+        hops=0,
+        xid=0x11223344,
+        secs=timedelta(seconds=0),
+        flags=Flags.UNICAST,
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("0.0.0.0"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
+        chaddr=bytearray(b"\x00\x11\x22\x33\x44\x55"),
+        sname="",
+        file="",
+        options=options,
+    )
+
+
+@pytest.mark.parametrize(
+    "code,payload,label",
+    [
+        (224, b"\x01\x02\x03", "site-specific code with no enum member (RFC 3942)"),
+        (DhcpOptionCode.ROUTER, b"\x01\x02", "truncated ROUTER payload"),
+        (DhcpOptionCode.RAPID_COMMIT, b"", "zero-length RAPID_COMMIT (RFC 4039)"),
+    ],
+)
+def test_dumps_tolerates_undecodable_options(code, payload, label):
+    """dumps() must degrade per option to hex, the way to_mapping() already does.
+
+    93 of 254 option codes are not enum members, including 28 in the private-use
+    range, so raising here means a client sending any of them gets no service.
+    """
+    message = _discover_with(code, payload)
+
+    dumped = message.dumps()
+
+    assert "DHCPDISCOVER" in dumped
+    assert str(int(code)) in dumped
+
+
+def test_log_is_lazy_and_never_raises(caplog):
+    """log() must do no formatting work when the level is disabled, and must not
+    propagate a formatting failure to its caller."""
+    message = _discover_with(224, b"\x01\x02\x03")
+
+    calls = []
+    original_dumps = type(message).dumps
+
+    def counting_dumps(self, *args, **kwargs):
+        calls.append(1)
+        return original_dumps(self, *args, **kwargs)
+
+    type(message).dumps = counting_dumps
+    try:
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            message.log("src", "dst", logging.DEBUG)
+        assert calls == [], "dumps() ran even though DEBUG was disabled"
+
+        with caplog.at_level(logging.DEBUG, logger="pydhcp"):
+            message.log("src", "dst", logging.DEBUG)
+        assert calls == [1], "dumps() did not run when DEBUG was enabled"
+    finally:
+        type(message).dumps = original_dumps

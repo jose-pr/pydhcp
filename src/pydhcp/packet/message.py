@@ -425,7 +425,17 @@ class DhcpMessage:
         ]:
             lines.append(f"{name: <40}: {value}")
         lines.append(f"OPTIONS:")
-        for code, opt_val in self.options.items(decoded=codemap or True):
+        _codemap = codemap or self.options._codemap
+        for _code, _raw in self.options._options.items():
+            # Render per option, never as a batch: an unregistered code (93 of 254 are
+            # not enum members) or one malformed payload must not cost the whole dump.
+            # Same fallback `to_mapping` uses.
+            try:
+                code = _codemap.from_code(_code)
+                opt_val: _ty.Any = code.get_type()._dhcp_decode(_raw)
+            except Exception:
+                code = _code  # type: ignore[assignment]
+                opt_val = _type.Bytes(_raw)
             if isinstance(opt_val, list):
                 decoded_str = "\n".join([repr(i) for i in opt_val])
             else:
@@ -458,5 +468,19 @@ class DhcpMessage:
         return self.options.__contains__(__key)
 
     def log(self, src: _ty.Any, dst: _ty.Any, level: int) -> None:
-        header = f"{'#' * 10} {self.op.name} XID={self.xid:08X} Src: {src} Dst: {dst} {'#' * 10}"
-        LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")
+        """Log the packet at `level`.
+
+        Never raises and never does work the level does not call for: callers on the
+        receive and send paths invoke this before handling or sending, so a failure
+        here would silently cost a packet its handler or its reply.
+        """
+        if not LOGGER.isEnabledFor(level):
+            return
+        try:
+            header = (
+                f"{'#' * 10} {self.op.name} XID={self.xid:08X} "
+                f"Src: {src} Dst: {dst} {'#' * 10}"
+            )
+            LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")
+        except Exception:  # pragma: no cover - defensive, dumps() is already tolerant
+            LOGGER.log(level, "Could not format packet for logging", exc_info=True)

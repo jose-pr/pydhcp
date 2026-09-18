@@ -314,10 +314,21 @@ class DhcpServer(_Base):
 
         resp.log(context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.INFO)
         if __debug__:
-            _check = DhcpMessage.decode(memoryview(data))
-            _check.log(
-                context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.DEBUG
-            )
+            # Diagnostic only: a reply we cannot re-decode is a real bug, but it must be
+            # reported, never allowed to suppress the send.
+            try:
+                _check = DhcpMessage.decode(memoryview(data))
+            except Exception:
+                LOGGER.warning(
+                    "Encoded reply does not decode cleanly -- sending it anyway",
+                    exc_info=True,
+                )
+            else:
+                _check.log(
+                    context.interface.ip,
+                    _net.SocketAddress(dest, dest_port),
+                    _logging.DEBUG,
+                )
         context.transport.send(data, dest, dest_port, context.client_mac)
         self.metrics.packets_sent += 1
 
