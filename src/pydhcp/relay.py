@@ -5,7 +5,7 @@ import typing as _ty
 
 from .packet.message import DhcpMessage
 from .listener import DhcpListener as _Base, ListenSpec, RequestContext
-from . import network as _net
+from . import network as _net, constants as _const
 from .packet import enums as _enum
 from .options import DhcpOptionCode
 from .options import type as _type
@@ -51,6 +51,7 @@ class DhcpRelay(_Base):
         insert_relay_agent_info: bool = False,
         circuit_id: _ty.Optional[bytes] = None,
         remote_id: _ty.Optional[bytes] = None,
+        trust_client_relay_agent_info: bool = False,
         select_timeout: _ty.Optional[float] = None,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: bool | None = None,
@@ -68,6 +69,8 @@ class DhcpRelay(_Base):
         self.insert_relay_agent_info = insert_relay_agent_info
         self.circuit_id = circuit_id
         self.remote_id = remote_id
+        self.trust_client_relay_agent_info = trust_client_relay_agent_info
+        self._server_ips = {ip for ip, _port in self.server_addresses}
         self._pending_clients: _ty.OrderedDict[int, _net.SocketAddress] = (
             _ty.OrderedDict()
         )
@@ -80,8 +83,43 @@ class DhcpRelay(_Base):
         else:
             LOGGER.warning(f"[XID={msg.xid:08x}] Received message with unknown op {msg.op}, ignoring.")
 
+    def _encode_for_forward(self, msg: DhcpMessage) -> bytearray:
+        """Encode a message being forwarded without shrinking it.
+
+        `encode()` defaults to the 576-octet minimum, which is not a limit this
+        relay gets to impose: a server reply legitimately exceeds it whenever the
+        client advertised a larger maximum (PXE/iPXE boot options, vendor info,
+        classless routes). Encoding at the default raised OverflowError and the
+        receive loop logged it, so the client simply never got its reply.
+        """
+        advertised = msg.options.get(
+            DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE, default=None, decode=_type.U16
+        )
+        limit = int(advertised) if advertised else self._max_packet_size
+        return msg.encode(max(limit, _const.DHCP_MIN_LEGAL_PACKET_SIZE))
+
     def _forward_to_servers(self, msg: DhcpMessage, context: RequestContext) -> None:
+        if (
+            msg.giaddr == _net.WILDCARD_IPv4
+            and DhcpOptionCode.RELAY_AGENT_INFORMATION in msg.options
+            and not self.trust_client_relay_agent_info
+        ):
+            # RFC 3046 s2.1 and s5: giaddr 0 means this came straight from a
+            # client, so the option is forged -- a client claiming a circuit id
+            # picks its own policy on any server that trusts option 82. Pass
+            # trust_client_relay_agent_info=True only when the access layer
+            # below is trusted to set it.
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] Dropping request from {context.client}: "
+                "RELAY_AGENT_INFORMATION present with giaddr 0 (untrusted source)"
+            )
+            self.metrics.packets_dropped_untrusted += 1
+            return
+
         forwarded = DhcpMessage(**msg.__dict__.copy())
+        # A shallow __dict__ copy shares the options container, so stamping this
+        # copy would edit the caller's message.
+        forwarded.options = msg.options.copy()
         forwarded.hops = msg.hops + 1
         if forwarded.hops > self.max_hops:
             LOGGER.warning(
@@ -99,7 +137,7 @@ class DhcpRelay(_Base):
             self._pending_clients.popitem(last=False)
         self._insert_relay_agent_info(forwarded)
 
-        data = forwarded.encode()
+        data = self._encode_for_forward(forwarded)
         for server_ip, server_port in self.server_addresses:
             forwarded.log(context.interface.ip, _net.SocketAddress(server_ip, server_port), _logging.INFO)
             context.transport.send(data, server_ip, server_port, msg.chaddr)
@@ -122,6 +160,19 @@ class DhcpRelay(_Base):
             msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = _type.RelayAgentInformation(suboptions)
 
     def _forward_to_client(self, msg: DhcpMessage, context: RequestContext) -> None:
+        if context.client.ip not in self._server_ips:
+            # Anything that can reach this relay's port 67 could otherwise have a
+            # forged ACK broadcast onto the client segment, sourced from the
+            # relay's own address -- naming the attacker as router and DNS, and
+            # arriving from the port DHCP-snooping switches trust. RFC 1542
+            # s4.1.2 assumes replies come from the servers we forwarded to.
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] Dropping BOOTREPLY from {context.client}: "
+                "not a configured server address"
+            )
+            self.metrics.packets_dropped_untrusted += 1
+            return
+
         original_client = self._pending_clients.pop(msg.xid, None)
         client_port = original_client.port if original_client is not None else int(_enum.DhcpPort.CLIENT)
 
@@ -135,7 +186,16 @@ class DhcpRelay(_Base):
         else:
             dest = _net.IPv4("255.255.255.255")
 
-        data = msg.encode()
-        msg.log(context.interface.ip, _net.SocketAddress(dest, client_port), _logging.INFO)
+        reply = DhcpMessage(**msg.__dict__.copy())
+        reply.options = msg.options.copy()
+        if DhcpOptionCode.RELAY_AGENT_INFORMATION in reply.options:
+            # RFC 3046 s2.2: the relay strips the option it echoed back before
+            # handing the reply to the client. It is relay-to-server bookkeeping
+            # -- circuit and remote ids describe the access port -- and has no
+            # meaning to, and should not be disclosed to, the client.
+            del reply.options[int(DhcpOptionCode.RELAY_AGENT_INFORMATION)]
+
+        data = self._encode_for_forward(reply)
+        reply.log(context.interface.ip, _net.SocketAddress(dest, client_port), _logging.INFO)
         context.transport.send(data, dest, client_port, msg.chaddr)
         self.metrics.packets_sent += 1

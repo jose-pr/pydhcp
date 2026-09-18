@@ -23,6 +23,20 @@ def _context(client_port: int = 68) -> RequestContext:
     )
 
 
+def _server_context(client_port: int = 68, server_ip: str = "192.0.2.1") -> RequestContext:
+    """A context whose source is a configured upstream server.
+
+    Replies reach a relay *from* a server; the relay now drops a BOOTREPLY from
+    anywhere else, so reply-path tests must look like the real thing.
+    """
+    return RequestContext(
+        transport=Mock(),
+        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None),
+        client=SocketAddress(server_ip, client_port),
+        client_mac=CHADDR,
+    )
+
+
 def _discover(giaddr: str = "0.0.0.0", hops: int = 0, with_relay_info: bool = False) -> DhcpMessage:
     opts = DhcpOptions()
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
@@ -161,7 +175,10 @@ def test_relay_agent_info_not_inserted_when_disabled():
     assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in forwarded.options
 
 
-def test_relay_agent_info_passthrough_when_already_present():
+def test_request_with_relay_info_and_giaddr_zero_is_dropped():
+    """RFC 3046 s2.1/s5: giaddr 0 means this came straight from a client, so the
+    option is forged -- a client that sets its own circuit id picks its own
+    policy on any server that trusts option 82."""
     relay = DhcpRelay(
         listen=("127.0.0.1", 6767),
         server_addresses=["192.0.2.1"],
@@ -169,7 +186,28 @@ def test_relay_agent_info_passthrough_when_already_present():
         circuit_id=b"circuit-1",
     )
     context = _context()
-    msg = _discover(with_relay_info=True)
+
+    relay.handle(_discover(with_relay_info=True), context)
+
+    context.transport.send.assert_not_called()
+    assert relay.metrics.packets_dropped_untrusted == 1
+
+
+def test_relay_agent_info_passthrough_when_already_present():
+    """A downstream relay's option is passed through unmodified.
+
+    giaddr is set, so this came from another relay rather than a client. The
+    same holds for a client-sourced request when the access layer below is
+    trusted and trust_client_relay_agent_info=True.
+    """
+    relay = DhcpRelay(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        insert_relay_agent_info=True,
+        circuit_id=b"circuit-1",
+    )
+    context = _context()
+    msg = _discover(giaddr="10.0.0.1", with_relay_info=True)
 
     relay.handle(msg, context)
 
@@ -179,9 +217,26 @@ def test_relay_agent_info_passthrough_when_already_present():
     assert relay_info == RelayAgentInformation([TlvOption(1, b"existing")])
 
 
+def test_client_relay_info_passes_through_when_explicitly_trusted():
+    relay = DhcpRelay(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        trust_client_relay_agent_info=True,
+    )
+    context = _context()
+
+    relay.handle(_discover(with_relay_info=True), context)
+
+    data, *_rest = context.transport.send.call_args.args
+    forwarded = DhcpMessage.decode(data)
+    assert forwarded.options.get(
+        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+    ) == RelayAgentInformation([TlvOption(1, b"existing")])
+
+
 def test_forward_to_client_broadcast_flag():
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    context = _context()
+    context = _server_context()
     reply = _reply(giaddr="10.0.0.1", broadcast=True)
 
     relay.handle(reply, context)
@@ -193,7 +248,7 @@ def test_forward_to_client_broadcast_flag():
 
 def test_forward_to_client_ciaddr():
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    context = _context()
+    context = _server_context()
     reply = _reply(giaddr="10.0.0.1", ciaddr="10.0.0.50")
 
     relay.handle(reply, context)
@@ -205,7 +260,7 @@ def test_forward_to_client_ciaddr():
 
 def test_forward_to_client_yiaddr_fallback():
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    context = _context()
+    context = _server_context()
     reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.60")
 
     relay.handle(reply, context)
@@ -220,12 +275,12 @@ def test_forward_to_client_uses_original_client_port_when_known():
     # ephemeral port in tests) must still get replies routed back to the
     # port its original request actually came from, not a hardcoded 68.
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    request_context = _context(client_port=54321)
+    request_context = _server_context(client_port=54321)
     discover = _discover()
 
     relay.handle(discover, request_context)
 
-    reply_context = _context(client_port=67)  # server's own source port
+    reply_context = _server_context(client_port=67)  # server's own source port
     reply = _reply(giaddr="10.0.0.1", ciaddr="10.0.0.50")
     relay.handle(reply, reply_context)
 
@@ -263,8 +318,78 @@ def test_reply_for_an_evicted_xid_falls_back_to_the_well_known_client_port():
 
     reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
     reply.xid = 1
-    context = _context()
+    context = _server_context(server_ip="10.0.0.2")
     relay.handle(reply, context)
 
     _data, _dest, port, _mac = context.transport.send.call_args.args
     assert port == 68
+
+
+# --- Relay trust and the RFC 3046 reply path ---
+
+
+def test_bootreply_from_an_unconfigured_source_is_dropped():
+    """Anything that can reach the relay's port 67 could otherwise have a forged
+    ACK broadcast onto the client segment from the relay's own address, naming
+    the attacker as router and DNS."""
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    context = _server_context(server_ip="198.51.100.66")
+
+    relay.handle(_reply("10.0.0.1", yiaddr="10.0.0.50"), context)
+
+    context.transport.send.assert_not_called()
+    assert relay.metrics.packets_dropped_untrusted == 1
+
+
+def test_relay_strips_relay_agent_information_from_replies():
+    """RFC 3046 s2.2: the option is relay-to-server bookkeeping and is removed
+    before the reply reaches the client."""
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
+    reply.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
+        [TlvOption(1, b"circuit-1")]
+    )
+    context = _server_context()
+
+    relay.handle(reply, context)
+
+    data, *_rest = context.transport.send.call_args.args
+    forwarded = DhcpMessage.decode(data)
+    assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in forwarded.options
+    # The caller's message is untouched: the relay works on a copy.
+    assert DhcpOptionCode.RELAY_AGENT_INFORMATION in reply.options
+
+
+def test_relay_forwards_a_reply_larger_than_the_576_byte_default():
+    """A server reply legitimately exceeds 576 octets when the client advertised
+    a larger maximum. Encoding at the default raised OverflowError, and the
+    receive loop logged it, so the client never got its reply."""
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
+    for index in range(4):
+        reply.options[200 + index] = bytearray(b"P" * 200)
+    context = _server_context()
+
+    relay.handle(reply, context)
+
+    data, *_rest = context.transport.send.call_args.args
+    forwarded = DhcpMessage.decode(bytearray(data))
+    assert len(data) > 576
+    for index in range(4):
+        assert len(forwarded.options.get(200 + index, decode=False)) == 200
+
+
+def test_forwarding_a_request_does_not_mutate_the_callers_message():
+    relay = DhcpRelay(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        insert_relay_agent_info=True,
+        circuit_id=b"circuit-1",
+    )
+    msg = _discover()
+
+    relay.handle(msg, _context())
+
+    assert msg.giaddr == IPv4("0.0.0.0")
+    assert msg.hops == 0
+    assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in msg.options

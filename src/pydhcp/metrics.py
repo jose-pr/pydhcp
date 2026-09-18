@@ -9,6 +9,7 @@ class DhcpMetrics:
         self.leases_renewed = 0
         self.leases_released = 0
         self.packets_dropped_hop_limit = 0
+        self.packets_dropped_untrusted = 0
 
     def reset(self) -> None:
         self.packets_received = 0
@@ -17,6 +18,7 @@ class DhcpMetrics:
         self.leases_renewed = 0
         self.leases_released = 0
         self.packets_dropped_hop_limit = 0
+        self.packets_dropped_untrusted = 0
 
     def snapshot(self) -> _ty.Dict[str, int]:
         return {
@@ -26,4 +28,5 @@ class DhcpMetrics:
             "leases_renewed": self.leases_renewed,
             "leases_released": self.leases_released,
             "packets_dropped_hop_limit": self.packets_dropped_hop_limit,
+            "packets_dropped_untrusted": self.packets_dropped_untrusted,
         }
