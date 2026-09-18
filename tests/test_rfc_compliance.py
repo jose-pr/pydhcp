@@ -81,11 +81,25 @@ def test_lease_expiration_total_seconds():
     assert 3650 < expires <= 3662
 
 
-def test_invalid_htype_defaults_to_ethernet():
-    """Bug 1: Unknown hardware type should fall back to ETHERNET without crashing."""
+def test_unnamed_htype_is_preserved_not_rewritten():
+    """Bug 1: an unknown hardware type must not crash -- and must not be rewritten.
+
+    It used to become ETHERNET, which a relay then forwarded: RFC 1542 s4.1.2
+    has a relay alter giaddr and hops and nothing else, so an IPoIB client
+    (RFC 4390, htype 32) reached the server as htype 1. The derived client
+    identifier is built from this value too, so that changed as well.
+    """
     data = build_dhcp_packet(htype=255)
     msg = DhcpMessage.decode(data)
-    assert msg.htype == HardwareAddressType.ETHERNET
+
+    assert msg.htype == 255
+    assert msg.htype.label() == "HTYPE_255"
+    assert bytes(msg.encode())[1] == 255, "htype was rewritten on re-encode"
+
+    # A type that now has a name resolves to it rather than a pseudo-member.
+    assert DhcpMessage.decode(build_dhcp_packet(htype=32)).htype is (
+        HardwareAddressType.INFINIBAND
+    )
 
 
 def test_bad_magic_cookie_raises_value_error():

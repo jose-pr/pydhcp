@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import socket as _socket
-from .packet.message import DhcpMessage
+from .packet.message import DhcpMessage, NoClientIdentity
 from .listener import DhcpListener as _Base, ListenSpec, RequestContext
 from . import constants as _const, network as _net
 from .packet import enums as _enum
@@ -247,7 +247,14 @@ class DhcpServer(_Base):
                 f"[XID={msg.xid:08x}] Received a reply msg from {context.client} ignoring it."
             )
             return
-        client_id = msg.client_id()
+        try:
+            client_id = msg.client_id()
+        except NoClientIdentity as e:
+            # Nothing to key a lease on, and RFC 2131 s4.2 requires the client to
+            # supply one. Serving it would hand out an address under an identity
+            # every other such client shares.
+            LOGGER.warning(f"[XID={msg.xid:08x}] Ignoring unidentifiable client: {e}")
+            return
         msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         msg_ty_name = (
             msg_ty.name

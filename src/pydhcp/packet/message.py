@@ -11,6 +11,17 @@ import datetime as _dt
 import textwrap as _tw
 
 _NULL = 0x00.to_bytes(1, "big")
+
+
+class NoClientIdentity(ValueError):
+    """Raised when a message carries nothing that identifies its client.
+
+    A `ValueError` subclass so existing `except ValueError` handlers keep
+    working, but distinguishable for callers that want to drop the message
+    rather than fail.
+    """
+
+
 _FIXED_HEADER_SIZE = 236
 _MAGIC_COOKIE_END = 240
 _HEADER_STRUCT = _struct.Struct("!BBBBIHHIIII")
@@ -165,7 +176,10 @@ class DhcpMessage:
 
         return {
             "op": self.op.name,
-            "htype": self.htype.name,
+            # label(), not .name: an unnamed hardware type has no .name at all,
+            # so a mapping would carry a null where a string is expected and
+            # from_mapping() could not read it back.
+            "htype": self.htype.label(),
             "hlen": self.hlen,
             "hops": self.hops,
             "xid": self.xid,
@@ -254,11 +268,10 @@ class DhcpMessage:
         if hlen > 16:
             raise ValueError(f"Hardware address length {hlen} exceeds maximum of 16")
         op = _enum.OpCode(op)
-        try:
-            htype = _enum.HardwareAddressType(htype)
-        except ValueError:
-            LOGGER.warning(f"Unknown hardware type {htype}, using ETHERNET")
-            htype = _enum.HardwareAddressType.ETHERNET
+        # Never rewritten: an unnamed type keeps its octet, so a relay forwards
+        # the htype it received. The warning went too -- it fired once per
+        # packet, which let one client flood the log.
+        htype = _enum.HardwareAddressType(htype)
         secs = _dt.timedelta(seconds=secs)
         flags = _enum.Flags(flags & _enum.Flags.BROADCAST.value)
         ciaddr = _net.IPv4(ciaddr)
@@ -444,11 +457,26 @@ class DhcpMessage:
     def client_id(
         self, func: _ty.Optional[_ty.Callable[["DhcpMessage"], bytearray]] = None
     ) -> str:
+        """Stable identity for this client, used to key leases.
+
+        Option 61 when present, else the hardware type and address. Raises
+        `NoClientIdentity` when the message carries neither: `hlen` may legally
+        be 0 (RFC 4390 requires exactly that for IPoIB, which supplies option 61
+        instead), and the old fallback then produced the hardware-type octet
+        alone -- one identifier, `"01"`, shared by every such client. Two of them
+        would take over each other's lease, and a RELEASE from either would free
+        both.
+        """
         cid = self.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:
             if func:
                 cid = func(self)
             if not cid:
+                if not self.chaddr:
+                    raise NoClientIdentity(
+                        "message has neither a client identifier (option 61) nor "
+                        f"a hardware address (hlen=0, htype={self.htype.label()})"
+                    )
                 cid = bytearray([self.htype.value])
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()

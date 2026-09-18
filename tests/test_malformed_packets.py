@@ -59,18 +59,21 @@ def test_packet_shorter_than_magic_cookie():
         DhcpMessage.decode(bytearray(238))
 
 
-def test_invalid_htype_warning(caplog):
+def test_unnamed_htype_decodes_without_warning_noise(caplog):
+    """An unnamed hardware type is data, not a fault.
+
+    Warning per packet let one client flood the log, and the value it warned
+    about was then discarded anyway. It is now kept, and says nothing.
+    """
     packet = get_valid_packet_bytes()
-    # Modify htype (offset 1) to an invalid value, e.g. 99
+    # Modify htype (offset 1) to a value with no IANA name, e.g. 99
     packet[1] = 99
     with caplog.at_level(logging.WARNING):
         decoded = DhcpMessage.decode(packet)
-    assert (
-        "Unknown hardware type HardwareAddressType.UNKNOWN" in caplog.text
-        or "Unknown hardware type" in caplog.text
-    )
-    # Should default to ETHERNET
-    assert decoded.htype == HardwareAddressType.ETHERNET
+
+    assert decoded.htype == 99
+    assert "Unknown hardware type" not in caplog.text
+    assert bytes(decoded.encode())[1] == 99
 
 
 def test_invalid_magic_cookie():

@@ -11,7 +11,7 @@ from .packet import enums as _enum
 from .listener import DhcpListener, ListenSpec, RequestContext
 from .log import LOGGER
 from .options import DhcpOptionCode
-from .packet.message import DhcpMessage
+from .packet.message import DhcpMessage, NoClientIdentity
 from .options import DhcpOptionType
 
 CapturePredicate = _ty.Callable[["CaptureEvent"], bool]
@@ -58,7 +58,12 @@ class CaptureEvent:
 
     @property
     def client_id(self) -> str:
-        return self.message.client_id()
+        try:
+            return self.message.client_id()
+        except NoClientIdentity:
+            # A capture reports what arrived; a client with no identity is
+            # exactly the sort of packet someone runs a capture to look at.
+            return "UNKNOWN"
 
     @property
     def xid(self) -> str:

@@ -273,3 +273,51 @@ def test_valid_utf8_sname_is_unchanged_by_the_preserving_path():
     assert decoded.sname == "münchen-srv"
     assert bytes(decoded.encode())[44:108] == name.ljust(64, b"\x00")
     assert decoded.to_mapping()["sname"] == "münchen-srv"
+
+
+def test_unidentifiable_client_does_not_collide_with_every_other_one():
+    """hlen=0 with no option 61 leaves nothing to key a lease on.
+
+    hlen=0 is legal -- RFC 4390 requires exactly that for IPoIB, which supplies
+    option 61 instead -- so it must not be rejected at decode. But the old
+    fallback built the identifier from the hardware type alone, so every such
+    client got "01": two of them would take over each other's lease, and a
+    RELEASE from either would free both.
+    """
+    from pydhcp.packet.message import NoClientIdentity
+
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    wire = bytearray(message.encode())
+    wire[2] = 0  # hlen
+
+    decoded = DhcpMessage.decode(bytearray(wire))
+    assert decoded.chaddr == b""
+    with pytest.raises(NoClientIdentity):
+        decoded.client_id()
+
+    # The legal IPoIB shape -- hlen 0, htype 32, option 61 present -- still works.
+    ipoib = _discover_with(DhcpOptionCode.CLIENT_IDENTIFIER, b"\xff\x01\x02\x03")
+    wire = bytearray(ipoib.encode())
+    wire[1] = 32
+    wire[2] = 0
+    decoded = DhcpMessage.decode(bytearray(wire))
+    assert decoded.htype == 32
+    assert decoded.client_id() == "FF:01:02:03"
+
+
+def test_unnamed_htype_survives_a_mapping_round_trip():
+    """to_mapping() emits label(), because an unnamed member has no .name.
+
+    Emitting None there put a null where a string belongs, and from_mapping()
+    could not read its own output back.
+    """
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    wire = bytearray(message.encode())
+    wire[1] = 99
+
+    decoded = DhcpMessage.decode(bytearray(wire))
+    mapping = decoded.to_mapping()
+
+    assert mapping["htype"] == "HTYPE_99"
+    json.dumps(mapping)
+    assert DhcpMessage.from_mapping(mapping).htype == 99
