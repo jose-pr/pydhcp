@@ -81,6 +81,27 @@ def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDhcpOptionCode]) ->
     return int(raw_code)
 
 
+def _decode_bootp_field(raw: memoryview, field: str) -> str:
+    """Decode a NUL-terminated BOOTP text field.
+
+    RFC 2131 specifies NVT ASCII for `sname` and `file`, but senders do put other
+    encodings there, and rejecting the field threw away the whole packet -- its
+    message type and client id included -- over a name the receiver usually does
+    not read. This matches the tolerance `String` already applies to option
+    payloads: warn and substitute. Byte fidelity is not preserved across a
+    re-encode when this fires.
+    """
+    text = raw.tobytes().split(_NULL, 1)[0]
+    try:
+        return text.decode()
+    except UnicodeDecodeError:
+        LOGGER.warning(
+            f"BOOTP {field} field contains invalid UTF-8, decoding with "
+            f"replacement: {text.hex()}"
+        )
+        return text.decode("utf-8", errors="replace")
+
+
 @_data.dataclass
 class DhcpMessage:
     MIN_LEGAL_SIZE = _const.DHCP_MIN_LEGAL_PACKET_SIZE - _const.UDP_MIN_PACKET_SIZE
@@ -274,7 +295,7 @@ class DhcpMessage:
 
         sname_str: str = ""
         if sname_raw is not None:
-            sname_str = sname_raw.tobytes().split(_NULL, 1)[0].decode()
+            sname_str = _decode_bootp_field(sname_raw, "sname")
         else:
             tftp_val = options.get(
                 DhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
@@ -284,7 +305,7 @@ class DhcpMessage:
 
         file_str: str = ""
         if file_raw is not None:
-            file_str = file_raw.tobytes().split(_NULL, 1)[0].decode()
+            file_str = _decode_bootp_field(file_raw, "file")
         else:
             bootfile_val = options.get(
                 DhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
@@ -319,6 +340,13 @@ class DhcpMessage:
             raise ValueError(f"{max_packetsize} is too small for a DHCP packet")
 
         options = self.options.copy()
+        # Whether THIS encode overloads is decided below, so drop any marker the
+        # message is carrying. A decoded packet keeps its sender's OPTION_OVERLOAD,
+        # and re-encoding it (a relay forwarding a PXE reply, say) would otherwise
+        # tell the receiver to parse sname/file as options while they hold the
+        # literal server name and boot file that decode moved out of them.
+        if int(DhcpOptionCode.OPTION_OVERLOAD) in options:
+            del options[int(DhcpOptionCode.OPTION_OVERLOAD)]
         sname_bytes: _ty.Union[bytes, bytearray] = self.sname.encode()
         file_bytes: _ty.Union[bytes, bytearray] = self.file.encode()
         options_field: _ty.Union[bytes, bytearray] = options.encode()
@@ -373,6 +401,15 @@ class DhcpMessage:
                 file_bytes, leftover = leftover.partial_encode(128)
             if bool(overload.value & _type.OptionOverload.SNAME.value) and leftover is not None:
                 sname_bytes, leftover = leftover.partial_encode(64)
+
+            # Nothing may be left once every field has been packed: silently
+            # dropping options produces a reply the client accepts and acts on
+            # while missing (possibly) its server identifier or routes.
+            if leftover is not None:
+                raise OverflowError(
+                    "DHCP options exceed maximum packet size: "
+                    f"{len(leftover)} option(s) did not fit"
+                )
 
         data = bytearray(28)
         _HEADER_STRUCT.pack_into(

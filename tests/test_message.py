@@ -154,3 +154,70 @@ def test_log_is_lazy_and_never_raises(caplog):
         assert calls == [1], "dumps() did not run when DEBUG was enabled"
     finally:
         type(message).dumps = original_dumps
+
+
+def test_encode_clears_a_stale_option_overload():
+    """A decoded overloaded packet carries its sender's option 52.
+
+    Re-encoding it (a relay forwarding a PXE reply) must not keep the marker:
+    decode moves the real sname/file out of the overloaded fields, so a stale 52
+    tells the receiver to parse literal text as options.
+    """
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPACK.value]
+    )
+    options[DhcpOptionCode.OPTION_OVERLOAD] = bytearray([3])
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.options = options
+    message.sname = "10.0.0.5"
+    message.file = "pxelinux.0"
+
+    wire = bytes(message.encode())
+    decoded = DhcpMessage.decode(bytearray(wire))
+
+    assert DhcpOptionCode.OPTION_OVERLOAD not in decoded.options
+    assert decoded.sname == "10.0.0.5"
+    assert decoded.file == "pxelinux.0"
+
+
+def test_encode_raises_rather_than_dropping_options_that_do_not_fit():
+    """Encoding more options than the packet can hold must raise, not truncate.
+
+    This reaches the up-front size check. The matching guard after the sname
+    field is packed is defensive: no input was found that reaches it once the
+    size accounting is correct, but leftover was previously discarded there
+    without inspection.
+    """
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPACK.value]
+    )
+    for index in range(12):
+        options[200 + index] = bytearray(b"X" * 250)
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.options = options
+
+    with pytest.raises(OverflowError):
+        message.encode(576)
+
+
+def test_decode_tolerates_non_utf8_sname_and_file():
+    """RFC 2131 says NVT ASCII, but senders put other encodings there. Rejecting
+    the field threw away the whole packet, message type and client id included."""
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPDISCOVER.value]
+    )
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    wire = bytearray(message.encode())
+    # Splice latin-1 bytes into the sname (offset 44) and file (offset 108) fields.
+    wire[44:52] = b"caf\xe9-srv"
+    wire[108:116] = b"b\xfcte.cfg"
+
+    decoded = DhcpMessage.decode(wire)
+
+    assert decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == (
+        DhcpMessageType.DHCPDISCOVER
+    )
+    assert decoded.sname and decoded.file
