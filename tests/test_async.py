@@ -259,3 +259,58 @@ def _discover_bytes() -> bytes:
             options=options,
         ).encode()
     )
+
+
+def test_async_listener_uses_the_same_receive_path_as_the_sync_one():
+    """A wildcard async listen must take the packet-info path where it exists.
+
+    It used to hardcode `_pktinfo = False` and expand the wildcard into one
+    socket per address. On Linux an address-bound socket receives no broadcasts,
+    so a real dhclient's DISCOVER -- which goes to 255.255.255.255 -- reached the
+    async server never, while the identical sync server answered it. Verified
+    against ISC dhclient 4.4.3 over a veth pair: nothing before, full DORA after.
+    """
+    from pydhcp.listener import AsyncDhcpListener, DhcpListener
+
+    for spec in ("*", ("*", 10067), None):
+        sync = DhcpListener(listen=spec)
+        expected = sync._pktinfo
+        assert (
+            AsyncDhcpListener(listen=spec)._pktinfo == expected
+        ), f"listeners disagree about the receive path for {spec!r}"
+        # And so the wildcard stays unexpanded in the same cases: expanding it is
+        # precisely what loses the broadcasts on Linux.
+        assert (len(AsyncDhcpListener(listen=spec)._listen) == len(sync._listen)) or (
+            not expected
+        )
+
+
+def test_async_listener_builds_a_packet_info_context():
+    """The received interface must reach the handler, not just the socket.
+
+    _context_for is shared with the sync listener for this reason: the async
+    half previously built its own RequestContext and dropped ifindex/local_ip,
+    so replies went out with whatever SERVER_IDENTIFIER the wildcard implied.
+    """
+    from pydhcp.listener import PktInfoUdpTransport, UdpTransport, _context_for
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    try:
+        plain = _context_for(sock, SocketAddress(IPv4("127.0.0.1"), 68), b"\x00" * 6)
+        assert type(plain.transport) is UdpTransport
+        assert plain.ifindex is None and plain.local_ip is None
+
+        routed = _context_for(
+            sock,
+            SocketAddress(IPv4("127.0.0.1"), 68),
+            b"\x00" * 6,
+            ifindex=7,
+            local_ip=IPv4("127.0.0.1"),
+        )
+        assert isinstance(routed.transport, PktInfoUdpTransport)
+        assert routed.transport.ifindex == 7
+        assert routed.transport.local_ip == IPv4("127.0.0.1")
+        assert routed.ifindex == 7 and routed.local_ip == IPv4("127.0.0.1")
+    finally:
+        sock.close()

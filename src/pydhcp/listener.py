@@ -18,6 +18,10 @@ import logging as _logging
 
 IP_PKTINFO = getattr(_socket, "IP_PKTINFO", None)
 CMSG_SPACE = getattr(_socket, "CMSG_SPACE", None)
+#: POSIX-only in typeshed, so referencing `sock.recvmsg` directly is an error on a
+#: Windows check and an unused-ignore on a POSIX one -- no single annotation is
+#: right for both. Going through the same getattr alias as the constants above is.
+_RECVMSG = getattr(_socket.socket, "recvmsg", None)
 
 ListenAddress = _ty.Union[_net.IPv4, str]
 ListenPort = _ty.Union[int, _ty.Sequence[int]]
@@ -219,6 +223,131 @@ def _clear_interface_cache() -> None:
     _INTERFACE_CACHE.clear()
 
 
+_PKTINFO_STRUCT = "=I4s4s"
+
+
+def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool:
+    """Whether this listener can use the POSIX packet-info path.
+
+    Only a wildcard bind needs it, and only POSIX has it. Without it a wildcard
+    has to be expanded into one socket per address -- which on Linux then
+    receives no broadcasts at all, so a client's DISCOVER never arrives.
+    """
+    return (
+        per_interface is not True
+        and _RECVMSG is not None
+        and hasattr(_socket, "IP_PKTINFO")
+        and _listen_uses_wildcard(listen)
+    )
+
+
+def _bind_sockets(
+    listen: "_ty.Sequence[_net.SocketAddress]",
+    sockets: "list[_socket.socket]",
+    pktinfo: bool,
+    label: str = "",
+) -> None:
+    """Bind one socket per listen address, reusing any already bound.
+
+    Shared by both listeners. Held apart, the async copy silently lacked the
+    ``IP_PKTINFO`` socket option and the bind-error hints, so the same mistake
+    produced a helpful message from one listener and a bare errno from the other.
+    """
+    _clear_interface_cache()
+    active = {_net.SocketAddress(sock): sock for sock in sockets}
+    wanted = []
+    for address in listen:
+        wanted.append(address)
+        if address in active:
+            continue
+        LOGGER.info(f"Listening on{' (' + label + ')' if label else ''}: {address}")
+        try:
+            sock = address.listen(
+                _socket.AF_INET,
+                _socket.SOCK_DGRAM,
+                _socket.IPPROTO_UDP,
+                options=[
+                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
+                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
+                ],
+            )
+            if pktinfo and address.ip == _net.WILDCARD_IPv4 and IP_PKTINFO is not None:
+                sock.setsockopt(_socket.IPPROTO_IP, IP_PKTINFO, 1)
+        except OSError as e:
+            # netimps recognises the POSIX errnos *and* the Windows WinError
+            # codes, which differ; the DHCP-specific suggestion is appended
+            # rather than replacing the generic diagnosis.
+            hint = _netimps.bind_error_hint(e, address.port)
+            if hint is None:
+                raise
+            if isinstance(e, PermissionError) or "permission" in hint.lower():
+                raise PermissionError(f"{hint}. Try 6767 for testing.") from e
+            if "in use" in hint:
+                raise OSError(
+                    e.errno, f"{hint}; try port {address.port + 1000}."
+                ) from e
+            raise OSError(e.errno, hint) from e
+        sockets.append(sock)
+    for address, sock in active.items():
+        if address not in wanted:
+            sockets.remove(sock)
+            try:
+                sock.close()
+            except Exception:
+                pass
+
+
+def _recv_with_pktinfo(
+    sock: _socket.socket, max_packet_size: int
+) -> "tuple[bytes, _net.SocketAddress, int | None, _net.IPv4 | None]":
+    """Receive one datagram together with the interface it arrived on."""
+    if CMSG_SPACE is None or IP_PKTINFO is None or _RECVMSG is None:
+        raise RuntimeError("packet info support unavailable")
+    data, ancdata, _flags, client_tuple = _RECVMSG(
+        sock, max_packet_size, CMSG_SPACE(_struct.calcsize(_PKTINFO_STRUCT))
+    )
+    local_ip: "_net.IPv4 | None" = None
+    ifindex: "int | None" = None
+    for level, ctype, cdata in ancdata:
+        if level == _socket.IPPROTO_IP and ctype == IP_PKTINFO:
+            ifindex, dst1, _ = _struct.unpack(
+                _PKTINFO_STRUCT, cdata[: _struct.calcsize(_PKTINFO_STRUCT)]
+            )
+            local_ip = _net.IPv4(_socket.inet_ntoa(dst1))
+            break
+    return data, _net.SocketAddress(*client_tuple), ifindex, local_ip
+
+
+def _context_for(
+    sock: _socket.socket,
+    client: _net.SocketAddress,
+    client_mac: bytes,
+    ifindex: "int | None" = None,
+    local_ip: "_net.IPv4 | None" = None,
+) -> RequestContext:
+    """Build the context for one received datagram.
+
+    Shared by both listeners: duplicating it is what let the async half miss
+    every fix the sync half gained.
+    """
+    transport: Transport
+    if ifindex is not None or local_ip is not None:
+        pkt_transport = PktInfoUdpTransport(sock)
+        pkt_transport.ifindex = ifindex
+        pkt_transport.local_ip = local_ip
+        transport = pkt_transport
+    else:
+        transport = UdpTransport(sock)
+    return RequestContext(
+        transport=transport,
+        interface=_resolve_interface(sock, local_ip, ifindex),
+        client=client,
+        client_mac=client_mac,
+        ifindex=ifindex,
+        local_ip=local_ip,
+    )
+
+
 def _resolve_interface(
     sock: _socket.socket,
     pkt_local_ip: _ty.Optional[_net.IPv4] = None,
@@ -314,12 +443,7 @@ class DhcpListener:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
-        self._pktinfo = (
-            per_interface is not True
-            and hasattr(_socket.socket, "recvmsg")
-            and hasattr(_socket, "IP_PKTINFO")
-            and _listen_uses_wildcard(listen)
-        )
+        self._pktinfo = _pktinfo_supported(listen, per_interface)
         self._listen = _parselisteners(
             listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo
         )
@@ -335,49 +459,7 @@ class DhcpListener:
         pass
 
     def bind(self) -> None:
-        _clear_interface_cache()
-        active = {_net.SocketAddress(socket): socket for socket in self._sockets}
-        _listen = []
-        for address in self._listen:
-            _listen.append(address)
-            if address in active:
-                continue
-            LOGGER.info(f"Listening on: {address}")
-            try:
-                socket = address.listen(
-                    _socket.AF_INET,
-                    _socket.SOCK_DGRAM,
-                    _socket.IPPROTO_UDP,
-                    options=[
-                        _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
-                        _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
-                    ],
-                )
-                if self._pktinfo and address.ip == _net.WILDCARD_IPv4:
-                    if IP_PKTINFO is not None:
-                        socket.setsockopt(_socket.IPPROTO_IP, IP_PKTINFO, 1)
-            except OSError as e:
-                # netimps recognises the POSIX errnos *and* the Windows
-                # WinError codes, which differ; the DHCP-specific suggestion
-                # is appended rather than replacing the generic diagnosis.
-                hint = _netimps.bind_error_hint(e, address.port)
-                if hint is None:
-                    raise
-                if isinstance(e, PermissionError) or "permission" in hint.lower():
-                    raise PermissionError(f"{hint}. Try 6767 for testing.") from e
-                if "in use" in hint:
-                    raise OSError(
-                        e.errno, f"{hint}; try port {address.port + 1000}."
-                    ) from e
-                raise OSError(e.errno, hint) from e
-            self._sockets.append(socket)
-        for address, socket in active.items():
-            if address not in _listen:
-                self._sockets.remove(socket)
-                try:
-                    socket.close()
-                except Exception:
-                    pass
+        _bind_sockets(self._listen, self._sockets, self._pktinfo)
 
     def stop(self) -> None:
         if self._cancellation_token is not None:
@@ -478,51 +560,24 @@ class DhcpListener:
                     break
                 for socket in rlist:
                     try:
-                        if self._pktinfo and hasattr(socket, "recvmsg"):
-                            if CMSG_SPACE is None or IP_PKTINFO is None:
-                                raise RuntimeError("packet info support unavailable")
-                            data, ancdata, _, client_tuple = socket.recvmsg(
-                                self._max_packet_size,
-                                CMSG_SPACE(_struct.calcsize("=I4s4s")),
+                        if self._pktinfo:
+                            data, client, ifindex, local_ip = _recv_with_pktinfo(
+                                socket, self._max_packet_size
                             )
-                            size = len(data)
-                            local_ip = None
-                            ifindex = None
-                            for level, ctype, cdata in ancdata:
-                                if level == _socket.IPPROTO_IP and ctype == IP_PKTINFO:
-                                    ifindex, dst1, _ = _struct.unpack(
-                                        "=I4s4s", cdata[: _struct.calcsize("=I4s4s")]
-                                    )
-                                    local_ip = _net.IPv4(_socket.inet_ntoa(dst1))
-                                    break
                             msg = DhcpMessage.decode(memoryview(data))
-                            client = _net.SocketAddress(*client_tuple)
-                            interface = _resolve_interface(socket, local_ip, ifindex)
-                            pkt_transport = PktInfoUdpTransport(socket)
-                            context = RequestContext(
-                                transport=pkt_transport,
-                                interface=interface,
-                                client=client,
-                                client_mac=msg.chaddr,
-                                ifindex=ifindex,
-                                local_ip=local_ip,
-                            )
-                            pkt_transport.ifindex = ifindex
-                            pkt_transport.local_ip = local_ip
                         else:
+                            # No control message to read, so keep the preallocated
+                            # buffer rather than letting recvmsg allocate per packet.
                             size, client_tuple = socket.recvfrom_into(
                                 view, self._max_packet_size
                             )
                             client = _net.SocketAddress(*client_tuple)
+                            ifindex = None
+                            local_ip = None
                             msg = DhcpMessage.decode(view[:size])
-                            interface = _resolve_interface(socket)
-                            transport = UdpTransport(socket)
-                            context = RequestContext(
-                                transport=transport,
-                                interface=interface,
-                                client=client,
-                                client_mac=msg.chaddr,
-                            )
+                        context = _context_for(
+                            socket, client, msg.chaddr, ifindex, local_ip
+                        )
                         self.metrics.packets_received += 1
                         msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
                         self.handle(msg, context)
@@ -541,6 +596,13 @@ import asyncio as _asyncio
 
 
 class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
+    """Fallback receive path for loops without `add_reader`.
+
+    Windows' default proactor loop raises NotImplementedError for socket
+    readability, so it cannot use the reader path. It also has no IP_PKTINFO,
+    so nothing is lost by receiving without control messages here.
+    """
+
     def __init__(self, listener: "AsyncDhcpListener", sock: _socket.socket) -> None:
         self.listener = listener
         self.sock = sock
@@ -555,7 +617,7 @@ class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
         # rewrite in FileLeaseBackend, interface work -- so doing it inline
         # blocked every other coroutine in the host application for the duration
         # and made the server strictly serial anyway.
-        self.listener._dispatch(data, addr, self.sock)
+        self.listener._dispatch_received(data, _net.SocketAddress(*addr), self.sock)
 
     def error_received(self, exc: Exception) -> None:
         # Without this, a UDP error (an ICMP port-unreachable from a previous
@@ -582,16 +644,54 @@ class AsyncDhcpListener:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
-        self._pktinfo = False
-        self._listen = _parselisteners(listen, self.DEFAULT_PORTS, expand_wildcard=True)
+        self._pktinfo = _pktinfo_supported(listen, per_interface)
+        self._listen = _parselisteners(
+            listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo
+        )
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._transports: list[_asyncio.DatagramTransport] = []
+        self._readers: list[_socket.socket] = []
+        self._loop: _ty.Optional[_asyncio.AbstractEventLoop] = None
         self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
         self.metrics = DhcpMetrics()
 
-    def _dispatch(
-        self, data: bytes, addr: tuple[str, int], sock: _socket.socket
+    def _on_readable(self, sock: _socket.socket) -> None:
+        """Read one datagram off a ready socket, on the event loop.
+
+        Only the read happens here; the handler runs on the worker. Reading via
+        add_reader rather than a DatagramTransport is what makes the packet-info
+        path possible at all -- asyncio's transport calls sock.recvfrom() and
+        offers no way to get at the control message that says which interface a
+        broadcast arrived on.
+        """
+        try:
+            if self._pktinfo:
+                data, client, ifindex, local_ip = _recv_with_pktinfo(
+                    sock, self._max_packet_size
+                )
+            else:
+                data, client_tuple = sock.recvfrom(self._max_packet_size)
+                client = _net.SocketAddress(*client_tuple)
+                ifindex = None
+                local_ip = None
+        except BlockingIOError:  # pragma: no cover - spurious readability
+            return
+        except Exception as e:
+            LOGGER.error(
+                f"Encounter error reading async datagram: "
+                f"{e.__class__.__name__} | {e}"
+            )
+            return
+        self._dispatch_received(data, client, sock, ifindex, local_ip)
+
+    def _dispatch_received(
+        self,
+        data: bytes,
+        client: _net.SocketAddress,
+        sock: _socket.socket,
+        ifindex: "int | None" = None,
+        local_ip: "_net.IPv4 | None" = None,
     ) -> None:
         """Run one datagram's handling off the event loop.
 
@@ -601,9 +701,11 @@ class AsyncDhcpListener:
         """
         worker = self._worker
         if worker is None:  # not started through start(); keep working anyway
-            self._handle_datagram(data, addr, sock)
+            self._handle_datagram(data, client, sock, ifindex, local_ip)
             return
-        future = worker.submit(self._handle_datagram, data, addr, sock)
+        future = worker.submit(
+            self._handle_datagram, data, client, sock, ifindex, local_ip
+        )
         future.add_done_callback(self._report_worker_result)
 
     @staticmethod
@@ -616,23 +718,22 @@ class AsyncDhcpListener:
             )
 
     def _handle_datagram(
-        self, data: bytes, addr: tuple[str, int], sock: _socket.socket
+        self,
+        data: bytes,
+        client: _net.SocketAddress,
+        sock: _socket.socket,
+        ifindex: "int | None" = None,
+        local_ip: "_net.IPv4 | None" = None,
     ) -> None:
         try:
-            client = _net.SocketAddress(*addr)
             msg = DhcpMessage.decode(memoryview(data))
             self.metrics.packets_received += 1
             msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
-            context = RequestContext(
-                transport=UdpTransport(sock),
-                interface=_resolve_interface(sock),
-                client=client,
-                client_mac=msg.chaddr,
-            )
+            context = _context_for(sock, client, msg.chaddr, ifindex, local_ip)
             self.handle(msg, context)
         except Exception as e:
             LOGGER.error(
-                f"Encounter error handling async request from {addr} : "
+                f"Encounter error handling async request from {client} : "
                 f"{e.__class__.__name__} | {e}"
             )
 
@@ -640,31 +741,7 @@ class AsyncDhcpListener:
         pass
 
     def bind(self) -> None:
-        _clear_interface_cache()
-        active = {_net.SocketAddress(socket): socket for socket in self._sockets}
-        _listen = []
-        for address in self._listen:
-            _listen.append(address)
-            if address in active:
-                continue
-            LOGGER.info(f"Listening on (async): {address}")
-            socket = address.listen(
-                _socket.AF_INET,
-                _socket.SOCK_DGRAM,
-                _socket.IPPROTO_UDP,
-                options=[
-                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
-                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
-                ],
-            )
-            self._sockets.append(socket)
-        for address, socket in active.items():
-            if address not in _listen:
-                self._sockets.remove(socket)
-                try:
-                    socket.close()
-                except Exception:
-                    pass
+        _bind_sockets(self._listen, self._sockets, self._pktinfo, label="async")
 
     async def start(self) -> None:
         self.bind()
@@ -673,11 +750,23 @@ class AsyncDhcpListener:
                 max_workers=1, thread_name_prefix="pydhcp-async-handler"
             )
         loop = _asyncio.get_running_loop()
+        self._loop = loop
         for sock in self._sockets:
-            transport, _ = await loop.create_datagram_endpoint(
-                lambda: _DhcpDatagramProtocol(self, sock), sock=sock
-            )
-            self._transports.append(transport)
+            sock.setblocking(False)
+            try:
+                loop.add_reader(sock.fileno(), self._on_readable, sock)
+            except NotImplementedError:
+                # Proactor loop (the Windows default): no socket readability, so
+                # receive through a datagram transport instead. That path cannot
+                # deliver control messages, which is why it is the fallback and
+                # not the default -- but it is only ever taken where IP_PKTINFO
+                # does not exist anyway.
+                transport, _ = await loop.create_datagram_endpoint(
+                    lambda: _DhcpDatagramProtocol(self, sock), sock=sock
+                )
+                self._transports.append(transport)
+            else:
+                self._readers.append(sock)
 
     def stop(self) -> _ty.Any:
         """Close every transport and socket.
@@ -690,6 +779,14 @@ class AsyncDhcpListener:
         bound, and mypy accepted it. Returning an already-finished future keeps
         the `await` form working from inside a running loop.
         """
+        loop, self._loop = self._loop, None
+        for sock in self._readers:
+            if loop is not None:
+                try:
+                    loop.remove_reader(sock.fileno())
+                except Exception:  # pragma: no cover - loop already closed
+                    pass
+        self._readers.clear()
         for transport in self._transports:
             transport.close()
         self._transports.clear()
