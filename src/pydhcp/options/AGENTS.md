@@ -132,7 +132,11 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
   `StaticRoute` rejects a `0.0.0.0` destination.
 - **`DomainList`** — RFC 1035/3397 domain-name list with DNS-style
   compression-pointer support on both decode and encode (encode
-  deduplicates common suffixes automatically).
+  deduplicates common suffixes automatically). Names obey the same limits as
+  every other option carrying one — 63 octets per label, 255 per name,
+  measured on the uncompressed form — and an over-long label raises rather
+  than writing a length octet that collides with the pointer flag bits. An
+  empty entry is the root name and encodes as a single zero octet.
 - **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0)`** — RFC 4702 client FQDN
   (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/`FLAG_O`/`FLAG_E`/
   `FLAG_N` are the defined bits; the name is RFC 1035 wire format when `FLAG_E`
@@ -169,6 +173,25 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 - **`ViVendorClassRecord`** / **`ViVendorClass`** — RFC 3925
   vendor-identifying vendor class (enterprise-number-keyed data / its list
   container).
+
+### Domain names (`type/domain.py`)
+
+Internal, but the single source of truth for every option carrying an RFC 1035
+name — options 81, 120, 122, 139/140 and the 3397 search list all route here,
+so a malformed name is accepted or refused identically whichever option carries
+it. `MAX_LABEL_OCTETS` (63) and `MAX_NAME_OCTETS` (255) are the limits.
+
+- `split_domain_name(name, what, allow_root=False) -> list[str]` — validate and
+  return the labels. Separate from encoding so `DomainList`, whose compressed
+  encoder cannot share the *encoding*, still shares the *rules*.
+- `encode_domain_name(name, what, allow_root=False) -> bytes` — length-prefixed
+  labels plus a root label. `allow_root` permits the empty name.
+- `decode_domain_name(option, start=0, what) -> (str, octets_read)` — rejects
+  compression pointers: with no enclosing message a pointer cannot resolve, and
+  read as a length, `0xC0` silently yields a wrong name.
+
+This module deliberately imports nothing from the package: `options.type` and
+`options.ccc` import each other and work only by statement order.
 
 ### MoS records (`mos.py`, RFC 5678)
 
