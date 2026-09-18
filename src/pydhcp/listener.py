@@ -653,6 +653,7 @@ class AsyncDhcpListener:
         self._transports: list[_asyncio.DatagramTransport] = []
         self._readers: list[_socket.socket] = []
         self._loop: _ty.Optional[_asyncio.AbstractEventLoop] = None
+        self._stopped: _ty.Optional[_asyncio.Event] = None
         self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
         self.metrics = DhcpMetrics()
 
@@ -743,6 +744,32 @@ class AsyncDhcpListener:
     def bind(self) -> None:
         _bind_sockets(self._listen, self._sockets, self._pktinfo, label="async")
 
+    async def wait(self) -> None:
+        """Block until `stop()` is called.
+
+        The sync counterpart is `DhcpListener.wait()`, and reaching *that* one
+        through the inherited contract raised `AttributeError: _cancellation_token`
+        -- the async constructor never sets one. A coroutine is the honest shape
+        here: waiting synchronously inside the loop that has to run the handlers
+        would deadlock.
+        """
+        stopped = self._stopped
+        if stopped is None:  # never started, or already stopped
+            return
+        await stopped.wait()
+
+    def listen(self) -> None:
+        """Not available: the async listener is driven by its event loop.
+
+        Inherited from `DhcpListener` through `AsyncDhcpServer`'s MRO, where it
+        used to fail with `AttributeError: _cancellation_token` several frames
+        deep instead of saying what to call.
+        """
+        raise NotImplementedError(
+            "AsyncDhcpListener has no blocking listen(); "
+            "use `await start()` and then `await wait()`."
+        )
+
     async def start(self) -> None:
         self.bind()
         if self._worker is None:
@@ -751,6 +778,7 @@ class AsyncDhcpListener:
             )
         loop = _asyncio.get_running_loop()
         self._loop = loop
+        self._stopped = _asyncio.Event()
         for sock in self._sockets:
             sock.setblocking(False)
             try:
@@ -779,6 +807,9 @@ class AsyncDhcpListener:
         bound, and mypy accepted it. Returning an already-finished future keeps
         the `await` form working from inside a running loop.
         """
+        stopped, self._stopped = self._stopped, None
+        if stopped is not None:
+            stopped.set()
         loop, self._loop = self._loop, None
         for sock in self._readers:
             if loop is not None:

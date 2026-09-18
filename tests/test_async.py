@@ -314,3 +314,33 @@ def test_async_listener_builds_a_packet_info_context():
         assert routed.ifindex == 7 and routed.local_ip == IPv4("127.0.0.1")
     finally:
         sock.close()
+
+
+def test_async_wait_and_listen_do_not_raise_attributeerror():
+    """Both are reachable through the inherited DhcpListener contract.
+
+    AsyncDhcpListener.__init__ never sets `_cancellation_token`, so the sync
+    implementations it inherited through AsyncDhcpServer's MRO failed with
+    `AttributeError: _cancellation_token` several frames deep -- a bug report
+    that says nothing about what to call instead.
+    """
+    from pydhcp.server import AsyncDhcpServer
+
+    async def main():
+        server = AsyncDhcpServer(listen=("127.0.0.1", 0))
+
+        # listen() says what to use, rather than dying on missing state.
+        with pytest.raises(NotImplementedError, match="await start"):
+            server.listen()
+
+        # wait() before start() returns rather than hanging or raising.
+        await asyncio.wait_for(server.wait(), timeout=1)
+
+        await server.start()
+        waiter = asyncio.create_task(server.wait())
+        await asyncio.sleep(0.05)
+        assert not waiter.done(), "wait() returned while the server was serving"
+        server.stop()
+        await asyncio.wait_for(waiter, timeout=1)
+
+    asyncio.run(main())
