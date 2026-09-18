@@ -45,6 +45,10 @@ jobs:
       - name: Run tests
         run: python -m pytest tests -q -rs
 
+      - name: Check formatting (black)
+        if: matrix.python-version == '3.14'
+        run: python -m black --check src tests benchmarks examples
+
       - name: Type-check (mypy strict)
         if: matrix.python-version == '3.14'
         run: python -m mypy src
