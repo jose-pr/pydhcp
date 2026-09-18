@@ -6,6 +6,7 @@ if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
 from .base import DhcpOptionType, List
+from .domain import decode_domain_name, encode_domain_name
 from .net import IPv4Address
 from .scalar import Bytes
 
@@ -20,35 +21,11 @@ class _MoSLabelList(DhcpOptionType, list[str]):
 
     @staticmethod
     def _encode_domain(domain: str) -> bytes:
-        labels = domain.split(".")
-        data = bytearray()
-        for label in labels:
-            if not label:
-                raise ValueError("MoS FQDN entries must not contain empty labels")
-            label_bytes = label.encode()
-            if len(label_bytes) > 63:
-                raise ValueError("MoS FQDN label exceeds 63 bytes")
-            data.append(len(label_bytes))
-            data.extend(label_bytes)
-        data.append(0)
-        return bytes(data)
+        return encode_domain_name(domain, "MoS FQDN entry")
 
     @classmethod
     def _decode_domain(cls, option: memoryview, start: int) -> tuple[str, int]:
-        labels: list[str] = []
-        idx = start
-        size = len(option)
-        while True:
-            if idx >= size:
-                raise ValueError(f"{cls.__name__} option is truncated")
-            length = option[idx]
-            idx += 1
-            if length == 0:
-                return ".".join(labels), idx - start
-            if idx + length > size:
-                raise ValueError(f"{cls.__name__} option is truncated")
-            labels.append(option[idx : idx + length].tobytes().decode())
-            idx += length
+        return decode_domain_name(option, start, cls.__name__)
 
     @classmethod
     def _normalize(cls, item: _ty.Any) -> str:

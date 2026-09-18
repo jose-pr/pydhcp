@@ -7,6 +7,7 @@ if _ty.TYPE_CHECKING:
 
 from ...network import IPv4 as _IP, IPv4Interface as _Interface, IPv4Network as _Network
 from .base import DhcpOptionType
+from .domain import decode_domain_name, encode_domain_name
 
 
 class IPv4Address(DhcpOptionType, _IP):
@@ -331,51 +332,6 @@ class RdnssSelection(DhcpOptionType):
         return [self.flags, str(self.primary), str(self.secondary), self.domains.__json__()]
 
 
-# RFC 1035 name encoding without compression. `ccc.py` and `type/mos.py` each
-# carry their own copy of this pair; converging all three is finding
-# options-codecs-18, which is not attempted here because `options.type` and
-# `options.ccc` already import each other and only work by statement order
-# (finding neatness-9).
-
-
-def _encode_domain_name(name: str) -> bytes:
-    labels = name.rstrip(".").split(".") if name else []
-    data = bytearray()
-    for label in labels:
-        if not label:
-            raise ValueError("domain name must not contain empty labels")
-        encoded = label.encode("utf-8")
-        if len(encoded) > 63:
-            raise ValueError(f"domain label exceeds 63 octets: {label!r}")
-        data.append(len(encoded))
-        data.extend(encoded)
-    data.append(0)
-    if len(data) > 255:
-        raise ValueError("domain name exceeds 255 octets")
-    return bytes(data)
-
-
-def _decode_domain_name(option: memoryview, start: int = 0) -> tuple[str, int]:
-    labels: list[str] = []
-    idx = start
-    size = len(option)
-    while True:
-        if idx >= size:
-            raise ValueError("domain name is truncated")
-        length = option[idx]
-        idx += 1
-        if length == 0:
-            return ".".join(labels), idx - start
-        if length & 0xC0:
-            # RFC 4702 s3.1 and RFC 3361 s3.1 both forbid compression here, and
-            # there is no enclosing message to resolve a pointer against anyway.
-            raise ValueError("compression pointers are not allowed in this option")
-        if idx + length > size:
-            raise ValueError("domain name is truncated")
-        labels.append(option[idx : idx + length].tobytes().decode("utf-8"))
-        idx += length
-
-
 class ClientFqdn(DhcpOptionType):
     """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
 
@@ -439,7 +395,7 @@ class ClientFqdn(DhcpOptionType):
             raise ValueError(f"ClientFqdn reserved flag bits set: {flags:#04x}")
         rest = option[3:]
         if flags & cls.FLAG_E:
-            name, read = _decode_domain_name(rest)
+            name, read = decode_domain_name(rest, 0, "ClientFqdn name")
             if read != len(rest):
                 raise ValueError("ClientFqdn has trailing data after the name")
         else:
@@ -452,7 +408,7 @@ class ClientFqdn(DhcpOptionType):
         data.append(self.rcode1)
         data.append(self.rcode2)
         if self.encoded:
-            data.extend(_encode_domain_name(self.name))
+            data.extend(encode_domain_name(self.name, "ClientFqdn name", allow_root=True))
         else:
             data.extend(self.name.encode("utf-8"))
         return len(data) - start
@@ -553,7 +509,7 @@ class SipServers(DhcpOptionType):
             values = []
             idx = 0
             while idx < len(body):
-                name, read = _decode_domain_name(body, idx)
+                name, read = decode_domain_name(body, idx, "SipServers name")
                 values.append(name)
                 idx += read
         else:
@@ -568,7 +524,7 @@ class SipServers(DhcpOptionType):
                 data.extend(_IP(value).packed)
         else:
             for value in self.values:
-                data.extend(_encode_domain_name(value))
+                data.extend(encode_domain_name(value, "SipServers name"))
         return len(data) - start
 
     def __eq__(self, other: object) -> bool:

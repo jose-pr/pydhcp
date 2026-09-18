@@ -692,3 +692,77 @@ def test_name_service_search_is_a_list_of_option_codes():
         [0x00, 0x06, 0x00, 0x2C]
     )
     assert options.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
+
+
+# --- The shared uncompressed-name helpers (options/type/domain.py) ---
+#
+# These lived in three copies that had drifted: only one rejected a compression
+# pointer, only one enforced RFC 1035's 255-octet name limit. The same malformed
+# input was accepted, rejected or silently misread depending on which option it
+# arrived in.
+
+
+def test_domain_helper_round_trips():
+    from pydhcp.options.type.domain import decode_domain_name, encode_domain_name
+
+    wire = encode_domain_name("sip.example.com")
+    assert wire == bytes([3]) + b"sip" + bytes([7]) + b"example" + bytes([3]) + b"com" + bytes([0])
+    assert decode_domain_name(memoryview(bytearray(wire))) == ("sip.example.com", len(wire))
+
+
+def test_domain_helper_rejects_compression_pointers():
+    """Read as a length, 0xC0 means "the next 192 octets are a label", which
+    either overruns a short option or silently yields a wrong name from a long
+    one. RFC 4702 s3.1, RFC 3361 s3.1 and RFC 3495 all forbid compression here."""
+    import pytest as _pytest
+
+    from pydhcp.options.type.domain import decode_domain_name
+
+    payload = bytes([0x03]) + b"lab" + bytes([0xC0, 0x00])
+    with _pytest.raises(ValueError, match="compression pointer"):
+        decode_domain_name(memoryview(bytearray(payload)))
+
+
+def test_domain_helper_enforces_the_rfc1035_limits():
+    import pytest as _pytest
+
+    from pydhcp.options.type.domain import encode_domain_name
+
+    with _pytest.raises(ValueError, match="63 octets"):
+        encode_domain_name("a" * 64)
+    with _pytest.raises(ValueError, match="255 octets"):
+        encode_domain_name(".".join(["abcdefgh"] * 40))
+    with _pytest.raises(ValueError, match="empty labels"):
+        encode_domain_name("lab..example")
+
+
+def test_domain_helper_root_name_is_opt_in():
+    """RFC 4702 lets a client send option 81 with no name, but for most options
+    an empty name is a caller mistake -- and these codecs rejected it before."""
+    import pytest as _pytest
+
+    from pydhcp.options.type.domain import encode_domain_name
+
+    assert encode_domain_name("", allow_root=True) == bytes([0])
+    with _pytest.raises(ValueError, match="must not be empty"):
+        encode_domain_name("")
+
+
+def test_ccc_and_mos_inherit_the_shared_checks():
+    """Convergence has to reach the callers, or it is just a fourth copy."""
+    import pytest as _pytest
+
+    from pydhcp.options.ccc import _decode_no_compression_domain, _encode_no_compression_domain
+    from pydhcp.options.type import MoSFqdnList, MoSFqdnRecord
+
+    pointer = memoryview(bytearray(bytes([0x03]) + b"lab" + bytes([0xC0, 0x00])))
+    with _pytest.raises(ValueError, match="compression pointer"):
+        _decode_no_compression_domain(pointer)
+    with _pytest.raises(ValueError, match="255 octets"):
+        _encode_no_compression_domain(".".join(["abcdefgh"] * 40))
+    # MoS validates by encoding, so the same limits apply on construction.
+    with _pytest.raises(ValueError, match="255 octets"):
+        MoSFqdnRecord(1, [".".join(["abcdefgh"] * 40)])
+    # and the ordinary case still works
+    record = MoSFqdnRecord(1, ["alpha.example"])
+    assert list(MoSFqdnList([record])) == [record]

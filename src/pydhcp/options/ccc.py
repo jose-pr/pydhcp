@@ -4,41 +4,18 @@ import typing as _ty
 
 from .. import network as _net
 from .type import Boolean, Bytes, DhcpOptionType, IPv4Address, List, U8
+from .type.domain import decode_domain_name, encode_domain_name
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
 
 def _encode_no_compression_domain(domain: str) -> bytes:
-    labels = domain.split(".")
-    if not labels or any(not label for label in labels):
-        raise ValueError("CCC domain names must not contain empty labels")
-    data = bytearray()
-    for label in labels:
-        label_bytes = label.encode("utf-8")
-        if len(label_bytes) > 63:
-            raise ValueError("CCC domain label exceeds 63 bytes")
-        data.append(len(label_bytes))
-        data.extend(label_bytes)
-    data.append(0)
-    return bytes(data)
+    return encode_domain_name(domain, "CCC domain name")
 
 
 def _decode_no_compression_domain(option: memoryview, start: int = 0) -> tuple[str, int]:
-    labels: list[str] = []
-    idx = start
-    size = len(option)
-    while True:
-        if idx >= size:
-            raise ValueError("CCC domain name is truncated")
-        length = option[idx]
-        idx += 1
-        if length == 0:
-            return ".".join(labels), idx - start
-        if idx + length > size:
-            raise ValueError("CCC domain name is truncated")
-        labels.append(option[idx : idx + length].tobytes().decode("utf-8"))
-        idx += length
+    return decode_domain_name(option, start, "CCC domain name")
 
 
 class _CccDomainText(DhcpOptionType, str):
