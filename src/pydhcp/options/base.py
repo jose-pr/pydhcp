@@ -34,16 +34,17 @@ class BaseDhcpOptionCode:
 
     def __str__(self) -> str:
         return self.label()
-    
+
     @classmethod
     def normalize(cls, code: int, value: object) -> DhcpOption:
         _code = cls.from_code(code)
         return DhcpOption(_code, _code.get_type()(value))  # type: ignore[call-arg]
-    
+
     @classmethod
     def decode(cls, code: int, value: bytearray) -> DhcpOption:
         _code = cls.from_code(code)
         return DhcpOption(_code, _code.get_type()._dhcp_decode(value))
+
 
 class DhcpOption(_ty.NamedTuple):
     code: _ty.Union[int, "BaseDhcpOptionCode"]

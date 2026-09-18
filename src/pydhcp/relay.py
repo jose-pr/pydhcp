@@ -93,9 +93,7 @@ class DhcpRelay(_Base):
         self.remote_id = remote_id
         self.trust_client_relay_agent_info = trust_client_relay_agent_info
         self._server_ips = {ip for ip, _port in self.server_addresses}
-        self._pending_clients: _ty.OrderedDict[int, PendingClient] = (
-            _ty.OrderedDict()
-        )
+        self._pending_clients: _ty.OrderedDict[int, PendingClient] = _ty.OrderedDict()
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         if msg.op == _enum.OpCode.BOOTREQUEST:
@@ -103,7 +101,9 @@ class DhcpRelay(_Base):
         elif msg.op == _enum.OpCode.BOOTREPLY:
             self._forward_to_client(msg, context)
         else:
-            LOGGER.warning(f"[XID={msg.xid:08x}] Received message with unknown op {msg.op}, ignoring.")
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] Received message with unknown op {msg.op}, ignoring."
+            )
 
     @staticmethod
     def _routed_transport(transport: _Transport) -> _Transport:
@@ -196,7 +196,11 @@ class DhcpRelay(_Base):
         data = self._encode_for_forward(forwarded)
         transport = self._routed_transport(context.transport)
         for server_ip, server_port in self.server_addresses:
-            forwarded.log(context.interface.ip, _net.SocketAddress(server_ip, server_port), _logging.INFO)
+            forwarded.log(
+                context.interface.ip,
+                _net.SocketAddress(server_ip, server_port),
+                _logging.INFO,
+            )
             transport.send(data, server_ip, server_port, msg.chaddr)
             self.metrics.packets_sent += 1
 
@@ -214,7 +218,9 @@ class DhcpRelay(_Base):
         if self.remote_id is not None:
             suboptions.append((2, self.remote_id))
         if suboptions:
-            msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = _type.RelayAgentInformation(suboptions)
+            msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = (
+                _type.RelayAgentInformation(suboptions)
+            )
 
     def _forward_to_client(self, msg: DhcpMessage, context: RequestContext) -> None:
         if context.client.ip not in self._server_ips:
@@ -260,7 +266,9 @@ class DhcpRelay(_Base):
             del reply.options[int(DhcpOptionCode.RELAY_AGENT_INFORMATION)]
 
         data = self._encode_for_forward(reply)
-        reply.log(context.interface.ip, _net.SocketAddress(dest, client_port), _logging.INFO)
+        reply.log(
+            context.interface.ip, _net.SocketAddress(dest, client_port), _logging.INFO
+        )
         # The reply arrived on the server-facing interface and has to leave on the
         # client-facing one, so re-pin it to the interface the request came in on
         # rather than reusing this packet's pin or letting the default route

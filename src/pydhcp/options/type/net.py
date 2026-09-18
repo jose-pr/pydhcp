@@ -12,6 +12,7 @@ from .domain import decode_domain_name, encode_domain_name
 
 class IPv4Address(DhcpOptionType, _IP):
     """A single IPv4 address carried in network byte order."""
+
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         return cls(option[:4].tobytes()), 4
@@ -44,9 +45,7 @@ class ClasslessRoute(DhcpOptionType):
     gateway: _IP
     network: _Network
 
-    def __init__(
-        self, gateway: _ty.Any, network: _ty.Optional[_ty.Any] = None
-    ) -> None:
+    def __init__(self, gateway: _ty.Any, network: _ty.Optional[_ty.Any] = None) -> None:
         gw: _ty.Any
         net: _ty.Any
         if network is not None:
@@ -67,7 +66,9 @@ class ClasslessRoute(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 1:
-            raise ValueError("ClasslessRoute option is truncated: missing prefix length")
+            raise ValueError(
+                "ClasslessRoute option is truncated: missing prefix length"
+            )
         cidr = option[0]
         if cidr > 32:
             raise ValueError(f"ClasslessRoute prefix length {cidr} exceeds 32")
@@ -120,7 +121,9 @@ class _IPv4PairList(DhcpOptionType, list[tuple[_IP, _IP]]):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) % 8:
-            raise ValueError(f"{cls.__name__} option is truncated: expected 8-byte records")
+            raise ValueError(
+                f"{cls.__name__} option is truncated: expected 8-byte records"
+            )
         self = cls()
         for idx in range(0, len(option), 8):
             left = _IP(option[idx : idx + 4].tobytes())
@@ -161,6 +164,7 @@ class StaticRoute(_IPv4PairList):
 
 class DomainList(DhcpOptionType, list[str]):
     """RFC 1035 domain-name list with compression support."""
+
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         view = memoryview(option)
@@ -188,7 +192,11 @@ class DomainList(DhcpOptionType, list[str]):
             if is_ptr:
                 if is_ptr != 0xC0:
                     raise ValueError()
-                components[start] = ("ptr", ((0x3F & ptr_or_len) << 8) | view[id], id + 1)
+                components[start] = (
+                    "ptr",
+                    ((0x3F & ptr_or_len) << 8) | view[id],
+                    id + 1,
+                )
                 id += 1
                 if id < size:
                     domains.append(id)
@@ -276,7 +284,13 @@ class DomainList(DhcpOptionType, list[str]):
 class RdnssSelection(DhcpOptionType):
     """RFC 6731 RDNSS selection payload."""
 
-    def __init__(self, flags: int, primary: _IP, secondary: _IP, domains: DomainList | None = None) -> None:
+    def __init__(
+        self,
+        flags: int,
+        primary: _IP,
+        secondary: _IP,
+        domains: DomainList | None = None,
+    ) -> None:
         self.flags = int(flags)
         self.primary = _IP(primary)
         self.secondary = _IP(secondary)
@@ -329,7 +343,12 @@ class RdnssSelection(DhcpOptionType):
         )
 
     def __json__(self) -> list[_ty.Any]:
-        return [self.flags, str(self.primary), str(self.secondary), self.domains.__json__()]
+        return [
+            self.flags,
+            str(self.primary),
+            str(self.secondary),
+            self.domains.__json__(),
+        ]
 
 
 class ClientFqdn(DhcpOptionType):
@@ -366,7 +385,12 @@ class ClientFqdn(DhcpOptionType):
         rcode2: int = 0,
     ) -> None:
         if isinstance(name, ClientFqdn):
-            name, flags, rcode1, rcode2 = name.name, name.flags, name.rcode1, name.rcode2
+            name, flags, rcode1, rcode2 = (
+                name.name,
+                name.flags,
+                name.rcode1,
+                name.rcode2,
+            )
         elif isinstance(name, _ty.Mapping):
             mapping = name
             name = mapping.get("name", "")
@@ -408,7 +432,9 @@ class ClientFqdn(DhcpOptionType):
         data.append(self.rcode1)
         data.append(self.rcode2)
         if self.encoded:
-            data.extend(encode_domain_name(self.name, "ClientFqdn name", allow_root=True))
+            data.extend(
+                encode_domain_name(self.name, "ClientFqdn name", allow_root=True)
+            )
         else:
             data.extend(self.name.encode("utf-8"))
         return len(data) - start
@@ -457,7 +483,9 @@ class SipServers(DhcpOptionType):
     encoding: int
     values: list[str]
 
-    def __init__(self, values: _ty.Any = (), encoding: _ty.Optional[int] = None) -> None:
+    def __init__(
+        self, values: _ty.Any = (), encoding: _ty.Optional[int] = None
+    ) -> None:
         if isinstance(values, SipServers):
             values, encoding = list(values.values), values.encoding
         elif isinstance(values, _ty.Mapping):
@@ -541,6 +569,8 @@ class SipServers(DhcpOptionType):
 
     def __json__(self) -> dict[str, _ty.Any]:
         return {
-            "encoding": "address" if self.encoding == self.ENCODING_ADDRESS else "domain",
+            "encoding": (
+                "address" if self.encoding == self.ENCODING_ADDRESS else "domain"
+            ),
             "values": list(self.values),
         }

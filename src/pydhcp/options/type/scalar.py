@@ -12,7 +12,10 @@ from .base import DhcpOptionType
 
 class Bytes(DhcpOptionType, bytes):
     """Opaque byte payload."""
-    def __new__(cls, src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None) -> Self:
+
+    def __new__(
+        cls, src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None
+    ) -> Self:
         if isinstance(src, str):
             return cls.fromhex(src)
         if src is None:
@@ -75,7 +78,9 @@ class UriList(DhcpOptionType, list[str]):
             try:
                 decoded = payload.decode("utf-8")
             except UnicodeDecodeError as exc:
-                raise ValueError(f"{cls.__name__} option contains invalid UTF-8") from exc
+                raise ValueError(
+                    f"{cls.__name__} option contains invalid UTF-8"
+                ) from exc
             self.append(decoded)
             idx += length
         return self, size
@@ -97,6 +102,7 @@ class UriList(DhcpOptionType, list[str]):
 
 class String(DhcpOptionType, str):
     """RFC 2132 NVT-ASCII string with null termination on the wire."""
+
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
@@ -115,6 +121,7 @@ class String(DhcpOptionType, str):
 
 class Boolean(DhcpOptionType, int):
     """Boolean option encoded as a single octet."""
+
     def __new__(cls, val: _ty.Any) -> Self:
         if val:
             val = 1
@@ -196,7 +203,10 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
         option_part = option[: cls.NUMBER_OF_BYTES]
         if len(option_part) != cls.NUMBER_OF_BYTES:
             raise ValueError()
-        return cls(int.from_bytes(option_part, "big", signed=cls.SIGNED)), cls.NUMBER_OF_BYTES
+        return (
+            cls(int.from_bytes(option_part, "big", signed=cls.SIGNED)),
+            cls.NUMBER_OF_BYTES,
+        )
 
     def _dhcp_write(self, data: bytearray) -> int:
         self._validate()
@@ -226,30 +236,35 @@ class FixedLengthInteger(BaseFixedLengthInteger):
 
 class U8(FixedLengthInteger):
     """Unsigned 8-bit integer."""
+
     NUMBER_OF_BYTES = 1
     SIGNED = False
 
 
 class U16(FixedLengthInteger):
     """Unsigned 16-bit integer."""
+
     NUMBER_OF_BYTES = 2
     SIGNED = False
 
 
 class U32(FixedLengthInteger):
     """Unsigned 32-bit integer."""
+
     NUMBER_OF_BYTES = 4
     SIGNED = False
 
 
 class I32(FixedLengthInteger):
     """Signed 32-bit integer."""
+
     NUMBER_OF_BYTES = 4
     SIGNED = True
 
 
 class ClientIdentifier(Bytes):
     """RFC 2132 client identifier."""
+
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 2:
@@ -276,6 +291,7 @@ class ClientIdentifier(Bytes):
 
 class OptionOverload(DhcpOptionType, _enum.IntFlag):
     """RFC 2132 option-overload selector."""
+
     NONE = 0
     FILE = 1
     SNAME = 2

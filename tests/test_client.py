@@ -3,11 +3,18 @@ import time
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
-from pydhcp import DhcpClient, DhcpLease, DhcpMessage, DhcpOptions, DhcpServer, NetworkInterface, RequestContext
+from pydhcp import (
+    DhcpClient,
+    DhcpLease,
+    DhcpMessage,
+    DhcpOptions,
+    DhcpServer,
+    NetworkInterface,
+    RequestContext,
+)
 from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4, SocketAddress
-
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
 
@@ -21,7 +28,9 @@ def _context() -> RequestContext:
     )
 
 
-def _reply(xid: int, message_type: DhcpMessageType = DhcpMessageType.DHCPOFFER) -> DhcpMessage:
+def _reply(
+    xid: int, message_type: DhcpMessageType = DhcpMessageType.DHCPOFFER
+) -> DhcpMessage:
     options = DhcpOptions()
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
     return DhcpMessage(
@@ -60,7 +69,9 @@ def test_client_builds_standard_request_messages() -> None:
         parameter_request_list=[DhcpOptionCode.SUBNET_MASK, DhcpOptionCode.ROUTER],
     )
     assert discover.flags == Flags.BROADCAST
-    assert discover.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False) == bytearray(b"\x01" + CHADDR)
+    assert discover.options.get(
+        DhcpOptionCode.CLIENT_IDENTIFIER, decode=False
+    ) == bytearray(b"\x01" + CHADDR)
     _assert_round_trips(discover, DhcpMessageType.DHCPDISCOVER)
 
     request = client.build_request(
@@ -78,11 +89,15 @@ def test_client_builds_standard_request_messages() -> None:
     assert DhcpOptionCode.REQUESTED_IP not in inform.options
     _assert_round_trips(inform, DhcpMessageType.DHCPINFORM)
 
-    release = client.build_release(CHADDR, ciaddr="192.0.2.20", server_identifier="192.0.2.1")
+    release = client.build_release(
+        CHADDR, ciaddr="192.0.2.20", server_identifier="192.0.2.1"
+    )
     assert release.flags == Flags.UNICAST
     _assert_round_trips(release, DhcpMessageType.DHCPRELEASE)
 
-    decline = client.build_decline(CHADDR, requested_ip="192.0.2.30", server_identifier="192.0.2.1")
+    decline = client.build_decline(
+        CHADDR, requested_ip="192.0.2.30", server_identifier="192.0.2.1"
+    )
     assert decline.options.get(DhcpOptionCode.REQUESTED_IP) == IPv4("192.0.2.30")
     _assert_round_trips(decline, DhcpMessageType.DHCPDECLINE)
 
@@ -134,7 +149,9 @@ class _FixedLeaseServer(DhcpServer):
     def acquire_lease(self, client_id, server_id, msg):
         options = DhcpOptions()
         options[DhcpOptionCode.ROUTER] = IPv4("127.0.0.1")
-        return DhcpLease(IPv4("127.0.0.1"), datetime.now() + timedelta(seconds=60), options)
+        return DhcpLease(
+            IPv4("127.0.0.1"), datetime.now() + timedelta(seconds=60), options
+        )
 
 
 def _wait_bound(listener, timeout: float = 2.0) -> None:
@@ -154,10 +171,17 @@ def test_client_dora_against_real_server() -> None:
     _wait_bound(client)
     try:
         ack = client.dora(
-            CHADDR, timeout=2.0, retries=1, destination="127.0.0.1", port=server_port, broadcast=False
+            CHADDR,
+            timeout=2.0,
+            retries=1,
+            destination="127.0.0.1",
+            port=server_port,
+            broadcast=False,
         )
         assert ack is not None
-        assert ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+        assert (
+            ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+        )
         assert ack.yiaddr == IPv4("127.0.0.1")
     finally:
         client.stop()

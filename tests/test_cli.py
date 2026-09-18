@@ -11,7 +11,13 @@ from unittest.mock import MagicMock, patch
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from pydhcp import CaptureEvent, DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import (
+    CaptureEvent,
+    DhcpMessage,
+    DhcpOptions,
+    NetworkInterface,
+    RequestContext,
+)
 from pydhcp.cli import (
     App,
     Capture,
@@ -112,7 +118,9 @@ def test_cmd_packet_encode_from_file(tmp_path) -> None:
     source = tmp_path / "packet.json"
     source.write_text(dump_message(packet, "json"), encoding="utf-8")
     output = tmp_path / "packet.hex"
-    cmd = Packet(mode=False, packet_format="json", input=str(source), output=str(output))
+    cmd = Packet(
+        mode=False, packet_format="json", input=str(source), output=str(output)
+    )
 
     cmd()
 
@@ -159,8 +167,20 @@ def test_write_capture_record_single_file_appends(tmp_path) -> None:
     output = tmp_path / "captures.json"
     state = {"first": True}
 
-    _write_capture_record(_capture_event(), output=output, output_mode="single", packet_format="json", state=state)
-    _write_capture_record(_capture_event(), output=output, output_mode="single", packet_format="json", state=state)
+    _write_capture_record(
+        _capture_event(),
+        output=output,
+        output_mode="single",
+        packet_format="json",
+        state=state,
+    )
+    _write_capture_record(
+        _capture_event(),
+        output=output,
+        output_mode="single",
+        packet_format="json",
+        state=state,
+    )
 
     lines = output.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 2
@@ -197,7 +217,10 @@ def test_write_capture_record_rejects_stdout_per_capture() -> None:
 
 def test_load_capture_hook_python_function(tmp_path, monkeypatch) -> None:
     module = tmp_path / "hooks.py"
-    module.write_text("seen = []\ndef on_capture(event):\n    seen.append(event.message_type)\n", encoding="utf-8")
+    module.write_text(
+        "seen = []\ndef on_capture(event):\n    seen.append(event.message_type)\n",
+        encoding="utf-8",
+    )
     monkeypatch.syspath_prepend(str(tmp_path))
 
     hook = _load_capture_hook("hooks:on_capture", "json", False)
@@ -234,7 +257,9 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
     events = [_capture_event()]
 
     class FakeCapture:
-        def __init__(self, listen, packet_filter, sink, hook, hook_fail_fast, per_interface):
+        def __init__(
+            self, listen, packet_filter, sink, hook, hook_fail_fast, per_interface
+        ):
             self.sink = sink
             self.hook = hook
             self.stopped = False
@@ -265,7 +290,10 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
 
     cmd()
 
-    assert json.loads(capsys.readouterr().out)["options"]["DHCP_MESSAGE_TYPE"] == "DHCPDISCOVER"
+    assert (
+        json.loads(capsys.readouterr().out)["options"]["DHCP_MESSAGE_TYPE"]
+        == "DHCPDISCOVER"
+    )
 
 
 def test_capture_cli_main_help_lists_capture(monkeypatch, capsys) -> None:

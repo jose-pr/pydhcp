@@ -6,7 +6,9 @@ from pathlib import Path
 
 
 def _load_module():
-    script_path = Path(__file__).resolve().parent.parent / "benchmarks" / "bench_parse.py"
+    script_path = (
+        Path(__file__).resolve().parent.parent / "benchmarks" / "bench_parse.py"
+    )
     spec = importlib.util.spec_from_file_location("bench_parse", script_path)
     assert spec is not None
     assert spec.loader is not None

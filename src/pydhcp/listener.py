@@ -48,14 +48,16 @@ class UdpTransport(Transport):
     ) -> int:
         dest_ip = dest
         dest_str = "255.255.255.255" if dest_ip == _net.WILDCARD_IPv4 else str(dest_ip)
-        
+
         # Future RawTransport can be plugged in here to craft L2 Ethernet frames targeting client_mac.
         # Standard UDP sockets can't directly target L2 MAC on UDP if there is no ARP entry,
         # so we fall back to broadcast if unicast fails.
         try:
             return self.socket.sendto(data, (dest_str, port))
         except Exception as e:
-            LOGGER.warning(f"UDP unicast to {dest_str} failed ({e}), falling back to broadcast.")
+            LOGGER.warning(
+                f"UDP unicast to {dest_str} failed ({e}), falling back to broadcast."
+            )
             return self.socket.sendto(data, ("255.255.255.255", port))
 
 
@@ -74,8 +76,18 @@ class PktInfoUdpTransport(UdpTransport):
         port: int,
         client_mac: bytes,
     ) -> int:
-        if hasattr(self.socket, "sendmsg") and self.ifindex is not None and self.local_ip is not None and IP_PKTINFO is not None:
-            pktinfo = _struct.pack("=I4s4s", self.ifindex, _socket.inet_aton(str(self.local_ip)), _socket.inet_aton(str(self.local_ip)))
+        if (
+            hasattr(self.socket, "sendmsg")
+            and self.ifindex is not None
+            and self.local_ip is not None
+            and IP_PKTINFO is not None
+        ):
+            pktinfo = _struct.pack(
+                "=I4s4s",
+                self.ifindex,
+                _socket.inet_aton(str(self.local_ip)),
+                _socket.inet_aton(str(self.local_ip)),
+            )
             return int(
                 self.socket.sendmsg(
                     [data],
@@ -144,7 +156,9 @@ def _is_wildcard_binding(binding: ListenBinding) -> bool:
 
 
 def _listen_uses_wildcard(listen: ListenSpec) -> bool:
-    return any(_is_wildcard_binding(binding) for binding in _iter_listen_bindings(listen))
+    return any(
+        _is_wildcard_binding(binding) for binding in _iter_listen_bindings(listen)
+    )
 
 
 def _parselisteners(
@@ -271,15 +285,18 @@ def _resolve_interface_uncached(
             return i
 
     import ipaddress as _ipaddress
+
     try:
         ip_addr = _net.IPv4(local_ip)
     except Exception:
         ip_addr = _net.IPv4("127.0.0.1")
-    LOGGER.warning(f"Could not resolve interface for IP {local_ip}; using synthetic interface")
+    LOGGER.warning(
+        f"Could not resolve interface for IP {local_ip}; using synthetic interface"
+    )
     return _net.NetworkInterface(
         name=f"unknown[{local_ip}]",
         ip_interface=_ipaddress.IPv4Interface((str(ip_addr), 32)),
-        mac=None
+        mac=None,
     )
 
 
@@ -302,7 +319,9 @@ class DhcpListener:
             and hasattr(_socket, "IP_PKTINFO")
             and _listen_uses_wildcard(listen)
         )
-        self._listen = _parselisteners(listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo)
+        self._listen = _parselisteners(
+            listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo
+        )
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         self._sigint_handler: _ty.Optional[_ty.Any] = None
@@ -344,9 +363,7 @@ class DhcpListener:
                 if hint is None:
                     raise
                 if isinstance(e, PermissionError) or "permission" in hint.lower():
-                    raise PermissionError(
-                        f"{hint}. Try 6767 for testing."
-                    ) from e
+                    raise PermissionError(f"{hint}. Try 6767 for testing.") from e
                 if "in use" in hint:
                     raise OSError(
                         e.errno, f"{hint}; try port {address.port + 1000}."
@@ -432,7 +449,9 @@ class DhcpListener:
         self._sigint_handler = None
         self._previous_sigint = None
 
-    def start(self, cancellation_token: _thread.Event | None = None) -> _thread.Thread | None:
+    def start(
+        self, cancellation_token: _thread.Event | None = None
+    ) -> _thread.Thread | None:
         if not self._cancellation_token:
             thread = _thread.Thread(target=self.listen, args=())
             self._cancellation_token = cancellation_token or _thread.Event()
@@ -490,7 +509,9 @@ class DhcpListener:
                             pkt_transport.ifindex = ifindex
                             pkt_transport.local_ip = local_ip
                         else:
-                            size, client_tuple = socket.recvfrom_into(view, self._max_packet_size)
+                            size, client_tuple = socket.recvfrom_into(
+                                view, self._max_packet_size
+                            )
                             client = _net.SocketAddress(*client_tuple)
                             msg = DhcpMessage.decode(view[:size])
                             interface = _resolve_interface(socket)
@@ -516,6 +537,7 @@ class DhcpListener:
 
 
 import asyncio as _asyncio
+
 
 class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
     def __init__(self, listener: "AsyncDhcpListener", sock: _socket.socket) -> None:
@@ -601,8 +623,7 @@ class AsyncDhcpListener:
         loop = _asyncio.get_running_loop()
         for sock in self._sockets:
             transport, _ = await loop.create_datagram_endpoint(
-                lambda: _DhcpDatagramProtocol(self, sock),
-                sock=sock
+                lambda: _DhcpDatagramProtocol(self, sock), sock=sock
             )
             self._transports.append(transport)
 
@@ -634,4 +655,3 @@ class AsyncDhcpListener:
             return None
         future.set_result(None)
         return future
-

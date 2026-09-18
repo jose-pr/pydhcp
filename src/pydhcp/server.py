@@ -88,7 +88,9 @@ class DhcpServer(_Base):
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
         self._declined: _ty.OrderedDict[_net.IPv4, float] = _ty.OrderedDict()
 
-    def acquire_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage) -> _ty.Optional[DhcpLease]:
+    def acquire_lease(
+        self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
+    ) -> _ty.Optional[DhcpLease]:
         """Return a lease for a client message.
 
         The base implementation is intentionally small: it renews existing leases and
@@ -96,13 +98,17 @@ class DhcpServer(_Base):
         this method to implement address pools, reservations, policy checks, or custom
         response options.
         """
-        _server = next(_net.host_ip_interfaces(lambda interface: interface.ip == server_id), None)
+        _server = next(
+            _net.host_ip_interfaces(lambda interface: interface.ip == server_id), None
+        )
         if _server is None:
             return None
 
         existing = self.lease_backend.lookup(client_id)
         if existing:
-            requested_ttl = msg.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32)
+            requested_ttl = msg.options.get(
+                DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
+            )
             ttl = int(requested_ttl) if requested_ttl is not None else 3600
             renewed = self.lease_backend.renew(client_id, ttl)
             if renewed:
@@ -113,7 +119,9 @@ class DhcpServer(_Base):
         requested_ip = msg.options.get(
             DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
-        requested_ttl = msg.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32)
+        requested_ttl = msg.options.get(
+            DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
+        )
         ttl = int(requested_ttl) if requested_ttl is not None else 3600
 
         ip: _ty.Optional[_net.IPv4] = None
@@ -198,7 +206,9 @@ class DhcpServer(_Base):
         while len(self._declined) > self.MAX_DECLINED_ADDRESSES:
             self._declined.popitem(last=False)
 
-    def release_lease(self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage) -> None:
+    def release_lease(
+        self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
+    ) -> None:
         """Release any lease associated with `client_id`.
 
         Override this method when lease release needs to update an external store
@@ -215,10 +225,14 @@ class DhcpServer(_Base):
         should receive site-specific options without touching lease allocation.
         """
         options = DhcpOptions()
-        _server = next(_net.host_ip_interfaces(lambda interface: interface.ip == server_id), None)
+        _server = next(
+            _net.host_ip_interfaces(lambda interface: interface.ip == server_id), None
+        )
         if _server is not None:
             options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
-            options[DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
+            options[DhcpOptionCode.BROADCAST_ADDRESS] = (
+                _server.network.broadcast_address
+            )
             options[DhcpOptionCode.ROUTER] = [server_id]
             options[DhcpOptionCode.DNS] = [server_id]
         return options
@@ -235,8 +249,14 @@ class DhcpServer(_Base):
             return
         client_id = msg.client_id()
         msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        msg_ty_name = msg_ty.name if (msg_ty is not None and hasattr(msg_ty, "name")) else str(msg_ty)
-        LOGGER.debug(f"[XID={msg.xid:08x}] Received {msg_ty_name} from {context.client.ip}")
+        msg_ty_name = (
+            msg_ty.name
+            if (msg_ty is not None and hasattr(msg_ty, "name"))
+            else str(msg_ty)
+        )
+        LOGGER.debug(
+            f"[XID={msg.xid:08x}] Received {msg_ty_name} from {context.client.ip}"
+        )
         server_id: _ty.Optional[_net.IPv4] = msg.options.get(
             DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
@@ -271,21 +291,27 @@ class DhcpServer(_Base):
         """Handle DHCPDISCOVER by offering a lease returned from `acquire_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
-        LOGGER.info(f"[XID={msg.xid:08x}] DHCPDISCOVER from {context.client}|{client_id}")
+        LOGGER.info(
+            f"[XID={msg.xid:08x}] DHCPDISCOVER from {context.client}|{client_id}"
+        )
         lease = self.acquire_lease(client_id, actual_server_id, msg)
         if not lease:
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
             )
             return
-        resp = self._create_response(msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPOFFER)
+        resp = self._create_response(
+            msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPOFFER
+        )
         self._filter_and_send(msg, resp, context, _enum.DhcpMessageType.DHCPOFFER)
 
     def handle_request(self, msg: DhcpMessage, context: RequestContext) -> None:
         """Handle DHCPREQUEST by ACKing or NAKing the lease returned from `acquire_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
-        LOGGER.info(f"[XID={msg.xid:08x}] DHCPREQUEST from {context.client}|{client_id}")
+        LOGGER.info(
+            f"[XID={msg.xid:08x}] DHCPREQUEST from {context.client}|{client_id}"
+        )
 
         # INIT-REBOOT: no server identifier, a requested address, and ciaddr 0.
         # RFC 2131 4.3.2 -- "If the server has no record of this client, then it
@@ -328,7 +354,9 @@ class DhcpServer(_Base):
         """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
-        LOGGER.warning(f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}")
+        LOGGER.warning(
+            f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}"
+        )
         declined: _ty.Optional[_net.IPv4] = msg.options.get(
             DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
@@ -345,7 +373,9 @@ class DhcpServer(_Base):
         """Handle DHCPRELEASE by releasing the client's lease through `release_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
-        LOGGER.info(f"[XID={msg.xid:08x}] DHCPRELEASE from {context.client}|{client_id}")
+        LOGGER.info(
+            f"[XID={msg.xid:08x}] DHCPRELEASE from {context.client}|{client_id}"
+        )
         self.release_lease(client_id, actual_server_id, msg)
 
     def handle_inform(self, msg: DhcpMessage, context: RequestContext) -> None:
@@ -364,7 +394,9 @@ class DhcpServer(_Base):
             _inf,
             self.get_inform_options(actual_server_id, msg),
         )
-        resp = self._create_response(msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPACK)
+        resp = self._create_response(
+            msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPACK
+        )
         if DhcpOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
             del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
         resp.yiaddr = _net.WILDCARD_IPv4
@@ -396,7 +428,11 @@ class DhcpServer(_Base):
             resp.sname = ""
             resp.file = ""
         elif lease.ip:
-            if lease.expires is None or lease.expires == _inf or not isinstance(lease.expires, _dt.datetime):
+            if (
+                lease.expires is None
+                or lease.expires == _inf
+                or not isinstance(lease.expires, _dt.datetime)
+            ):
                 expires = _const.INFINITE_LEASE_TIME
             else:
                 expires = int((lease.expires - _dt.datetime.now()).total_seconds())
@@ -406,7 +442,9 @@ class DhcpServer(_Base):
                 resp.yiaddr = lease.ip
         resp.options[DhcpOptionCode.SERVER_IDENTIFIER] = actual_server_id
         resp.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
-        relay_info = msg.options.get(DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False)
+        relay_info = msg.options.get(
+            DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False
+        )
         if relay_info is not None:
             resp.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
         client_identifier = msg.options.get(
@@ -459,8 +497,10 @@ class DhcpServer(_Base):
                 msg.client_id().replace(":", "")
             )
         if requests_params:
+
             def _paramfilter(opt: tuple[int, bytearray]) -> bool:
                 return opt[0] in requests_params
+
             resp.options._options = _ty.OrderedDict(
                 filter(_paramfilter, resp.options.items(decoded=False))
             )
@@ -471,12 +511,16 @@ class DhcpServer(_Base):
             default=_const.DHCP_MIN_LEGAL_PACKET_SIZE,
             decode=_type.U16,
         )
-        max_size = int(max_size_opt) if max_size_opt is not None else _const.DHCP_MIN_LEGAL_PACKET_SIZE
+        max_size = (
+            int(max_size_opt)
+            if max_size_opt is not None
+            else _const.DHCP_MIN_LEGAL_PACKET_SIZE
+        )
         data = resp.encode(max_size)
 
         dest: _net.IPv4
         dest_port: int = context.client.port
-        
+
         if resp_ty is _enum.DhcpMessageType.DHCPNAK:
             # RFC 2131 4.3.2: with giaddr 0 the server MUST broadcast the NAK to
             # 255.255.255.255, because the client may hold no usable address or
@@ -511,7 +555,9 @@ class DhcpServer(_Base):
             else:
                 dest = _net.IPv4("255.255.255.255")
 
-        resp.log(context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.INFO)
+        resp.log(
+            context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.INFO
+        )
         if __debug__:
             # Diagnostic only: a reply we cannot re-decode is a real bug, but it must be
             # reported, never allowed to suppress the send.
@@ -545,10 +591,13 @@ class AsyncDhcpServer(_AsyncBase, DhcpServer):  # type: ignore[misc]
         lease_backend: _ty.Optional[LeaseBackend] = None,
         per_interface: bool | None = None,
     ) -> None:
-        _AsyncBase.__init__(self, listen=listen, max_packet_size=max_packet_size, per_interface=per_interface)
+        _AsyncBase.__init__(
+            self,
+            listen=listen,
+            max_packet_size=max_packet_size,
+            per_interface=per_interface,
+        )
         self._init_server_state(lease_backend)
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         DhcpServer.handle(self, msg, context)
-
-

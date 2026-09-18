@@ -73,7 +73,9 @@ class UserClass(_LengthPrefixedOpaqueList):
 
 
 class TlvOption(DhcpOptionType):
-    def __init__(self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]) -> None:
+    def __init__(
+        self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]
+    ) -> None:
         self.code = int(code)
         self.value = Bytes(value)
 
@@ -174,7 +176,10 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ViVendorSpecificInformationRecord):
             return NotImplemented
-        return (self.enterprise_number, self.value) == (other.enterprise_number, other.value)
+        return (self.enterprise_number, self.value) == (
+            other.enterprise_number,
+            other.value,
+        )
 
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]
@@ -191,7 +196,9 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
 
     def _dhcp_write(self, data: bytearray) -> int:
         if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
-            raise ValueError(f"{type(self).__name__} enterprise_number must fit in 32 bits")
+            raise ValueError(
+                f"{type(self).__name__} enterprise_number must fit in 32 bits"
+            )
         if len(self.value) > 255:
             raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
         data.extend(self.enterprise_number.to_bytes(4, "big"))
@@ -200,7 +207,9 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
         return 5 + len(self.value)
 
 
-class ViVendorSpecificInformation(DhcpOptionType, list[ViVendorSpecificInformationRecord]):
+class ViVendorSpecificInformation(
+    DhcpOptionType, list[ViVendorSpecificInformationRecord]
+):
     """RFC 3925 vendor-identifying vendor-specific information records."""
 
     def __init__(self, *items: _ty.Any):
@@ -261,7 +270,10 @@ class ViVendorClassRecord(DhcpOptionType):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ViVendorClassRecord):
             return NotImplemented
-        return (self.enterprise_number, self.value) == (other.enterprise_number, other.value)
+        return (self.enterprise_number, self.value) == (
+            other.enterprise_number,
+            other.value,
+        )
 
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]
@@ -281,7 +293,9 @@ class ViVendorClassRecord(DhcpOptionType):
 
     def _dhcp_write(self, data: bytearray) -> int:
         if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
-            raise ValueError(f"{type(self).__name__} enterprise_number must fit in 32 bits")
+            raise ValueError(
+                f"{type(self).__name__} enterprise_number must fit in 32 bits"
+            )
         payload = bytearray()
         payload_len = self.value._dhcp_write(payload)
         if payload_len > 255:

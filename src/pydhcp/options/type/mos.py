@@ -141,7 +141,9 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
         if len(payload) % 4:
             raise ValueError(f"{cls.__name__} option is truncated")
-        return List[IPv4Address]([payload[i : i + 4].tobytes() for i in range(0, len(payload), 4)])
+        return List[IPv4Address](
+            [payload[i : i + 4].tobytes() for i in range(0, len(payload), 4)]
+        )
 
     @classmethod
     def _from_payload(cls: type[Self], code: int, payload: memoryview) -> Self:

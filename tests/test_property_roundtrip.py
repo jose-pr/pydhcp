@@ -55,7 +55,9 @@ def test_boolean_round_trip(b: bool) -> None:
     assert bool(decoded) == b
 
 
-@given(st.text(alphabet=st.characters(min_codepoint=0x20, max_codepoint=0x7E), max_size=64))
+@given(
+    st.text(alphabet=st.characters(min_codepoint=0x20, max_codepoint=0x7E), max_size=64)
+)
 def test_string_round_trip(s: str) -> None:
     decoded = _round_trip(String(s))
     assert str(decoded) == s
@@ -80,7 +82,9 @@ def test_list_ipv4address_round_trip(addrs: list[str]) -> None:
     assert list(decoded) == [IPv4Address(a) for a in addrs]
 
 
-_label = st.text(alphabet="abcdefghijklmnopqrstuvwxyz0123456789-", min_size=1, max_size=20)
+_label = st.text(
+    alphabet="abcdefghijklmnopqrstuvwxyz0123456789-", min_size=1, max_size=20
+)
 _domain = st.lists(_label, min_size=1, max_size=4).map(".".join)
 
 

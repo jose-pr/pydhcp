@@ -234,7 +234,9 @@ def test_nak_is_broadcast_when_giaddr_is_zero() -> None:
     server.handle(_nak_request(), _context(transport))
 
     reply, dest, _port = _sent(transport)
-    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPNAK
+    assert (
+        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPNAK
+    )
     assert dest == "255.255.255.255"
 
 
@@ -272,6 +274,7 @@ def test_nak_through_a_relay_sets_the_broadcast_bit() -> None:
 def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() -> None:
     """Practically every client sends option 55, and the echo was filtered out by
     it -- so relays that validate the echo dropped every reply."""
+
     class LeaseServer(DhcpServer):
         def acquire_lease(self, client_id, server_id, msg):
             return DhcpLease(
@@ -293,7 +296,9 @@ def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() ->
         DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False
     ) == bytearray(b"\x01\x04port")
     # The machinery options survive too, or the reply is not a usable DHCP message.
-    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+    assert (
+        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+    )
     assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
     assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in reply.options
 
@@ -325,12 +330,15 @@ def test_init_reboot_from_a_known_client_is_answered() -> None:
     server.handle(msg, _context(transport))
 
     reply, _dest, _port = _sent(transport)
-    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+    assert (
+        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+    )
 
 
 def test_inform_does_not_create_a_lease() -> None:
     """RFC 2131 4.3.5: an INFORM client already has its address and is asking
     only for configuration. Allocating let an INFORM flood grow the store."""
+
     class AllocatingServer(DhcpServer):
         """Allocates through the backend, as the stock acquire_lease does."""
 
@@ -345,7 +353,9 @@ def test_inform_does_not_create_a_lease() -> None:
     server.handle(msg, _context(transport))
 
     reply, _dest, _port = _sent(transport)
-    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+    assert (
+        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+    )
     assert reply.yiaddr == IPv4("0.0.0.0")
     assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
     assert server.lease_backend.lookup(msg.client_id()) is None
@@ -354,6 +364,7 @@ def test_inform_does_not_create_a_lease() -> None:
 def test_inform_uses_the_documented_allocation_free_hook() -> None:
     """get_inform_options is documented as the INFORM path's hook, but a client
     that happened to hold a lease bypassed it entirely."""
+
     class InformServer(_NakServer):
         def get_inform_options(self, server_id, msg):
             options = DhcpOptions()
@@ -414,22 +425,33 @@ def _request_for(ip: str, client: bytes = b"\x01\x02\x03") -> DhcpMessage:
 def test_allocator_refuses_addresses_it_must_not_hand_out(address, reason) -> None:
     server = _LoopbackServer()
 
-    assert server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for(address)) is None
+    assert (
+        server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for(address))
+        is None
+    )
 
 
 def test_allocator_refuses_an_address_another_client_holds() -> None:
     server = _LoopbackServer()
     server.lease_backend.allocate("client-a", IPv4("10.0.0.50"), 3600)
 
-    assert server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50")) is None
+    assert (
+        server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50"))
+        is None
+    )
     # The holder itself is still served.
-    assert server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.50")) is not None
+    assert (
+        server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.50"))
+        is not None
+    )
 
 
 def test_allocator_grants_a_free_in_subnet_address() -> None:
     server = _LoopbackServer()
 
-    lease = server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.50"))
+    lease = server.acquire_lease(
+        "client-a", IPv4("10.0.0.1"), _request_for("10.0.0.50")
+    )
 
     assert lease is not None and lease.ip == IPv4("10.0.0.50")
 
@@ -445,7 +467,10 @@ def test_declined_address_is_quarantined_and_not_reoffered() -> None:
     server.handle(decline, _context(Mock()))
 
     assert IPv4("10.0.0.50") in server._declined
-    assert server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50")) is None
+    assert (
+        server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50"))
+        is None
+    )
 
 
 def test_quarantine_is_bounded_and_expires() -> None:
@@ -458,7 +483,10 @@ def test_quarantine_is_bounded_and_expires() -> None:
 
     server.DECLINE_QUARANTINE_SECONDS = -1.0  # already elapsed
     server.quarantine_address(IPv4("10.0.0.60"))
-    assert server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.60")) is not None
+    assert (
+        server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.60"))
+        is not None
+    )
 
 
 def test_client_identifier_is_echoed() -> None:
@@ -466,12 +494,14 @@ def test_client_identifier_is_echoed() -> None:
     server = _LoopbackServer()
     transport = Mock()
 
-    server.handle(_request_for("10.0.0.50", client=b"\x01\xaa\xbb"), _context(transport))
+    server.handle(
+        _request_for("10.0.0.50", client=b"\x01\xaa\xbb"), _context(transport)
+    )
 
     reply, _dest, _port = _sent(transport)
-    assert reply.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False) == bytearray(
-        b"\x01\xaa\xbb"
-    )
+    assert reply.options.get(
+        DhcpOptionCode.CLIENT_IDENTIFIER, decode=False
+    ) == bytearray(b"\x01\xaa\xbb")
 
 
 def test_reply_to_an_unconfigured_client_is_broadcast() -> None:
@@ -504,6 +534,7 @@ def test_reply_over_loopback_is_unicast() -> None:
 
 def test_unicast_to_unconfigured_client_can_be_opted_into() -> None:
     """For a transport that can address the client's hardware address."""
+
     class L2Server(_NakServer):
         UNICAST_TO_UNCONFIGURED_CLIENT = True
 

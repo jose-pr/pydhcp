@@ -33,7 +33,9 @@ def test_load_config_toml(tmp_path) -> None:
     assert load_config(str(path)) == {"server": {"listen": "*"}}
 
 
-def test_load_config_toml_without_reader_reports_not_implemented(monkeypatch, tmp_path) -> None:
+def test_load_config_toml_without_reader_reports_not_implemented(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setattr(config, "_tomllib", None)
     path = tmp_path / "config.toml"
     path.write_text('[server]\nlisten = "*"\n', encoding="utf-8")

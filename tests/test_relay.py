@@ -10,20 +10,23 @@ from pydhcp.options import DhcpOptionCode
 from pydhcp.options.type import RelayAgentInformation, TlvOption
 from pydhcp.network import IPv4, SocketAddress
 
-
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 
 
 def _context(client_port: int = 68) -> RequestContext:
     return RequestContext(
         transport=Mock(),
-        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None),
+        interface=NetworkInterface(
+            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
+        ),
         client=SocketAddress("10.0.0.50", client_port),
         client_mac=CHADDR,
     )
 
 
-def _server_context(client_port: int = 68, server_ip: str = "192.0.2.1") -> RequestContext:
+def _server_context(
+    client_port: int = 68, server_ip: str = "192.0.2.1"
+) -> RequestContext:
     """A context whose source is a configured upstream server.
 
     Replies reach a relay *from* a server; the relay now drops a BOOTREPLY from
@@ -31,17 +34,23 @@ def _server_context(client_port: int = 68, server_ip: str = "192.0.2.1") -> Requ
     """
     return RequestContext(
         transport=Mock(),
-        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None),
+        interface=NetworkInterface(
+            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
+        ),
         client=SocketAddress(server_ip, client_port),
         client_mac=CHADDR,
     )
 
 
-def _discover(giaddr: str = "0.0.0.0", hops: int = 0, with_relay_info: bool = False) -> DhcpMessage:
+def _discover(
+    giaddr: str = "0.0.0.0", hops: int = 0, with_relay_info: bool = False
+) -> DhcpMessage:
     opts = DhcpOptions()
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
     if with_relay_info:
-        opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([TlvOption(1, b"existing")])
+        opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
+            [TlvOption(1, b"existing")]
+        )
     return DhcpMessage(
         op=OpCode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
@@ -61,7 +70,12 @@ def _discover(giaddr: str = "0.0.0.0", hops: int = 0, with_relay_info: bool = Fa
     )
 
 
-def _reply(giaddr: str, ciaddr: str = "0.0.0.0", yiaddr: str = "0.0.0.0", broadcast: bool = False) -> DhcpMessage:
+def _reply(
+    giaddr: str,
+    ciaddr: str = "0.0.0.0",
+    yiaddr: str = "0.0.0.0",
+    broadcast: bool = False,
+) -> DhcpMessage:
     opts = DhcpOptions()
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPOFFER
     return DhcpMessage(
@@ -108,7 +122,9 @@ def test_forward_to_servers_stamps_giaddr_and_increments_hops():
 
 
 def test_forward_to_servers_sends_to_every_configured_server():
-    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1", ("192.0.2.2", 6767)])
+    relay = DhcpRelay(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1", ("192.0.2.2", 6767)]
+    )
     context = _context()
     msg = _discover()
 
@@ -133,7 +149,9 @@ def test_forward_to_servers_is_idempotent_when_giaddr_already_set():
 
 
 def test_forward_to_servers_drops_packet_over_hop_limit():
-    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], max_hops=2)
+    relay = DhcpRelay(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], max_hops=2
+    )
     context = _context()
     msg = _discover(hops=2)
 
@@ -159,8 +177,12 @@ def test_relay_agent_info_inserted_when_enabled():
 
     data, *_rest = context.transport.send.call_args.args
     forwarded = DhcpMessage.decode(data)
-    relay_info = forwarded.options.get(DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation)
-    assert relay_info == RelayAgentInformation([TlvOption(1, b"circuit-1"), TlvOption(2, b"remote-1")])
+    relay_info = forwarded.options.get(
+        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+    )
+    assert relay_info == RelayAgentInformation(
+        [TlvOption(1, b"circuit-1"), TlvOption(2, b"remote-1")]
+    )
 
 
 def test_relay_agent_info_not_inserted_when_disabled():
@@ -213,7 +235,9 @@ def test_relay_agent_info_passthrough_when_already_present():
 
     data, *_rest = context.transport.send.call_args.args
     forwarded = DhcpMessage.decode(data)
-    relay_info = forwarded.options.get(DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation)
+    relay_info = forwarded.options.get(
+        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+    )
     assert relay_info == RelayAgentInformation([TlvOption(1, b"existing")])
 
 
@@ -430,7 +454,9 @@ def test_reply_is_pinned_to_the_interface_the_request_arrived_on():
 
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     arrived_on_server_side = PktInfoUdpTransport(Mock())
-    arrived_on_server_side.ifindex, arrived_on_server_side.local_ip = 9, IPv4("10.98.0.1")
+    arrived_on_server_side.ifindex, arrived_on_server_side.local_ip = 9, IPv4(
+        "10.98.0.1"
+    )
     pending = PendingClient(SocketAddress("10.99.0.50", 68), 3, IPv4("10.99.0.1"))
 
     out = relay._client_transport(arrived_on_server_side, pending)
@@ -456,7 +482,9 @@ def test_pending_map_records_the_ingress_interface():
     relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     context = RequestContext(
         transport=Mock(),
-        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None),
+        interface=NetworkInterface(
+            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
+        ),
         client=SocketAddress("10.0.0.50", 68),
         client_mac=CHADDR,
         ifindex=4,

@@ -54,9 +54,10 @@ from pydhcp.options.type import (
 from pydhcp.network import IPv4
 from ipaddress import ip_network
 
+
 def test_ipv4address_option():
     # Test valid decode
-    ip_bytes = b"\xc0\xa8\x01\x64" # 192.168.1.100
+    ip_bytes = b"\xc0\xa8\x01\x64"  # 192.168.1.100
     addr, length = IPv4Address._dhcp_read(memoryview(ip_bytes))
     assert addr == IPv4("192.168.1.100")
     assert length == 4
@@ -90,7 +91,7 @@ def test_string_option(caplog):
 def test_boolean_option():
     b_true = Boolean(True)
     assert int(b_true) == 1
-    
+
     b_false = Boolean(False)
     assert int(b_false) == 0
 
@@ -149,7 +150,7 @@ def test_fixed_length_integers():
     # U16
     with pytest.raises(ValueError, match="Number is too big"):
         U16(65536)
-    
+
     u16 = U16(1000)
     buf = bytearray()
     u16._dhcp_write(buf)
@@ -174,13 +175,13 @@ def test_classless_route_option():
     gateway = IPv4("192.168.1.1")
     network = ip_network("10.0.0.0/8")
     route = ClasslessRoute(gateway, network)
-    
+
     buf = bytearray()
     wrote = route._dhcp_write(buf)
     # Prefixlen 8 -> last = 1. Write cidr (1 byte) + network (1 byte) + gateway (4 bytes) = 6 bytes
     assert wrote == 6
-    assert buf[0] == 8 # cidr
-    assert buf[1] == 10 # network address byte
+    assert buf[0] == 8  # cidr
+    assert buf[1] == 10  # network address byte
     assert buf[2:6] == gateway.packed
 
     decoded, length = ClasslessRoute._dhcp_read(memoryview(buf))
@@ -199,10 +200,12 @@ def test_classless_route_truncated_and_invalid_prefix():
 
 
 def test_policy_filter_round_trip_and_truncation():
-    value = PolicyFilter([
-        ("192.0.2.1", "255.255.255.0"),
-        ("198.51.100.1", "255.255.255.128"),
-    ])
+    value = PolicyFilter(
+        [
+            ("192.0.2.1", "255.255.255.0"),
+            ("198.51.100.1", "255.255.255.128"),
+        ]
+    )
     buf = bytearray()
     assert value._dhcp_write(buf) == 16
     decoded, length = PolicyFilter._dhcp_read(memoryview(buf))
@@ -217,10 +220,12 @@ def test_static_route_rejects_default_destination_and_round_trip():
     with pytest.raises(ValueError, match="default-route"):
         StaticRoute([("0.0.0.0", "192.0.2.1")])
 
-    value = StaticRoute([
-        ("192.0.2.0", "192.0.2.1"),
-        ("198.51.100.0", "198.51.100.1"),
-    ])
+    value = StaticRoute(
+        [
+            ("192.0.2.0", "192.0.2.1"),
+            ("198.51.100.0", "198.51.100.1"),
+        ]
+    )
     buf = bytearray()
     assert value._dhcp_write(buf) == 16
     decoded, length = StaticRoute._dhcp_read(memoryview(buf))
@@ -263,6 +268,7 @@ def test_vendor_specific_information_preserves_opaque_bytes():
     decoded, length = RelayAgentInformation._dhcp_read(memoryview(buf))
     assert decoded == relay
     assert length == 5
+
 
 def test_vi_vendor_specific_information_uses_enterprise_records():
     value = ViVendorSpecificInformation(
@@ -332,10 +338,12 @@ def test_rdnss_selection_round_trip():
 
 
 def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
-    value = MoSIpv4AddressList([
-        MoSIpv4AddressRecord(1, ["192.0.2.1", "192.0.2.2"]),
-        (99, b"\x01\x02"),
-    ])
+    value = MoSIpv4AddressList(
+        [
+            MoSIpv4AddressRecord(1, ["192.0.2.1", "192.0.2.2"]),
+            (99, b"\x01\x02"),
+        ]
+    )
     buf = bytearray()
     wrote = value._dhcp_write(buf)
     assert wrote == len(buf)
@@ -346,9 +354,15 @@ def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
     assert decoded[1].code == 99
     assert decoded[1].value == b"\x01\x02"
 
-    raw = bytes([1, 8]) + IPv4Address("198.51.100.1").packed + IPv4Address("198.51.100.2").packed
+    raw = (
+        bytes([1, 8])
+        + IPv4Address("198.51.100.1").packed
+        + IPv4Address("198.51.100.2").packed
+    )
     decoded_raw, length = MoSIpv4AddressList._dhcp_read(memoryview(raw))
-    assert decoded_raw == MoSIpv4AddressList([MoSIpv4AddressRecord(1, ["198.51.100.1", "198.51.100.2"])])
+    assert decoded_raw == MoSIpv4AddressList(
+        [MoSIpv4AddressRecord(1, ["198.51.100.1", "198.51.100.2"])]
+    )
     assert length == len(raw)
 
     with pytest.raises(ValueError, match="truncated"):
@@ -356,10 +370,12 @@ def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
 
 
 def test_mos_fqdn_option_round_trip_and_rejects_truncated_labels():
-    value = MoSFqdnList([
-        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
-        (99, b"\x03raw"),
-    ])
+    value = MoSFqdnList(
+        [
+            MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+            (99, b"\x03raw"),
+        ]
+    )
     buf = bytearray()
     wrote = value._dhcp_write(buf)
     assert wrote == len(buf)
@@ -388,6 +404,7 @@ def test_signed_i32_round_trip():
 
 def test_domain_list_option():
     from pydhcp.options.type import DomainList
+
     # Encode list of domains
     dl = DomainList(["example.com", "sub.example.com"])
     buf = bytearray()
@@ -397,7 +414,9 @@ def test_domain_list_option():
     assert list(decoded) == ["example.com", "sub.example.com"]
     assert length == len(buf)
 
-    single, single_length = DomainList._dhcp_read(memoryview(b"\x05alpha\x07example\x00"))
+    single, single_length = DomainList._dhcp_read(
+        memoryview(b"\x05alpha\x07example\x00")
+    )
     assert list(single) == ["alpha.example"]
     assert single_length == 15
 
@@ -442,8 +461,9 @@ def test_uri_list_option_round_trip_and_truncation():
 
 def test_client_identifier_option():
     from pydhcp.options.type import ClientIdentifier
+
     with pytest.raises(ValueError):
-        ClientIdentifier._dhcp_read(memoryview(b"\x01")) # Too short
+        ClientIdentifier._dhcp_read(memoryview(b"\x01"))  # Too short
 
     ci = ClientIdentifier(b"\x01\x00\x11\x22\x33\x44\x55")
     assert repr(ci).startswith("ETHERNET")
@@ -452,6 +472,7 @@ def test_client_identifier_option():
 
 def test_option_overload_option():
     from pydhcp.options.type import OptionOverload
+
     oo = OptionOverload.BOTH
     buf = bytearray()
     oo._dhcp_write(buf)
@@ -466,7 +487,9 @@ def test_ccc_payload_round_trips_and_unknown_records():
     primary = CccPrimaryDhcpServerAddress("192.0.2.1")
     secondary = CccSecondaryDhcpServerAddress("192.0.2.2")
     provisioning_ipv4 = CccProvisioningServerAddress(("ipv4", "192.0.2.3"))
-    provisioning_fqdn = CccProvisioningServerAddress(("fqdn", CccProvisioningServerFqdn("tsp.example")))
+    provisioning_fqdn = CccProvisioningServerAddress(
+        ("fqdn", CccProvisioningServerFqdn("tsp.example"))
+    )
     as_retry = CccAsReqAsRepBackoffRetry(1, 2, 3)
     ap_retry = CccApReqApRepBackoffRetry(4, 5, 6)
     realm = CccKerberosRealmName("EXAMPLE.COM")
@@ -580,9 +603,9 @@ def test_domainlist_decode_is_linear_in_payload_size():
 
     # 4x the input must not cost anything like 16x the time. A generous bound:
     # quadratic would be ~16x, linear ~4x. This machine is noisy, so allow 8x.
-    assert large < max(small * 8, 0.05), (
-        f"decode looks super-linear: {small:.4f}s for 6000B vs {large:.4f}s for 24000B"
-    )
+    assert large < max(
+        small * 8, 0.05
+    ), f"decode looks super-linear: {small:.4f}s for 6000B vs {large:.4f}s for 24000B"
 
 
 def test_domainlist_still_follows_backward_pointers():
@@ -621,11 +644,15 @@ def test_client_fqdn_round_trips_the_canonical_encoded_form():
     """E bit set means RFC 1035 wire format (RFC 4702 s2.1)."""
     from pydhcp.options.type import ClientFqdn
 
-    value = ClientFqdn("pc-lab7.example.com", flags=ClientFqdn.FLAG_E | ClientFqdn.FLAG_S)
+    value = ClientFqdn(
+        "pc-lab7.example.com", flags=ClientFqdn.FLAG_E | ClientFqdn.FLAG_S
+    )
     wire = bytes(value._dhcp_encode())
 
     assert wire[:3] == bytes([0x05, 0x00, 0x00])
-    assert wire[3:] == bytes([7]) + b"pc-lab7" + bytes([7]) + b"example" + bytes([3]) + b"com" + bytes([0])
+    assert wire[3:] == bytes([7]) + b"pc-lab7" + bytes([7]) + b"example" + bytes(
+        [3]
+    ) + b"com" + bytes([0])
     assert ClientFqdn._dhcp_decode(bytearray(wire)) == value
 
 
@@ -634,9 +661,9 @@ def test_client_fqdn_rejects_malformed_input():
     import pytest as _pytest
 
     with _pytest.raises(ValueError):
-        ClientFqdn._dhcp_decode(bytearray([0x00, 0x00]))          # shorter than 3
+        ClientFqdn._dhcp_decode(bytearray([0x00, 0x00]))  # shorter than 3
     with _pytest.raises(ValueError):
-        ClientFqdn._dhcp_decode(bytearray([0xF0, 0x00, 0x00]))     # reserved bits set
+        ClientFqdn._dhcp_decode(bytearray([0xF0, 0x00, 0x00]))  # reserved bits set
     with _pytest.raises(ValueError):
         # E bit set, but a compression pointer, which RFC 4702 s3.1 forbids
         ClientFqdn._dhcp_decode(bytearray([0x04, 0x00, 0x00, 0xC0, 0x00]))
@@ -654,7 +681,10 @@ def test_sip_servers_carries_the_encoding_octet():
     assert wire[0] == SipServers.ENCODING_ADDRESS
     assert len(wire) % 4 == 1
     assert SipServers._dhcp_decode(bytearray(wire)) == value
-    assert value.__json__() == {"encoding": "address", "values": ["192.0.2.1", "192.0.2.2"]}
+    assert value.__json__() == {
+        "encoding": "address",
+        "values": ["192.0.2.1", "192.0.2.2"],
+    }
 
 
 def test_sip_servers_domain_encoding():
@@ -674,11 +704,13 @@ def test_sip_servers_rejects_bad_encodings_and_lengths():
     import pytest as _pytest
 
     with _pytest.raises(ValueError):
-        SipServers._dhcp_decode(bytearray())                        # no encoding octet
+        SipServers._dhcp_decode(bytearray())  # no encoding octet
     with _pytest.raises(ValueError):
-        SipServers._dhcp_decode(bytearray([0x0A, 0x01, 0x02]))       # reserved encoding
+        SipServers._dhcp_decode(bytearray([0x0A, 0x01, 0x02]))  # reserved encoding
     with _pytest.raises(ValueError):
-        SipServers._dhcp_decode(bytearray([0x01, 0xC0, 0x00, 0x02]))  # not a multiple of 4
+        SipServers._dhcp_decode(
+            bytearray([0x01, 0xC0, 0x00, 0x02])
+        )  # not a multiple of 4
 
 
 def test_name_service_search_is_a_list_of_option_codes():
@@ -688,9 +720,9 @@ def test_name_service_search_is_a_list_of_option_codes():
     options = DhcpOptions()
     options[DhcpOptionCode.NAME_SERVICE_SEARCH] = [6, 44]
 
-    assert bytes(options.get(DhcpOptionCode.NAME_SERVICE_SEARCH, decode=False)) == bytes(
-        [0x00, 0x06, 0x00, 0x2C]
-    )
+    assert bytes(
+        options.get(DhcpOptionCode.NAME_SERVICE_SEARCH, decode=False)
+    ) == bytes([0x00, 0x06, 0x00, 0x2C])
     assert options.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
 
 
@@ -706,8 +738,13 @@ def test_domain_helper_round_trips():
     from pydhcp.options.type.domain import decode_domain_name, encode_domain_name
 
     wire = encode_domain_name("sip.example.com")
-    assert wire == bytes([3]) + b"sip" + bytes([7]) + b"example" + bytes([3]) + b"com" + bytes([0])
-    assert decode_domain_name(memoryview(bytearray(wire))) == ("sip.example.com", len(wire))
+    assert wire == bytes([3]) + b"sip" + bytes([7]) + b"example" + bytes(
+        [3]
+    ) + b"com" + bytes([0])
+    assert decode_domain_name(memoryview(bytearray(wire))) == (
+        "sip.example.com",
+        len(wire),
+    )
 
 
 def test_domain_helper_rejects_compression_pointers():
@@ -752,7 +789,10 @@ def test_ccc_and_mos_inherit_the_shared_checks():
     """Convergence has to reach the callers, or it is just a fourth copy."""
     import pytest as _pytest
 
-    from pydhcp.options.ccc import _decode_no_compression_domain, _encode_no_compression_domain
+    from pydhcp.options.ccc import (
+        _decode_no_compression_domain,
+        _encode_no_compression_domain,
+    )
     from pydhcp.options.type import MoSFqdnList, MoSFqdnRecord
 
     pointer = memoryview(bytearray(bytes([0x03]) + b"lab" + bytes([0xC0, 0x00])))

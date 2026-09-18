@@ -139,7 +139,10 @@ class Packet(LoggingArgs, Cmd):
     decode: _ty.Annotated[
         bool,
         Meta(
-            action="store_const", const=True, conflicts="mode", conflicts_required=True,
+            action="store_const",
+            const=True,
+            conflicts="mode",
+            conflicts_required=True,
             kwargs={"dest": "mode"},
         ),
     ] = False
@@ -148,7 +151,10 @@ class Packet(LoggingArgs, Cmd):
     encode: _ty.Annotated[
         bool,
         Meta(
-            action="store_const", const=False, conflicts="mode", conflicts_required=True,
+            action="store_const",
+            const=False,
+            conflicts="mode",
+            conflicts_required=True,
             kwargs={"dest": "mode"},
         ),
     ] = False
@@ -175,7 +181,9 @@ class Packet(LoggingArgs, Cmd):
 
             if self.mode:
                 packet = DhcpMessage.decode(
-                    bytearray.fromhex("".join(ch for ch in payload_text if ch not in " \t\r\n:"))
+                    bytearray.fromhex(
+                        "".join(ch for ch in payload_text if ch not in " \t\r\n:")
+                    )
                 )
                 if self.packet_format == "summary":
                     output = packet.log_str("capture", "decoded")
@@ -183,7 +191,9 @@ class Packet(LoggingArgs, Cmd):
                     output = dump_message(packet, self.packet_format)
             else:
                 if self.packet_format == "summary":
-                    raise ValueError("summary output is only supported when decoding packets")
+                    raise ValueError(
+                        "summary output is only supported when decoding packets"
+                    )
                 packet = load_message(payload_text, self.packet_format)
                 output = packet.encode().hex()
 
@@ -198,7 +208,9 @@ class Packet(LoggingArgs, Cmd):
             sys.exit(1)
 
 
-def _infer_capture_format(output: "pathlib.Path | str | None", packet_format: "str | None") -> str:
+def _infer_capture_format(
+    output: "pathlib.Path | str | None", packet_format: "str | None"
+) -> str:
     if packet_format:
         return packet_format
     if output is not None and str(output) != "-":
@@ -214,7 +226,9 @@ def _infer_capture_format(output: "pathlib.Path | str | None", packet_format: "s
     return "json"
 
 
-def _infer_output_mode(output: "pathlib.Path | str | None", output_mode: "str | None") -> str:
+def _infer_output_mode(
+    output: "pathlib.Path | str | None", output_mode: "str | None"
+) -> str:
     if output_mode:
         return output_mode
     if output is None or str(output) == "-":
@@ -308,10 +322,14 @@ def _load_capture_hook(
         )
         if result.returncode != 0:
             _logging.getLogger("pydhcp").error(
-                "Capture hook command failed (%s): %s", result.returncode, result.stderr.strip()
+                "Capture hook command failed (%s): %s",
+                result.returncode,
+                result.stderr.strip(),
             )
             if fail_fast:
-                raise RuntimeError(f"Capture hook command failed with exit code {result.returncode}")
+                raise RuntimeError(
+                    f"Capture hook command failed with exit code {result.returncode}"
+                )
 
     return command_hook
 
@@ -329,7 +347,9 @@ class Capture(LoggingArgs, Cmd):
     "Capture filter expression"
     ("--filter",)
 
-    packet_format: _ty.Annotated[_ty.Optional[str], Meta(choices=CAPTURE_FORMATS)] = None
+    packet_format: _ty.Annotated[_ty.Optional[str], Meta(choices=CAPTURE_FORMATS)] = (
+        None
+    )
     ("--format", "-f")
 
     output: pathlib.Path = pathlib.Path("-")
@@ -362,7 +382,9 @@ class Capture(LoggingArgs, Cmd):
             output = self.output if self.output is not None else pathlib.Path("-")
             output_mode = _infer_output_mode(output, self.output_mode)
             if output_mode == "per-capture" and str(output) == "-":
-                raise ValueError("--output-mode per-capture requires --output to be a filename pattern")
+                raise ValueError(
+                    "--output-mode per-capture requires --output to be a filename pattern"
+                )
             packet_format = _infer_capture_format(output, self.packet_format)
             state: "dict[str, _ty.Any]" = {"first": True, "count": 0}
             capture: DhcpCapture

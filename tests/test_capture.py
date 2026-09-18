@@ -5,12 +5,18 @@ from datetime import datetime, timezone, timedelta
 
 import pytest
 
-from pydhcp import CaptureEvent, DhcpCapture, DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import (
+    CaptureEvent,
+    DhcpCapture,
+    DhcpMessage,
+    DhcpOptions,
+    NetworkInterface,
+    RequestContext,
+)
 from pydhcp.capture import compile_capture_filter
 from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4, SocketAddress
-
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
 
@@ -20,7 +26,9 @@ class _Transport:
         return len(data)
 
 
-def _message(message_type: DhcpMessageType = DhcpMessageType.DHCPDISCOVER) -> DhcpMessage:
+def _message(
+    message_type: DhcpMessageType = DhcpMessageType.DHCPDISCOVER,
+) -> DhcpMessage:
     options = DhcpOptions()
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
     options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + CHADDR)
@@ -95,7 +103,13 @@ def test_compile_capture_filter_rejects_non_matching_events(filter_text: str) ->
 
 @pytest.mark.parametrize(
     "filter_text",
-    ["msg_type", "=DHCPDISCOVER", "foo=bar", "option.NOT_A_REAL_OPTION=1", "msg_type=DHCPDISCOVER or xid=1"],
+    [
+        "msg_type",
+        "=DHCPDISCOVER",
+        "foo=bar",
+        "option.NOT_A_REAL_OPTION=1",
+        "msg_type=DHCPDISCOVER or xid=1",
+    ],
 )
 def test_compile_capture_filter_rejects_malformed_expressions(filter_text: str) -> None:
     with pytest.raises(ValueError):
@@ -108,9 +122,9 @@ def test_capture_event_formats_safe_filenames() -> None:
     assert event.message_type == "DHCPDISCOVER"
     assert event.source == SocketAddress("192.0.2.55", 68)
     assert event.destination == SocketAddress("192.0.2.1", 0)
-    assert event.format_filename("out/{client_id}/{timestamp}_{msg_type}_{xid}.{format}", "json") == (
-        "out/01_00_11_22_33_44_55/20260714T123015.000000Z_DHCPDISCOVER_1234ABCD.json"
-    )
+    assert event.format_filename(
+        "out/{client_id}/{timestamp}_{msg_type}_{xid}.{format}", "json"
+    ) == ("out/01_00_11_22_33_44_55/20260714T123015.000000Z_DHCPDISCOVER_1234ABCD.json")
 
 
 def test_dhcp_capture_invokes_sink_and_hook_for_accepted_packet() -> None:
@@ -149,7 +163,9 @@ def test_dhcp_capture_hook_fail_fast_raises() -> None:
     def bad_hook(event):
         raise RuntimeError("boom")
 
-    capture = DhcpCapture(listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True)
+    capture = DhcpCapture(
+        listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
+    )
 
     with pytest.raises(RuntimeError):
         capture.handle(_message(), _context())

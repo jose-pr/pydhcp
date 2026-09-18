@@ -1,15 +1,17 @@
 import typing as _ty
 import types as _types
 
-
 if _ty.TYPE_CHECKING:
-    class GenericMeta(type):
-        ...
+
+    class GenericMeta(type): ...
+
 else:
+
     class GenericMeta(type):
         # https://stackoverflow.com/questions/60985221/how-can-i-access-t-from-a-generict-instance-early-in-its-lifecycle
 
         __concrete__ = {}
+
         def __getitem__(cls, key_t):
             cache = cls.__concrete__
             if c := cache.get(key_t, None):

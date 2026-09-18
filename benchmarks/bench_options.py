@@ -53,12 +53,37 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
     t_mem = timeit.timeit(test_memory_usage, number=100)
     return OrderedDict(
         [
-            ("decode_0_options", {"seconds": t0, "ops_per_sec": iterations / t0, "iterations": iterations}),
-            ("decode_5_options", {"seconds": t5, "ops_per_sec": iterations / t5, "iterations": iterations}),
-            ("decode_20_options", {"seconds": t20, "ops_per_sec": iterations / t20, "iterations": iterations}),
+            (
+                "decode_0_options",
+                {
+                    "seconds": t0,
+                    "ops_per_sec": iterations / t0,
+                    "iterations": iterations,
+                },
+            ),
+            (
+                "decode_5_options",
+                {
+                    "seconds": t5,
+                    "ops_per_sec": iterations / t5,
+                    "iterations": iterations,
+                },
+            ),
+            (
+                "decode_20_options",
+                {
+                    "seconds": t20,
+                    "ops_per_sec": iterations / t20,
+                    "iterations": iterations,
+                },
+            ),
             (
                 "round_trip_encode_decode",
-                {"seconds": trt, "ops_per_sec": iterations / trt, "iterations": iterations},
+                {
+                    "seconds": trt,
+                    "ops_per_sec": iterations / trt,
+                    "iterations": iterations,
+                },
             ),
             (
                 "lease_allocations_1000_clients",
@@ -68,8 +93,12 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
     )
 
 
-def _print_benchmarks(iterations: int, benchmarks: OrderedDict[str, dict[str, Any]]) -> None:
-    print(f"--- Running DHCP Options & Memory Benchmarks ({iterations:,} iterations) ---")
+def _print_benchmarks(
+    iterations: int, benchmarks: OrderedDict[str, dict[str, Any]]
+) -> None:
+    print(
+        f"--- Running DHCP Options & Memory Benchmarks ({iterations:,} iterations) ---"
+    )
     print(
         f"Decode with 0 options:  {benchmarks['decode_0_options']['seconds']:.4f}s "
         f"({benchmarks['decode_0_options']['ops_per_sec']:.1f} ops/sec)"
@@ -115,7 +144,9 @@ def write_json_report(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run DHCP options and lease benchmark samples.")
+    parser = argparse.ArgumentParser(
+        description="Run DHCP options and lease benchmark samples."
+    )
     parser.add_argument(
         "--iterations",
         type=int,

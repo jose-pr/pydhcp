@@ -6,9 +6,7 @@ from pydhcp.server import AsyncDhcpServer, DhcpServer
 
 
 def test_parse_single_tuple() -> None:
-    assert _parselisteners(("127.0.0.1", 6767)) == [
-        SocketAddress("127.0.0.1", 6767)
-    ]
+    assert _parselisteners(("127.0.0.1", 6767)) == [SocketAddress("127.0.0.1", 6767)]
 
 
 def test_parse_list_of_tuples_preserves_order_and_deduplicates() -> None:
@@ -29,7 +27,9 @@ def test_parse_wildcard_expands_ipv4_interfaces(monkeypatch) -> None:
         NetworkInterface("eth0", ipaddress.IPv4Interface("192.0.2.10/24")),
         NetworkInterface("eth1", ipaddress.IPv4Interface("198.51.100.10/24")),
     ]
-    monkeypatch.setattr("pydhcp.listener._net.host_ip_interfaces", lambda: iter(interfaces))
+    monkeypatch.setattr(
+        "pydhcp.listener._net.host_ip_interfaces", lambda: iter(interfaces)
+    )
 
     assert _parselisteners("*", (67,)) == [
         SocketAddress("192.0.2.10", 67),
@@ -38,15 +38,11 @@ def test_parse_wildcard_expands_ipv4_interfaces(monkeypatch) -> None:
 
 
 def test_parse_string_host_with_default_port() -> None:
-    assert _parselisteners("127.0.0.1", (6767,)) == [
-        SocketAddress("127.0.0.1", 6767)
-    ]
+    assert _parselisteners("127.0.0.1", (6767,)) == [SocketAddress("127.0.0.1", 6767)]
 
 
 def test_parse_host_port_string() -> None:
-    assert _parselisteners("127.0.0.1:6767") == [
-        SocketAddress("127.0.0.1", 6767)
-    ]
+    assert _parselisteners("127.0.0.1:6767") == [SocketAddress("127.0.0.1", 6767)]
 
 
 def test_parse_comma_separated_host_port_string() -> None:
@@ -118,9 +114,9 @@ def test_resolve_interface_prefers_pktinfo_over_getsockname() -> None:
 
     assert resolved.ip == expected.ip
     assert resolved.name == expected.name
-    assert not resolved.name.startswith("unknown["), (
-        "fell back to a synthetic interface despite valid pktinfo data"
-    )
+    assert not resolved.name.startswith(
+        "unknown["
+    ), "fell back to a synthetic interface despite valid pktinfo data"
 
 
 def test_resolve_interface_without_pktinfo_still_falls_back() -> None:

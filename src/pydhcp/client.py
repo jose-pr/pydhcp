@@ -49,7 +49,9 @@ class DhcpClient(DhcpListener):
         broadcast: bool = True,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=broadcast)
-        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = _enum.DhcpMessageType.DHCPDISCOVER
+        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = (
+            _enum.DhcpMessageType.DHCPDISCOVER
+        )
         self._add_client_options(msg, client_identifier, parameter_request_list)
         return msg
 
@@ -66,7 +68,9 @@ class DhcpClient(DhcpListener):
         broadcast: bool = True,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=broadcast)
-        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = _enum.DhcpMessageType.DHCPREQUEST
+        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = (
+            _enum.DhcpMessageType.DHCPREQUEST
+        )
         if ciaddr is not None:
             msg.ciaddr = _net.IPv4(ciaddr)
         if requested_ip is not None:
@@ -102,7 +106,9 @@ class DhcpClient(DhcpListener):
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
         msg.ciaddr = _net.IPv4(ciaddr)
-        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = _enum.DhcpMessageType.DHCPRELEASE
+        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = (
+            _enum.DhcpMessageType.DHCPRELEASE
+        )
         if server_identifier is not None:
             msg.options[DhcpOptionCode.SERVER_IDENTIFIER] = _net.IPv4(server_identifier)
         self._add_client_options(msg, client_identifier, None)
@@ -118,7 +124,9 @@ class DhcpClient(DhcpListener):
         client_identifier: bytes | bytearray | None = None,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=True)
-        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = _enum.DhcpMessageType.DHCPDECLINE
+        msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = (
+            _enum.DhcpMessageType.DHCPDECLINE
+        )
         msg.options[DhcpOptionCode.REQUESTED_IP] = _net.IPv4(requested_ip)
         if server_identifier is not None:
             msg.options[DhcpOptionCode.SERVER_IDENTIFIER] = _net.IPv4(server_identifier)
@@ -172,7 +180,9 @@ class DhcpClient(DhcpListener):
         discover = self.build_discover(chaddr, **discover_kwargs)
         for _attempt in range(retries + 1):
             self.send(discover, destination, port)
-            offer = self._wait_for(discover.xid, _enum.DhcpMessageType.DHCPOFFER, timeout)
+            offer = self._wait_for(
+                discover.xid, _enum.DhcpMessageType.DHCPOFFER, timeout
+            )
             if offer is not None:
                 return offer
         return None
@@ -228,7 +238,9 @@ class DhcpClient(DhcpListener):
     def on_reply(self, msg: DhcpMessage, context: RequestContext) -> None:
         """Hook called after a BOOTREPLY is accepted and queued."""
 
-    def next_reply(self, timeout: float | None = None) -> tuple[DhcpMessage, RequestContext] | None:
+    def next_reply(
+        self, timeout: float | None = None
+    ) -> tuple[DhcpMessage, RequestContext] | None:
         try:
             return self._replies.get(timeout=timeout)
         except _queue.Empty:
@@ -276,4 +288,6 @@ class DhcpClient(DhcpListener):
         if client_identifier is not None:
             msg.options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(client_identifier)
         if parameter_request_list is not None:
-            msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = list(parameter_request_list)
+            msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = list(
+                parameter_request_list
+            )

@@ -35,7 +35,9 @@ def encode_domain_name(
     default because for most options an empty name is a caller mistake, and
     these codecs rejected it before this helper existed.
     """
-    labels = [label for label in name.rstrip(".").split(".") if label != ""] if name else []
+    labels = (
+        [label for label in name.rstrip(".").split(".") if label != ""] if name else []
+    )
     if not labels and not allow_root:
         raise ValueError(f"{what} must not be empty")
     if name and any(label == "" for label in name.rstrip(".").split(".")):

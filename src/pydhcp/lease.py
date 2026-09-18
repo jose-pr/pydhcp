@@ -23,17 +23,13 @@ class LeaseBackend(_ty.Protocol):
         ip: IPv4,
         ttl: int,
         options: _ty.Optional[DhcpOptions] = None,
-    ) -> _ty.Optional[DhcpLease]:
-        ...
+    ) -> _ty.Optional[DhcpLease]: ...
 
-    def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]:
-        ...
+    def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]: ...
 
-    def release(self, client_id: str) -> bool:
-        ...
+    def release(self, client_id: str) -> bool: ...
 
-    def renew(self, client_id: str, ttl: int) -> _ty.Optional[DhcpLease]:
-        ...
+    def renew(self, client_id: str, ttl: int) -> _ty.Optional[DhcpLease]: ...
 
 
 class InMemoryLeaseBackend:
@@ -47,7 +43,9 @@ class InMemoryLeaseBackend:
         ttl: int,
         options: _ty.Optional[DhcpOptions] = None,
     ) -> _ty.Optional[DhcpLease]:
-        expires = _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
+        expires = (
+            _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
+        )
         lease = DhcpLease(ip=ip, expires=expires, options=options or DhcpOptions())
         self._leases[client_id] = lease
         return lease
@@ -57,7 +55,11 @@ class InMemoryLeaseBackend:
         if lease is None:
             return None
         # Check expiration
-        if lease.expires != _inf and isinstance(lease.expires, _dt.datetime) and lease.expires < _dt.datetime.now():
+        if (
+            lease.expires != _inf
+            and isinstance(lease.expires, _dt.datetime)
+            and lease.expires < _dt.datetime.now()
+        ):
             self._leases.pop(client_id, None)
             return None
         return lease
@@ -87,7 +89,9 @@ class InMemoryLeaseBackend:
         lease = self.lookup(client_id)
         if lease is None:
             return None
-        expires = _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
+        expires = (
+            _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
+        )
         renewed = DhcpLease(ip=lease.ip, expires=expires, options=lease.options)
         self._leases[client_id] = renewed
         return renewed
@@ -122,7 +126,9 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                     code = int(code_str)
                     opts[code] = bytearray.fromhex(val_hex)
 
-                self._leases[client_id] = DhcpLease(ip=ip, expires=expires, options=opts)
+                self._leases[client_id] = DhcpLease(
+                    ip=ip, expires=expires, options=opts
+                )
         except Exception:
             pass
 
@@ -133,7 +139,11 @@ class FileLeaseBackend(InMemoryLeaseBackend):
 
         data = {}
         for client_id, lease in self._leases.items():
-            exp_str = "inf" if not isinstance(lease.expires, _dt.datetime) else lease.expires.isoformat()
+            exp_str = (
+                "inf"
+                if not isinstance(lease.expires, _dt.datetime)
+                else lease.expires.isoformat()
+            )
             opts_data = {}
             for code, option in lease.options.items(decoded=False):
                 opts_data[str(int(code))] = option.hex()

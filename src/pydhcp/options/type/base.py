@@ -15,6 +15,7 @@ class DhcpOptionType:
     advertise a fixed size with `_dhcp_len_hint`. The encode/decode pair should
     round-trip the same Python value.
     """
+
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple["Self", int]:
         raise NotImplementedError()
@@ -57,6 +58,7 @@ _C = _ty.TypeVar("_C", bound="BaseDhcpOptionCode")
 
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
     """Typed DHCP option list container."""
+
     _args_: _ty.ClassVar[tuple[_T]]
 
     def __init__(self, *items: _ty.Any):
@@ -105,6 +107,7 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
 
 class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
     """List of option codes used by parameter-request-list style options."""
+
     @classmethod
     def _normalize(cls, item: _ty.Any) -> _ty.Any:
         ty = cls._args_[0]

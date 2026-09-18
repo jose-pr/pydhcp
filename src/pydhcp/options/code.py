@@ -4,7 +4,6 @@ import enum as _enum
 from . import base as _options
 from .type import Bytes, DhcpOptionType
 
-
 _CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
 _REGISTRY_LOADED = False
 _PSEUDO_MEMBERS: dict[int, "DhcpOptionCode"] = {}
@@ -42,7 +41,9 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
             from . import registry as _registry  # noqa: F401
 
     def register_type(self, optiontype: type[DhcpOptionType]) -> None:
-        if not isinstance(optiontype, type) or not issubclass(optiontype, DhcpOptionType):
+        if not isinstance(optiontype, type) or not issubclass(
+            optiontype, DhcpOptionType
+        ):
             raise TypeError("optiontype must be a DhcpOptionType subclass")
         _CODEMAP[self] = optiontype
 
@@ -867,7 +868,7 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     # 222-223
     # 224-254 PRIVATE USE
     MSFT_CLASSLESS_STATIC_ROUTE = 249
-    WPAD = 252 
+    WPAD = 252
     ALL_VPNS = 254
     """All VPNs option"""
     END = 255

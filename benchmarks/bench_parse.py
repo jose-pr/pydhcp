@@ -23,7 +23,9 @@ from pydhcp.options import DhcpOptions
 
 def build_benchmark_payload() -> bytes:
     options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray([DhcpMessageType.DHCPDISCOVER.value])
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPDISCOVER.value]
+    )
     options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray([1, 0, 17, 34, 51, 68, 85])
     options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
         [1, 3, 6, 15, 31, 33, 43, 44, 46, 47, 119, 121, 249, 252]
@@ -72,17 +74,27 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
         [
             (
                 "decode_packet",
-                {"seconds": decode_time, "ops_per_sec": decode_ops_per_sec, "iterations": iterations},
+                {
+                    "seconds": decode_time,
+                    "ops_per_sec": decode_ops_per_sec,
+                    "iterations": iterations,
+                },
             ),
             (
                 "encode_packet",
-                {"seconds": encode_time, "ops_per_sec": encode_ops_per_sec, "iterations": iterations},
+                {
+                    "seconds": encode_time,
+                    "ops_per_sec": encode_ops_per_sec,
+                    "iterations": iterations,
+                },
             ),
         ]
     )
 
 
-def _print_benchmarks(iterations: int, benchmarks: OrderedDict[str, dict[str, Any]]) -> None:
+def _print_benchmarks(
+    iterations: int, benchmarks: OrderedDict[str, dict[str, Any]]
+) -> None:
     print(f"--- Running DHCP Packet Parsing Benchmarks ({iterations:,} iterations) ---")
     print(
         f"Decode: {benchmarks['decode_packet']['seconds']:.4f} seconds "
@@ -116,7 +128,9 @@ def write_json_report(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run DHCP packet parsing benchmark samples.")
+    parser = argparse.ArgumentParser(
+        description="Run DHCP packet parsing benchmark samples."
+    )
     parser.add_argument(
         "--iterations",
         type=int,

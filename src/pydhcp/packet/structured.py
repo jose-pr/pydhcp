@@ -21,7 +21,6 @@ except ImportError:  # pragma: no cover - optional dependency absent
     _tomli_w = None  # type: ignore[assignment]
 import yaml as _yaml  # type: ignore[import-untyped]
 
-
 _StructuredFormat = _ty.Literal["json", "yaml", "toml", "ini"]
 
 
@@ -66,9 +65,11 @@ def load_mapping(text: str, format: str) -> dict[str, _ty.Any]:
     data: dict[str, _ty.Any] = {
         key: _json_or_text(value) for key, value in parser.items("message")
     }
-    data["options"] = {
-        key: _json_or_text(value) for key, value in parser.items("options")
-    } if parser.has_section("options") else {}
+    data["options"] = (
+        {key: _json_or_text(value) for key, value in parser.items("options")}
+        if parser.has_section("options")
+        else {}
+    )
     return data
 
 
@@ -87,9 +88,12 @@ def dump_mapping(data: dict[str, _ty.Any], format: str) -> str:
 
     parser = _configparser.ConfigParser(interpolation=None)
     parser.optionxform = str  # type: ignore[method-assign,assignment]
-    message = {key: _json.dumps(value) for key, value in data.items() if key != "options"}
+    message = {
+        key: _json.dumps(value) for key, value in data.items() if key != "options"
+    }
     options = {
-        key: _json.dumps(value) for key, value in _ty.cast(dict[str, _ty.Any], data.get("options", {})).items()
+        key: _json.dumps(value)
+        for key, value in _ty.cast(dict[str, _ty.Any], data.get("options", {})).items()
     }
     parser["message"] = message
     parser["options"] = options

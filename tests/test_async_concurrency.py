@@ -10,6 +10,7 @@ from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4
 
+
 class MockAsyncServerForConcurrency(AsyncDhcpServer):
     def acquire_lease(self, client_id, server_id, msg):
         requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=IPv4Address)
@@ -44,7 +45,7 @@ async def run_client(client_id_int: int, server_port: int):
     opts = DhcpOptions()
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
     opts[DhcpOptionCode.CLIENT_IDENTIFIER] = mac
-    
+
     discover = DhcpMessage(
         op=OpCode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
@@ -53,14 +54,14 @@ async def run_client(client_id_int: int, server_port: int):
         xid=1000 + client_id_int,
         secs=timedelta(seconds=0),
         flags=Flags.UNICAST,
-        ciaddr=IPv4('0.0.0.0'),
-        yiaddr=IPv4('0.0.0.0'),
-        siaddr=IPv4('0.0.0.0'),
-        giaddr=IPv4('0.0.0.0'),
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("0.0.0.0"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
         chaddr=mac,
-        sname='',
-        file='',
-        options=opts
+        sname="",
+        file="",
+        options=opts,
     )
 
     start_time = time.perf_counter()
@@ -69,14 +70,16 @@ async def run_client(client_id_int: int, server_port: int):
     # Recv OFFER
     data, addr = await asyncio.wait_for(protocol.queue.get(), timeout=10.0)
     offer = DhcpMessage.decode(data)
-    assert offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+    assert (
+        offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+    )
 
     # 2. Send REQUEST
     req_opts = DhcpOptions()
     req_opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPREQUEST
     req_opts[DhcpOptionCode.REQUESTED_IP] = offer.yiaddr
     req_opts[DhcpOptionCode.CLIENT_IDENTIFIER] = mac
-    
+
     request = DhcpMessage(
         op=OpCode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
@@ -85,14 +88,14 @@ async def run_client(client_id_int: int, server_port: int):
         xid=2000 + client_id_int,
         secs=timedelta(seconds=0),
         flags=Flags.UNICAST,
-        ciaddr=IPv4('0.0.0.0'),
-        yiaddr=IPv4('0.0.0.0'),
-        siaddr=IPv4('0.0.0.0'),
-        giaddr=IPv4('0.0.0.0'),
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("0.0.0.0"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
         chaddr=mac,
-        sname='',
-        file='',
-        options=req_opts
+        sname="",
+        file="",
+        options=req_opts,
     )
     protocol.transport.sendto(request.encode(), ("127.0.0.1", server_port))
 
@@ -109,7 +112,7 @@ async def run_client(client_id_int: int, server_port: int):
 def test_async_concurrency():
     server_port = 10069
     server = MockAsyncServerForConcurrency(listen=[("127.0.0.1", server_port)])
-    
+
     async def main():
         await server.start()
         try:

@@ -135,10 +135,14 @@ class SocketSession(_ty.NamedTuple):
     def respond(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        to: _ty.Optional[_ty.Union[SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str]] = None,
+        to: _ty.Optional[
+            _ty.Union[SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str]
+        ] = None,
     ) -> int:
         if to is None:
-            to_addr: _ty.Union[SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str] = self.client
+            to_addr: _ty.Union[
+                SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str
+            ] = self.client
         else:
             to_addr = to
 

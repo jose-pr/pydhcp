@@ -33,7 +33,9 @@ class CaptureEvent:
 
     @property
     def destination(self) -> _net.SocketAddress:
-        local_ip = self.context.local_ip or _ty.cast(_net.IPv4, self.context.interface.ip)
+        local_ip = self.context.local_ip or _ty.cast(
+            _net.IPv4, self.context.interface.ip
+        )
         return _net.SocketAddress(local_ip, 0)
 
     @property
@@ -54,7 +56,9 @@ class CaptureEvent:
     def format_filename(self, pattern: str, format: str) -> str:
         values = {
             "client_id": _sanitize_filename_value(self.client_id),
-            "timestamp": _sanitize_filename_value(self.captured_at.strftime("%Y%m%dT%H%M%S.%fZ")),
+            "timestamp": _sanitize_filename_value(
+                self.captured_at.strftime("%Y%m%dT%H%M%S.%fZ")
+            ),
             "msg_type": _sanitize_filename_value(self.message_type),
             "xid": _sanitize_filename_value(self.xid),
             "format": _sanitize_filename_value(format),
@@ -158,7 +162,9 @@ def _validate_filter_key(key: str) -> None:
             try:
                 DhcpOptionCode[option_key]
             except KeyError:
-                raise ValueError(f"Unsupported DHCP option filter key: {key!r}") from None
+                raise ValueError(
+                    f"Unsupported DHCP option filter key: {key!r}"
+                ) from None
         return
     raise ValueError(f"Unsupported capture filter key: {key!r}")
 

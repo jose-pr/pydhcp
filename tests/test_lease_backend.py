@@ -27,7 +27,9 @@ def test_in_memory_lease_backend():
     lease = backend.allocate(client_id, ip, ttl, options)
     assert lease is not None
     assert lease.ip == ip
-    assert lease.options.get(DhcpOptionCode.SUBNET_MASK, decode=IPv4Address) == IPv4("255.255.255.0")
+    assert lease.options.get(DhcpOptionCode.SUBNET_MASK, decode=IPv4Address) == IPv4(
+        "255.255.255.0"
+    )
     assert isinstance(lease.expires, _dt.datetime)
 
     # Test lookup
@@ -50,7 +52,7 @@ def test_lease_expiration():
     backend = InMemoryLeaseBackend()
     client_id = "test-client-exp"
     ip = IPv4("192.168.1.200")
-    
+
     # Allocate with 0 TTL (expires immediately or next lookup)
     backend.allocate(client_id, ip, -1)
     assert backend.lookup(client_id) is None
@@ -75,11 +77,13 @@ def test_file_lease_backend(tmp_path):
     loaded = new_backend.lookup(client_id)
     assert loaded is not None
     assert loaded.ip == ip
-    assert loaded.options.get(DhcpOptionCode.SUBNET_MASK, decode=IPv4Address) == IPv4("255.255.255.0")
+    assert loaded.options.get(DhcpOptionCode.SUBNET_MASK, decode=IPv4Address) == IPv4(
+        "255.255.255.0"
+    )
 
     # Renew
     new_backend.renew(client_id, 120)
-    
+
     third_backend = FileLeaseBackend(filepath=filepath)
     loaded_renewed = third_backend.lookup(client_id)
     assert loaded_renewed is not None

@@ -40,8 +40,10 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
                 break
 
             if len(options) < 2:
-                LOGGER.warning(f"Option {code} at offset {offset} is truncated (cannot read length)")
-                options = options[len(options):]
+                LOGGER.warning(
+                    f"Option {code} at offset {offset} is truncated (cannot read length)"
+                )
+                options = options[len(options) :]
                 break
 
             length = options[1]
@@ -52,7 +54,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
                 )
                 data = options[2:]
                 self._options.setdefault(code, bytearray()).extend(data)
-                options = options[len(options):]
+                options = options[len(options) :]
                 continue
 
             next_idx = 2 + length
@@ -62,7 +64,9 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             self._options.setdefault(code, bytearray()).extend(data)
         return options
 
-    def partial_encode(self, maxsize: _ty.Optional[float], word_size: int = 1) -> tuple[bytearray, _ty.Optional["DhcpOptions"]]:
+    def partial_encode(
+        self, maxsize: _ty.Optional[float], word_size: int = 1
+    ) -> tuple[bytearray, _ty.Optional["DhcpOptions"]]:
         if maxsize is None:
             maxsize = _inf
 
@@ -134,55 +138,64 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return self._options[_key]
 
     @_ty.overload  # type: ignore[override]
-    def get(self, __key: int, default: _ty.Any = None, *, decode: type[T]) -> T | None:
-        ...
+    def get(
+        self, __key: int, default: _ty.Any = None, *, decode: type[T]
+    ) -> T | None: ...
 
     @_ty.overload
     def get(
-        self, __key: int, default: _ty.Any = None, *, decode: _ty.Callable[[bytearray], _R]
-    ) -> _R | None:
-        ...
+        self,
+        __key: int,
+        default: _ty.Any = None,
+        *,
+        decode: _ty.Callable[[bytearray], _R],
+    ) -> _R | None: ...
 
     @_ty.overload
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _ty.Literal[True]
-    ) -> DhcpOptionType | None:
-        ...
+    ) -> DhcpOptionType | None: ...
 
     @_ty.overload
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _ty.Literal[False]
-    ) -> bytearray | None:
-        ...
+    ) -> bytearray | None: ...
 
     @_ty.overload
-    def get(self, __key: int, default: _ty.Any = None) -> DhcpOptionType | None:
-        ...
+    def get(self, __key: int, default: _ty.Any = None) -> DhcpOptionType | None: ...
 
     def get(
         self,
         __key: int,
         default: _ty.Any = None,
-        decode: _ty.Union[bool, type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]] = True,
+        decode: _ty.Union[
+            bool, type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
+        ] = True,
     ) -> _ty.Any:
         value = self._options.get(__key, _const.MISSING)
         if value is _const.MISSING:
             return default
         assert isinstance(value, bytearray)
         if decode:
-            target_decoder: _ty.Union[type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]]
+            target_decoder: _ty.Union[
+                type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
+            ]
             if decode is True:
                 target_decoder = self._codemap.from_code(__key).get_type()
             else:
                 target_decoder = decode
-            
-            if isinstance(target_decoder, _builtins.type) and issubclass(target_decoder, DhcpOptionType):
+
+            if isinstance(target_decoder, _builtins.type) and issubclass(
+                target_decoder, DhcpOptionType
+            ):
                 return target_decoder._dhcp_decode(value)
             return _ty.cast(_ty.Callable[[bytearray], _ty.Any], target_decoder)(value)
         else:
             return value
 
-    def _ensuretype(self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]) -> DhcpOption:
+    def _ensuretype(
+        self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]
+    ) -> DhcpOption:
         if isinstance(option, DhcpOption):
             return option
         return self._codemap.normalize(*option)
@@ -217,24 +230,22 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return self._options.__iter__()
 
     @_ty.overload  # type: ignore[override]
-    def items(self) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]:
-        ...
+    def items(self) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]: ...
 
     @_ty.overload
-    def items(self, decoded: _ty.Literal[False]) -> _ty.ItemsView[int, bytearray]:
-        ...
+    def items(self, decoded: _ty.Literal[False]) -> _ty.ItemsView[int, bytearray]: ...
 
     @_ty.overload
     def items(
         self, decoded: _ty.Literal[True]
-    ) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]:
-        ...
+    ) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]: ...
 
     @_ty.overload
-    def items(self, decoded: type[C]) -> _ty.ItemsView[C, DhcpOptionType]:
-        ...
+    def items(self, decoded: type[C]) -> _ty.ItemsView[C, DhcpOptionType]: ...
 
-    def items(self, decoded: _ty.Union[bool, type[BaseDhcpOptionCode]] = True) -> _ty.Any:
+    def items(
+        self, decoded: _ty.Union[bool, type[BaseDhcpOptionCode]] = True
+    ) -> _ty.Any:
         items = self._options.items()
         if decoded is True:
             decoded = self._codemap

@@ -14,7 +14,9 @@ def _encode_no_compression_domain(domain: str) -> bytes:
     return encode_domain_name(domain, "CCC domain name")
 
 
-def _decode_no_compression_domain(option: memoryview, start: int = 0) -> tuple[str, int]:
+def _decode_no_compression_domain(
+    option: memoryview, start: int = 0
+) -> tuple[str, int]:
     return decode_domain_name(option, start, "CCC domain name")
 
 
@@ -68,7 +70,9 @@ class CccProvisioningServerAddress(DhcpOptionType):
                 return "ipv4", IPv4Address(payload)
             if kind_name in {"fqdn", "domain"}:
                 return "fqdn", CccProvisioningServerFqdn(payload)
-            raise ValueError("CCC provisioning server address kind must be ipv4 or fqdn")
+            raise ValueError(
+                "CCC provisioning server address kind must be ipv4 or fqdn"
+            )
         if isinstance(value, _net.IPv4):
             return "ipv4", IPv4Address(value)
         if isinstance(value, str):
@@ -97,7 +101,9 @@ class CccProvisioningServerAddress(DhcpOptionType):
         raise ValueError(f"CCC provisioning server address kind {kind} is unsupported")
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple["CccProvisioningServerAddress", int]:
+    def _dhcp_read(
+        cls, option: memoryview
+    ) -> tuple["CccProvisioningServerAddress", int]:
         return cls._read_payload(option), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -115,7 +121,14 @@ class CccProvisioningServerAddress(DhcpOptionType):
         return f"{type(self).__name__}(kind={self.kind!r}, value={self.value!r})"
 
     def __json__(self) -> list[_ty.Any]:
-        return [self.kind, self.value.__json__() if isinstance(self.value, DhcpOptionType) else str(self.value)]
+        return [
+            self.kind,
+            (
+                self.value.__json__()
+                if isinstance(self.value, DhcpOptionType)
+                else str(self.value)
+            ),
+        ]
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, CccProvisioningServerAddress):
@@ -134,7 +147,12 @@ class CccSecondaryDhcpServerAddress(IPv4Address):
 class CccAsReqAsRepBackoffRetry(DhcpOptionType):
     """CCC sub-option 4 AS-REQ/AS-REP backoff and retry tuple."""
 
-    def __init__(self, initial_timeout: _ty.Any, maximum_timeout: _ty.Any, maximum_retry_count: _ty.Any) -> None:
+    def __init__(
+        self,
+        initial_timeout: _ty.Any,
+        maximum_timeout: _ty.Any,
+        maximum_retry_count: _ty.Any,
+    ) -> None:
         self.initial_timeout = int(initial_timeout)
         self.maximum_timeout = int(maximum_timeout)
         self.maximum_retry_count = int(maximum_retry_count)
