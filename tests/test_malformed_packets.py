@@ -91,10 +91,16 @@ def test_truncated_options(caplog):
     # An option with code 1 (Subnet mask), claiming length 4 but no data.
     # We remove the end-of-options marker (255) first if it's there.
     # Actually, let's just make the packet end with option header but no payload.
+    # Cut back to the end of the options the message actually carries, rather
+    # than assuming encode() stops there: outgoing messages are padded to the
+    # 300-octet BOOTP minimum, so the tail is PAD octets, not the END marker.
+    end = packet.index(0xFF, 240)
     truncated_option = bytearray([1, 4])
-    packet = packet[:-1] + truncated_option
+    packet = packet[:end] + truncated_option
 
     with caplog.at_level(logging.WARNING):
         decoded = DhcpMessage.decode(packet)
 
-    assert "Option 1 at offset 243 claims 4 bytes but only 0 available" in caplog.text
+    assert f"Option 1 at offset {end} claims 4 bytes but only 0 available" in (
+        caplog.text
+    )

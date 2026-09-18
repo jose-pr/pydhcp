@@ -452,6 +452,17 @@ class DhcpMessage:
         data.extend(file_bytes.ljust(128, b"\x00")[:128])
         data.extend(self.MAGIC_COOKIE)
         data.extend(options_field)
+
+        # Pad to the minimal BOOTP message. These are PAD octets after END, which
+        # every parser skips, but their absence is not inert: RFC 1542 s2.1 has a
+        # relay agent verify the datagram could hold 300 octets and silently
+        # discard it otherwise. Every message pydhcp emits with few options -- all
+        # five client builders, and the server's NAK -- was under that, measured
+        # at 244-250 octets, while ISC dhclient was measured padding to exactly
+        # 300 on the wire.
+        floor = min(_const.BOOTP_MIN_PACKET_SIZE, max_packetsize)
+        if len(data) < floor:
+            data.extend(bytes(floor - len(data)))
         return data
 
     def client_id(

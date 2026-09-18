@@ -321,3 +321,35 @@ def test_unnamed_htype_survives_a_mapping_round_trip():
     assert mapping["htype"] == "HTYPE_99"
     json.dumps(mapping)
     assert DhcpMessage.from_mapping(mapping).htype == 99
+
+
+def test_encoded_messages_meet_the_bootp_minimum():
+    """RFC 1542 s2.1 makes a short datagram discardable, not merely unusual.
+
+    An agent performing the consistency checks "MUST silently discard" a BOOTP
+    message whose UDP payload cannot hold 300 octets. Every message pydhcp emits
+    with few options was under that -- all five client builders and the server's
+    NAK, measured at 244-250 octets -- while ISC dhclient was measured padding to
+    exactly 300 on the wire.
+    """
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+
+    wire = bytes(message.encode())
+    assert len(wire) == 300
+
+    # The padding is PAD octets after END, so it changes nothing semantically.
+    end = wire.index(0xFF, 240)
+    assert set(wire[end + 1 :]) == {0}, "padding must be PAD octets, after END"
+    assert (
+        DhcpMessage.decode(bytearray(wire)).options.get(
+            DhcpOptionCode.DHCP_MESSAGE_TYPE
+        )
+        == DhcpMessageType.DHCPDISCOVER
+    )
+
+    # A message that is already long enough is not touched.
+    big = _discover_with(200, b"X" * 200)
+    assert len(bytes(big.encode())) > 300
+
+    # And padding never exceeds an explicit limit below the minimum.
+    assert len(bytes(message.encode(280))) == 280
