@@ -149,3 +149,116 @@ def test_resolve_interface_falls_back_to_address_when_index_is_unknown() -> None
 
     assert resolved.ip == expected.ip
     assert resolved.name == expected.name
+
+
+# --- Lifecycle: sockets, the SIGINT handler, and the interface cache ---
+
+
+def test_close_releases_every_bound_socket() -> None:
+    """stop() only ends the receive loop. Without close(), a process creating a
+    listener per operation leaks a bound UDP socket and its port each time."""
+    from pydhcp.listener import DhcpListener
+
+    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener.bind()
+    sockets = list(listener._sockets)
+    assert sockets
+
+    listener.close()
+
+    assert listener._sockets == []
+    for sock in sockets:
+        assert sock.fileno() == -1
+
+
+def test_listener_is_a_context_manager() -> None:
+    from pydhcp.listener import DhcpListener
+
+    with DhcpListener(listen=("127.0.0.1", 0)) as listener:
+        assert listener._sockets
+        sockets = list(listener._sockets)
+
+    assert listener._sockets == []
+    for sock in sockets:
+        assert sock.fileno() == -1
+
+
+def test_start_off_the_main_thread_does_not_wedge_the_listener() -> None:
+    """signal.signal raises off the main thread. It used to do so after the
+    cancellation token was set, leaving the listener permanently 'started'."""
+    import threading
+
+    from pydhcp.listener import DhcpListener
+
+    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener._select_timeout = 0.05
+    result = {}
+
+    def run() -> None:
+        try:
+            result["thread"] = listener.start()
+        except Exception as exc:  # pragma: no cover - the bug being pinned
+            result["error"] = exc
+
+    worker = threading.Thread(target=run)
+    worker.start()
+    worker.join(5)
+
+    assert "error" not in result, result.get("error")
+    assert result["thread"] is not None
+    listener.stop()
+    result["thread"].join(5)
+    assert not result["thread"].is_alive()
+    listener.close()
+
+
+def test_start_restores_the_previous_sigint_handler_on_close() -> None:
+    """Library code must not keep a process-wide handler after it is done."""
+    import signal
+
+    from pydhcp.listener import DhcpListener
+
+    original = signal.getsignal(signal.SIGINT)
+    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener._select_timeout = 0.05
+    thread = listener.start()
+    assert thread is not None
+    assert signal.getsignal(signal.SIGINT) is not original
+
+    listener.stop()
+    thread.join(5)
+    listener.close()
+
+    assert signal.getsignal(signal.SIGINT) is original
+
+
+def test_interface_resolution_is_cached_and_cleared_by_bind() -> None:
+    """Enumerating every host adapter per datagram was expensive enough that a
+    modest flood denied service on its own."""
+    import socket
+
+    from pydhcp import listener as listener_module
+    from pydhcp.listener import _clear_interface_cache, _resolve_interface
+
+    calls = []
+    original = listener_module._resolve_interface_uncached
+
+    def counting(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    listener_module._resolve_interface_uncached = counting
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    try:
+        _clear_interface_cache()
+        for _ in range(25):
+            _resolve_interface(sock)
+        assert len(calls) == 1, "resolution was not cached"
+
+        _clear_interface_cache()
+        _resolve_interface(sock)
+        assert len(calls) == 2, "clearing the cache did not force a re-resolve"
+    finally:
+        listener_module._resolve_interface_uncached = original
+        sock.close()

@@ -193,6 +193,17 @@ def _parselisteners(
     return _listen
 
 
+#: Resolved interfaces, keyed by (ifindex, local address). Enumerating every host
+#: adapter costs tens of milliseconds on Windows, and it was paid per datagram --
+#: enough that a modest flood denied service on its own. Cleared by `bind()`, which
+#: is the point at which the set of addresses this listener serves can change.
+_INTERFACE_CACHE: dict[tuple[int, str], _net.NetworkInterface] = {}
+
+
+def _clear_interface_cache() -> None:
+    _INTERFACE_CACHE.clear()
+
+
 def _resolve_interface(
     sock: _socket.socket,
     pkt_local_ip: _ty.Optional[_net.IPv4] = None,
@@ -208,8 +219,30 @@ def _resolve_interface(
     reply's SERVER_IDENTIFIER must be the right one).
 
     Falls back to a synthetic host-route entry when nothing matches, which keeps
-    callers from having to special-case it.
+    callers from having to special-case it. Results are cached per
+    (ifindex, address); `bind()` clears the cache.
     """
+    if pkt_local_ip is None and pkt_ifindex is None:
+        try:
+            sock_ip, _port = sock.getsockname()
+        except Exception:
+            sock_ip = "127.0.0.1"
+        cache_key = (0, sock_ip)
+    else:
+        cache_key = (pkt_ifindex or 0, str(pkt_local_ip) if pkt_local_ip else "")
+    cached = _INTERFACE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    resolved = _resolve_interface_uncached(sock, pkt_local_ip, pkt_ifindex)
+    _INTERFACE_CACHE[cache_key] = resolved
+    return resolved
+
+
+def _resolve_interface_uncached(
+    sock: _socket.socket,
+    pkt_local_ip: _ty.Optional[_net.IPv4] = None,
+    pkt_ifindex: _ty.Optional[int] = None,
+) -> _net.NetworkInterface:
     if pkt_ifindex:
         fallback: _ty.Optional[_net.NetworkInterface] = None
         for index, interface in _net._iter_indexed_interfaces(family=4):
@@ -272,6 +305,8 @@ class DhcpListener:
         self._listen = _parselisteners(listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo)
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
+        self._sigint_handler: _ty.Optional[_ty.Any] = None
+        self._previous_sigint: _ty.Optional[_ty.Any] = None
         self._select_timeout = select_timeout or 1
         self._cancellation_token: _thread.Event | None = None
         self.metrics = DhcpMetrics()
@@ -280,6 +315,7 @@ class DhcpListener:
         pass
 
     def bind(self) -> None:
+        _clear_interface_cache()
         active = {_net.SocketAddress(socket): socket for socket in self._sockets}
         _listen = []
         for address in self._listen:
@@ -329,21 +365,78 @@ class DhcpListener:
         if self._cancellation_token is not None:
             self._cancellation_token.set()
 
+    def close(self) -> None:
+        """Close every bound socket and release the SIGINT handler.
+
+        `stop()` only ends the receive loop; without this the sockets stayed
+        open, so a process that creates a listener per operation leaked a bound
+        UDP socket and its port each time, and the next bind to the same port
+        failed or silently shared it.
+        """
+        for socket in self._sockets:
+            try:
+                socket.close()
+            except Exception:
+                pass
+        self._sockets.clear()
+        self._restore_sigint_handler()
+
+    def __enter__(self) -> "DhcpListener":
+        self.bind()
+        return self
+
+    def __exit__(self, *_exc: _ty.Any) -> None:
+        self.stop()
+        self.close()
+
     def wait(self) -> None:
         while self._cancellation_token is not None:
             self._cancellation_token.wait(self._select_timeout)
+
+    def _install_sigint_handler(self) -> None:
+        """Install a Ctrl-C handler, if this thread is allowed to.
+
+        `signal.signal` raises off the main thread, which used to propagate out
+        of `start()` *after* the cancellation token was set -- leaving the
+        listener permanently 'started' and impossible to start again. Library
+        code should not claim a process-wide handler as a side effect of
+        starting, so failure here is not an error.
+        """
+        import signal
+
+        if _thread.current_thread() is not _thread.main_thread():
+            return
+
+        def stop(*args: _ty.Any) -> None:
+            self.stop()
+            LOGGER.info("Stopped listening due to Ctrl-C")
+
+        try:
+            self._sigint_handler = stop
+            self._previous_sigint = signal.signal(signal.SIGINT, stop)
+        except (ValueError, OSError):  # pragma: no cover - platform dependent
+            self._sigint_handler = None
+            self._previous_sigint = None
+
+    def _restore_sigint_handler(self) -> None:
+        import signal
+
+        if self._sigint_handler is None:
+            return
+        try:
+            # Only give it back if nobody else has claimed it since.
+            if signal.getsignal(signal.SIGINT) is self._sigint_handler:
+                signal.signal(signal.SIGINT, self._previous_sigint)
+        except (ValueError, OSError, TypeError):  # pragma: no cover
+            pass
+        self._sigint_handler = None
+        self._previous_sigint = None
 
     def start(self, cancellation_token: _thread.Event | None = None) -> _thread.Thread | None:
         if not self._cancellation_token:
             thread = _thread.Thread(target=self.listen, args=())
             self._cancellation_token = cancellation_token or _thread.Event()
-            import signal
-
-            def stop(*args: _ty.Any) -> None:
-                self.stop()
-                LOGGER.info("Stopped listening due to Ctrl-C")
-
-            signal.signal(signal.SIGINT, stop)
+            self._install_sigint_handler()
             thread.start()
             return thread
         return None
@@ -477,6 +570,7 @@ class AsyncDhcpListener:
         pass
 
     def bind(self) -> None:
+        _clear_interface_cache()
         active = {_net.SocketAddress(socket): socket for socket in self._sockets}
         _listen = []
         for address in self._listen:

@@ -169,6 +169,11 @@ def test_client_dora_against_real_server() -> None:
 
 
 def test_client_discover_offer_returns_none_without_server() -> None:
-    client = DhcpClient(listen=("127.0.0.1", 0))
-    offer = client.discover_offer(CHADDR, timeout=0.2, retries=0, destination="127.0.0.1", port=6767)
+    # `with` so the client's socket is closed: this test leaked a bound socket
+    # on every run, which is what made the suite fail under
+    # `-W error::ResourceWarning`.
+    with DhcpClient(listen=("127.0.0.1", 0)) as client:
+        offer = client.discover_offer(
+            CHADDR, timeout=0.2, retries=0, destination="127.0.0.1", port=6767
+        )
     assert offer is None
