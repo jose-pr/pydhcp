@@ -399,3 +399,71 @@ def test_app_parses_relay_subcommand() -> None:
     instance = parser.parse_args(["relay", "--server", "192.0.2.1"])
     assert isinstance(instance, Relay)
     assert instance.server == ["192.0.2.1"]
+
+
+def test_yaml_capture_survives_a_second_run(tmp_path) -> None:
+    """The 'first record' flag is per process, but the file is opened for append.
+
+    A second run's first record used to be written straight onto the last record
+    of the first with no '---', so YAML merged the two mappings and the earlier
+    record silently disappeared on load: four records written, three loaded.
+    """
+    import yaml
+
+    output = tmp_path / "captures.yaml"
+    for _run in range(2):
+        state = {"first": True}  # fresh per run, exactly as the CLI builds it
+        for _record in range(2):
+            _write_capture_record(
+                _capture_event(),
+                output=output,
+                output_mode="single",
+                packet_format="yaml",
+                state=state,
+            )
+
+    documents = [d for d in yaml.safe_load_all(output.read_text(encoding="utf-8")) if d]
+    assert len(documents) == 4, "a record was merged away across runs"
+
+
+def test_capture_rejects_toml_and_ini_for_multi_record_output(capsys) -> None:
+    """Concatenated records are unreadable in both: TOML has no document
+    separator and configparser raises DuplicateSectionError on a second
+    [message]. per-capture writes one record per file, which is valid.
+
+    The rejection has to happen before binding. Without it this call does not
+    raise at all -- it opens sockets and captures until interrupted, which is
+    why this test is not run against the pre-fix tree.
+    """
+    import pathlib
+
+    import pytest
+
+    from pydhcp.cli import Capture
+
+    for fmt in ("toml", "ini"):
+        command = Capture()
+        command.packet_format = fmt
+        command.output = pathlib.Path("caps." + fmt)
+        command.output_mode = "single"
+        with pytest.raises(SystemExit) as exit_info:
+            command()
+        assert exit_info.value.code == 1
+        message = capsys.readouterr().err
+        assert "per-capture" in message and fmt in message
+
+
+def test_capture_allows_toml_per_capture(tmp_path) -> None:
+    """One record per file is the shape these formats do support."""
+    pattern = tmp_path / "{timestamp}_{msg_type}.{format}"
+
+    _write_capture_record(
+        _capture_event(),
+        output=pattern,
+        output_mode="per-capture",
+        packet_format="toml",
+        state={"first": True},
+    )
+
+    written = list(tmp_path.glob("*.toml"))
+    assert len(written) == 1

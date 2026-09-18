@@ -243,9 +243,18 @@ def _serialize_capture_event(event: CaptureEvent, packet_format: str) -> str:
 
 
 def _stream_separator(packet_format: str, first: bool) -> str:
-    if first:
-        return ""
-    return "" if packet_format == "json" else "---\n"
+    """Return what must precede a record so the file stays parseable.
+
+    YAML gets its `---` even on the first record of a run. The flag says "first
+    for this process", but the file is opened for append: a second run's first
+    record was written straight onto the last record of the first with no
+    separator, so YAML merged the two mappings and the earlier record silently
+    disappeared on load. A leading `---` is valid for the opening document too,
+    which makes the output correct whether the file is new or appended to.
+    """
+    if packet_format == "json":
+        return ""  # newline-delimited; a separator would break it
+    return "---\n"
 
 
 def _write_capture_record(
@@ -386,6 +395,19 @@ class Capture(LoggingArgs, Cmd):
                     "--output-mode per-capture requires --output to be a filename pattern"
                 )
             packet_format = _infer_capture_format(output, self.packet_format)
+            if packet_format in ("toml", "ini") and output_mode != "per-capture":
+                # Concatenating records produces a file no parser will read: TOML
+                # has no document separator, and a second [message] section is a
+                # DuplicateSectionError to configparser. One record per file is
+                # the only shape these formats have for this. Raised before
+                # binding, so it fails immediately rather than after capturing.
+                raise ValueError(
+                    f"--format {packet_format} cannot hold more than one packet in a "
+                    f"single file; use --output-mode per-capture with a filename "
+                    f"pattern, or --format json (newline-delimited) or yaml "
+                    f"(multi-document). Note the format is inferred from the "
+                    f"--output extension when --format is not given."
+                )
             state: "dict[str, _ty.Any]" = {"first": True, "count": 0}
             capture: DhcpCapture
 
