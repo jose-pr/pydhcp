@@ -7,9 +7,33 @@ from .type import Bytes, DhcpOptionType
 
 _CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
 _REGISTRY_LOADED = False
+_PSEUDO_MEMBERS: dict[int, "DhcpOptionCode"] = {}
 
 
 class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
+    @classmethod
+    def _missing_(cls, value: object) -> "_ty.Optional[DhcpOptionCode]":
+        """Return an opaque pseudo-member for any byte value without one.
+
+        Only 163 of codes 0-255 are members here, and RFC 3942 reserves 224-254
+        for site-specific use, so raising for the rest means a client sending any
+        of them gets no service at all: the receive path resolves every option
+        code before the packet reaches a handler. Such codes carry no known
+        structure, so `get_type()` returns `Bytes` and `label()` reports
+        "UNKNOWN" -- which is what the shipped API header documents.
+        """
+        if not isinstance(value, int) or isinstance(value, bool):
+            return None
+        if not 0 <= value <= 255:
+            return None
+        pseudo = _PSEUDO_MEMBERS.get(value)
+        if pseudo is None:
+            pseudo = int.__new__(cls, value)
+            pseudo._name_ = None  # type: ignore[assignment]
+            pseudo._value_ = value
+            _PSEUDO_MEMBERS[value] = pseudo
+        return pseudo
+
     @classmethod
     def ensure_registered(cls) -> None:
         global _REGISTRY_LOADED

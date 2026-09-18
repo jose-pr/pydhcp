@@ -675,3 +675,33 @@ def _walk(wire):
         code, length = wire[index], wire[index + 1]
         yield code, wire[index + 2 : index + 2 + length]
         index += 2 + length
+
+
+def test_unregistered_codes_fall_back_to_opaque_bytes():
+    """options/AGENTS.md documents a Bytes fallback for codes with no member.
+
+    Only 163 of 0-255 are members, and RFC 3942 reserves 224-254 for
+    site-specific use. Raising instead means a client sending any of them gets
+    no service, because the receive path resolves every code before the packet
+    reaches a handler.
+    """
+    for value in (199, 224, 250, 253):
+        code = DhcpOptionCode(value)
+        assert int(code) == value
+        assert code.label() == "UNKNOWN"
+        assert code.get_type() is Bytes
+        assert repr(code) == f"[{value}]UNKNOWN"
+        # Pseudo-members are cached, so a code compares and hashes consistently.
+        assert DhcpOptionCode(value) is code
+
+    options = DhcpOptions()
+    options.decode(bytearray(b"\x35\x01\x01\xe0\x03\x01\x02\x03\xff"))
+    assert bytes(options.get(224)) == b"\x01\x02\x03"
+    assert dict(options.items(decoded=False))[224] == bytearray(b"\x01\x02\x03")
+    assert options == options
+
+    # Out of range is still an error: these are option *codes*, one octet each.
+    with pytest.raises(ValueError):
+        DhcpOptionCode(256)
+    with pytest.raises(ValueError):
+        DhcpOptionCode(-1)
