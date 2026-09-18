@@ -174,3 +174,98 @@ def test_inform_does_not_strip_lease_time_from_the_stored_lease() -> None:
     stored = backend.lookup(client_id)
     assert stored is not None
     assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in stored.options
+
+
+# --- DHCPNAK construction and delivery (RFC 2131 4.3.2 / Table 3) ---
+
+
+class _NakServer(DhcpServer):
+    """Refuses every request, so _filter_and_send takes the NAK path."""
+
+    def acquire_lease(self, client_id, server_id, msg):
+        return DhcpLease(
+            IPv4("10.0.0.10"), datetime.now() + timedelta(seconds=3600), DhcpOptions()
+        )
+
+
+def _nak_request(giaddr: str = "0.0.0.0", requested: str = "10.0.0.99") -> DhcpMessage:
+    msg = _message(DhcpMessageType.DHCPREQUEST)
+    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4(requested)
+    msg.giaddr = IPv4(giaddr)
+    return msg
+
+
+def _sent(transport: Mock) -> tuple[DhcpMessage, str, int]:
+    data, dest, port, _ = transport.send.call_args.args
+    return DhcpMessage.decode(bytearray(data)), str(dest), port
+
+
+def test_nak_is_broadcast_when_giaddr_is_zero() -> None:
+    """The client may hold no usable address, so a unicast NAK never arrives."""
+    transport = Mock()
+    server = _NakServer()
+    server.handle(_nak_request(), _context(transport))
+
+    reply, dest, _port = _sent(transport)
+    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPNAK
+    assert dest == "255.255.255.255"
+
+
+def test_nak_carries_no_address_and_no_lease_time() -> None:
+    """RFC 2131 Table 3: a NAK has yiaddr 0, ciaddr 0 and no lease time -- it is
+    a refusal, not an offer of the address being refused."""
+    transport = Mock()
+    server = _NakServer()
+    server.handle(_nak_request(), _context(transport))
+
+    reply, _dest, _port = _sent(transport)
+    assert reply.yiaddr == IPv4("0.0.0.0")
+    assert reply.ciaddr == IPv4("0.0.0.0")
+    assert reply.siaddr == IPv4("0.0.0.0")
+    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
+    assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
+
+
+def test_nak_through_a_relay_sets_the_broadcast_bit() -> None:
+    """RFC 2131 4.3.2: with giaddr set the server MUST set the broadcast bit and
+    send to the relay on port 67."""
+    transport = Mock()
+    server = _NakServer()
+    server.handle(_nak_request(giaddr="10.0.0.1"), _context(transport))
+
+    reply, dest, port = _sent(transport)
+    assert dest == "10.0.0.1"
+    assert port == 67
+    assert reply.flags is Flags.BROADCAST
+
+
+# --- RFC 3046 2.2: the option 82 echo survives the request-list filter ---
+
+
+def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() -> None:
+    """Practically every client sends option 55, and the echo was filtered out by
+    it -- so relays that validate the echo dropped every reply."""
+    class LeaseServer(DhcpServer):
+        def acquire_lease(self, client_id, server_id, msg):
+            return DhcpLease(
+                IPv4("10.0.0.10"),
+                datetime.now() + timedelta(seconds=3600),
+                DhcpOptions(),
+            )
+
+    msg = _message(DhcpMessageType.DHCPDISCOVER)
+    msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = bytearray(b"\x01\x04port")
+    msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
+        [DhcpOptionCode.SUBNET_MASK, DhcpOptionCode.ROUTER]
+    )
+    transport = Mock()
+    LeaseServer().handle(msg, _context(transport))
+
+    reply, _dest, _port = _sent(transport)
+    assert reply.options.get(
+        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False
+    ) == bytearray(b"\x01\x04port")
+    # The machinery options survive too, or the reply is not a usable DHCP message.
+    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+    assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
+    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in reply.options

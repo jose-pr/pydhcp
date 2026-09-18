@@ -236,7 +236,17 @@ class DhcpServer(_Base):
         resp.op = _enum.OpCode.BOOTREPLY
         resp.hops = 0
         resp.secs = _dt.timedelta(seconds=0)
-        if lease.ip:
+        if resp_ty is _enum.DhcpMessageType.DHCPNAK:
+            # RFC 2131 Table 3: a DHCPNAK carries no address and no lease time --
+            # it refuses the client's. Cloning the request left ciaddr set and
+            # the lease's address in yiaddr, i.e. a refusal that still looked
+            # like an offer of the very address being refused.
+            resp.yiaddr = _net.WILDCARD_IPv4
+            resp.ciaddr = _net.WILDCARD_IPv4
+            resp.siaddr = _net.WILDCARD_IPv4
+            resp.sname = ""
+            resp.file = ""
+        elif lease.ip:
             if lease.expires is None or lease.expires == _inf or not isinstance(lease.expires, _dt.datetime):
                 expires = _const.INFINITE_LEASE_TIME
             else:
@@ -263,19 +273,30 @@ class DhcpServer(_Base):
             DhcpOptionCode.PARAMETER_REQUEST_LIST,
             decode=_type.DhcpOptionCodes[DhcpOptionCode],
         )
+        # Options the server controls rather than the client requesting them, so
+        # the parameter request list must never filter them out: RFC 2131 4.3.1
+        # (message type, server identifier, lease time) and RFC 3046 2.2, which
+        # says a server supporting the relay agent option SHALL echo it in all
+        # replies -- and practically every client sends a request list, so
+        # filtering by it alone dropped the echo on every single reply.
+        always_send = [
+            DhcpOptionCode.DHCP_MESSAGE_TYPE,
+            DhcpOptionCode.SERVER_IDENTIFIER,
+            DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
+            DhcpOptionCode.RELAY_AGENT_INFORMATION,
+            DhcpOptionCode.CLIENT_IDENTIFIER,
+        ]
         requests_params: _ty.List[DhcpOptionCode] = []
         if requests_params_raw:
-            requests_params = [
-                *requests_params_raw,
-                DhcpOptionCode.IP_ADDRESS_LEASE_TIME,
-                DhcpOptionCode.SERVER_IDENTIFIER,
-            ]
+            requests_params = [*requests_params_raw, *always_send]
         if resp_ty is _enum.DhcpMessageType.DHCPNAK:
             requests_params = [
                 DhcpOptionCode.DHCP_MESSAGE,
                 DhcpOptionCode.CLIENT_IDENTIFIER,
                 DhcpOptionCode.VENDOR_CLASS_IDENTIFIER,
                 DhcpOptionCode.SERVER_IDENTIFIER,
+                DhcpOptionCode.DHCP_MESSAGE_TYPE,
+                DhcpOptionCode.RELAY_AGENT_INFORMATION,
             ]
             resp.options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
                 msg.client_id().replace(":", "")
@@ -299,7 +320,21 @@ class DhcpServer(_Base):
         dest: _net.IPv4
         dest_port: int = context.client.port
         
-        if msg.giaddr != _net.WILDCARD_IPv4:
+        if resp_ty is _enum.DhcpMessageType.DHCPNAK:
+            # RFC 2131 4.3.2: with giaddr 0 the server MUST broadcast the NAK to
+            # 255.255.255.255, because the client may hold no usable address or
+            # subnet mask; with giaddr set it MUST set the broadcast bit and send
+            # to the relay. Falling through to the normal rules unicast the
+            # refusal to the very address the client was told it may not use, so
+            # the client never saw it and retried until its timers expired.
+            if msg.giaddr != _net.WILDCARD_IPv4:
+                resp.flags = _enum.Flags.BROADCAST
+                data = resp.encode(max_size)
+                dest = msg.giaddr
+                dest_port = 67 if context.client.port == 68 else context.client.port
+            else:
+                dest = _net.IPv4("255.255.255.255")
+        elif msg.giaddr != _net.WILDCARD_IPv4:
             dest = msg.giaddr
             dest_port = 67 if context.client.port == 68 else context.client.port
         elif msg.ciaddr != _net.WILDCARD_IPv4:
