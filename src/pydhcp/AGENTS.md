@@ -36,10 +36,20 @@ DhcpMessage` etc. all work directly off the top-level package.
   - `.handle(msg, context) -> None` — override point; base implementation is
     a no-op. Called for every successfully decoded packet.
 - **`AsyncDhcpListener(listen=None, max_packet_size=None,
-  per_interface=None)`** — `asyncio` counterpart. `await .start()` binds and
-  creates one `DatagramProtocol` endpoint per socket; `await .stop()` closes
-  transports and sockets. Same `.handle()` override point and per-instance
-  `self.metrics`.
+  per_interface=None)`** — `asyncio` counterpart, with the same receive path,
+  the same `IP_PKTINFO` wildcard routing and the same `listen` forms as
+  `DhcpListener`. `await .start()` binds and registers each socket with the
+  event loop; `.stop()` unregisters and closes them. `.stop()` is **not** a
+  coroutine — it is reached through the inherited `DhcpListener` contract,
+  where nobody awaits it — but `await .stop()` still works. Same `.handle()`
+  override point and per-instance `self.metrics`.
+  - Handlers run on a single worker thread, not on the event loop: `.handle()`
+    is ordinary blocking code, so running it inline stalled every other
+    coroutine in the host application. One worker, so handlers still run one
+    at a time in arrival order — the lease backends are not thread-safe.
+  - On loops without socket readability (Windows' default proactor loop) it
+    falls back to a `DatagramProtocol` endpoint per socket. That path cannot
+    carry `IP_PKTINFO`, which is absent on those platforms anyway.
 - **`Transport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
   bytes) -> int`; base raises `NotImplementedError`.
 - **`UdpTransport(socket)`** — plain UDP send; unicast failures automatically

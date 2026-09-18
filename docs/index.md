@@ -36,14 +36,20 @@ from pydhcp.server import AsyncDhcpServer
 
 async def main():
     server = AsyncDhcpServer()
-    await server.start()
-    
-    # Wait or run other async application logic
-    # To shut down cleanly:
-    # await server.stop()
+    await server.start()      # binds and starts receiving; returns immediately
+    try:
+        await asyncio.Event().wait()   # serve until cancelled (Ctrl-C)
+    finally:
+        server.stop()
 
 asyncio.run(main())
 ```
+
+`start()` returns as soon as the sockets are bound, so something has to keep the loop
+alive — await your application's own work there instead of the `Event` if you have any.
+Handlers run on a single worker thread rather than on the event loop, so a blocking
+`handle()` will not stall the rest of your application; they still run one at a time and
+in arrival order.
 
 ### Basic Packet Client
 
