@@ -461,6 +461,10 @@ def test_capture_rejects_toml_and_ini_for_multi_record_output(capsys) -> None:
 
 def test_capture_allows_toml_per_capture(tmp_path) -> None:
     """One record per file is the shape these formats do support."""
+    # Writing TOML is the `toml` extra's job, not a base install's -- without the
+    # skip this fails on any environment that has only [dev], which is exactly
+    # what a contributor gets from the documented setup command.
+    pytest.importorskip("tomli_w")
     pattern = tmp_path / "{timestamp}_{msg_type}.{format}"
 
     _write_capture_record(
