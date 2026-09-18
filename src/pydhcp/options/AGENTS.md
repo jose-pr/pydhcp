@@ -133,6 +133,15 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 - **`DomainList`** — RFC 1035/3397 domain-name list with DNS-style
   compression-pointer support on both decode and encode (encode
   deduplicates common suffixes automatically).
+- **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0)`** — RFC 4702 client FQDN
+  (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/`FLAG_O`/`FLAG_E`/
+  `FLAG_N` are the defined bits; the name is RFC 1035 wire format when `FLAG_E`
+  is set and ASCII otherwise, and `.encoded` reports which. Reserved flag bits
+  and compression pointers are rejected on decode.
+- **`SipServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
+  120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
+  IPv4 addresses, written as a leading encoding octet. A plain list infers its
+  encoding. `.values` is a list of strings either way.
 - **`RdnssSelection(flags, primary, secondary, domains=None)`** — RFC 6731
   RDNSS selection record.
 
