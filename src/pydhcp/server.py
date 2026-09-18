@@ -16,6 +16,22 @@ from math import inf as _inf
 
 from .lease import DhcpLease, LeaseBackend
 
+
+def _is_loopback(context: RequestContext) -> bool:
+    """Whether this exchange is happening over loopback.
+
+    Loopback inverts both halves of the unicast/broadcast trade-off: there is no
+    ARP, so a unicast to an address the client has not configured still arrives,
+    and POSIX refuses a broadcast from a socket bound to 127.0.0.1 outright
+    (Windows allows it, which is how a loopback harness can pass on one platform
+    and hang on the other).
+    """
+    for candidate in (context.local_ip, context.interface.ip, context.client.ip):
+        if candidate is not None:
+            return bool(candidate.is_loopback)
+    return False
+
+
 class DhcpServer(_Base):
     DEFAULT_PORTS = (_enum.DhcpPort.SERVER,)
 
@@ -25,6 +41,20 @@ class DhcpServer(_Base):
     #: Upper bound on quarantined addresses, so a DECLINE flood cannot grow
     #: memory without limit; the oldest entry is evicted first.
     MAX_DECLINED_ADDRESSES = 1024
+
+    #: Whether to unicast a reply to a client that has no address yet.
+    #:
+    #: RFC 2131 4.1 says the server unicasts OFFER/ACK "to the client's hardware
+    #: address and 'yiaddr'" when the client leaves the broadcast flag clear.
+    #: That is an L2 send: the client cannot answer ARP for an address it has not
+    #: been given, so on a plain UDP socket the kernel drops the reply with no
+    #: error at all. Measured against ISC dhclient 4.4.3 on a veth pair: every
+    #: OFFER was logged as sent to yiaddr:68 and the client saw none of them,
+    #: retransmitting DISCOVER until it gave up. Broadcasting is how the reply
+    #: actually arrives. Set this True only with a transport that can address the
+    #: client's hardware address directly (a raw/AF_PACKET socket), or where the
+    #: neighbour entry is installed out of band.
+    UNICAST_TO_UNCONFIGURED_CLIENT = False
 
     def __init__(
         self,
@@ -455,7 +485,14 @@ class DhcpServer(_Base):
         elif msg.flags is _enum.Flags.BROADCAST:
             dest = _net.IPv4("255.255.255.255")
         else:
-            if resp.yiaddr != _net.WILDCARD_IPv4:
+            # The client has no address yet (ciaddr 0) and did not ask for a
+            # broadcast. See UNICAST_TO_UNCONFIGURED_CLIENT: a plain UDP socket
+            # cannot deliver to yiaddr before the client owns it. Loopback is the
+            # exception both ways -- there is no ARP to fail, and POSIX refuses a
+            # broadcast from a socket bound to 127.0.0.1 outright.
+            if resp.yiaddr != _net.WILDCARD_IPv4 and (
+                self.UNICAST_TO_UNCONFIGURED_CLIENT or _is_loopback(context)
+            ):
                 dest = resp.yiaddr
             else:
                 dest = _net.IPv4("255.255.255.255")

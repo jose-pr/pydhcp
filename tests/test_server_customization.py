@@ -42,6 +42,21 @@ def _context(transport: Mock) -> RequestContext:
     )
 
 
+def _lan_context(transport: Mock) -> RequestContext:
+    """A context that is NOT loopback.
+
+    Loopback is a special case for reply delivery -- no ARP to fail, and POSIX
+    refuses a broadcast from a 127.0.0.1-bound socket -- so the broadcast rule
+    has to be asserted on a normal segment.
+    """
+    return RequestContext(
+        transport=transport,
+        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
+        client=SocketAddress("10.0.0.50", 68),
+        client_mac=bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55]),
+    )
+
+
 def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
     class FixedLeaseServer(DhcpServer):
         def acquire_lease(self, client_id, server_id, msg):
@@ -60,6 +75,9 @@ def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
 
     data, dest, port, _ = transport.send.call_args.args
     response = DhcpMessage.decode(data)
+    # Unicast here because this exchange is over loopback, where there is no ARP
+    # to fail and POSIX refuses a broadcast anyway. On a real segment the same
+    # reply is broadcast -- see test_reply_to_an_unconfigured_client_is_broadcast.
     assert dest == IPv4("127.0.0.10")
     assert port == 68
     assert response.yiaddr == IPv4("127.0.0.10")
@@ -454,3 +472,56 @@ def test_client_identifier_is_echoed() -> None:
     assert reply.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False) == bytearray(
         b"\x01\xaa\xbb"
     )
+
+
+def test_reply_to_an_unconfigured_client_is_broadcast() -> None:
+    """A client with no address cannot answer ARP for yiaddr.
+
+    RFC 2131 4.1 has the server unicast to the client's hardware address and
+    yiaddr when the broadcast flag is clear, which needs an L2 send the plain UDP
+    transport cannot do -- the kernel drops the reply with no error. Measured
+    against ISC dhclient 4.4.3: every OFFER was logged as sent to yiaddr:68 and
+    the client saw none of them.
+    """
+    transport = Mock()
+    msg = _message(DhcpMessageType.DHCPDISCOVER)  # flags=UNICAST, ciaddr=0
+    _NakServer().handle(msg, _lan_context(transport))
+
+    _reply, dest, _port = _sent(transport)
+    assert dest == "255.255.255.255"
+
+
+def test_reply_over_loopback_is_unicast() -> None:
+    """Loopback inverts the trade-off: no ARP to fail, and POSIX refuses a
+    broadcast from a socket bound to 127.0.0.1 -- which hung this suite on Linux
+    while it passed on Windows."""
+    transport = Mock()
+    _NakServer().handle(_message(DhcpMessageType.DHCPDISCOVER), _context(transport))
+
+    _reply, dest, _port = _sent(transport)
+    assert dest == "10.0.0.10"
+
+
+def test_unicast_to_unconfigured_client_can_be_opted_into() -> None:
+    """For a transport that can address the client's hardware address."""
+    class L2Server(_NakServer):
+        UNICAST_TO_UNCONFIGURED_CLIENT = True
+
+    transport = Mock()
+    L2Server().handle(_message(DhcpMessageType.DHCPDISCOVER), _lan_context(transport))
+
+    _reply, dest, _port = _sent(transport)
+    assert dest == "10.0.0.10"
+
+
+def test_configured_client_still_gets_a_unicast_reply() -> None:
+    """ciaddr set means the client holds the address and ARP resolves."""
+    transport = Mock()
+    msg = _message(DhcpMessageType.DHCPREQUEST)
+    msg.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("127.0.0.1")
+    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
+    msg.ciaddr = IPv4("10.0.0.10")
+    _NakServer().handle(msg, _context(transport))
+
+    _reply, dest, _port = _sent(transport)
+    assert dest == "10.0.0.10"
