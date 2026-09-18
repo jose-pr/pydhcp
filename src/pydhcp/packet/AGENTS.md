@@ -18,8 +18,10 @@ top-level package header.
   - **`DhcpMessage.decode(data: bytes | bytearray | memoryview) ->
     DhcpMessage`** — parses a wire packet. Raises `ValueError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
-    a missing `0xFF` (END) options terminator. Unknown `htype` values fall
-    back to `ETHERNET` with a logged warning rather than raising. Honors
+    a missing `0xFF` (END) options terminator. An `htype` with no IANA name
+    is **preserved** as an unnamed `HardwareAddressType` member rather than
+    raising or being rewritten, so a relay forwards the type it received.
+    `hlen = 0` is accepted: RFC 4390 requires it for IPoIB. Honors
     RFC 3396 `OPTION_OVERLOAD` (decodes overflow options packed into the
     `file`/`sname` fields).
   - **`.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) ->
@@ -35,7 +37,12 @@ top-level package header.
     hex bytes). Backs the JSON/YAML/TOML/INI helpers below.
   - **`.client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
-    `htype.value + chaddr`; returned as uppercase colon-hex.
+    `htype.value + chaddr`; returned as uppercase colon-hex. Raises
+    **`NoClientIdentity`** (a `ValueError` subclass) when the message has
+    none of those — `chaddr` is empty and there is no option 61 — rather
+    than returning the hardware-type octet alone, which every such client
+    would share. `DhcpServer` drops such a message; `CaptureEvent.client_id`
+    reports `"UNKNOWN"`.
   - **`.dumps(codemap=None) -> str`** — human-readable multi-line summary
     (used by `.log_str()`/`.log()` and the CLI's `--format summary`).
   - **`.log(src, dst, level: int) -> None`** — logs `.dumps()` framed with a
@@ -49,9 +56,16 @@ top-level package header.
 - **`OpCode`** (`IntEnum`) — `BOOTREQUEST = 1`, `BOOTREPLY = 2`.
 - **`DhcpPort`** (`IntEnum`) — `SERVER = 67`, `CLIENT = 68`.
 - **`Flags`** (`Flag`) — `UNICAST = 0`, `BROADCAST = 1 << 15`.
-- **`HardwareAddressType`** (`IntEnum`) — `NONE`..`LOCALNET` (0–12);
-  `.dumps(address: bytes) -> str` renders colon-hex for `ETHERNET`, else
-  `repr(address)`.
+- **`HardwareAddressType`** (`IntEnum`) — the IANA ARP hardware types used by
+  DHCP, `NONE` (0) through `HFI` (37), including `INFINIBAND` (32) for
+  RFC 4390 IPoIB. Any other octet 0–255 becomes a cached **unnamed**
+  pseudo-member, so a value a client sent is never rewritten.
+  - `.label() -> str` — the member name, or `HTYPE_<n>` for an unnamed one.
+    Use this, not `.name`, which is `None` for unnamed members;
+    `to_mapping()` emits it and `HardwareAddressType("HTYPE_<n>")` reads it
+    back.
+  - `.dumps(address: bytes) -> str` renders colon-hex for `ETHERNET`, else
+    `repr(address)`.
 
 ## Structured (de)serialization (`structured.py`)
 
