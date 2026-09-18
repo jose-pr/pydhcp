@@ -139,15 +139,20 @@ class DomainList(DhcpOptionType, list[str]):
         self = cls()
         if not option:
             return self, 0
-        components: dict[int, str | int | None] = _ty.OrderedDict()
+        # offset -> (kind, value, offset of the next component)
+        #   kind "label": value is the decoded text
+        #   kind "root" : value is None (a 0x00 terminator)
+        #   kind "ptr"  : value is the target offset
+        components: dict[int, tuple[str, _ty.Any, int]] = _ty.OrderedDict()
         domains: list[int] = [0]
         id = 0
         size = len(view)
         while id < size:
+            start = id
             ptr_or_len = view[id]
             id += 1
             if ptr_or_len == 0x00:
-                components[id - 1] = None
+                components[start] = ("root", None, id)
                 if id < size:
                     domains.append(id)
                 continue
@@ -155,7 +160,7 @@ class DomainList(DhcpOptionType, list[str]):
             if is_ptr:
                 if is_ptr != 0xC0:
                     raise ValueError()
-                components[id - 1] = ((0x3F & ptr_or_len) << 8) | view[id]
+                components[start] = ("ptr", ((0x3F & ptr_or_len) << 8) | view[id], id + 1)
                 id += 1
                 if id < size:
                     domains.append(id)
@@ -163,19 +168,40 @@ class DomainList(DhcpOptionType, list[str]):
                 dc = view[id : ptr_or_len + id]
                 if len(dc) != ptr_or_len:
                     raise ValueError()
-                components[id - 1] = dc.tobytes().decode()
+                components[start] = ("label", dc.tobytes().decode(), id + ptr_or_len)
                 id += ptr_or_len
 
-        def get_dn(id: int) -> list[str]:
-            result = []
-            for idx, dc in components.items():
-                if idx >= id:
-                    if dc is None:
-                        break
-                    elif isinstance(dc, int):
-                        result.extend(get_dn(dc))
-                        break
-                    result.append(dc)
+        def get_dn(start: int) -> list[str]:
+            """Resolve one name by walking the component chain.
+
+            Iterative, and every offset is visited at most once per name: a
+            self-referential or mutually-referential compression pointer is a
+            decode error, not a RecursionError, and the work is proportional to
+            the name actually produced. The previous implementation rescanned
+            every component for each name, which made decoding O(n^2) in the
+            payload length and, since packets are decoded on the receive path,
+            an unauthenticated CPU exhaustion vector.
+            """
+            result: list[str] = []
+            seen: set[int] = set()
+            offset = start
+            while True:
+                if offset in seen:
+                    raise ValueError(
+                        f"Cyclic domain-name compression pointer at offset {offset}"
+                    )
+                seen.add(offset)
+                component = components.get(offset)
+                if component is None:
+                    break
+                kind, value, nxt = component
+                if kind == "root":
+                    break
+                if kind == "ptr":
+                    offset = value
+                    continue
+                result.append(value)
+                offset = nxt
             return result
 
         for domain in domains:

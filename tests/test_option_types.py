@@ -535,3 +535,63 @@ def test_ccc_option_container_preserves_unknown_records():
     assert length == wrote
     assert decoded[-1].code == 99
     assert decoded[-1].value == b"\x01\x02\x03"
+
+
+# --- DomainList hostile input (RFC 1035 compression pointers) ---
+
+
+@pytest.mark.parametrize(
+    "payload,label",
+    [
+        (b"\x01a\xc0\x00", "self-referential pointer"),
+        (b"\xc0\x02\xc0\x00", "two-pointer cycle"),
+        (b"\x01a\xc0\x02\xc0\x02", "pointer to itself mid-buffer"),
+    ],
+)
+def test_domainlist_rejects_compression_pointer_cycles(payload, label):
+    """A pointer loop must be a decode error, not a RecursionError.
+
+    RecursionError is not a ValueError, so it escapes the codec's error contract
+    and reaches the listener's receive loop.
+    """
+    from pydhcp.options.type import DomainList
+
+    with pytest.raises(ValueError):
+        DomainList._dhcp_read(memoryview(bytearray(payload)))
+
+
+def test_domainlist_decode_is_linear_in_payload_size():
+    """Decoding must not be quadratic: packets are decoded on the receive path, so
+    O(n^2) here is an unauthenticated CPU-exhaustion vector (max_packet_size
+    defaults to 65535)."""
+    import time
+
+    from pydhcp.options.type import DomainList
+
+    def elapsed(size):
+        payload = bytearray(b"\x01a\x00" * (size // 3))
+        start = time.perf_counter()
+        DomainList._dhcp_read(memoryview(payload))
+        return time.perf_counter() - start
+
+    elapsed(3000)  # warm up, so import/JIT costs do not land in the measurement
+    small = elapsed(6000)
+    large = elapsed(24000)
+
+    # 4x the input must not cost anything like 16x the time. A generous bound:
+    # quadratic would be ~16x, linear ~4x. This machine is noisy, so allow 8x.
+    assert large < max(small * 8, 0.05), (
+        f"decode looks super-linear: {small:.4f}s for 6000B vs {large:.4f}s for 24000B"
+    )
+
+
+def test_domainlist_still_follows_backward_pointers():
+    """The cycle guard must not break legitimate RFC 1035 compression."""
+    from pydhcp.options.type import DomainList
+
+    # "example.com" at offset 0, then "sub" + pointer back to "example.com".
+    payload = bytearray(b"\x07example\x03com\x00\x03sub\xc0\x00")
+    decoded, length = DomainList._dhcp_read(memoryview(payload))
+
+    assert list(decoded) == ["example.com", "sub.example.com"]
+    assert length == len(payload)
