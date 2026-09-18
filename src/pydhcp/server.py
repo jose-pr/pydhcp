@@ -70,7 +70,21 @@ class DhcpServer(_Base):
             max_packet_size=max_packet_size,
             per_interface=per_interface,
         )
+        self._init_server_state(lease_backend)
+
+    def _init_server_state(
+        self, lease_backend: _ty.Optional[LeaseBackend] = None
+    ) -> None:
+        """Set up the state every server variant needs.
+
+        AsyncDhcpServer cannot call this class's `__init__` (its own base takes a
+        different argument set), so it re-implemented the body -- and then drifted
+        from it: `_declined` was added here and not there, which made every
+        DHCPDECLINE an AttributeError on the async server. One method both
+        constructors call is what keeps that from happening again.
+        """
         from .lease import InMemoryLeaseBackend
+
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
         self._declined: _ty.OrderedDict[_net.IPv4, float] = _ty.OrderedDict()
 
@@ -532,8 +546,7 @@ class AsyncDhcpServer(_AsyncBase, DhcpServer):  # type: ignore[misc]
         per_interface: bool | None = None,
     ) -> None:
         _AsyncBase.__init__(self, listen=listen, max_packet_size=max_packet_size, per_interface=per_interface)
-        from .lease import InMemoryLeaseBackend
-        self.lease_backend = lease_backend or InMemoryLeaseBackend()
+        self._init_server_state(lease_backend)
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         DhcpServer.handle(self, msg, context)

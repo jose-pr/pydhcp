@@ -606,7 +606,17 @@ class AsyncDhcpListener:
             )
             self._transports.append(transport)
 
-    async def stop(self) -> None:
+    def stop(self) -> _ty.Any:
+        """Close every transport and socket.
+
+        Deliberately not a coroutine, even though `await listener.stop()` is the
+        documented form and still works. The work here is entirely synchronous,
+        and as `async def` this silently did nothing whenever it was reached
+        through the inherited `DhcpListener` contract: `server.stop()` returned a
+        coroutine nobody awaited, so the server kept running with its ports
+        bound, and mypy accepted it. Returning an already-finished future keeps
+        the `await` form working from inside a running loop.
+        """
         for transport in self._transports:
             transport.close()
         self._transports.clear()
@@ -616,4 +626,12 @@ class AsyncDhcpListener:
             except Exception:
                 pass
         self._sockets.clear()
+
+        try:
+            future = _asyncio.get_running_loop().create_future()
+        except RuntimeError:
+            # No running loop, so nobody can be awaiting this anyway.
+            return None
+        future.set_result(None)
+        return future
 
