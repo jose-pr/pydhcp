@@ -14,14 +14,23 @@ top-level package header.
   `yiaddr: IPv4`, `siaddr: IPv4`, `giaddr: IPv4`, `chaddr: bytes` (≤16
   bytes), `sname: str` (≤64 bytes encoded), `file: str` (≤128 bytes
   encoded), `options: DhcpOptions`. `MAGIC_COOKIE` (class var, 4 bytes) and
-  `MIN_LEGAL_SIZE` (class var) are also exposed.
+  `MIN_LEGAL_SIZE` (class var) are also exposed. **`MIN_LEGAL_SIZE`** is
+  548 — the smallest DHCP message every implementation must be able to
+  handle, per RFC 2131 §2: `576 − 20 (IPv4) − 8 (UDP) = 548`, of which
+  `548 − 236 (fixed header) = 312` is the options field clients "MUST be
+  prepared to receive". It is a floor on *capability*, not on any packet, so
+  nothing enforces it — see `.decode()` below.
   - **`DhcpMessage.decode(data: bytes | bytearray | memoryview) ->
     DhcpMessage`** — parses a wire packet. Raises `ValueError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
     a missing `0xFF` (END) options terminator. An `htype` with no IANA name
     is **preserved** as an unnamed `HardwareAddressType` member rather than
     raising or being rewritten, so a relay forwards the type it received.
-    `hlen = 0` is accepted: RFC 4390 requires it for IPoIB. Honors
+    `hlen = 0` is accepted: RFC 4390 requires it for IPoIB. There is **no
+    minimum size check** — a message as short as 241 octets (fixed header +
+    cookie + END) decodes, and neither `MIN_LEGAL_SIZE` (548) nor
+    `BOOTP_MIN_PACKET_SIZE` (300) is applied on receive. Real senders emit
+    short datagrams, and `.encode()` pads only what pydhcp sends. Honors
     RFC 3396 `OPTION_OVERLOAD` (decodes overflow options packed into the
     `file`/`sname` fields).
   - **`.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) ->

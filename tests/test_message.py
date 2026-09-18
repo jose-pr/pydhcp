@@ -353,3 +353,43 @@ def test_encoded_messages_meet_the_bootp_minimum():
 
     # And padding never exceeds an explicit limit below the minimum.
     assert len(bytes(message.encode(280))) == 280
+
+
+def test_min_legal_size_is_the_rfc2131_capability_floor():
+    """548 is not an arbitrary constant, and not a limit on any packet.
+
+    RFC 2131 s2 states it twice over, and the two statements must agree:
+    576 is the minimum IP datagram an IP host must accept, and a client "MUST
+    be prepared to receive DHCP messages with an 'options' field of at least
+    length 312 octets".
+    """
+    from pydhcp import constants as const
+
+    fixed_header = 236  # op..file, RFC 2131 s2 figure 1
+    ipv4_and_udp = 20 + 8
+
+    assert const.UDP_MIN_PACKET_SIZE == ipv4_and_udp
+    assert DhcpMessage.MIN_LEGAL_SIZE == const.DHCP_MIN_LEGAL_PACKET_SIZE - ipv4_and_udp
+    assert DhcpMessage.MIN_LEGAL_SIZE == 548
+    assert DhcpMessage.MIN_LEGAL_SIZE - fixed_header == 312
+
+
+def test_decode_applies_no_minimum_size():
+    """Liberal on receive, strict on send.
+
+    RFC 1542 s2.1's "MUST silently discard" binds a relay agent performing the
+    consistency checks, not a decoder; 6 of the 13 realistic corpus packets are
+    under 300 octets, so enforcing a floor here would reject real traffic.
+    """
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    wire = bytes(message.encode())
+    end = wire.index(0xFF, 240)
+
+    for size in (end + 1, 241):
+        short = bytearray(wire[:size])
+        if short[-1] != 0xFF:
+            short[-1] = 0xFF
+        decoded = DhcpMessage.decode(short)
+        assert decoded.xid == message.xid, f"{size}-octet message was not decoded"
+
+    assert len(bytes(message.encode())) == 300, "what we send is still padded"

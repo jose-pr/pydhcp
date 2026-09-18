@@ -113,6 +113,22 @@ def _decode_bootp_field(raw: memoryview, field: str) -> str:
 @_data.dataclass
 class DhcpMessage:
     MIN_LEGAL_SIZE = _const.DHCP_MIN_LEGAL_PACKET_SIZE - _const.UDP_MIN_PACKET_SIZE
+    """Smallest DHCP message every implementation must be able to handle: 548.
+
+    RFC 2131 s2: 576 octets is the minimum IP datagram an IP host must be
+    prepared to accept, and a DHCP client "MUST be prepared to receive DHCP
+    messages with an 'options' field of at least length 312 octets". Those are
+    the same statement -- the arithmetic closes exactly:
+
+        576 - 20 (IPv4) - 8 (UDP)            = 548   this message
+        548 - 236 (fixed header, op..file)   = 312   the options field
+
+    So this is a floor on *capability*, not on any particular packet, which is
+    why nothing enforces it: `decode()` deliberately accepts shorter messages
+    (241 octets and up), and plenty of real senders emit them. The floor pydhcp
+    applies to what it *sends* is a different and smaller number,
+    `BOOTP_MIN_PACKET_SIZE` (300).
+    """
     MAGIC_COOKIE: _ty.ClassVar[bytes] = 0x63825363.to_bytes(4, "big")
     """The first four octets of the 'options' field of the DHCP message decimal values: 99, 130, 83 and 99"""
 
