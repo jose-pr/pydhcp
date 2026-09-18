@@ -36,7 +36,18 @@ class CaptureEvent:
         local_ip = self.context.local_ip or _ty.cast(
             _net.IPv4, self.context.interface.ip
         )
-        return _net.SocketAddress(local_ip, 0)
+        # The port the packet was received on. Hardcoding 0 here made the
+        # documented `dst_port=` filter key unable to match anything, while
+        # still passing validation -- so a filter using it silently dropped
+        # every packet.
+        port = 0
+        socket = getattr(self.context.transport, "socket", None)
+        if socket is not None:
+            try:
+                port = int(socket.getsockname()[1])
+            except Exception:  # pragma: no cover - closed or unusual socket
+                port = 0
+        return _net.SocketAddress(local_ip, port)
 
     @property
     def message_type(self) -> str:

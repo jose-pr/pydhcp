@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import importlib
 import json as _json
 import logging as _logging
@@ -323,15 +324,50 @@ def _write_capture_record(
     return payload
 
 
+#: How long a command hook may run before it is treated as a failure. The hook
+#: runs on the receive thread, so without a bound a hanging one (a network
+#: export, say) stops packets being read at all, with nothing logged.
+HOOK_TIMEOUT_SECONDS = 10.0
+
+
+@contextlib.contextmanager
+def _cwd_on_sys_path() -> "_ty.Iterator[None]":
+    """Make `--hook myhooks:on_capture` work from the installed console script.
+
+    A console script's `sys.path[0]` is its own Scripts directory, not the
+    working directory, so the form the docs show could not import a module
+    sitting next to the user.
+    """
+    cwd = os.getcwd()
+    added = cwd not in sys.path
+    if added:
+        sys.path.insert(0, cwd)
+    try:
+        yield
+    finally:
+        if added:
+            try:
+                sys.path.remove(cwd)
+            except ValueError:  # pragma: no cover - someone else removed it
+                pass
+
+
 def _load_capture_hook(
     hook: "str | None", packet_format: str, fail_fast: bool
 ) -> "_ty.Callable[[CaptureEvent], None] | None":
     if not hook:
         return None
     hook_path = pathlib.Path(hook)
-    if hook.count(":") == 1 and not hook_path.exists():
+    # A module reference is `package.module:function` -- never contains a path
+    # separator. Deciding on the separator rather than on ':' alone keeps
+    # "C:\hooks\export.exe" a path on every platform: it has exactly one ':', so
+    # it used to be read as module "C" and reported as "No module named 'C'",
+    # and splitdrive alone would only have fixed that on Windows.
+    looks_like_path = "/" in hook or "\\" in hook or hook_path.exists()
+    if not looks_like_path and hook.count(":") == 1:
         module_name, function_name = hook.split(":", 1)
-        module = importlib.import_module(module_name)
+        with _cwd_on_sys_path():
+            module = importlib.import_module(module_name)
         function = getattr(module, function_name, None)
         if not callable(function):
             raise ValueError(f"Capture hook {hook!r} does not resolve to a callable")
@@ -352,13 +388,26 @@ def _load_capture_hook(
                 "PYDHCP_CAPTURE_FORMAT": packet_format,
             }
         )
-        result = subprocess.run(
-            [str(hook_path)],
-            input=payload,
-            text=True,
-            capture_output=True,
-            env=env,
-        )
+        try:
+            result = subprocess.run(
+                [str(hook_path)],
+                input=payload,
+                text=True,
+                capture_output=True,
+                env=env,
+                timeout=HOOK_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as expired:
+            # The hook runs on the receive thread, so without this a hanging one
+            # stops packets being read at all and nothing says why.
+            raise RuntimeError(
+                f"Capture hook command timed out after {HOOK_TIMEOUT_SECONDS}s: "
+                f"{hook_path}"
+            ) from expired
+        if result.stdout:
+            _logging.getLogger("pydhcp").debug(
+                "Capture hook command output: %s", result.stdout.strip()
+            )
         if result.returncode != 0:
             _logging.getLogger("pydhcp").error(
                 "Capture hook command failed (%s): %s",
@@ -488,7 +537,18 @@ class App(Cli):
 
 
 def main() -> None:
-    sys.exit(duho.main(App))
+    try:
+        sys.exit(duho.main(App))
+    except (ValueError, OSError, NotImplementedError) as error:
+        # A mistyped port, a missing config, an address already in use or a bad
+        # hex id is a user error, not a crash. duho lets exceptions out of the
+        # command, so these arrived as tracebacks -- including the privileged-
+        # port hint the listener carefully builds. Set PYDHCP_TRACEBACK=1 to see
+        # the traceback anyway when diagnosing pydhcp itself.
+        if os.environ.get("PYDHCP_TRACEBACK"):
+            raise
+        print(f"pydhcp: error: {error}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

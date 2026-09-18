@@ -236,9 +236,9 @@ def test_load_capture_hook_command_gets_stdin_and_env(tmp_path, monkeypatch) -> 
     command.write_text("", encoding="utf-8")
     calls = []
 
-    def fake_run(args, input, text, capture_output, env):
-        calls.append((args, input, text, capture_output, env))
-        return argparse.Namespace(returncode=0, stderr="")
+    def fake_run(args, input, text, capture_output, env, timeout=None):
+        calls.append((args, input, text, capture_output, env, timeout))
+        return argparse.Namespace(returncode=0, stderr="", stdout="")
 
     monkeypatch.setattr("pydhcp.cli.subprocess.run", fake_run)
 
@@ -246,8 +246,10 @@ def test_load_capture_hook_command_gets_stdin_and_env(tmp_path, monkeypatch) -> 
     assert hook is not None
     hook(_capture_event())
 
-    args, payload, text, capture_output, env = calls[0]
+    args, payload, text, capture_output, env, timeout = calls[0]
     assert args == [str(command)]
+    # the hook runs on the receive thread, so it must not be able to hang it
+    assert timeout is not None and timeout > 0
     assert json.loads(payload)["xid"] == 0x12345678
     assert text is True
     assert capture_output is True
@@ -568,3 +570,88 @@ def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> Non
     for suffix in (".ini", ".json", ".yaml"):
         with pytest.raises((FileNotFoundError, OSError)):
             load_config(str(tmp_path / ("missing" + suffix)))
+
+
+def test_hook_module_is_importable_from_the_working_directory(tmp_path, monkeypatch):
+    """The documented `--hook myhooks:on_capture` form.
+
+    A console script's sys.path[0] is its own Scripts directory, so a module
+    next to the user was not importable and capture refused to start.
+    """
+    (tmp_path / "myhooks.py").write_text(
+        "seen = []\ndef on_capture(event):\n    seen.append(1)\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delitem(sys.modules, "myhooks", raising=False)
+    # cwd is deliberately NOT on sys.path, as it is not for a console script
+    monkeypatch.setattr(
+        sys, "path", [p for p in sys.path if p not in ("", str(tmp_path))]
+    )
+
+    hook = _load_capture_hook("myhooks:on_capture", "json", False)
+
+    assert hook is not None
+    hook(_capture_event())
+    assert sys.modules["myhooks"].seen == [1]
+    # and the directory is not left on sys.path afterwards
+    assert str(tmp_path) not in sys.path
+
+
+def test_windows_drive_letter_hook_path_is_not_read_as_a_module() -> None:
+    r"""C:\hooks\export.exe has exactly one ':' and was reported as
+    "No module named 'C'"."""
+    with pytest.raises(ValueError, match="does not exist"):
+        _load_capture_hook(r"C:\hooks\does-not-exist.exe", "json", False)
+
+
+def test_capture_destination_port_is_the_port_received_on() -> None:
+    """dst_port is a documented filter key, but destination always had port 0,
+    so a filter using it silently matched nothing."""
+    import socket as _socket
+
+    from pydhcp.listener import UdpTransport
+
+    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    sock.bind(("127.0.0.1", 0))
+    bound_port = sock.getsockname()[1]
+    try:
+        event = CaptureEvent(
+            message=_sample_packet(),
+            context=RequestContext(
+                transport=UdpTransport(sock),
+                interface=NetworkInterface(
+                    "lo", ipaddress.IPv4Interface("127.0.0.1/24")
+                ),
+                client=SocketAddress("127.0.0.1", 68),
+                client_mac=b"\x00\x11\x22\x33\x44\x55",
+                local_ip=IPv4("127.0.0.1"),
+            ),
+            captured_at=datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc),
+        )
+
+        assert event.destination.port == bound_port
+
+        from pydhcp.capture import compile_capture_filter
+
+        assert compile_capture_filter(f"dst_port={bound_port}")(event)
+        assert not compile_capture_filter("dst_port=1")(event)
+    finally:
+        sock.close()
+
+
+def test_user_errors_do_not_print_a_traceback(monkeypatch, capsys) -> None:
+    """A mistyped port is a user error, not a crash. duho lets exceptions out of
+    the command, so these arrived as tracebacks -- including the privileged-port
+    hint the listener carefully builds."""
+    monkeypatch.delenv("PYDHCP_TRACEBACK", raising=False)
+    monkeypatch.setattr(
+        "sys.argv", ["pydhcp", "server", "--listen", "127.0.0.1:notaport"]
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("pydhcp: error:")
+    assert "Traceback" not in err
