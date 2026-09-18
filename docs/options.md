@@ -22,7 +22,19 @@ options = DhcpOptions()
 options[DhcpOptionCode.DNS] = ["192.0.2.53", "192.0.2.54"]
 ```
 
-## Boolean option
+## Boolean and presence options
+
+```python
+from pydhcp import DhcpOptions
+from pydhcp.options import DhcpOptionCode
+
+options = DhcpOptions()
+options[DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL] = True
+```
+
+Some options carry their meaning purely by being present. RFC 4039 defines
+Rapid Commit as "Code 80, Len 0", so it encodes no payload; delete the option
+to express absence rather than assigning a false value.
 
 ```python
 from pydhcp import DhcpOptions
@@ -63,10 +75,12 @@ from pydhcp.network import IPv4
 from pydhcp.options.type import ClasslessRoute
 
 options = DhcpOptions()
-options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = ClasslessRoute(
-    IPv4("192.0.2.1"),
-    ip_network("10.0.0.0/8"),
-)
+# RFC 3442 carries one or more routes, and a server sending option 121 SHOULD
+# include the default route -- so this option is a list.
+options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = [
+    ClasslessRoute(IPv4("192.0.2.1"), ip_network("0.0.0.0/0")),
+    ClasslessRoute(IPv4("192.0.2.1"), ip_network("10.0.0.0/8")),
+]
 ```
 
 ## Domain search list
@@ -93,10 +107,9 @@ from pydhcp.options.type import Boolean, ClasslessRoute
 
 options = DhcpOptions()
 options[DhcpOptionCode.RAPID_COMMIT] = True
-options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = ClasslessRoute(
-    IPv4("192.0.2.1"),
-    ip_network("10.0.0.0/8"),
-)
+options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = [
+    ClasslessRoute(IPv4("192.0.2.1"), ip_network("10.0.0.0/8")),
+]
 
 for code, value in options.items(decoded=True):
     print(code, repr(value))

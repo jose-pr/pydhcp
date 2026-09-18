@@ -102,6 +102,10 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 - **`UriList`** — list of UTF-8 URI strings, each U16-length-prefixed on the
   wire.
 - **`Boolean(val)`** — single-octet boolean (`bool()` truthiness of `val`).
+- **`Flag()`** — zero-length presence option: the option's meaning is that it
+  is there at all, so it encodes no payload and rejects any. Registered for
+  `RAPID_COMMIT` (80), which RFC 4039 §4 defines as "Code 80, Len 0".
+  Assigning a falsy value raises; delete the option to express absence.
 - **`BaseFixedLengthInteger`** / **`FixedLengthInteger`** — abstract fixed-
   width big-endian integer base; subclasses set `NUMBER_OF_BYTES`/`SIGNED`.
   **`U8`**/**`U16`**/**`U32`** (unsigned, 1/2/4 bytes), **`I32`** (signed,
@@ -117,7 +121,12 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 - **`IPv4Address`** (`ipaddress.IPv4Address` subclass) — single 4-byte IPv4
   address.
 - **`ClasslessRoute(gateway, network)`** — RFC 3442 classless static route
-  (variable-length prefix + gateway).
+  (variable-length prefix + gateway). Also accepts a single
+  `(gateway, network)` pair or an existing instance, so routes normalize from
+  JSON/YAML/config input. Options 121 and 249 are registered as
+  **`List[ClasslessRoute]`**, not a bare `ClasslessRoute`: RFC 3442 defines one
+  or more routes and a server sending the option SHOULD include the default
+  route, so assign and expect a list.
 - **`PolicyFilter`** / **`StaticRoute`** — lists of `(IPv4, IPv4)` 8-byte
   record pairs (destination/mask, destination/router respectively);
   `StaticRoute` rejects a `0.0.0.0` destination.
@@ -130,7 +139,11 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 ### Vendor / TLV containers (`vendor.py`)
 
 - **`UserClass`** — RFC 3004 list of opaque length-prefixed byte entries;
-  zero-length entries are rejected on both encode and decode.
+  zero-length entries are rejected on both encode and decode. **Opt-in:**
+  option 77 is registered as opaque `Bytes`, because iPXE and several PXE ROMs
+  send the option unframed and the strict codec rejects those packets. Ask for
+  the structured form with `options.get(77, decode=UserClass)` — the same
+  arrangement option 43 uses.
 - **`TlvOption(code, value)`** — one generic `(code: int, value: Bytes)`
   TLV record.
 - **`EncapsulatedOptions`** — TLV container used to build vendor-specific
