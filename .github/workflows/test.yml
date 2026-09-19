@@ -21,11 +21,24 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Windows is not a nicety here. Every platform-divergent defect this repo has
+    # hit -- a broadcast POSIX refuses from a loopback-bound socket, the
+    # IP_PKTINFO receive path, os.path.splitdrive being a no-op off Windows,
+    # asyncio's proactor loop having no add_reader -- passed on one OS and failed
+    # on the other. A single-OS matrix cannot see any of them.
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        include:
+          # The floor and the newest, where platform and version interact; the
+          # versions in between add little that Linux is not already covering.
+          - os: windows-latest
+            python-version: "3.9"
+          - os: windows-latest
+            python-version: "3.14"
 
     steps:
       - uses: actions/checkout@v4
@@ -46,14 +59,19 @@ jobs:
         run: python -m pytest tests -q -rs
 
       - name: Check formatting (black)
-        if: matrix.python-version == '3.14'
+        if: matrix.python-version == '3.14' && matrix.os == 'ubuntu-latest'
         run: python -m black --check src tests benchmarks examples
 
+      # Deliberately on BOTH platforms: typeshed marks POSIX-only socket calls
+      # unavailable on Windows, so `sock.recvmsg(...)` is an attr-defined error
+      # on one platform while a `# type: ignore` for it is an unused-ignore
+      # error on the other. Only checking both catches that.
       - name: Type-check (mypy strict)
         if: matrix.python-version == '3.14'
         run: python -m mypy src
 
       - name: Build docs
+        if: matrix.os == 'ubuntu-latest'
         run: python -m mkdocs build --strict
 
   benchmark:
