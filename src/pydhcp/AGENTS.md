@@ -46,7 +46,9 @@ DhcpMessage` etc. all work directly off the top-level package.
   - Handlers run on a single worker thread, not on the event loop: `.handle()`
     is ordinary blocking code, so running it inline stalled every other
     coroutine in the host application. One worker, so handlers still run one
-    at a time in arrival order — the lease backends are not thread-safe.
+    at a time and in arrival order — which is also what keeps a caller's
+    compound lease operation ("free? then allocate") atomic, since the
+    backend's own lock does not span two calls.
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
     (there is no blocking loop to enter — use `start()` then `wait()`).
@@ -82,6 +84,16 @@ client build helpers below to keep the exchange unicast.
     override point. Base impl renews an existing lease, else allocates when
     the client supplies `REQUESTED_IP` or a non-wildcard `ciaddr`; returns
     `None` when nothing can be allocated (silently drops the message).
+  - `.lease_seconds(msg) -> float` — how long a lease to grant, applying this
+    server's policy to the client's requested time. RFC 2131 §4.3.1 honours
+    that request only "if acceptable to local policy", so it is clamped to
+    `[MIN_LEASE_SECONDS, MAX_LEASE_SECONDS]` (60 s … 1 day), defaulting to
+    `DEFAULT_LEASE_SECONDS` (1 h) when the client asks for none. The
+    RFC 2132 §3.3 infinity sentinel (`0xFFFFFFFF`) yields `math.inf` when
+    **`ALLOW_INFINITE_LEASE`** is set, and the maximum when it is not — never
+    a finite 136-year lease. Override the method or the four attributes; this
+    is the base allocator's policy only, so an `.acquire_lease()` override
+    that builds its own lease is unaffected.
   - `.release_lease(client_id, server_id, msg) -> None` — override point,
     releases via the lease backend.
   - `.get_inform_options(server_id, msg) -> DhcpOptions` — override point for
@@ -216,7 +228,9 @@ IPv6-only interface can break at runtime.
 - **`LeaseBackend`** (`Protocol`) — `.allocate(client_id, ip, ttl,
   options=None) -> DhcpLease | None`, `.lookup(client_id) -> DhcpLease |
   None`, `.release(client_id) -> bool`, `.renew(client_id, ttl) -> DhcpLease
-  | None`. `ttl` is seconds; pass `math.inf` for an infinite lease.
+  | None`. **`ttl: float`** — seconds, or `math.inf` for an infinite lease.
+  It is `float` rather than `int` because that is what `math.inf` is and what
+  the implementations have always accepted; an `int` still satisfies it.
 - **`InMemoryLeaseBackend()`** — dict-backed reference implementation;
   `.lookup()` evicts (and returns `None` for) expired leases lazily. Each
   method is atomic against the others (an `RLock` on `self._lock`), so one
