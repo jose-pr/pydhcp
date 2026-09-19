@@ -556,3 +556,100 @@ def test_configured_client_still_gets_a_unicast_reply() -> None:
 
     _reply, dest, _port = _sent(transport)
     assert dest == "10.0.0.10"
+
+
+# --- lease time is the server's policy, not the client's choice ---
+
+
+def _discover_requesting(seconds=None):
+    from pydhcp.options import type as _optype
+
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    if seconds is not None:
+        options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = _optype.U32(seconds)
+    return DhcpMessage(
+        op=OpCode.BOOTREQUEST,
+        htype=HardwareAddressType.ETHERNET,
+        hlen=6,
+        hops=0,
+        xid=0x1234,
+        secs=timedelta(0),
+        flags=Flags.UNICAST,
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("0.0.0.0"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
+        chaddr=b"\x00\x11\x22\x33\x44\x55",
+        sname="",
+        file="",
+        options=options,
+    )
+
+
+def test_client_cannot_choose_its_own_lease_length():
+    """RFC 2131 §4.3.1 honours the request only "if acceptable to local policy".
+
+    There was no policy: the requested value went straight to the backend, so a
+    client asking for 0xFFFFFFFE held the address until 2162.
+    """
+    server = DhcpServer(listen=("127.0.0.1", 0))
+    try:
+        assert server.lease_seconds(_discover_requesting(None)) == (
+            server.DEFAULT_LEASE_SECONDS
+        )
+        assert server.lease_seconds(_discover_requesting(3600)) == 3600
+        # clamped at both ends
+        assert server.lease_seconds(_discover_requesting(1)) == server.MIN_LEASE_SECONDS
+        assert server.lease_seconds(_discover_requesting(999_999)) == (
+            server.MAX_LEASE_SECONDS
+        )
+        assert server.lease_seconds(_discover_requesting(0xFFFFFFFE)) == (
+            server.MAX_LEASE_SECONDS
+        )
+    finally:
+        server.close()
+
+
+def test_infinity_sentinel_is_infinity_not_136_years():
+    """RFC 2132 §3.3: 0xFFFFFFFF means infinite, not 4294967295 seconds.
+
+    Read literally it became an expiry in 2162, and the reply then advertised
+    4294967294 -- one second short of the sentinel, so the client was told a
+    different number than it asked for.
+    """
+    import math
+
+    class Permissive(DhcpServer):
+        ALLOW_INFINITE_LEASE = True
+
+    denied = DhcpServer(listen=("127.0.0.1", 0))
+    allowed = Permissive(listen=("127.0.0.1", 0))
+    try:
+        # Default policy: not granted, but clamped -- never a 136-year lease.
+        assert denied.lease_seconds(_discover_requesting(0xFFFFFFFF)) == (
+            denied.MAX_LEASE_SECONDS
+        )
+        # Opted in: actually infinite, which the reply path renders as the
+        # sentinel rather than as a finite countdown.
+        assert math.isinf(allowed.lease_seconds(_discover_requesting(0xFFFFFFFF)))
+    finally:
+        denied.close()
+        allowed.close()
+
+
+def test_lease_policy_is_overridable():
+    """The knobs are the supported way to change it, not editing the method."""
+
+    class Corporate(DhcpServer):
+        DEFAULT_LEASE_SECONDS = 7200
+        MIN_LEASE_SECONDS = 300
+        MAX_LEASE_SECONDS = 4 * 3600
+
+    server = Corporate(listen=("127.0.0.1", 0))
+    try:
+        assert server.lease_seconds(_discover_requesting(None)) == 7200
+        assert server.lease_seconds(_discover_requesting(10)) == 300
+        assert server.lease_seconds(_discover_requesting(86400)) == 4 * 3600
+    finally:
+        server.close()

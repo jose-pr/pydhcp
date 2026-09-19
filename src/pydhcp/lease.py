@@ -21,11 +21,20 @@ class DhcpLease(_ty.NamedTuple):
 
 
 class LeaseBackend(_ty.Protocol):
+    """Where leases live. `ttl` is seconds, or `math.inf` for no expiry.
+
+    `ttl` is typed `float` rather than `int` because `math.inf` is a float and
+    the implementations have always accepted it -- `InMemoryLeaseBackend`
+    branches on `ttl != inf`. The Protocol said `int`, so a caller passing the
+    infinity the backend was written to handle was a type error. An `int` is
+    still accepted: every int is a float to the type system.
+    """
+
     def allocate(
         self,
         client_id: str,
         ip: IPv4,
-        ttl: int,
+        ttl: float,
         options: _ty.Optional[DhcpOptions] = None,
     ) -> _ty.Optional[DhcpLease]: ...
 
@@ -33,7 +42,7 @@ class LeaseBackend(_ty.Protocol):
 
     def release(self, client_id: str) -> bool: ...
 
-    def renew(self, client_id: str, ttl: int) -> _ty.Optional[DhcpLease]: ...
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]: ...
 
 
 class InMemoryLeaseBackend:
@@ -56,7 +65,7 @@ class InMemoryLeaseBackend:
         self,
         client_id: str,
         ip: IPv4,
-        ttl: int,
+        ttl: float,
         options: _ty.Optional[DhcpOptions] = None,
     ) -> _ty.Optional[DhcpLease]:
         expires = (
@@ -105,7 +114,7 @@ class InMemoryLeaseBackend:
                 return True
             return False
 
-    def renew(self, client_id: str, ttl: int) -> _ty.Optional[DhcpLease]:
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]:
         with self._lock:
             lease = self.lookup(client_id)
             if lease is None:
@@ -269,7 +278,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         self,
         client_id: str,
         ip: IPv4,
-        ttl: int,
+        ttl: float,
         options: _ty.Optional[DhcpOptions] = None,
     ) -> _ty.Optional[DhcpLease]:
         lease = super().allocate(client_id, ip, ttl, options)
@@ -283,7 +292,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
             self._save()
         return res
 
-    def renew(self, client_id: str, ttl: int) -> _ty.Optional[DhcpLease]:
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]:
         lease = super().renew(client_id, ttl)
         if lease:
             self._save()

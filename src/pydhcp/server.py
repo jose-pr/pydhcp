@@ -56,6 +56,22 @@ class DhcpServer(_Base):
     #: neighbour entry is installed out of band.
     UNICAST_TO_UNCONFIGURED_CLIENT = False
 
+    #: Lease length granted when the client asks for none.
+    DEFAULT_LEASE_SECONDS: float = 3600
+
+    #: Upper bound on a client-requested lease time. Without one, a client that
+    #: asks for 0xFFFFFFFE holds the address until 2162.
+    MAX_LEASE_SECONDS: float = 86400
+
+    #: Lower bound, so a client cannot ask for a one-second lease and turn
+    #: itself into a renewal flood.
+    MIN_LEASE_SECONDS: float = 60
+
+    #: Whether to grant an actually-infinite lease when a client sends the
+    #: RFC 2132 s3.3 sentinel. Off by default: an address that is never
+    #: reclaimed is a policy decision, not something a client gets to take.
+    ALLOW_INFINITE_LEASE = False
+
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -88,6 +104,31 @@ class DhcpServer(_Base):
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
         self._declined: _ty.OrderedDict[_net.IPv4, float] = _ty.OrderedDict()
 
+    def lease_seconds(self, msg: DhcpMessage) -> float:
+        """Lease length to grant for `msg`, applying this server's policy.
+
+        RFC 2131 s4.3.1 lets the server honour a client's requested lease time
+        only "if acceptable to local policy" -- a MAY, so there has to be a
+        policy. There was none: the requested value went straight through, and
+        any client could hold an address for 136 years by asking for one.
+
+        RFC 2132 s3.3 also makes 0xFFFFFFFF mean *infinity*, not 4294967295
+        seconds. Taken literally it became a finite expiry in 2162, and the
+        reply then advertised 4294967294 -- a different number than the client
+        asked for, one second short of the sentinel.
+
+        Override this, or set the class attributes, to change the policy.
+        """
+        requested = msg.options.get(
+            DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
+        )
+        if requested is None:
+            return float(self.DEFAULT_LEASE_SECONDS)
+        value = int(requested)
+        if value == _const.INFINITE_LEASE_TIME:
+            return _inf if self.ALLOW_INFINITE_LEASE else float(self.MAX_LEASE_SECONDS)
+        return float(max(self.MIN_LEASE_SECONDS, min(value, self.MAX_LEASE_SECONDS)))
+
     def acquire_lease(
         self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
     ) -> _ty.Optional[DhcpLease]:
@@ -106,11 +147,7 @@ class DhcpServer(_Base):
 
         existing = self.lease_backend.lookup(client_id)
         if existing:
-            requested_ttl = msg.options.get(
-                DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
-            )
-            ttl = int(requested_ttl) if requested_ttl is not None else 3600
-            renewed = self.lease_backend.renew(client_id, ttl)
+            renewed = self.lease_backend.renew(client_id, self.lease_seconds(msg))
             if renewed:
                 self.metrics.leases_renewed += 1
                 return renewed
@@ -119,10 +156,7 @@ class DhcpServer(_Base):
         requested_ip = msg.options.get(
             DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
-        requested_ttl = msg.options.get(
-            DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
-        )
-        ttl = int(requested_ttl) if requested_ttl is not None else 3600
+        ttl = self.lease_seconds(msg)
 
         ip: _ty.Optional[_net.IPv4] = None
         if requested_ip:
