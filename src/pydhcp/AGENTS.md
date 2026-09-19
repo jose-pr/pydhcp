@@ -128,11 +128,20 @@ client build helpers below to keep the exchange unicast.
   - `.dora(chaddr, *, timeout=2.0, retries=2, destination=..., port=...,
     broadcast=True, **discover_kwargs) -> DhcpMessage | None` — full
     DISCOVER→OFFER→REQUEST→ACK exchange; returns the DHCPACK or `None`.
-    **`broadcast` forwards to both the DISCOVER and the follow-up REQUEST.**
+    **`broadcast` forwards to both the DISCOVER and the follow-up REQUEST**,
+    as do `client_identifier` and `parameter_request_list` — RFC 2131 §4.2
+    and §4.4.1 require the same values in every subsequent message, and the
+    identifier is what the server keys the lease on. Returns `None` (with a
+    warning) if the OFFER carries no `SERVER_IDENTIFIER`, since a SELECTING
+    REQUEST must echo it (§4.3.2).
   - `.next_reply(timeout=None) -> tuple[DhcpMessage, RequestContext] | None`
     / `.drain_replies() -> list[...]` — pull queued BOOTREPLY messages.
   - `.on_reply(msg, context) -> None` — override hook called after a
     BOOTREPLY is accepted and queued (no-op by default).
+  - **`MAX_QUEUED_REPLIES`** (class var, 1024) — cap on undrained replies. An
+    idle client (nothing sent yet) accepts every BOOTREPLY on the segment, so
+    that `start()` + `.on_reply()` works as an observer; past the cap the
+    oldest is discarded and counted in `metrics.replies_dropped_overflow`.
 
 **Gotcha**: `.dora()`/`.discover_offer()` require the listener's receive loop
 to actually be running (`client.start()`) — replies only reach the internal
@@ -220,10 +229,16 @@ IPv6-only interface can break at runtime.
 
 - **`DhcpMetrics()`** — plain counters, one instance per listener/server/
   client/relay/capture (`self.metrics`), never a module-level singleton.
-  Fields: `packets_received`, `packets_sent`, `leases_allocated`,
-  `leases_renewed`, `leases_released`, `packets_dropped_hop_limit`.
   `.reset() -> None` zeroes all counters; `.snapshot() -> dict[str, int]`
   returns a plain dict copy.
+  - **`DhcpMetrics.FIELDS`** (class var) — the counter names, in snapshot
+    order, and the single source `__init__`/`.reset()`/`.snapshot()` all read.
+    Add a counter here and it is initialised, reset and reported; the three
+    used to repeat the list, which is how one gets incremented but never
+    reported.
+  - Today: `packets_received`, `packets_sent`, `leases_allocated`,
+    `leases_renewed`, `leases_released`, `packets_dropped_hop_limit`,
+    `packets_dropped_untrusted`, `replies_dropped_overflow`.
 
 ## Constants (`constants.py`)
 
