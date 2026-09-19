@@ -12,6 +12,7 @@ from .listener import DhcpListener, ListenSpec, RequestContext, UdpTransport
 from .packet.message import DhcpMessage
 from .options import DhcpOptionCode, DhcpOptions
 from .options import type as _type
+from .log import LOGGER
 
 
 class DhcpClient(DhcpListener):
@@ -22,6 +23,13 @@ class DhcpClient(DhcpListener):
     """
 
     DEFAULT_PORTS = (_enum.DhcpPort.CLIENT,)
+
+    #: Upper bound on undrained replies. An idle client accepts every BOOTREPLY
+    #: on the segment so that `start()` + `on_reply` works as an observer, which
+    #: on a busy network is unbounded growth when nobody calls `drain_replies()`.
+    #: Past this the oldest is discarded and counted in
+    #: `metrics.replies_dropped_overflow`.
+    MAX_QUEUED_REPLIES = 1024
 
     def __init__(
         self,
@@ -36,7 +44,9 @@ class DhcpClient(DhcpListener):
             max_packet_size=max_packet_size,
             per_interface=per_interface,
         )
-        self._replies: _queue.Queue[tuple[DhcpMessage, RequestContext]] = _queue.Queue()
+        self._replies: _queue.Queue[tuple[DhcpMessage, RequestContext]] = _queue.Queue(
+            maxsize=self.MAX_QUEUED_REPLIES
+        )
         self._pending_xids: set[int] = set()
 
     def build_discover(
@@ -178,14 +188,21 @@ class DhcpClient(DhcpListener):
     ) -> DhcpMessage | None:
         """Broadcast DHCPDISCOVER and return the first DHCPOFFER, or None."""
         discover = self.build_discover(chaddr, **discover_kwargs)
-        for _attempt in range(retries + 1):
-            self.send(discover, destination, port)
-            offer = self._wait_for(
-                discover.xid, _enum.DhcpMessageType.DHCPOFFER, timeout
-            )
-            if offer is not None:
-                return offer
-        return None
+        try:
+            for _attempt in range(retries + 1):
+                self.send(discover, destination, port)
+                offer = self._wait_for(
+                    discover.xid, _enum.DhcpMessageType.DHCPOFFER, timeout
+                )
+                if offer is not None:
+                    return offer
+            return None
+        finally:
+            # The exchange is over either way. Left in place, this set only ever
+            # grew, and every later replay of a spent xid -- visible to anyone on
+            # the segment, since these go out as broadcasts -- stayed acceptable
+            # forever. dora() re-registers the xid for its own REQUEST.
+            self._pending_xids.discard(discover.xid)
 
     def dora(
         self,
@@ -213,26 +230,62 @@ class DhcpClient(DhcpListener):
         server_identifier = offer.options.get(
             DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
+        if server_identifier is None:
+            # RFC 2131 s4.3.2: a REQUEST in SELECTING state MUST carry the
+            # server identifier, and the server uses it to tell "this offer is
+            # mine" from "another server's offer was chosen". Sending one
+            # without it asks every server on the segment to answer.
+            LOGGER.warning(
+                f"[XID={offer.xid:08x}] DHCPOFFER has no SERVER_IDENTIFIER; "
+                "cannot send a conforming DHCPREQUEST"
+            )
+            return None
         request = self.build_request(
             chaddr,
             xid=offer.xid,
             requested_ip=offer.yiaddr,
             server_identifier=server_identifier,
             broadcast=broadcast,
+            # RFC 2131 s4.2 and s4.4.1 both say MUST: the same client
+            # identifier in every subsequent message, and the same parameter
+            # list in any subsequent REQUEST. Omitting the identifier keyed the
+            # REQUEST under htype+chaddr while the OFFER was allocated under the
+            # supplied one, so the server saw two different clients.
+            client_identifier=discover_kwargs.get("client_identifier"),
+            parameter_request_list=discover_kwargs.get("parameter_request_list"),
         )
-        for _attempt in range(retries + 1):
-            self.send(request, destination, port)
-            ack = self._wait_for(request.xid, _enum.DhcpMessageType.DHCPACK, timeout)
-            if ack is not None:
-                return ack
-        return None
+        try:
+            for _attempt in range(retries + 1):
+                self.send(request, destination, port)
+                ack = self._wait_for(
+                    request.xid, _enum.DhcpMessageType.DHCPACK, timeout
+                )
+                if ack is not None:
+                    return ack
+            return None
+        finally:
+            self._pending_xids.discard(request.xid)
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         if msg.op != _enum.OpCode.BOOTREPLY:
             return
         if self._pending_xids and msg.xid not in self._pending_xids:
             return
-        self._replies.put((msg, context))
+        # An idle client (nothing sent yet) deliberately still accepts: that is
+        # what makes `start()` + `on_reply` usable as an observer. What it must
+        # not do is grow without bound while nobody drains the queue, so the
+        # oldest reply is discarded to make room and counted. Oldest rather than
+        # newest: a caller waiting on an exchange wants the recent ones.
+        while True:
+            try:
+                self._replies.put_nowait((msg, context))
+                break
+            except _queue.Full:
+                try:
+                    self._replies.get_nowait()
+                    self.metrics.replies_dropped_overflow += 1
+                except _queue.Empty:  # pragma: no cover - drained concurrently
+                    pass
         self.on_reply(msg, context)
 
     def on_reply(self, msg: DhcpMessage, context: RequestContext) -> None:

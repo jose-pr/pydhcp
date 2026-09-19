@@ -201,3 +201,128 @@ def test_client_discover_offer_returns_none_without_server() -> None:
             CHADDR, timeout=0.2, retries=0, destination="127.0.0.1", port=6767
         )
     assert offer is None
+
+
+# --- the client must stay the same client across a DORA ---
+
+
+def _canned_offer(xid, chaddr=CHADDR):
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPOFFER
+    options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("10.0.0.1")
+    return DhcpMessage(
+        op=OpCode.BOOTREPLY,
+        htype=HardwareAddressType.ETHERNET,
+        hlen=6,
+        hops=0,
+        xid=xid,
+        secs=timedelta(0),
+        flags=Flags.UNICAST,
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("10.0.0.50"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
+        chaddr=chaddr,
+        sname="",
+        file="",
+        options=options,
+    )
+
+
+class _RecordingClient(DhcpClient):
+    """Captures what would go on the wire; answers a DISCOVER with an OFFER."""
+
+    def __init__(self, *args, offer_has_server_id=True, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.sent = []
+        self.offer_has_server_id = offer_has_server_id
+
+    def send(self, message, destination=IPv4("255.255.255.255"), port=67):
+        self.sent.append(message)
+        self._pending_xids.add(message.xid)
+        if message.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is (
+            DhcpMessageType.DHCPDISCOVER
+        ):
+            offer = _canned_offer(message.xid)
+            if not self.offer_has_server_id:
+                del offer.options[int(DhcpOptionCode.SERVER_IDENTIFIER)]
+            self._replies.put((offer, None))
+        return 0
+
+
+def test_dora_repeats_the_client_id_and_parameter_list_in_the_request():
+    """RFC 2131 §4.2 and §4.4.1 are both MUSTs.
+
+    The identifier is what the server keys the lease on: sending the DISCOVER
+    under a supplied client id and the REQUEST under htype+chaddr made pydhcp's
+    own server see two different clients, so the OFFER and the REQUEST were
+    allocated separately.
+    """
+    cid = b"\xff\xde\xad\xbe\xef"
+    prl = [DhcpOptionCode.SUBNET_MASK, DhcpOptionCode.ROUTER]
+
+    client = _RecordingClient(listen=("127.0.0.1", 0))
+    client.dora(
+        CHADDR,
+        timeout=0.2,
+        retries=0,
+        client_identifier=cid,
+        parameter_request_list=prl,
+    )
+
+    assert len(client.sent) == 2, [
+        str(m.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)) for m in client.sent
+    ]
+    discover, request = client.sent
+    assert request.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is (
+        DhcpMessageType.DHCPREQUEST
+    )
+    assert request.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False) == cid
+    assert request.options.get(DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=False)
+    # and the two messages are the same client as far as a server is concerned
+    assert request.client_id() == discover.client_id()
+
+
+def test_dora_refuses_an_offer_without_a_server_identifier():
+    """RFC 2131 §4.3.2: a SELECTING REQUEST carries option 54.
+
+    Without it the REQUEST asks every server on the segment to answer, and
+    pydhcp sent one anyway with the option silently absent.
+    """
+    client = _RecordingClient(listen=("127.0.0.1", 0), offer_has_server_id=False)
+
+    assert client.dora(CHADDR, timeout=0.2, retries=0) is None
+    types = [m.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) for m in client.sent]
+    assert DhcpMessageType.DHCPREQUEST not in types
+
+
+def test_client_reply_queue_is_bounded_and_counts_what_it_drops():
+    """An idle client accepts every BOOTREPLY so `on_reply` works as an observer.
+
+    That is deliberate, but it used to be an unbounded queue: on a busy segment
+    with nobody calling drain_replies(), memory grew without limit.
+    """
+    client = DhcpClient(listen=("127.0.0.1", 0))
+    context = Mock()
+
+    for index in range(client.MAX_QUEUED_REPLIES + 50):
+        client.handle(_canned_offer(index), context)
+
+    assert client._replies.qsize() == client.MAX_QUEUED_REPLIES
+    assert client.metrics.replies_dropped_overflow == 50
+    # the newest replies are the ones kept
+    kept = {msg.xid for msg, _ in client.drain_replies()}
+    assert max(kept) == client.MAX_QUEUED_REPLIES + 49
+
+
+def test_pending_xids_do_not_accumulate_across_exchanges():
+    """A spent xid stayed acceptable forever, and the set only ever grew.
+
+    These go out as broadcasts, so the xid is visible to anyone on the segment.
+    """
+    client = _RecordingClient(listen=("127.0.0.1", 0))
+
+    for _ in range(5):
+        client.dora(CHADDR, timeout=0.05, retries=0)
+
+    assert client._pending_xids == set(), client._pending_xids
