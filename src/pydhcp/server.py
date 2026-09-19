@@ -177,8 +177,14 @@ class DhcpServer(_Base):
         options = DhcpOptions()
         options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
         options[DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
-        options[DhcpOptionCode.ROUTER] = [server_id]
-        options[DhcpOptionCode.DNS] = [server_id]
+        # No ROUTER and no DNS. They used to be set to this host's own address,
+        # which is a guess and usually a wrong one: running the server on an
+        # ordinary machine then told every client to send all off-link traffic
+        # and every name lookup to a host that routes and resolves nothing.
+        # Omitting them leaves the client with whatever it already has -- a
+        # statically configured resolver, another router on the segment -- which
+        # is recoverable, where being pointed at a black hole is not.
+        # Override `acquire_lease` to supply the real ones.
 
         LOGGER.debug(f"[XID={msg.xid:08x}] Allocating {ip} for {client_id}")
         lease = self.lease_backend.allocate(client_id, ip, ttl, options)
@@ -267,8 +273,8 @@ class DhcpServer(_Base):
             options[DhcpOptionCode.BROADCAST_ADDRESS] = (
                 _server.network.broadcast_address
             )
-            options[DhcpOptionCode.ROUTER] = [server_id]
-            options[DhcpOptionCode.DNS] = [server_id]
+            # As in `acquire_lease`: this host is not known to be a router or a
+            # resolver, so it does not claim to be either.
         return options
 
     def handle(

@@ -83,7 +83,15 @@ client build helpers below to keep the exchange unicast.
   - `.acquire_lease(client_id, server_id, msg) -> DhcpLease | None` —
     override point. Base impl renews an existing lease, else allocates when
     the client supplies `REQUESTED_IP` or a non-wildcard `ciaddr`; returns
-    `None` when nothing can be allocated (silently drops the message).
+    `None` when nothing can be allocated (silently drops the message), which
+    includes any address outside the served network — so a relayed client on
+    another subnet is refused rather than answered with values that do not
+    apply there.
+    - **Default options: `SUBNET_MASK` and `BROADCAST_ADDRESS` only**, both
+      taken from the receiving interface. It deliberately does **not** send
+      `ROUTER` or `DNS`: this host is not known to route or resolve, and
+      naming it as both told clients to send off-link traffic and name lookups
+      into a black hole. Supply the real ones by overriding this method.
   - `.lease_seconds(msg) -> float` — how long a lease to grant, applying this
     server's policy to the client's requested time. RFC 2131 §4.3.1 honours
     that request only "if acceptable to local policy", so it is clamped to
@@ -97,7 +105,8 @@ client build helpers below to keep the exchange unicast.
   - `.release_lease(client_id, server_id, msg) -> None` — override point,
     releases via the lease backend.
   - `.get_inform_options(server_id, msg) -> DhcpOptions` — override point for
-    DHCPINFORM-only option sets (no address allocated).
+    DHCPINFORM-only option sets (no address allocated). Same default set, and
+    the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
   - `.handle_discover/.handle_request/.handle_decline/.handle_release/
     .handle_inform(msg, context) -> None` — per-message-type handlers called
     from `.handle()`; each is independently overridable.

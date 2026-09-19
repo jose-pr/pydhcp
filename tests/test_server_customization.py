@@ -653,3 +653,105 @@ def test_lease_policy_is_overridable():
         assert server.lease_seconds(_discover_requesting(86400)) == 4 * 3600
     finally:
         server.close()
+
+
+def test_base_server_does_not_claim_to_be_a_router_or_resolver():
+    """The default option set used to set ROUTER and DNS to the server's own IP.
+
+    That is a guess, and on an ordinary host a wrong one: every client was told
+    to send all off-link traffic and every name lookup to a machine that routes
+    and resolves nothing, so it had neither connectivity nor name resolution.
+    Omitting them leaves whatever the client already has, which is recoverable.
+    """
+    interface = _servable_interface()
+
+    server = DhcpServer(listen=("127.0.0.1", 0))
+    try:
+        wanted = _free_host_in(interface)
+        lease = server.acquire_lease(
+            "client-a", interface.ip, _discover_requesting_ip(wanted)
+        )
+        assert lease is not None
+        assert DhcpOptionCode.ROUTER not in lease.options
+        assert DhcpOptionCode.DNS not in lease.options
+        # what it does know first-hand is still offered
+        assert DhcpOptionCode.SUBNET_MASK in lease.options
+        assert DhcpOptionCode.BROADCAST_ADDRESS in lease.options
+
+        inform = server.get_inform_options(
+            interface.ip, _discover_requesting_ip(wanted)
+        )
+        assert DhcpOptionCode.ROUTER not in inform
+        assert DhcpOptionCode.DNS not in inform
+    finally:
+        server.close()
+
+
+def test_relayed_client_on_another_subnet_is_refused_not_misconfigured():
+    """A server with no configuration for the client's subnet must not guess.
+
+    The concern was that a relayed client would receive the *server's* mask and
+    router, unreachable from its own segment. It cannot: the requested address
+    is outside the served network, so the allocator refuses it outright rather
+    than answering with values that do not apply.
+    """
+    interface = _servable_interface()
+
+    server = DhcpServer(listen=("127.0.0.1", 0))
+    try:
+        msg = _discover_requesting_ip("192.0.2.50")
+        msg.giaddr = IPv4("192.0.2.1")
+        assert server.acquire_lease("client-b", interface.ip, msg) is None
+    finally:
+        server.close()
+
+
+def _discover_requesting_ip(ip):
+    from pydhcp.options import type as _optype
+
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    options[DhcpOptionCode.REQUESTED_IP] = _optype.IPv4Address(ip)
+    return DhcpMessage(
+        op=OpCode.BOOTREQUEST,
+        htype=HardwareAddressType.ETHERNET,
+        hlen=6,
+        hops=0,
+        xid=0x1234,
+        secs=timedelta(0),
+        flags=Flags.UNICAST,
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("0.0.0.0"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
+        chaddr=b"\x00\x11\x22\x33\x44\x55",
+        sname="",
+        file="",
+        options=options,
+    )
+
+
+def _servable_interface():
+    """A host interface whose network has a spare address to hand out.
+
+    Not simply "the first non-loopback one": this machine's WSL instance puts
+    10.255.255.254/32 first, a host route with no room in it at all, so asking
+    for network_address + 50 was refused for being off-subnet -- on Linux only,
+    while the same test passed on Windows.
+    """
+    from pydhcp.network import host_ip_interfaces
+
+    for interface in host_ip_interfaces(lambda i: not i.ip.is_loopback):
+        if interface.network.prefixlen <= 29:
+            return interface
+    pytest.skip("no host interface with a usable subnet to serve from")
+
+
+def _free_host_in(interface):
+    """An address in `interface`'s network the allocator will accept."""
+    for candidate in interface.network.hosts():
+        if candidate != interface.ip:
+            return str(candidate)
+    raise AssertionError(  # pragma: no cover - guarded by _servable_interface
+        f"no usable host address in {interface.network}"
+    )

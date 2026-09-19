@@ -34,6 +34,12 @@ server.listen()
 `DhcpServer` is designed as a base implementation. Override `acquire_lease()` when your
 application owns address-pool selection, reservations, or site-specific options.
 
+The base implementation offers only what it knows first-hand from the receiving
+interface — `SUBNET_MASK` and `BROADCAST_ADDRESS`. In particular it does **not** send
+`ROUTER` or `DNS`: the machine running the server is not necessarily a gateway or a
+resolver, and naming it as both would point clients' off-link traffic and name lookups at
+a host that handles neither. Supply the real values here, as below.
+
 ```python
 from datetime import datetime, timedelta
 
