@@ -218,12 +218,28 @@ IPv6-only interface can break at runtime.
   None`, `.release(client_id) -> bool`, `.renew(client_id, ttl) -> DhcpLease
   | None`. `ttl` is seconds; pass `math.inf` for an infinite lease.
 - **`InMemoryLeaseBackend()`** — dict-backed reference implementation;
-  `.lookup()` evicts (and returns `None` for) expired leases lazily.
+  `.lookup()` evicts (and returns `None` for) expired leases lazily. Each
+  method is atomic against the others (an `RLock` on `self._lock`), so one
+  backend can be shared by a threaded server and an async one. A **caller's**
+  compound operation is not — "is this address free, then allocate it" is two
+  calls; hold `self._lock` across such a sequence if it matters.
+  - `.lookup_by_ip(ip) -> str | None` — who holds an address. An optional
+    extension, deliberately **not** on the `LeaseBackend` Protocol: a backend
+    without it just skips the allocator's already-in-use check.
 - **`FileLeaseBackend(filepath="leases.json")`** (`InMemoryLeaseBackend`
-  subclass) — persists to JSON after every allocate/release/renew; malformed
-  or missing files are silently ignored on load (starts empty), and save
-  failures are silently swallowed too (best-effort persistence, not a
-  durable store).
+  subclass) — persists to JSON after every allocate/release/renew.
+  - Writes are **atomic**: a temporary file in the same directory, renamed
+    over the target, so a reader sees the whole file or the previous one and
+    an interrupted write cannot truncate it. The rename retries briefly on
+    `PermissionError` (on Windows an indexer or antivirus holding the file
+    looks exactly like that).
+  - A missing file starts empty and says nothing. An **unreadable** one is
+    logged at ERROR and moved aside to `<filepath>.corrupt` — it is the only
+    copy of that state, so it is kept for recovery rather than overwritten by
+    the next save.
+  - A save that fails is logged at ERROR and does **not** raise: a lease store
+    that cannot be written must not take the server down mid-exchange. So it
+    is best-effort persistence — but no longer a silent one.
 
 ## Metrics (`metrics.py`)
 
