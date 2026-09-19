@@ -246,6 +246,17 @@ IPv6-only interface can break at runtime.
   backend can be shared by a threaded server and an async one. A **caller's**
   compound operation is not — "is this address free, then allocate it" is two
   calls; hold `self._lock` across such a sequence if it matters.
+  - **`MAX_LEASES`** (class var, 10 000) — cap on stored leases. A client
+    identifier is unauthenticated, so an unbounded store is an unbounded
+    allocation driven from the network. At the cap, expired entries are
+    reclaimed and a **new** client is then refused (`.allocate()` returns
+    `None`); an established binding is never evicted to make room, since
+    least-recently-used would drop the long-lived real clients and keep the
+    newest forged ones.
+  - **`.refused_while_full`** (int) — how many new clients were turned away
+    at the cap. The accompanying warning is rate-limited to one per
+    `FULL_LOG_INTERVAL_SECONDS` (60), so a flood cannot also flood the log;
+    this counter is the exact figure.
   - `.lookup_by_ip(ip) -> str | None` — who holds an address. An optional
     extension, deliberately **not** on the `LeaseBackend` Protocol: a backend
     without it just skips the allocator's already-in-use check.
