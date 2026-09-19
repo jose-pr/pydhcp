@@ -42,7 +42,9 @@ DhcpOptionCode.NON_LOCAL_SOURCE_ROUTING.register_type(Boolean)
 DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST.register_type(DomainList)
 DhcpOptionCode.BCMCS_IPV4_ADDRESS.register_type(List[IPv4Address])
 DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME.register_type(U32)
-DhcpOptionCode.ASSOCIATED_IP.register_type(IPv4Address)
+# RFC 4388 s6.1: 'Len n (multiple of 4), Address 1 ... Address n'. A single
+# address could not decode a DHCPLEASEACTIVE for a multi-homed client.
+DhcpOptionCode.ASSOCIATED_IP.register_type(List[IPv4Address])
 DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE.register_type(List[U16])
 DhcpOptionCode.PCODE.register_type(String)
 DhcpOptionCode.TCODE.register_type(String)
@@ -56,7 +58,8 @@ DhcpOptionCode.CAPWAP_AC_V4.register_type(List[IPv4Address])
 DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.register_type(DomainList)
 DhcpOptionCode.IPV4_ADDRESS_ANDSF.register_type(List[IPv4Address])
 DhcpOptionCode.V4_SZTP_REDIRECT.register_type(UriList)
-DhcpOptionCode.V4_DOTS_RI.register_type(String)
+# RFC 8973 s5.2: an uncompressed RFC 1035 label sequence, not dotted text.
+DhcpOptionCode.V4_DOTS_RI.register_type(DomainName)
 DhcpOptionCode.V4_DOTS_ADDRESS.register_type(List[IPv4Address])
 DhcpOptionCode.MUD_URL_V4.register_type(String)
 DhcpOptionCode.TFTP_SERVER_ADDRESS.register_type(List[IPv4Address])
@@ -66,11 +69,14 @@ DhcpOptionCode.QUERY_START_TIME.register_type(U32)
 DhcpOptionCode.QUERY_END_TIME.register_type(U32)
 DhcpOptionCode.DHCP_STATE.register_type(U8)
 DhcpOptionCode.DATA_SOURCE.register_type(U8)
-DhcpOptionCode.V4_PCP_SERVER.register_type(List[IPv4Address])
+# RFC 7291 s4: one or more (List-Length, addresses) entries. A flat list read
+# the length octet as address data.
+DhcpOptionCode.V4_PCP_SERVER.register_type(PcpServerList)
 DhcpOptionCode.CONFIGURATION_FILE.register_type(String)
 DhcpOptionCode.PATH_PREFIX.register_type(String)
 DhcpOptionCode.REBOOT_TIME.register_type(U32)
-DhcpOptionCode.V4_ACCESS_DOMAIN.register_type(String)
+# RFC 5986 s3.2: an uncompressed RFC 1035 label sequence, as for 147.
+DhcpOptionCode.V4_ACCESS_DOMAIN.register_type(DomainName)
 DhcpOptionCode.POLICY_FILTER.register_type(PolicyFilter)
 DhcpOptionCode.NIS_DOMAIN.register_type(String)
 DhcpOptionCode.NIS_PLUS_DOMAIN.register_type(String)
@@ -96,7 +102,9 @@ DhcpOptionCode.TCP_DEFAULT_TTL.register_type(U8)
 DhcpOptionCode.TCP_KEEPALIVE_GARBAGE.register_type(Boolean)
 DhcpOptionCode.TCP_KEEPALIVE_INTERVAL.register_type(U32)
 DhcpOptionCode.TFTP_SERVER.register_type(String)
-DhcpOptionCode.VENDOR_CLASS_IDENTIFIER.register_type(String)
+# RFC 2132 s9.13: 'a string of n octets' -- not NUL-terminated. String
+# truncates at the first NUL, so a binary vendor class decoded to ''.
+DhcpOptionCode.VENDOR_CLASS_IDENTIFIER.register_type(OctetString)
 DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION.register_type(VendorSpecificInformation)
 DhcpOptionCode.WPAD.register_type(String)
 DhcpOptionCode.NETBIOS_SCOPE.register_type(String)
@@ -135,6 +143,9 @@ DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL.register_type(Boolean)
 DhcpOptionCode.TRAILER_ENCAPSULATION.register_type(Boolean)
 # RFC 4039 s4: "Code 80, Len 0" -- presence is the whole message.
 DhcpOptionCode.RAPID_COMMIT.register_type(Flag)
-DhcpOptionCode.FORCERENEW_NONCE_CAPABLE.register_type(Boolean)
+# RFC 6704 s3.1.2: one octet per supported algorithm. Boolean made a
+# two-algorithm payload undecodable, and False wrote the undefined 0.
+DhcpOptionCode.FORCERENEW_NONCE_CAPABLE.register_type(List[U8])
 DhcpOptionCode.RDNSS_SELECTION.register_type(RdnssSelection)
-DhcpOptionCode.STATUS_CODE.register_type(U8)
+# RFC 6926 s6.2.2: a status octet plus an optional UTF-8 message.
+DhcpOptionCode.STATUS_CODE.register_type(StatusCode)

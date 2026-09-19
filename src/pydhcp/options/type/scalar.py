@@ -123,6 +123,21 @@ class String(DhcpOptionType, str):
         return _nvt.display(self)
 
 
+class OctetString(String):
+    """Text that is the whole payload: no NUL terminator, no truncation.
+
+    RFC 2132 s9.13 defines option 60 as "a string of n octets" -- not a
+    NUL-terminated NVT string. `String` partitions at the first NUL, so a vendor
+    class identifier that is binary, as embedded and CPE firmware sends, decoded
+    to the empty string and lost everything a server might have matched on.
+    Octets that are not valid UTF-8 are preserved, as in `String`.
+    """
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        return cls(_nvt.decode(option.tobytes(), "Option octet string")), len(option)
+
+
 class Boolean(DhcpOptionType, int):
     """Boolean option encoded as a single octet."""
 

@@ -8,6 +8,7 @@ if _ty.TYPE_CHECKING:
 from ...network import IPv4 as _IP, IPv4Interface as _Interface, IPv4Network as _Network
 from .base import DhcpOptionType
 from .domain import decode_domain_name, encode_domain_name, split_domain_name
+from ... import nvt as _nvt
 
 
 class IPv4Address(DhcpOptionType, _IP):
@@ -578,3 +579,152 @@ class SipServers(DhcpOptionType):
             ),
             "values": list(self.values),
         }
+
+
+class DomainName(DhcpOptionType, str):
+    """A single uncompressed RFC 1035 name, as an option payload.
+
+    Options 147 (RFC 8973 s5.2) and 213 (RFC 5986 s3.2) carry a label sequence,
+    not dotted text. Registered as `String` they decoded to the raw label bytes
+    rather than to `example.com`, and emitted dotted text that a conforming
+    receiver cannot parse.
+    """
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        name, read = decode_domain_name(option, 0, cls.__name__)
+        return cls(name), read
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        encoded = encode_domain_name(str(self), type(self).__name__, allow_root=True)
+        data.extend(encoded)
+        return len(encoded)
+
+    def __json__(self) -> str:
+        return str(self)
+
+
+class StatusCode(DhcpOptionType):
+    """RFC 6926 s6.2.2 status: one code octet, then an optional UTF-8 message.
+
+    Registered as a bare `U8` the message made the option the wrong size, so a
+    DHCPLEASEQUERY reply carrying one could not be decoded at all.
+    """
+
+    code: int
+    message: str
+
+    def __init__(self, code: _ty.Any = 0, message: _ty.Any = "") -> None:
+        if isinstance(code, StatusCode):
+            code, message = code.code, code.message
+        elif isinstance(code, _ty.Mapping):
+            mapping = code
+            code = mapping.get("code", 0)
+            message = mapping.get("message", message)
+        elif isinstance(code, (tuple, list)) and len(code) == 2:
+            code, message = code
+        value = int(code)
+        if not 0 <= value <= 255:
+            raise ValueError(f"StatusCode code must fit one octet, got {value}")
+        self.code = value
+        self.message = str(message or "")
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 1:
+            raise ValueError("StatusCode option is truncated: missing code octet")
+        message = _nvt.decode(option[1:].tobytes(), "StatusCode message")
+        return cls(option[0], message), len(option)
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        encoded = _nvt.encode(self.message)
+        data.append(self.code)
+        data.extend(encoded)
+        return 1 + len(encoded)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, StatusCode):
+            return NotImplemented
+        return (self.code, self.message) == (other.code, other.message)
+
+    def __repr__(self) -> str:
+        return f"StatusCode(code={self.code}, message={self.message!r})"
+
+    def __json__(self) -> dict[str, _ty.Any]:
+        return {"code": self.code, "message": _nvt.display(self.message)}
+
+
+class PcpServerList(DhcpOptionType, list[list[str]]):
+    """RFC 7291 s4 PCP servers: one or more length-prefixed address lists.
+
+    Each entry is a List-Length octet giving the octet count, then that many
+    octets of IPv4 addresses; separate entries are separate PCP servers.
+    Registered as a flat `List[IPv4Address]` the length octet was read as
+    address data, so a conformant option raised and an emitted one carried no
+    length octet at all.
+    """
+
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], (list, tuple)):
+            entries = list(items[0])
+            # PcpServerList(["192.0.2.1"]) means one server, not an entry of
+            # nothing -- accept the flat spelling people will reach for.
+            if entries and not isinstance(entries[0], (list, tuple)):
+                entries = [entries]
+        else:
+            entries = list(items)
+        for entry in entries:
+            self.append(entry)
+
+    @staticmethod
+    def _normalize(entry: _ty.Any) -> list[str]:
+        if isinstance(entry, (str, _IP)):
+            entry = [entry]
+        addresses = [str(_IP(address)) for address in entry]
+        if not addresses:
+            raise ValueError("PcpServerList entry must hold at least one address")
+        return addresses
+
+    def append(self, entry: _ty.Any) -> None:
+        list.append(self, self._normalize(entry))
+
+    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
+        list.extend(self, [self._normalize(entry) for entry in __iterable])
+
+    @classmethod
+    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        self = cls()
+        idx = 0
+        while idx < len(option):
+            length = option[idx]
+            idx += 1
+            if length == 0 or length % 4:
+                raise ValueError(
+                    "PcpServerList entry length must be a non-zero multiple of 4, "
+                    f"got {length}"
+                )
+            if idx + length > len(option):
+                raise ValueError("PcpServerList option is truncated")
+            self.append(
+                [
+                    str(_IP(option[pos : pos + 4].tobytes()))
+                    for pos in range(idx, idx + length, 4)
+                ]
+            )
+            idx += length
+        if not self:
+            raise ValueError("PcpServerList option is empty")
+        return self, len(option)
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        written = 0
+        for entry in self:
+            data.append(len(entry) * 4)
+            written += 1
+            for address in entry:
+                data.extend(_IP(address).packed)
+                written += 4
+        return written
+
+    def __json__(self) -> list[list[str]]:
+        return [list(entry) for entry in self]

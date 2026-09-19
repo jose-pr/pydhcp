@@ -858,3 +858,115 @@ def test_domainlist_root_entry_round_trips() -> None:
     buf = bytearray()
     DomainList([""])._dhcp_write(buf)
     assert bytes(buf) == b"\x00"
+
+
+# --- codecs matched to the wire forms their RFCs actually define ---
+
+
+@pytest.mark.parametrize(
+    "code,payload,expected",
+    [
+        # RFC 4388 s6.1: Len n (multiple of 4), Address 1 ... Address n
+        (92, bytes.fromhex("c0000201c0000202"), ["192.0.2.1", "192.0.2.2"]),
+        # RFC 6704 s3.1.2: one octet per supported algorithm
+        (145, bytes.fromhex("0102"), [1, 2]),
+        # RFC 7291 s4: (List-Length, addresses) entries, one per PCP server
+        (158, bytes.fromhex("04c0000201"), [["192.0.2.1"]]),
+        (
+            158,
+            bytes.fromhex("08c0000201c000020204c0000203"),
+            [["192.0.2.1", "192.0.2.2"], ["192.0.2.3"]],
+        ),
+    ],
+)
+def test_rfc_wire_forms_decode_and_round_trip(code, payload, expected):
+    """Each of these raised on its own RFC's wire form, so the packet was lost.
+
+    A raise in a codec is not local: the receive path resolves every option
+    before the packet reaches a handler, so one unparseable option dropped the
+    whole message.
+    """
+    from pydhcp.options import DhcpOptionCode
+
+    codec = DhcpOptionCode(code).get_type()
+    value = codec._dhcp_decode(payload)
+
+    def plain(item):
+        # str() on a scalar codec gives its repr (U8(1)), so compare by value.
+        if isinstance(item, list):
+            return [plain(sub) for sub in item]
+        return int(item) if isinstance(item, int) else str(item)
+
+    assert [plain(v) for v in value] == [plain(e) for e in expected]
+    assert value._dhcp_encode() == payload, "re-encode is not byte-identical"
+
+
+def test_status_code_carries_its_optional_message():
+    """RFC 6926 s6.2.2: a status octet, then an optional UTF-8 message.
+
+    Registered as a bare U8, a reply carrying the message was the wrong size
+    and could not be decoded at all.
+    """
+    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options.type import StatusCode
+
+    codec = DhcpOptionCode(151).get_type()
+    assert codec is StatusCode
+
+    with_message = codec._dhcp_decode(b"\x01busy")
+    assert with_message.code == 1 and with_message.message == "busy"
+    assert with_message._dhcp_encode() == b"\x01busy"
+
+    # the message is optional, and its absence is not an error
+    bare = codec._dhcp_decode(b"\x00")
+    assert bare.code == 0 and bare.message == ""
+    assert bare._dhcp_encode() == b"\x00"
+
+    assert StatusCode(2, "no binding").__json__() == {
+        "code": 2,
+        "message": "no binding",
+    }
+    with pytest.raises(ValueError):
+        StatusCode(256)
+
+
+def test_dns_name_options_are_label_sequences_not_dotted_text():
+    """Options 147 (RFC 8973 s5.2) and 213 (RFC 5986 s3.2) carry RFC 1035 labels.
+
+    As `String` they decoded to the raw label bytes rather than to a name, and
+    emitted dotted text a conforming receiver cannot parse.
+    """
+    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options.type import DomainName
+
+    wire = b"\x07example\x03com\x00"
+    for code in (147, 213):
+        codec = DhcpOptionCode(code).get_type()
+        assert codec is DomainName
+        assert str(codec._dhcp_decode(wire)) == "example.com"
+        assert DomainName("example.com")._dhcp_encode() == wire
+
+    # the shared name rules apply here too
+    with pytest.raises(ValueError, match="63 octets"):
+        DomainName("x" * 64 + ".example.com")._dhcp_encode()
+
+
+def test_vendor_class_identifier_keeps_binary_payloads():
+    """RFC 2132 s9.13 calls option 60 a string of n octets, not NUL-terminated.
+
+    `String` partitions at the first NUL, so the binary identifiers some
+    embedded and CPE firmware sends decoded to the empty string and a server
+    had nothing left to match on.
+    """
+    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options.type import OctetString
+
+    codec = DhcpOptionCode(60).get_type()
+    assert codec is OctetString
+
+    binary = bytes.fromhex("00000de9fffe")
+    assert codec._dhcp_decode(binary)._dhcp_encode() == binary
+
+    # the ordinary ASCII case is unchanged
+    assert str(codec._dhcp_decode(b"MSFT 5.0")) == "MSFT 5.0"
+    assert codec._dhcp_decode(b"MSFT 5.0")._dhcp_encode() == b"MSFT 5.0"
