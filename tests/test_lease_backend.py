@@ -222,3 +222,86 @@ def test_in_memory_backend_survives_concurrent_use():
 
     assert errors == [], errors[:3]
     assert len(backend._leases) == 8 * 200
+
+
+# --- a forged-identity flood must not be an unbounded allocation ---
+
+
+class _SmallStore(InMemoryLeaseBackend):
+    MAX_LEASES = 50
+
+
+def test_lease_store_is_bounded():
+    """Nothing about a DHCP client is authenticated.
+
+    Every forged CLIENT_IDENTIFIER used to add an entry for good: memory, file
+    size, and -- because FileLeaseBackend rewrites the whole file per mutation
+    -- a quadratic amount of blocking I/O on the receive thread. Measured
+    before: 4,000 forged identities cost 71 s cumulative and a 465 KiB file.
+    """
+    backend = _SmallStore()
+
+    accepted = sum(
+        backend.allocate(f"forged-{n}", IPv4("10.0.0.1"), 3600) is not None
+        for n in range(500)
+    )
+
+    assert accepted == backend.MAX_LEASES
+    assert len(backend._leases) == backend.MAX_LEASES
+    assert backend.refused_while_full == 500 - backend.MAX_LEASES
+
+
+def test_an_established_lease_is_never_evicted_to_make_room():
+    """LRU eviction would be exactly backwards here.
+
+    The forged identities are the *newest*, so evicting least-recently-used
+    would drop the long-lived real clients and keep the attacker's entries.
+    A full store refuses new clients instead.
+
+    Passes on the unbounded store too, which never evicted anything: this is a
+    guard on the eviction policy, not a reproduction of a past failure.
+    """
+    backend = _SmallStore()
+    backend.allocate("real-client", IPv4("10.0.0.9"), 3600)
+
+    for n in range(500):
+        backend.allocate(f"forged-{n}", IPv4("10.0.0.1"), 3600)
+
+    assert backend.lookup("real-client") is not None
+    # and it can still renew, which is what keeps a working client working
+    assert backend.renew("real-client", 3600) is not None
+
+
+def test_expired_leases_are_reclaimed_before_refusing():
+    """A flood's entries expire on their own; the sweep should notice.
+
+    Also a guard rather than a reproduction — an unbounded store never had to
+    reclaim anything. It pins that the cap does not turn a transient flood into
+    a permanently full server.
+    """
+    backend = _SmallStore()
+    for n in range(backend.MAX_LEASES):
+        backend.allocate(f"transient-{n}", IPv4("10.0.0.1"), 0)  # already expiring
+
+    time.sleep(0.01)
+    assert backend.allocate("newcomer", IPv4("10.0.0.2"), 3600) is not None
+    assert backend.lookup("newcomer") is not None
+
+
+def test_a_full_store_does_not_flood_the_log(caplog):
+    """The condition is reached once per refused packet, and what fills the
+    store is a flood -- so logging each one hands the attacker the log as a
+    second target."""
+    import logging
+
+    backend = _SmallStore()
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        for n in range(500):
+            backend.allocate(f"forged-{n}", IPv4("10.0.0.1"), 3600)
+
+    full_reports = [
+        r for r in caplog.records if "Lease store is full" in r.getMessage()
+    ]
+    assert len(full_reports) == 1, len(full_reports)
+    # the count is still exact, it just is not one line each
+    assert backend.refused_while_full == 450

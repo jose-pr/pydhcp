@@ -54,12 +54,28 @@ class InMemoryLeaseBackend:
     **not** make a caller's compound operation atomic -- "is this address free,
     and if so allocate it" is two calls, and two threads can still interleave
     across them. Hold `self._lock` around such a sequence if that matters.
+
+    The store is bounded by `MAX_LEASES`. Nothing about a DHCP client is
+    authenticated, so a flood of forged client identifiers is otherwise an
+    unbounded allocation -- and, for `FileLeaseBackend`, a whole-file rewrite
+    per forged identity, which is quadratic.
     """
+
+    #: Upper bound on stored leases. At the cap, expired entries are reclaimed
+    #: first and a *new* client is then refused; established bindings are never
+    #: evicted to make room. Evicting the least-recently-used would be exactly
+    #: backwards under a flood -- the forged identities are the newest, so LRU
+    #: would drop the long-lived real clients and keep the attacker's.
+    MAX_LEASES = 10_000
 
     def __init__(self) -> None:
         self._leases: _ty.Dict[str, DhcpLease] = {}
         #: Re-entrant: `lookup_by_ip` and `renew` call `lookup` while holding it.
         self._lock = _threading.RLock()
+        #: New clients turned away because the store was full. Visible so an
+        #: operator can tell "nobody is asking" from "everybody is refused".
+        self.refused_while_full = 0
+        self._last_full_log = float("-inf")
 
     def allocate(
         self,
@@ -73,8 +89,46 @@ class InMemoryLeaseBackend:
         )
         lease = DhcpLease(ip=ip, expires=expires, options=options or DhcpOptions())
         with self._lock:
+            if client_id not in self._leases and not self._make_room():
+                self._report_full()
+                return None
             self._leases[client_id] = lease
         return lease
+
+    #: Seconds between "store is full" reports. The condition is reached once
+    #: per refused packet, and the thing that fills the store is a flood -- so
+    #: logging each one hands the attacker the log as a second target, which is
+    #: the trap the per-packet unknown-htype warning fell into.
+    FULL_LOG_INTERVAL_SECONDS = 60.0
+
+    def _report_full(self) -> None:
+        """Report a full store at most once per interval. Caller holds the lock."""
+        self.refused_while_full += 1
+        now = _time.monotonic()
+        if now - self._last_full_log < self.FULL_LOG_INTERVAL_SECONDS:
+            return
+        self._last_full_log = now
+        LOGGER.warning(
+            f"Lease store is full ({len(self._leases)}/{self.MAX_LEASES}); refusing "
+            f"new clients. {self.refused_while_full} refused so far. Established "
+            "bindings are kept; raise MAX_LEASES if this is legitimate demand."
+        )
+
+    def _make_room(self) -> bool:
+        """Whether there is room for one more client. Caller holds the lock.
+
+        Reclaims expired leases before answering: under a flood most of the
+        store is forged entries that expire on their own, so a sweep usually
+        makes room without touching anyone real.
+        """
+        if len(self._leases) < self.MAX_LEASES:
+            return True
+        now = _dt.datetime.now()
+        for client_id in list(self._leases):
+            expires = self._leases[client_id].expires
+            if isinstance(expires, _dt.datetime) and expires < now:
+                del self._leases[client_id]
+        return len(self._leases) < self.MAX_LEASES
 
     def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]:
         with self._lock:
