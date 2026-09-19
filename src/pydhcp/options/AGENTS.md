@@ -103,6 +103,11 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
   another encoding survives being forwarded. They are held as surrogates, so
   such a value cannot go to a strict encoder: `__json__()` returns the display
   form, with U+FFFD, and is what structured output uses. See `pydhcp.nvt`.
+- **`OctetString`** (`String` subclass) — text that is the **whole** payload:
+  no NUL terminator, no truncation. RFC 2132 §9.13 defines option 60 as "a
+  string of n octets", so `String`'s partition at the first NUL threw away a
+  binary vendor class identifier. Registered for `VENDOR_CLASS_IDENTIFIER`
+  (60).
 - **`UriList`** — list of UTF-8 URI strings, each U16-length-prefixed on the
   wire.
 - **`Boolean(val)`** — single-octet boolean (`bool()` truthiness of `val`).
@@ -152,6 +157,19 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
   encoding. `.values` is a list of strings either way.
 - **`RdnssSelection(flags, primary, secondary, domains=None)`** — RFC 6731
   RDNSS selection record.
+- **`DomainName`** — a single **uncompressed** RFC 1035 name as the whole
+  payload, through the shared name helpers (so the 63/255-octet limits apply
+  and a compression pointer is refused). Registered for `V4_DOTS_RI` (147,
+  RFC 8973 §5.2) and `V4_ACCESS_DOMAIN` (213, RFC 5986 §3.2), which are label
+  sequences rather than dotted text.
+- **`StatusCode(code=0, message="")`** — RFC 6926 §6.2.2: a one-octet status
+  code then an optional UTF-8 message. `.code` / `.message`; accepts a
+  `(code, message)` pair or a mapping. Registered for `STATUS_CODE` (151),
+  where a bare `U8` made any reply carrying the message undecodable.
+- **`PcpServerList`** — RFC 7291 §4 PCP servers: a list of **entries**, each a
+  list of IPv4 addresses written with a leading List-Length octet. A flat
+  address list read that octet as address data. `PcpServerList(["192.0.2.1"])`
+  is accepted as one entry.
 
 ### Vendor / TLV containers (`vendor.py`)
 
