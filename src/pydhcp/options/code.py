@@ -446,9 +446,15 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
          end of the encapsulated vendor-specific extensions field.
 
    The code for this option is 43 and its minimum length is 1."""
+    # Brackets escaped below (hence the raw docstring): mkdocstrings renders these
+    # docstrings as markdown, and python-markdown reads the adjacent pair "[19] [20]"
+    # as a reference link, which mkdocs-autorefs then cannot resolve --
+    # "Could not find cross-reference target '20'", one warning, which is enough to
+    # abort `mkdocs build --strict`. Measured 2026-09-20: this is the only adjacent
+    # pair among the 163 members, so the isolated RFC citations elsewhere are safe.
     NBNS_SERVERS = 44
-    """The NetBIOS name server (NBNS) option specifies a list of RFC
-   1001/1002 [19] [20] NBNS name servers listed in order of preference.
+    r"""The NetBIOS name server (NBNS) option specifies a list of RFC
+   1001/1002 \[19\] \[20\] NBNS name servers listed in order of preference.
 
    The code for this option is 44.  The minimum length of the option is
    4 octets, and the length must always be a multiple of 4."""

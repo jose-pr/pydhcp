@@ -10,6 +10,36 @@ This section provides references for the primary classes in the `pydhcp` package
 
 ::: pydhcp.options.DhcpOptions
 
+## DhcpOptionCode
+
+The standard IANA option-code registry: an `IntEnum` whose members carry, in their own
+docstrings, the RFC text that defines each option. Codes without a member resolve to an
+opaque pseudo-member (`get_type()` returns `Bytes`, `label()` reports `UNKNOWN`) rather
+than raising, so an unknown code never costs a client its lease.
+
+::: pydhcp.options.DhcpOptionCode
+    options:
+      # Load-bearing, measured 2026-09-20: without it only the 82 members that carry an
+      # RFC docstring render and the other 81 codes vanish from the registry listing.
+      members: true
+
+## BaseDhcpOptionCode
+
+The base any custom code map subclasses; pass one to `DhcpOptions(codemap=...)` to
+serve a private or vendor option space instead of the IANA registry above.
+
+::: pydhcp.options.BaseDhcpOptionCode
+    options:
+      # Same reason as DhcpOptionCode: nothing on this class carries a docstring, so
+      # without `members: true` the heading renders with no body at all.
+      members: true
+
+## DhcpOption
+
+::: pydhcp.options.DhcpOption
+    options:
+      members: true
+
 ## Option Types
 
 ::: pydhcp.options.type
