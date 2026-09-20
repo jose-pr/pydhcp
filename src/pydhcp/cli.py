@@ -530,6 +530,10 @@ class Capture(_Command):
 class App(Cli):
     """pydhcp CLI Interface"""
 
+    # duho names the program after the class, so every usage line and every
+    # error read "App" -- a name that appears nowhere the user installed,
+    # typed, or could look up.
+    _parsername_ = "pydhcp"
     _version_ = AUTO
     _logger_name_ = "pydhcp"
     _help_formatter_ = DefaultsFormatter

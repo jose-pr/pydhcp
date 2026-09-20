@@ -659,3 +659,65 @@ def test_user_errors_do_not_print_a_traceback(monkeypatch, capsys) -> None:
     err = capsys.readouterr().err
     assert err.startswith("pydhcp: error:")
     assert "Traceback" not in err
+
+
+# --- the program has to call itself what the user typed ---
+
+
+def _run_module(*argv):
+    """Run `python -m pydhcp ...` with this test run's import path.
+
+    The subprocess does not inherit however pytest made `pydhcp` importable --
+    an editable install on one machine, a rootdir injection on another -- so
+    pass the package's own location explicitly. Without this the test passed on
+    a machine with pydhcp installed and failed on one without it.
+    """
+    import os
+    import subprocess
+    import sys
+
+    import pydhcp
+
+    src = os.path.dirname(os.path.dirname(os.path.abspath(pydhcp.__file__)))
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join([src, env.get("PYTHONPATH", "")]).rstrip(
+        os.pathsep
+    )
+    return subprocess.run(
+        [sys.executable, "-m", "pydhcp", *argv],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+    )
+
+
+def test_cli_names_itself_pydhcp_not_its_class():
+    """duho names the program after the class, which was `App`.
+
+    That appeared in every usage line, every argparse error and `--version` --
+    a name that is nowhere the user installed, typed, or could look up.
+    """
+    for argv in (["--help"], ["--nope"]):
+        result = _run_module(*argv)
+        output = result.stdout + result.stderr
+        assert "usage: pydhcp" in output, output[:200]
+        assert "App" not in output, output[:200]
+
+
+def test_python_dash_m_pydhcp_works():
+    """`python -m pydhcp` failed with "No module named pydhcp.__main__".
+
+    The console script is only on PATH after an install; `python -m` is what
+    works from a checkout, in a container, or when the interpreter has to be
+    named explicitly -- which is when someone is already debugging something.
+    """
+    # `--help`, not `--version`: `_version_ = AUTO` resolves from installed
+    # package metadata, which is absent when running from a checkout, so duho
+    # drops the flag entirely there. The point of this test is that the module
+    # entry point exists at all.
+    result = _run_module("--help")
+
+    assert result.returncode == 0, result.stderr
+    assert "No module named" not in result.stderr
+    assert "usage: pydhcp" in result.stdout
