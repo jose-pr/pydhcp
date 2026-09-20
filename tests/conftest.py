@@ -9,6 +9,7 @@ each -- so a change to any of them had to be made everywhere or not at all.
 
 from __future__ import annotations
 
+import contextlib
 import time
 import typing as _ty
 from datetime import datetime, timedelta
@@ -75,6 +76,35 @@ def wait_bound(listener: _ty.Any, timeout: float = 2.0) -> None:
     deadline = time.time() + timeout
     while not listener.bound_addresses and time.time() < deadline:
         time.sleep(0.01)
+
+
+@contextlib.contextmanager
+def running(listener: _ty.Any, timeout: float = 2.0) -> _ty.Iterator[_ty.Any]:
+    """Start `listener`, wait for it to bind, and always stop, join and close it.
+
+    Five test sites started a listener and only then entered `try`, so anything
+    that raised in between -- `wait_bound` timing out, a `bound_addresses[0]`
+    on an empty tuple -- left the receive thread running for the rest of the
+    session. Measured before the listener thread became a daemon: a process
+    that started a listener and returned from `main` without `stop()` was still
+    alive after 8 s and had to be killed.
+
+    The join is asserted, not best-effort: a thread that outlives its test is
+    the defect this exists to catch, and a silent `join(timeout=1)` hides it.
+    """
+    thread = listener.start()
+    try:
+        wait_bound(listener, timeout)
+        assert listener.bound_addresses, "listener did not bind within the timeout"
+        yield listener
+    finally:
+        listener.stop()
+        if thread is not None:
+            # Generously more than `select_timeout`, which is what bounds how
+            # long the loop takes to notice the cancellation token.
+            thread.join(timeout + listener._select_timeout + 2)
+            assert not thread.is_alive(), "listener thread outlived the test"
+        listener.close()
 
 
 class FixedLeaseServer(DhcpServer):

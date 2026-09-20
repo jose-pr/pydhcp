@@ -20,6 +20,8 @@ class DhcpMetrics:
         "releases_ignored",
         "packets_dropped_hop_limit",
         "packets_dropped_untrusted",
+        "packets_dropped_truncated",
+        "packets_dropped_error",
         "replies_dropped_overflow",
     )
 
@@ -39,6 +41,13 @@ class DhcpMetrics:
     releases_ignored: int
     packets_dropped_hop_limit: int
     packets_dropped_untrusted: int
+    #: Datagrams dropped before decoding because they did not fit
+    #: `max_packet_size`. A sender that keeps exceeding it is a
+    #: misconfiguration an operator can act on, which is why it is counted
+    #: rather than only logged.
+    packets_dropped_truncated: int
+    #: Datagrams lost to an error anywhere in receive, decode or handle.
+    packets_dropped_error: int
     #: Replies discarded because the client's reply queue was full.
     replies_dropped_overflow: int
 

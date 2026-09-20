@@ -1,3 +1,4 @@
+import contextlib
 import socket
 import pytest
 import ipaddress
@@ -12,7 +13,7 @@ from pydhcp import (
 from pydhcp.packet import DhcpMessageType, Flags, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import SocketAddress, IPv4
-from conftest import FixedLeaseServer, build_request, wait_bound
+from conftest import FixedLeaseServer, build_request, running
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 
@@ -23,13 +24,8 @@ class MockDhcpServer(FixedLeaseServer):
 
 @pytest.fixture
 def run_dora_server():
-    server = MockDhcpServer(listen=[("127.0.0.1", 0)])
-    thread = server.start()
-    wait_bound(server)
-    yield server
-    server.stop()
-    if thread:
-        thread.join(timeout=1.0)
+    with running(MockDhcpServer(listen=[("127.0.0.1", 0)])) as server:
+        yield server
 
 
 def test_dora_sequence(run_dora_server):
@@ -198,14 +194,13 @@ def test_dora_with_lease_persistence(tmp_path):
     backend = FileLeaseBackend(filepath=filepath)
     server = MockDhcpServerWithBackend(listen=[("127.0.0.1", 0)], lease_backend=backend)
 
-    thread = server.start()
-    wait_bound(server)
-    server_port = server.bound_addresses[0].port
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
     client.settimeout(2.0)
 
-    try:
+    with running(server), contextlib.closing(client):
+        server_port = server.bound_addresses[0].port
+
         # 1. Send DISCOVER
         opts = DhcpOptions()
         opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
@@ -254,9 +249,3 @@ def test_dora_with_lease_persistence(tmp_path):
         persisted = new_backend.lookup(client_id)
         assert persisted is not None
         assert persisted.ip == IPv4("127.0.0.1")
-
-    finally:
-        client.close()
-        server.stop()
-        if thread:
-            thread.join(timeout=1.0)

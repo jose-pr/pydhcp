@@ -8,6 +8,7 @@ import threading as _thread
 import struct as _struct
 import concurrent.futures as _futures
 import typing as _ty
+import weakref as _weakref
 
 from . import network as _net, constants as _const
 from .packet import enums as _enum
@@ -22,6 +23,39 @@ CMSG_SPACE = getattr(_socket, "CMSG_SPACE", None)
 #: Windows check and an unused-ignore on a POSIX one -- no single annotation is
 #: right for both. Going through the same getattr alias as the constants above is.
 _RECVMSG = getattr(_socket.socket, "recvmsg", None)
+#: Windows-only: "nobody else may bind this address", the opposite of
+#: SO_REUSEADDR. See `_bind_sockets` for why it is the default there.
+SO_EXCLUSIVEADDRUSE = getattr(_socket, "SO_EXCLUSIVEADDRUSE", None)
+#: POSIX-only; 0 where absent, so `flags & MSG_TRUNC` is simply never true.
+MSG_TRUNC = getattr(_socket, "MSG_TRUNC", 0)
+MSG_CTRUNC = getattr(_socket, "MSG_CTRUNC", 0)
+
+#: The all-ones address every DHCP client can be reached at before it has one of
+#: its own (RFC 2131 s4.1).
+BROADCAST_ADDRESS = "255.255.255.255"
+
+#: WSAEACCES. Windows reports it from `bind()` for an address held by a socket
+#: that asked for exclusive use, or one inside a reserved port range -- never
+#: for a lack of privilege, because Windows has no privileged ports (measured:
+#: binding UDP/67 as an ordinary user succeeds). Python maps it onto errno 13,
+#: which is EACCES on POSIX and *does* mean privilege there.
+_WSAEACCES = 10013
+
+#: WSAEMSGSIZE. Where Linux truncates an oversized datagram and reports it in
+#: the recv flags, Windows fails the call outright with this. Same event, two
+#: shapes; both become `_TruncatedDatagram` so the log and the counter do not
+#: depend on the platform.
+_WSAEMSGSIZE = 10040
+
+
+class _TruncatedDatagram(Exception):
+    """A datagram longer than `max_packet_size` arrived and was cut short.
+
+    Not an error the peer can be blamed for and not one a retry fixes: the
+    remedy is a larger `max_packet_size`. Raised so the receive loop can say
+    that, instead of handing a half-message to the decoder.
+    """
+
 
 ListenAddress = _ty.Union[_net.IPv4, str]
 ListenPort = _ty.Union[int, _ty.Sequence[int]]
@@ -40,9 +74,29 @@ class Transport:
         raise NotImplementedError()
 
 
+def _dest_string(dest: _net.IPv4) -> str:
+    """The address to actually send a reply to.
+
+    0.0.0.0 in a DHCP header means "this client has no address yet", which on
+    the wire is the limited broadcast (RFC 2131 s4.1) -- not a host called
+    0.0.0.0, which is what `str()` would produce and what `sendto` would then
+    reject or silently route nowhere.
+    """
+    return BROADCAST_ADDRESS if dest == _net.WILDCARD_IPv4 else str(dest)
+
+
 class UdpTransport(Transport):
     def __init__(self, socket: _socket.socket):
         self.socket = socket
+
+    def _send_to(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest_str: str,
+        port: int,
+    ) -> int:
+        """One `sendto`, with no fallback of any kind."""
+        return self.socket.sendto(data, (dest_str, port))
 
     def send(
         self,
@@ -51,19 +105,26 @@ class UdpTransport(Transport):
         port: int,
         client_mac: bytes,
     ) -> int:
-        dest_ip = dest
-        dest_str = "255.255.255.255" if dest_ip == _net.WILDCARD_IPv4 else str(dest_ip)
+        dest_str = _dest_string(dest)
 
         # Future RawTransport can be plugged in here to craft L2 Ethernet frames targeting client_mac.
         # Standard UDP sockets can't directly target L2 MAC on UDP if there is no ARP entry,
         # so we fall back to broadcast if unicast fails.
         try:
-            return self.socket.sendto(data, (dest_str, port))
+            return self._send_to(data, dest_str, port)
         except Exception as e:
+            if dest_str == BROADCAST_ADDRESS:
+                # The "fallback" would be the identical syscall with identical
+                # arguments, so it can only fail identically -- while the
+                # warning claimed a broadcast retry had been attempted and the
+                # second failure, not the first, is what reached the caller.
+                # A broadcast that fails is usually a missing SO_BROADCAST or a
+                # loopback-bound socket on POSIX, neither of which a retry fixes.
+                raise
             LOGGER.warning(
                 f"UDP unicast to {dest_str} failed ({e}), falling back to broadcast."
             )
-            return self.socket.sendto(data, ("255.255.255.255", port))
+            return self._send_to(data, BROADCAST_ADDRESS, port)
 
 
 class PktInfoUdpTransport(UdpTransport):
@@ -81,6 +142,7 @@ class PktInfoUdpTransport(UdpTransport):
         port: int,
         client_mac: bytes,
     ) -> int:
+        dest_str = _dest_string(dest)
         if (
             hasattr(self.socket, "sendmsg")
             and self.ifindex is not None
@@ -93,14 +155,44 @@ class PktInfoUdpTransport(UdpTransport):
                 _socket.inet_aton(str(self.local_ip)),
                 _socket.inet_aton(str(self.local_ip)),
             )
-            return int(
-                self.socket.sendmsg(
-                    [data],
-                    [(_socket.IPPROTO_IP, IP_PKTINFO, pktinfo)],
-                    0,
-                    (str(dest), port),
+            try:
+                return int(
+                    self.socket.sendmsg(
+                        [data],
+                        # `_dest_string`, not `str(dest)`: this path took a
+                        # yiaddr of 0.0.0.0 -- the normal case for a client that
+                        # has no address yet -- and asked the kernel to send to
+                        # host 0.0.0.0, which is the one destination a reply to
+                        # an unconfigured client must never be.
+                        [(_socket.IPPROTO_IP, IP_PKTINFO, pktinfo)],
+                        0,
+                        (dest_str, port),
+                    )
                 )
-            )
+            except Exception as e:
+                # This path's own failure modes -- a stale ifindex, a local_ip
+                # no longer on that adapter -- used to propagate and lose the
+                # reply outright. Retry without the pin, which is the thing that
+                # went stale.
+                #
+                # Deliberately `_send_to` and not `super().send()`: the base
+                # send answers a failed *unicast* with a broadcast to the whole
+                # segment. That is right for a client with no address yet, and
+                # wrong for one the server deliberately unicast to -- a
+                # RENEWING client at its own ciaddr, or a relay at giaddr. Going
+                # through it here would put yiaddr, chaddr, the lease options
+                # and the echoed RELAY_AGENT_INFORMATION (RFC 3046 s2.2, whose
+                # circuit-id identifies the subscriber's physical port) in front
+                # of every host on the segment. Measured on the version this
+                # replaces: sendmsg -> 192.0.2.50, sendto -> 192.0.2.50, sendto
+                # -> 255.255.255.255. Same destination, one attempt, and the
+                # error propagates if it fails.
+                LOGGER.warning(
+                    f"IP_PKTINFO send via ifindex {self.ifindex} failed "
+                    f"({e.__class__.__name__} | {e}); retrying unpinned to "
+                    f"{dest_str}."
+                )
+                return self._send_to(data, dest_str, port)
         return super().send(data, dest, port, client_mac)
 
 
@@ -219,11 +311,40 @@ def _parselisteners(
 _INTERFACE_CACHE: dict[tuple[int, str], _net.NetworkInterface] = {}
 
 
+#: Every cache keyed by "what addresses does this host have", dropped together
+#: whenever a listener binds. Binding is the one moment both listeners pass
+#: through, and the moment that answer can change.
+_ADDRESS_CACHES: "list[_ty.MutableMapping[_ty.Any, _ty.Any]]" = [_INTERFACE_CACHE]
+
+
+def _register_address_cache(cache: "_ty.MutableMapping[_ty.Any, _ty.Any]") -> None:
+    """Have `cache` dropped on every bind, alongside `_INTERFACE_CACHE`.
+
+    So that a second module caching the same kind of answer -- `server.py`
+    memoising which servable interface holds an address -- cannot end up with a
+    different invalidation point from this one.
+    """
+    _ADDRESS_CACHES.append(cache)
+
+
 def _clear_interface_cache() -> None:
-    _INTERFACE_CACHE.clear()
+    for cache in _ADDRESS_CACHES:
+        cache.clear()
 
 
 _PKTINFO_STRUCT = "=I4s4s"
+
+#: The address each socket was *asked* to bind, which is not what it ended up
+#: bound to whenever that request named port 0. `_bind_sockets` matches already
+#: open sockets against the requested list, and keying them by `getsockname()`
+#: meant a port-0 request never matched the socket it had produced: measured, a
+#: second `bind()` closed the socket on port 52908 and opened a new one on
+#: 52909, so every caller holding the first port was talking to a closed socket.
+#: Weak keys, so an entry disappears with the socket it describes rather than
+#: pinning a closed one alive for the process's lifetime.
+_REQUESTED_ADDRESS: "_ty.MutableMapping[_socket.socket, _net.SocketAddress]" = (
+    _weakref.WeakKeyDictionary()
+)
 
 
 def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool:
@@ -241,20 +362,95 @@ def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool
     )
 
 
+def _bind_options(reuse_address: bool) -> "list[_net.SocketOption]":
+    """The socket options every listener socket is opened with.
+
+    ``SO_REUSEADDR`` used to be set unconditionally, which is a security and a
+    debugging problem rather than a convenience. Measured on Windows: a second
+    listener binding a port the first already held *succeeded silently* and then
+    received nothing, while the first got every datagram -- so a
+    misconfiguration, or another process quietly taking over a DHCP port, looked
+    exactly like a working start-up. (Linux allows the same duplicate bind for
+    UDP when both sockets set it.) A DHCP server has no legitimate reason to
+    share port 67 with anything, so the default is now exclusive and the
+    reuse is opt-in via ``DhcpListener.REUSE_ADDRESS``.
+
+    On Windows "exclusive" needs saying out loud: without ``SO_EXCLUSIVEADDRUSE``
+    a *later* socket that sets ``SO_REUSEADDR`` can still steal the address.
+    POSIX has no such option and needs none -- a plain bind already refuses.
+    """
+    options = [_net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)]
+    if reuse_address:
+        options.append(_net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1))
+    elif SO_EXCLUSIVEADDRUSE is not None:
+        options.append(_net.SocketOption(_socket.SOL_SOCKET, SO_EXCLUSIVEADDRUSE, 1))
+    return options
+
+
+def _raise_bind_error(error: OSError, address: _net.SocketAddress) -> "_ty.NoReturn":
+    """Re-raise a failed bind with a diagnosis a reader can act on."""
+    if getattr(error, "winerror", None) == _WSAEACCES:
+        # Python turns WSAEACCES into PermissionError/errno 13, and netimps then
+        # reads that as POSIX EACCES and says "permission denied binding port
+        # N". Measured: binding over a socket holding SO_EXCLUSIVEADDRUSE
+        # produced `PermissionError: permission denied binding port 64514` --
+        # a privilege message about an unprivileged port, sending the reader
+        # after an elevation problem that does not exist on this platform.
+        # Built without the errno positional on purpose: `OSError(13, ...)`
+        # returns a `PermissionError`, so the *type* would go on saying
+        # "privilege" however carefully the message is worded. The errno is
+        # still attached, and the other in-use branch below is a plain OSError
+        # too (EADDRINUSE maps to no builtin subclass).
+        failure = OSError(
+            f"Port {address.port} on {address.ip} is held exclusively by another "
+            f"socket (WSAEACCES); it is in use, not privileged. "
+            f"Try port {address.port + 1000}."
+        )
+        failure.errno = error.errno
+        raise failure from error
+    # netimps recognises the POSIX errnos *and* the Windows WinError
+    # codes, which differ; the DHCP-specific suggestion is appended
+    # rather than replacing the generic diagnosis.
+    hint = _netimps.bind_error_hint(error, address.port)
+    if hint is None:
+        raise error
+    if isinstance(error, PermissionError) or "permission" in hint.lower():
+        raise PermissionError(f"{hint}. Try 6767 for testing.") from error
+    if "in use" in hint:
+        raise OSError(
+            error.errno, f"{hint}; try port {address.port + 1000}."
+        ) from error
+    raise OSError(error.errno, hint) from error
+
+
 def _bind_sockets(
     listen: "_ty.Sequence[_net.SocketAddress]",
     sockets: "list[_socket.socket]",
     pktinfo: bool,
     label: str = "",
+    reuse_address: bool = False,
 ) -> None:
     """Bind one socket per listen address, reusing any already bound.
 
     Shared by both listeners. Held apart, the async copy silently lacked the
     ``IP_PKTINFO`` socket option and the bind-error hints, so the same mistake
     produced a helpful message from one listener and a bare errno from the other.
+
+    Idempotent, including for port 0: an already open socket is matched against
+    the address it was *asked* for, not the one it was given, so re-binding a
+    port-0 listener keeps the ephemeral port it already has. See
+    `_REQUESTED_ADDRESS`.
     """
     _clear_interface_cache()
-    active = {_net.SocketAddress(sock): sock for sock in sockets}
+    active: "dict[_net.SocketAddress, _socket.socket]" = {}
+    for sock in sockets:
+        requested = _REQUESTED_ADDRESS.get(sock)
+        if requested is None:  # pragma: no cover - not bound through here
+            try:
+                requested = _net.SocketAddress(sock)
+            except OSError:
+                continue
+        active[requested] = sock
     wanted = []
     for address in listen:
         wanted.append(address)
@@ -266,27 +462,13 @@ def _bind_sockets(
                 _socket.AF_INET,
                 _socket.SOCK_DGRAM,
                 _socket.IPPROTO_UDP,
-                options=[
-                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1),
-                    _net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1),
-                ],
+                options=_bind_options(reuse_address),
             )
             if pktinfo and address.ip == _net.WILDCARD_IPv4 and IP_PKTINFO is not None:
                 sock.setsockopt(_socket.IPPROTO_IP, IP_PKTINFO, 1)
         except OSError as e:
-            # netimps recognises the POSIX errnos *and* the Windows WinError
-            # codes, which differ; the DHCP-specific suggestion is appended
-            # rather than replacing the generic diagnosis.
-            hint = _netimps.bind_error_hint(e, address.port)
-            if hint is None:
-                raise
-            if isinstance(e, PermissionError) or "permission" in hint.lower():
-                raise PermissionError(f"{hint}. Try 6767 for testing.") from e
-            if "in use" in hint:
-                raise OSError(
-                    e.errno, f"{hint}; try port {address.port + 1000}."
-                ) from e
-            raise OSError(e.errno, hint) from e
+            _raise_bind_error(e, address)
+        _REQUESTED_ADDRESS[sock] = address
         sockets.append(sock)
     for address, sock in active.items():
         if address not in wanted:
@@ -303,9 +485,28 @@ def _recv_with_pktinfo(
     """Receive one datagram together with the interface it arrived on."""
     if CMSG_SPACE is None or IP_PKTINFO is None or _RECVMSG is None:
         raise RuntimeError("packet info support unavailable")
-    data, ancdata, _flags, client_tuple = _RECVMSG(
+    data, ancdata, flags, client_tuple = _RECVMSG(
         sock, max_packet_size, CMSG_SPACE(_struct.calcsize(_PKTINFO_STRUCT))
     )
+    client_address = _net.SocketAddress(*client_tuple)
+    # The flags were discarded, which threw away the only report of a datagram
+    # that did not fit. Measured on Linux with max_packet_size=576: a
+    # 1102-octet datagram arrived with MSG_TRUNC set and `data` silently cut to
+    # 576, and the decoder was then handed a message whose option stream stops
+    # mid-option.
+    if MSG_TRUNC and flags & MSG_TRUNC:
+        raise _TruncatedDatagram(
+            f"datagram from {client_address} exceeded max_packet_size="
+            f"{max_packet_size}; {len(data)} octets kept"
+        )
+    if MSG_CTRUNC and flags & MSG_CTRUNC:
+        # The payload is intact but the control message was cut, so the
+        # interface below may be missing or partial. Worth saying: the reply's
+        # SERVER_IDENTIFIER and egress interface are derived from it.
+        LOGGER.warning(
+            f"IP_PKTINFO control data truncated for a datagram from "
+            f"{client_address}; the receiving interface may be resolved wrongly."
+        )
     local_ip: "_net.IPv4 | None" = None
     ifindex: "int | None" = None
     for level, ctype, cdata in ancdata:
@@ -315,7 +516,7 @@ def _recv_with_pktinfo(
             )
             local_ip = _net.IPv4(_socket.inet_ntoa(dst1))
             break
-    return data, _net.SocketAddress(*client_tuple), ifindex, local_ip
+    return data, client_address, ifindex, local_ip
 
 
 def _context_for(
@@ -441,6 +642,13 @@ def _resolve_interface_uncached(
 class DhcpListener:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
 
+    #: Whether to set ``SO_REUSEADDR`` on every listening socket. Off: see
+    #: `_bind_options` for what sharing a DHCP port actually looks like when it
+    #: goes wrong. A class attribute rather than a constructor argument so every
+    #: subclass (server, client, relay, capture) inherits it without each
+    #: constructor having to forward it.
+    REUSE_ADDRESS: bool = False
+
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -467,12 +675,18 @@ class DhcpListener:
     def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
         """The addresses this listener is currently bound to.
 
-        Empty before `bind()` and after `stop()`/`close()`. Asking the socket
-        rather than repeating `self._listen` is the point: binding port 0 gives
-        an ephemeral port that only the socket knows, which is how a test or a
-        tool discovers where to send. Without this the only way to find out was
-        to reach into the private socket list, which the tests did in twenty-one
-        places.
+        Empty before `bind()` and after `close()`. **Not** emptied by `stop()`
+        returning: `stop()` only asks the receive loop to exit, and the sockets
+        are closed by `listen()` on its way out -- up to `select_timeout` later,
+        on the receive thread. Join the thread `start()` handed back before
+        reading this if the distinction matters. (It previously stayed populated
+        indefinitely, because nothing closed the sockets at all.)
+
+        Asking the socket rather than repeating `self._listen` is the point:
+        binding port 0 gives an ephemeral port that only the socket knows, which
+        is how a test or a tool discovers where to send. Without this the only
+        way to find out was to reach into the private socket list, which the
+        tests did in twenty-one places.
         """
         addresses = []
         for sock in self._sockets:
@@ -486,7 +700,12 @@ class DhcpListener:
         pass
 
     def bind(self) -> None:
-        _bind_sockets(self._listen, self._sockets, self._pktinfo)
+        _bind_sockets(
+            self._listen,
+            self._sockets,
+            self._pktinfo,
+            reuse_address=self.REUSE_ADDRESS,
+        )
 
     def stop(self) -> None:
         if self._cancellation_token is not None:
@@ -517,8 +736,16 @@ class DhcpListener:
         self.close()
 
     def wait(self) -> None:
-        while self._cancellation_token is not None:
-            self._cancellation_token.wait(self._select_timeout)
+        # Read once per turn, not twice. `listen()` sets `_cancellation_token`
+        # to None from the receive thread as it exits, so a token that was not
+        # None at the `is not None` test could be None at the `.wait()` --
+        # `AttributeError: 'NoneType' object has no attribute 'wait'` out of a
+        # call whose whole job is to block until shutdown.
+        while True:
+            token = self._cancellation_token
+            if token is None:
+                return
+            token.wait(self._select_timeout)
 
     def _install_sigint_handler(self) -> None:
         """Install a Ctrl-C handler, if this thread is allowed to.
@@ -550,6 +777,14 @@ class DhcpListener:
 
         if self._sigint_handler is None:
             return
+        if _thread.current_thread() is not _thread.main_thread():
+            # `signal.signal` raises off the main thread, so the handler cannot
+            # be given back from here -- and `close()` now runs on the receive
+            # thread too (from `listen()`'s teardown). Leave both the handler
+            # and the bookkeeping in place so a later `close()` on the owning
+            # thread can still restore it; clearing them here would make that
+            # restore a silent no-op and strand the process-wide handler.
+            return
         try:
             # Only give it back if nobody else has claimed it since.
             if signal.getsignal(signal.SIGINT) is self._sigint_handler:
@@ -563,60 +798,155 @@ class DhcpListener:
         self, cancellation_token: _thread.Event | None = None
     ) -> _thread.Thread | None:
         if not self._cancellation_token:
-            thread = _thread.Thread(target=self.listen, args=())
+            # Daemon: a non-daemon receive thread keeps the interpreter alive
+            # after `main` returns, and nothing in the loop ends on its own.
+            # Measured: a process that started a listener and fell off the end
+            # of `main` without `stop()` was still running after 8 s and had to
+            # be killed. Shutdown is `stop()` plus `join()`, which every
+            # supported entry point does; a caller that forgets now exits
+            # instead of hanging.
+            thread = _thread.Thread(
+                target=self.listen, args=(), name="pydhcp-listener", daemon=True
+            )
             self._cancellation_token = cancellation_token or _thread.Event()
             self._install_sigint_handler()
             thread.start()
             return thread
         return None
 
+    def _receive_one(self, sock: _socket.socket, view: memoryview) -> None:
+        """Receive, decode and dispatch exactly one datagram.
+
+        Split into three steps because they fail for three unrelated reasons and
+        need three different reports. One `except Exception` used to cover all of
+        them and log `Encounter error handling request: <class> | <str>` with no
+        traceback -- so a malformed packet from the segment (routine, the peer's
+        doing), a socket error (ours), and a bug inside a `handle()` override
+        were indistinguishable, and the only one whose traceback matters was the
+        one that lost it.
+        """
+        try:
+            if self._pktinfo:
+                data, client, ifindex, local_ip = _recv_with_pktinfo(
+                    sock, self._max_packet_size
+                )
+                raw: memoryview = memoryview(data)
+            else:
+                # No control message to read, so keep the preallocated
+                # buffer rather than letting recvmsg allocate per packet.
+                # The buffer is one octet longer than the limit and the whole
+                # of it is offered: a datagram that comes back filling it was
+                # larger than `max_packet_size` and got cut. Linux truncates
+                # silently (measured: 1102 octets delivered as 576, no error);
+                # Windows instead fails the call with WSAEMSGSIZE, which lands
+                # in the OSError branch below. Neither used to be noticed.
+                size, client_tuple = sock.recvfrom_into(view, self._max_packet_size + 1)
+                client = _net.SocketAddress(*client_tuple)
+                ifindex = None
+                local_ip = None
+                if size > self._max_packet_size:
+                    raise _TruncatedDatagram(
+                        f"datagram from {client} exceeded max_packet_size="
+                        f"{self._max_packet_size}"
+                    )
+                raw = view[:size]
+        except _TruncatedDatagram as e:
+            self.metrics.packets_dropped_truncated += 1
+            LOGGER.warning(f"Dropping a truncated datagram: {e}")
+            return
+        except OSError as e:
+            if getattr(e, "winerror", None) == _WSAEMSGSIZE:
+                self.metrics.packets_dropped_truncated += 1
+                LOGGER.warning(
+                    f"Dropping a truncated datagram on {self._describe(sock)}: "
+                    f"it exceeded max_packet_size={self._max_packet_size} "
+                    f"(WSAEMSGSIZE)"
+                )
+                return
+            self.metrics.packets_dropped_error += 1
+            LOGGER.error(
+                f"Receive failed on {self._describe(sock)}: "
+                f"{e.__class__.__name__} | {e}",
+                exc_info=True,
+            )
+            return
+
+        try:
+            msg = DhcpMessage.decode(raw)
+        except Exception as e:
+            # The sender's fault, and routine on a shared segment: a warning
+            # with the facts, not an error with a traceback of our own decoder.
+            self.metrics.packets_dropped_error += 1
+            LOGGER.warning(
+                f"Discarding an undecodable {len(raw)}-octet datagram from "
+                f"{client}: {e.__class__.__name__} | {e}"
+            )
+            return
+
+        try:
+            self.metrics.packets_received += 1
+            context = _context_for(sock, client, msg.chaddr, ifindex, local_ip)
+            msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
+            self.handle(msg, context)
+        except Exception as e:
+            # Ours, almost always: `handle()` is the documented override point.
+            # exc_info is the whole value here -- the class name and str of, say,
+            # a KeyError deep in a lease backend say nothing about where it came
+            # from. `DhcpCapture.hook_fail_fast` relies on this staying a catch
+            # rather than a propagate.
+            self.metrics.packets_dropped_error += 1
+            LOGGER.error(
+                f"Encounter error handling request from {client}: "
+                f"{e.__class__.__name__} | {e}",
+                exc_info=True,
+            )
+
+    @staticmethod
+    def _describe(sock: _socket.socket) -> str:
+        try:
+            return str(_net.SocketAddress(sock))
+        except OSError:  # pragma: no cover - closed underneath us
+            return "a closed socket"
+
     def listen(self) -> None:
         self.bind()
-        listen = True
         rlist: list[_socket.socket]
-        buffer = bytearray(self._max_packet_size)
+        # One octet more than the limit, so a datagram that does not fit can be
+        # told apart from one that exactly fills the buffer. See `_receive_one`.
+        buffer = bytearray(self._max_packet_size + 1)
         view = memoryview(buffer)
         if self._cancellation_token is None:
             self._cancellation_token = _thread.Event()
+        token = self._cancellation_token
         try:
-            while listen and not self._cancellation_token.is_set():
+            while not token.is_set():
                 rlist, _, _ = _select.select(
                     list(self._sockets), [], [], self._select_timeout
                 )
-                if self._cancellation_token.is_set():
+                if token.is_set():
                     break
-                for socket in rlist:
-                    try:
-                        if self._pktinfo:
-                            data, client, ifindex, local_ip = _recv_with_pktinfo(
-                                socket, self._max_packet_size
-                            )
-                            msg = DhcpMessage.decode(memoryview(data))
-                        else:
-                            # No control message to read, so keep the preallocated
-                            # buffer rather than letting recvmsg allocate per packet.
-                            size, client_tuple = socket.recvfrom_into(
-                                view, self._max_packet_size
-                            )
-                            client = _net.SocketAddress(*client_tuple)
-                            ifindex = None
-                            local_ip = None
-                            msg = DhcpMessage.decode(view[:size])
-                        context = _context_for(
-                            socket, client, msg.chaddr, ifindex, local_ip
-                        )
-                        self.metrics.packets_received += 1
-                        msg.log(client, _net.SocketAddress(socket), _logging.DEBUG)
-                        self.handle(msg, context)
-                    except Exception as e:
-                        LOGGER.error(
-                            f"Encounter error handling request: {e.__class__.__name__} | {e}"
-                        )
+                for sock in rlist:
+                    if token.is_set():
+                        # A handler can stop the listener -- `DhcpCapture`'s
+                        # `--count` sink and `hook_fail_fast` both do -- and
+                        # this loop then kept draining the rest of the ready
+                        # set. Measured: `capture --count 1` wrote 3 records in
+                        # 3 of 3 trials on a wildcard bind with three sockets
+                        # ready in the same `select()`.
+                        break
+                    self._receive_one(sock, view)
         except KeyboardInterrupt:
             LOGGER.info("Stopped listening due to Ctrl-C")
-            self._cancellation_token.set()
+            token.set()
         finally:
             self._cancellation_token = None
+            # Release the sockets. `stop()` only ends the loop, and nothing else
+            # closed them on this path: measured across three test modules, 7
+            # sockets were still open at the end of the session. `close()` also
+            # gives back the SIGINT handler, but only when it can -- see
+            # `_restore_sigint_handler` for why that part waits for the main
+            # thread.
+            self.close()
 
 
 import asyncio as _asyncio
@@ -662,6 +992,9 @@ class _DhcpDatagramProtocol(_asyncio.DatagramProtocol):
 class AsyncDhcpListener:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
 
+    #: As on `DhcpListener`; see `_bind_options`.
+    REUSE_ADDRESS: bool = False
+
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -683,6 +1016,9 @@ class AsyncDhcpListener:
         self._stopped: _ty.Optional[_asyncio.Event] = None
         self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
         self.metrics = DhcpMetrics()
+        #: As on `DhcpListener`.
+        self.packets_dropped_truncated = 0
+        self.packets_dropped_error = 0
 
     def _on_readable(self, sock: _socket.socket) -> None:
         """Read one datagram off a ready socket, on the event loop.
@@ -699,16 +1035,38 @@ class AsyncDhcpListener:
                     sock, self._max_packet_size
                 )
             else:
-                data, client_tuple = sock.recvfrom(self._max_packet_size)
+                # One octet over the limit, for the same reason as the sync
+                # loop's buffer: a datagram that fills it was truncated.
+                data, client_tuple = sock.recvfrom(self._max_packet_size + 1)
                 client = _net.SocketAddress(*client_tuple)
                 ifindex = None
                 local_ip = None
+                if len(data) > self._max_packet_size:
+                    raise _TruncatedDatagram(
+                        f"datagram from {client} exceeded max_packet_size="
+                        f"{self._max_packet_size}"
+                    )
         except BlockingIOError:  # pragma: no cover - spurious readability
             return
+        except _TruncatedDatagram as e:
+            self.metrics.packets_dropped_truncated += 1
+            LOGGER.warning(f"Dropping a truncated datagram: {e}")
+            return
         except Exception as e:
+            if getattr(e, "winerror", None) == _WSAEMSGSIZE:
+                # As in `DhcpListener._receive_one`: Windows reports an
+                # oversized datagram as a failed call rather than a short read.
+                self.metrics.packets_dropped_truncated += 1
+                LOGGER.warning(
+                    f"Dropping a truncated datagram: it exceeded "
+                    f"max_packet_size={self._max_packet_size} (WSAEMSGSIZE)"
+                )
+                return
+            self.metrics.packets_dropped_error += 1
             LOGGER.error(
                 f"Encounter error reading async datagram: "
-                f"{e.__class__.__name__} | {e}"
+                f"{e.__class__.__name__} | {e}",
+                exc_info=True,
             )
             return
         self._dispatch_received(data, client, sock, ifindex, local_ip)
@@ -753,28 +1111,42 @@ class AsyncDhcpListener:
         ifindex: "int | None" = None,
         local_ip: "_net.IPv4 | None" = None,
     ) -> None:
+        # Split for the same reason as `DhcpListener._receive_one`: a packet the
+        # peer malformed and a bug in a `handle()` override are different
+        # events, and only the second one's traceback is worth keeping.
         try:
             msg = DhcpMessage.decode(memoryview(data))
+        except Exception as e:
+            self.metrics.packets_dropped_error += 1
+            LOGGER.warning(
+                f"Discarding an undecodable {len(data)}-octet datagram from "
+                f"{client}: {e.__class__.__name__} | {e}"
+            )
+            return
+        try:
             self.metrics.packets_received += 1
             msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
             context = _context_for(sock, client, msg.chaddr, ifindex, local_ip)
             self.handle(msg, context)
         except Exception as e:
+            self.metrics.packets_dropped_error += 1
             LOGGER.error(
                 f"Encounter error handling async request from {client} : "
-                f"{e.__class__.__name__} | {e}"
+                f"{e.__class__.__name__} | {e}",
+                exc_info=True,
             )
 
     @property
     def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
         """The addresses this listener is currently bound to.
 
-        Empty before `bind()` and after `stop()`/`close()`. Asking the socket
-        rather than repeating `self._listen` is the point: binding port 0 gives
-        an ephemeral port that only the socket knows, which is how a test or a
-        tool discovers where to send. Without this the only way to find out was
-        to reach into the private socket list, which the tests did in twenty-one
-        places.
+        Empty before `bind()` and after `stop()` has actually run -- which is
+        not necessarily when `stop()` returns; see the note on `stop()` about
+        being called from the handler worker. Asking the socket rather than
+        repeating `self._listen` is the point: binding port 0 gives an ephemeral
+        port that only the socket knows, which is how a test or a tool discovers
+        where to send. Without this the only way to find out was to reach into
+        the private socket list, which the tests did in twenty-one places.
         """
         addresses = []
         for sock in self._sockets:
@@ -788,7 +1160,13 @@ class AsyncDhcpListener:
         pass
 
     def bind(self) -> None:
-        _bind_sockets(self._listen, self._sockets, self._pktinfo, label="async")
+        _bind_sockets(
+            self._listen,
+            self._sockets,
+            self._pktinfo,
+            label="async",
+            reuse_address=self.REUSE_ADDRESS,
+        )
 
     async def wait(self) -> None:
         """Block until `stop()` is called.
