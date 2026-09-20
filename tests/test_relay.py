@@ -329,9 +329,11 @@ def test_pending_clients_map_is_bounded_and_evicts_oldest_first():
         relay.handle(msg, _context(client_port=40000 + xid))
 
     assert len(relay._pending_clients) == 4
-    # Oldest evicted, most recent four kept, insertion order preserved.
-    assert list(relay._pending_clients) == [6, 7, 8, 9]
-    assert relay._pending_clients[9].client.port == 40009
+    # Oldest evicted, most recent four kept, insertion order preserved. The key
+    # is (xid, chaddr): an xid alone is not an identity, since it is readable
+    # from any broadcast DISCOVER on the segment.
+    assert [xid for xid, _chaddr in relay._pending_clients] == [6, 7, 8, 9]
+    assert relay._pending_clients[(9, CHADDR)].client.port == 40009
 
 
 def test_reply_for_an_evicted_xid_falls_back_to_the_well_known_client_port():
@@ -493,6 +495,113 @@ def test_pending_map_records_the_ingress_interface():
 
     relay.handle(_discover(), context)
 
-    pending = relay._pending_clients[0x12345678]
+    pending = relay._pending_clients[(0x12345678, CHADDR)]
     assert pending.ifindex == 4
     assert pending.local_ip == IPv4("10.0.0.1")
+
+
+# --- reply routing must survive a client that reuses someone else's xid ---
+
+
+def _client_context(client_ip: str, client_port: int) -> RequestContext:
+    return RequestContext(
+        transport=Mock(),
+        interface=NetworkInterface(
+            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
+        ),
+        client=SocketAddress(client_ip, client_port),
+        client_mac=CHADDR,
+    )
+
+
+def test_a_reused_xid_cannot_redirect_another_clients_reply():
+    """The xid is cleartext in a broadcast DISCOVER, so it is not an identity.
+
+    Keyed by xid alone, a second request carrying the victim's xid overwrote the
+    entry and the relay then sent the victim's OFFER to the attacker's port -- a
+    targeted denial of lease acquisition for any host on the segment.
+    """
+    relay = DhcpRelay(server_addresses=["10.0.0.2"])
+
+    victim = _discover()
+    victim.xid = 0xAAAA
+    relay.handle(victim, _client_context("10.0.0.50", 40001))
+
+    attacker = _discover()
+    attacker.xid = 0xAAAA
+    attacker.chaddr = b"\xaa\xbb\xcc\xdd\xee\xff"
+    relay.handle(attacker, _client_context("10.0.0.66", 5353))
+
+    context = _server_context(server_ip="10.0.0.2")
+    reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.50")
+    reply.xid = 0xAAAA
+    relay.handle(reply, context)
+
+    _data, _dest, port, _mac = context.transport.send.call_args.args
+    assert port == 40001, "the victim's reply was redirected to the attacker"
+
+
+def test_every_configured_server_reply_reaches_the_tracked_port():
+    """Popping the entry on the first reply lost the port for the rest.
+
+    With two servers configured the second reply fell back to 68, so which reply
+    actually reached a client on another port depended on which server answered
+    first.
+    """
+    relay = DhcpRelay(server_addresses=["10.0.0.2", "10.0.0.3"])
+    request = _discover()
+    request.xid = 0xBBBB
+    relay.handle(request, _client_context("10.0.0.50", 40002))
+
+    ports = []
+    for server in ("10.0.0.2", "10.0.0.3"):
+        context = _server_context(server_ip=server)
+        reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.50")
+        reply.xid = 0xBBBB
+        relay.handle(reply, context)
+        _data, _dest, port, _mac = context.transport.send.call_args.args
+        ports.append(port)
+
+    assert ports == [40002, 40002], ports
+
+
+def test_a_client_on_the_standard_port_is_still_tracked():
+    """Skipping port 68 would have regressed the reply egress interface.
+
+    It is tempting -- 68 is the fallback, so the *port* needs no entry. But the
+    entry also carries the ingress interface, and that is what pins the reply
+    back onto the client's segment on a wildcard bind; without it every ordinary
+    client's reply goes out the default route instead.
+    """
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    context = RequestContext(
+        transport=Mock(),
+        interface=NetworkInterface(
+            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
+        ),
+        client=SocketAddress("10.0.0.50", 68),
+        client_mac=CHADDR,
+        ifindex=7,
+        local_ip=IPv4("10.0.0.1"),
+    )
+
+    relay.handle(_discover(), context)
+
+    pending = relay._pending_clients[(0x12345678, CHADDR)]
+    assert pending.ifindex == 7
+    assert pending.local_ip == IPv4("10.0.0.1")
+
+
+def test_pending_entries_expire_rather_than_accumulate():
+    """Entries are kept for further replies, so something else must remove them."""
+    import time
+
+    relay = DhcpRelay(server_addresses=["10.0.0.2"])
+    relay.PENDING_TTL_SECONDS = 0.0  # everything is immediately stale
+
+    request = _discover()
+    request.xid = 0xCCCC
+    relay.handle(request, _client_context("10.0.0.50", 40003))
+
+    relay._expire_pending(time.monotonic())
+    assert dict(relay._pending_clients) == {}

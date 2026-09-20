@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging as _logging
+import time as _time
 import typing as _ty
 
 from .packet.message import DhcpMessage
@@ -34,6 +35,9 @@ class PendingClient(_ty.NamedTuple):
     client: _net.SocketAddress
     ifindex: _ty.Optional[int] = None
     local_ip: _ty.Optional[_net.IPv4] = None
+    #: When it was recorded, so a stale entry ages out instead of being popped
+    #: by whichever reply happens to arrive first.
+    recorded_at: float = 0.0
 
 
 def _normalize_server_address(address: ServerAddress) -> tuple[_net.IPv4, int]:
@@ -65,6 +69,12 @@ class DhcpRelay(_Base):
     #: Upper bound on in-flight `xid -> client address` entries.
     MAX_PENDING_CLIENTS = 1024
 
+    #: How long a recorded client stays usable. An exchange is over in seconds,
+    #: so this only has to outlive a retransmit; entries are kept rather than
+    #: popped on the first reply, because several configured servers each send
+    #: one and they all go to the same client.
+    PENDING_TTL_SECONDS = 60.0
+
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -93,7 +103,9 @@ class DhcpRelay(_Base):
         self.remote_id = remote_id
         self.trust_client_relay_agent_info = trust_client_relay_agent_info
         self._server_ips = {ip for ip, _port in self.server_addresses}
-        self._pending_clients: _ty.OrderedDict[int, PendingClient] = _ty.OrderedDict()
+        self._pending_clients: _ty.OrderedDict[tuple[int, bytes], PendingClient] = (
+            _ty.OrderedDict()
+        )
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         if msg.op == _enum.OpCode.BOOTREQUEST:
@@ -185,12 +197,7 @@ class DhcpRelay(_Base):
         if forwarded.giaddr == _net.WILDCARD_IPv4:
             forwarded.giaddr = _ty.cast(_net.IPv4, context.interface.ip)
 
-        self._pending_clients[msg.xid] = PendingClient(
-            context.client, context.ifindex, context.local_ip
-        )
-        self._pending_clients.move_to_end(msg.xid)
-        while len(self._pending_clients) > self.MAX_PENDING_CLIENTS:
-            self._pending_clients.popitem(last=False)
+        self._record_pending(msg, context)
         self._insert_relay_agent_info(forwarded)
 
         data = self._encode_for_forward(forwarded)
@@ -222,6 +229,68 @@ class DhcpRelay(_Base):
                 _type.RelayAgentInformation(suboptions)
             )
 
+    def _pending_key(self, msg: DhcpMessage) -> tuple[int, bytes]:
+        """Identify an exchange by transaction *and* client.
+
+        The xid alone is not an identity: it travels in cleartext in a broadcast
+        DISCOVER, so any host on the segment can read it and send its own
+        request carrying the same one. Keyed by xid alone, that overwrote the
+        victim's entry and the relay then sent the victim's OFFER to the
+        attacker's port -- the victim never saw it.
+        """
+        return msg.xid, bytes(msg.chaddr[: msg.hlen or len(msg.chaddr)])
+
+    def _record_pending(self, msg: DhcpMessage, context: RequestContext) -> None:
+        """Note where a reply for this exchange has to go.
+
+        Recorded for every client, including one on the standard port 68. It is
+        tempting to skip those, since 68 is the fallback anyway -- but the entry
+        also carries the ingress interface, and that is what pins the reply back
+        onto the client's segment on a wildcard bind. Skipping it would send
+        every ordinary client's reply out the default route instead.
+
+        An entry is never replaced by a request from a *different* source
+        address: that takeover is what this tracking has to survive.
+        """
+        key = self._pending_key(msg)
+        now = _time.monotonic()
+        existing = self._pending_clients.get(key)
+        if (
+            existing is not None
+            and existing.client.ip != context.client.ip
+            and now - existing.recorded_at < self.PENDING_TTL_SECONDS
+        ):
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] Ignoring a request from {context.client} that "
+                f"reuses the transaction of {existing.client}"
+            )
+            return
+        self._pending_clients[key] = PendingClient(
+            context.client, context.ifindex, context.local_ip, now
+        )
+        self._pending_clients.move_to_end(key)
+        self._expire_pending(now)
+
+    def _lookup_pending(self, msg: DhcpMessage) -> _ty.Optional[PendingClient]:
+        """Find where this reply goes, leaving the entry for any further ones.
+
+        Popping on the first reply meant that with more than one server
+        configured, the second server's reply had lost the tracked port and fell
+        back to 68 -- so which reply reached the client depended on which server
+        answered first.
+        """
+        now = _time.monotonic()
+        self._expire_pending(now)
+        return self._pending_clients.get(self._pending_key(msg))
+
+    def _expire_pending(self, now: float) -> None:
+        """Drop entries past their TTL, then anything over the cap."""
+        for key in list(self._pending_clients):
+            if now - self._pending_clients[key].recorded_at >= self.PENDING_TTL_SECONDS:
+                del self._pending_clients[key]
+        while len(self._pending_clients) > self.MAX_PENDING_CLIENTS:
+            self._pending_clients.popitem(last=False)
+
     def _forward_to_client(self, msg: DhcpMessage, context: RequestContext) -> None:
         if context.client.ip not in self._server_ips:
             # Anything that can reach this relay's port 67 could otherwise have a
@@ -236,7 +305,7 @@ class DhcpRelay(_Base):
             self.metrics.packets_dropped_untrusted += 1
             return
 
-        pending = self._pending_clients.pop(msg.xid, None)
+        pending = self._lookup_pending(msg)
         client_port = (
             pending.client.port if pending is not None else int(_enum.DhcpPort.CLIENT)
         )
