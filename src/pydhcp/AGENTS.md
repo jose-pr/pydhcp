@@ -156,11 +156,20 @@ client build helpers below to keep the exchange unicast.
     `parameter_request_list` are added to every builder that accepts them.
   - `.send(message, destination=IPv4("255.255.255.255"),
     port=DhcpPort.SERVER) -> int` — binds lazily on first call, sends via a
-    fresh `UdpTransport`, and tracks the message's `xid` in
-    `self._pending_xids` so `.handle()` only queues matching replies.
+    fresh `UdpTransport`, and tracks the message's `(xid, chaddr)` in
+    `self._pending_keys` so `.handle()` only queues matching replies. A reply
+    carrying a seen `xid` but another client's `chaddr` is ignored — the xid
+    is in cleartext in a broadcast DISCOVER, so anyone on the segment can
+    read one (same key as `DhcpRelay._pending_key`).
   - `.discover_offer(chaddr, *, timeout=2.0, retries=2, destination=...,
     port=..., **discover_kwargs) -> DhcpMessage | None` — broadcasts
     DHCPDISCOVER (with retries) and returns the first DHCPOFFER, or `None`.
+    **`timeout` is the *initial* retransmission interval, not a fixed one**:
+    each retransmission waits roughly twice as long as the last, randomized,
+    capped at `RETRANSMIT_MAX_INTERVAL` (RFC 2131 §4.1). With the defaults the
+    call is bounded at about 2+4+8 s rather than 3×2 s. Each transmission
+    carries a real `secs` — seconds since the exchange began (§2) — which was
+    previously hardcoded to 0.
   - `.dora(chaddr, *, timeout=2.0, retries=2, destination=..., port=...,
     broadcast=True, **discover_kwargs) -> DhcpMessage | None` — full
     DISCOVER→OFFER→REQUEST→ACK exchange; returns the DHCPACK or `None`.
@@ -169,15 +178,27 @@ client build helpers below to keep the exchange unicast.
     and §4.4.1 require the same values in every subsequent message, and the
     identifier is what the server keys the lease on. Returns `None` (with a
     warning) if the OFFER carries no `SERVER_IDENTIFIER`, since a SELECTING
-    REQUEST must echo it (§4.3.2).
+    REQUEST must echo it (§4.3.2). `secs` counts from the DISCOVER across both
+    halves — §2 defines it as time since *acquisition* began, so the REQUEST
+    does not restart the clock.
   - `.next_reply(timeout=None) -> tuple[DhcpMessage, RequestContext] | None`
     / `.drain_replies() -> list[...]` — pull queued BOOTREPLY messages.
+    A reply belonging to an exchange currently running in
+    `.discover_offer()`/`.dora()` goes to that exchange and does **not** reach
+    these; everything else accepted does. That routing is what lets two
+    exchanges with different `chaddr`s run concurrently on one client without
+    consuming each other's replies.
   - `.on_reply(msg, context) -> None` — override hook called after a
     BOOTREPLY is accepted and queued (no-op by default).
   - **`MAX_QUEUED_REPLIES`** (class var, 1024) — cap on undrained replies. An
     idle client (nothing sent yet) accepts every BOOTREPLY on the segment, so
     that `start()` + `.on_reply()` works as an observer; past the cap the
     oldest is discarded and counted in `metrics.replies_dropped_overflow`.
+  - **`RETRANSMIT_MAX_INTERVAL`** (64.0) and
+    **`RETRANSMIT_JITTER_SECONDS`** (1.0), class vars — RFC 2131 §4.1's ceiling
+    and randomization amplitude. The jitter is the smaller of this and a
+    quarter of the interval, so a sub-second `timeout` in a test cannot be
+    jittered negative.
 
 **Gotcha**: `.dora()`/`.discover_offer()` require the listener's receive loop
 to actually be running (`client.start()`) — replies only reach the internal
