@@ -32,9 +32,20 @@ def _strip_hex_text(value: str) -> str:
 
 
 def _enum_name(value: _ty.Any) -> _ty.Any:
+    """Name an enum value for structured output, or fall back to its number.
+
+    `.name` is None for a value with no member -- an OPTION_OVERLOAD of 4, say,
+    or any flag combination the enum does not spell. Emitting that put a null
+    where a string belongs and the document would not load back.
+    """
     if isinstance(value, _enum_base.Enum):
-        return value.name
+        return value.name if value.name is not None else _enum_value_of(value)
     return value
+
+
+def _enum_value_of(value: _ty.Any) -> _ty.Any:
+    inner = getattr(value, "value", value)
+    return int(inner) if isinstance(inner, int) else inner
 
 
 def _coerce_enum_value(enum_type: type[_ty.Any], value: _ty.Any) -> _ty.Any:
@@ -172,23 +183,47 @@ class DhcpMessage:
     options: DhcpOptions
     """Optional parameters field."""
 
+    #: Key marking an option written as raw hex because its decoded form does
+    #: not reproduce the original octets. Round-trips through JSON, YAML, TOML
+    #: and INI alike, and `from_mapping` reads it back.
+    HEX_VALUE_KEY: _ty.ClassVar[str] = "hex"
+
     def to_mapping(self) -> dict[str, _ty.Any]:
         options: dict[str, _ty.Any] = {}
         for code, value in self.options._options.items():
             try:
                 code_obj = self.options._codemap.from_code(code)
-                key = code_obj.label()
+                # The numeric code when there is no name. `label()` answers
+                # "UNKNOWN" for every unnamed code, so two of them collided on
+                # one key and the document then failed to load on int("UNKNOWN").
+                key = (
+                    code_obj.label()
+                    if getattr(code_obj, "_name_", None) is not None
+                    else str(int(code))
+                )
                 option_type = code_obj.get_type()
                 decoded = option_type._dhcp_decode(value)
-                option_value = (
+                option_value = _enum_name(
                     decoded.__json__()
                     if isinstance(decoded, _type.DhcpOptionType)
                     else decoded
                 )
+                if not self._survives_round_trip(code, option_value, value):
+                    # The readable form would come back as different octets --
+                    # text holding a byte that is not valid UTF-8, a payload the
+                    # codec normalizes, a length the codec does not preserve.
+                    # Better an opaque value that reloads exactly than a pretty
+                    # one that silently does not.
+                    option_value = {self.HEX_VALUE_KEY: bytes(value).hex()}
             except Exception:
+                # Also the self-describing form, not a bare hex string: a bare
+                # one is ambiguous for a numeric option. A 2-octet
+                # IP_ADDRESS_LEASE_TIME was emitted as "1234" and read back as
+                # the decimal 1234, so the reloaded packet carried 000004d2 --
+                # different octets, no error.
                 key = str(code)
-                option_value = _type.Bytes(value).__json__()
-            options[key] = _enum_name(option_value)
+                option_value = {self.HEX_VALUE_KEY: bytes(value).hex()}
+            options[key] = option_value
 
         return {
             "op": self.op.name,
@@ -213,6 +248,25 @@ class DhcpMessage:
             "options": options,
         }
 
+    def _survives_round_trip(
+        self, code: int, option_value: _ty.Any, original: _ty.Any
+    ) -> bool:
+        """Whether loading `option_value` back yields the original octets.
+
+        Goes through a `DhcpOptions` keyed by the *real* code and the same
+        codemap, because that is the path `from_mapping` takes. Probing under a
+        different code silently measures a different codec -- code 0 is `PAD`,
+        which is unregistered and falls back to `Bytes`, so everything looked
+        lossy and every option came out as hex.
+        """
+        try:
+            option_type = self.options._codemap.from_code(code).get_type()
+            probe = DhcpOptions(codemap=self.options._codemap)
+            probe[code] = _coerce_option_value(option_type, option_value)
+            return bytes(probe.get(code, decode=False) or b"") == bytes(original)
+        except Exception:
+            return False
+
     @classmethod
     def from_mapping(cls, data: _ty.Mapping[str, _ty.Any]) -> "DhcpMessage":
         options = DhcpOptions()
@@ -222,6 +276,13 @@ class DhcpMessage:
 
         for raw_code, raw_value in raw_options.items():
             code = _coerce_option_code(raw_code, options._codemap)
+            if isinstance(raw_value, _ty.Mapping) and set(raw_value) == {
+                cls.HEX_VALUE_KEY
+            }:
+                options[code] = bytearray.fromhex(
+                    _strip_hex_text(str(raw_value[cls.HEX_VALUE_KEY]))
+                )
+                continue
             try:
                 code_obj = options._codemap.from_code(code)
                 option_type = code_obj.get_type()

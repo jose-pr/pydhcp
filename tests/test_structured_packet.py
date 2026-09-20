@@ -66,3 +66,108 @@ def test_toml_encode_without_writer_reports_not_implemented(monkeypatch) -> None
 
     with pytest.raises(NotImplementedError, match="INI format as a stdlib fallback"):
         dump_message(packet, "toml")
+
+
+# --- the structured round trip must not change the packet ---
+
+
+def _message_with_option(code, payload):
+    from datetime import timedelta
+
+    from pydhcp.network import IPv4
+    from pydhcp.options import DhcpOptionCode, DhcpOptions
+    from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+    from pydhcp.packet.message import DhcpMessage
+
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    options[code] = bytearray(payload)
+    return DhcpMessage(
+        op=OpCode.BOOTREQUEST,
+        htype=HardwareAddressType.ETHERNET,
+        hlen=6,
+        hops=0,
+        xid=0x1234,
+        secs=timedelta(0),
+        flags=Flags.UNICAST,
+        ciaddr=IPv4("0.0.0.0"),
+        yiaddr=IPv4("0.0.0.0"),
+        siaddr=IPv4("0.0.0.0"),
+        giaddr=IPv4("0.0.0.0"),
+        chaddr=b"\x00\x11\x22\x33\x44\x55",
+        sname="",
+        file="",
+        options=options,
+    )
+
+
+def _require_format(fmt):
+    """`toml` and `ini` are written by the optional `toml` extra."""
+    if fmt in ("toml", "ini"):
+        pytest.importorskip("tomli_w")
+
+
+@pytest.mark.parametrize("fmt", ["json", "yaml", "toml", "ini"])
+@pytest.mark.parametrize(
+    "code,payload,why",
+    [
+        (12, bytes.fromhex("6162ff6364"), "text holding a non-UTF-8 octet"),
+        (60, bytes.fromhex("00000de9fffe"), "a binary vendor class identifier"),
+        (52, bytes([4]), "an OPTION_OVERLOAD value with no enum member"),
+        (51, bytes.fromhex("1234"), "a lease time of the wrong length"),
+        (57, bytes.fromhex("05dc"), "an ordinary U16 option"),
+        (224, bytes.fromhex("0102"), "a site-specific code with no name"),
+    ],
+)
+def test_structured_round_trip_preserves_option_octets(code, payload, why, fmt):
+    """Whatever the text form, reloading must give back the same packet.
+
+    Before: a non-UTF-8 hostname came back with U+FFFD in it, a 2-octet lease
+    time was written as "1234" and reloaded as the decimal 1234 (four different
+    octets), and an unnamed code was written under the key "UNKNOWN" -- which
+    every other unnamed code shared, and which then failed on int("UNKNOWN").
+    """
+    from pydhcp.options import DhcpOptionCode
+    from pydhcp.packet.structured import dump_message, load_message
+
+    _require_format(fmt)
+    original = _message_with_option(code, payload)
+    reloaded = load_message(dump_message(original, fmt), fmt)
+
+    got = bytes(reloaded.options.get(DhcpOptionCode(code), decode=False) or b"")
+    assert got == payload, f"{why}: {got.hex()} != {payload.hex()}"
+
+
+@pytest.mark.parametrize("fmt", ["json", "yaml", "toml", "ini"])
+def test_integer_options_serialize_as_plain_integers(fmt):
+    """`__json__` returned the U16/U32 subclass, not an int.
+
+    JSON tolerates an int subclass; YAML refuses to represent it and TOML wrote
+    something it could not read back -- so any packet carrying option 57 or 51,
+    which is most real packets, could not round-trip through either.
+    """
+    from pydhcp.options import DhcpOptionCode
+    from pydhcp.packet.structured import dump_message, load_message
+
+    _require_format(fmt)
+    original = _message_with_option(57, bytes.fromhex("05dc"))
+    mapping = original.to_mapping()
+    assert type(mapping["options"]["MAXIMUM_DHCP_MESSAGE_SIZE"]) is int
+
+    reloaded = load_message(dump_message(original, fmt), fmt)
+    assert bytes(
+        reloaded.options.get(DhcpOptionCode(57), decode=False)
+    ) == bytes.fromhex("05dc")
+
+
+def test_unnamed_option_codes_do_not_collide_on_one_key():
+    """Every code without a name used to serialize as "UNKNOWN"."""
+    from pydhcp.options import DhcpOptionCode, DhcpOptions
+
+    message = _message_with_option(224, bytes.fromhex("0102"))
+    message.options[225] = bytearray(bytes.fromhex("0304"))
+
+    keys = set(message.to_mapping()["options"])
+
+    assert "224" in keys and "225" in keys
+    assert "UNKNOWN" not in keys

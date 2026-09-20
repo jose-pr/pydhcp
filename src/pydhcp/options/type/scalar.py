@@ -245,6 +245,17 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
     def __repr__(self) -> str:
         return f"{type(self).__name__}({int(self)!r})"
 
+    def __json__(self) -> int:
+        """A plain `int`, not this subclass.
+
+        The base `__json__` returns `self`, and `self` is a `U16`/`U32`. JSON
+        tolerates an int subclass; YAML refuses to represent it and TOML writes
+        something it cannot read back, so a packet carrying any integer option
+        -- which is most real packets, via option 57 or 51 -- could not survive
+        a round trip through either.
+        """
+        return int(self)
+
 
 class FixedLengthInteger(BaseFixedLengthInteger):
     def __new__(cls, val: _ty.Any) -> Self:
