@@ -558,6 +558,29 @@ class DhcpServer(_Base):
         resp.op = _enum.OpCode.BOOTREPLY
         resp.hops = 0
         resp.secs = _dt.timedelta(seconds=0)
+        # The reply is cloned from the request, so every header field not
+        # overwritten below is still the client's. RFC 2131 Table 3 says what a
+        # reply carries, and three of these were the sender's to choose:
+        #
+        #   siaddr  the *next bootstrap server*, which is the server's to name.
+        #           Echoing it let a client nominate its own next-server and get
+        #           the answer back stamped with the server's identifier.
+        #   sname   ditto, as text: an OFFER came back carrying whatever host
+        #           name the client had put in the request.
+        #   file    the boot file name, same problem -- and this is the pair a
+        #           PXE client acts on.
+        #
+        # giaddr is deliberately *not* reset: Table 3 says a reply echoes it,
+        # and it is what lets the relay route the answer back to the segment the
+        # request came from. Clearing it would strand every relayed client.
+        resp.siaddr = _net.WILDCARD_IPv4
+        resp.sname = ""
+        resp.file = ""
+        if resp_ty is _enum.DhcpMessageType.DHCPOFFER:
+            # Table 3: ciaddr is 0 in a DHCPOFFER. In a DHCPACK it is the
+            # ciaddr from the DHCPREQUEST, so the clone is right there and this
+            # must not be widened to cover both.
+            resp.ciaddr = _net.WILDCARD_IPv4
         if resp_ty is _enum.DhcpMessageType.DHCPNAK:
             # RFC 2131 Table 3: a DHCPNAK carries no address and no lease time --
             # it refuses the client's. Cloning the request left ciaddr set and
