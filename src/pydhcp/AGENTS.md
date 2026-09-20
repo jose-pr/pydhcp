@@ -187,15 +187,28 @@ that's never started will always time out waiting for a reply.
 
 **Gotcha**: a relay reply must not assume the client listens on well-known
 port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
-`DhcpRelay` tracks `xid -> original client SocketAddress` in
-`self._pending_clients` (populated on forward, consumed on reply) so clients
-on non-standard ports still get routed correctly; falls back to port 68 if
-the xid was never observed by this relay instance. That map is bounded at
-`DhcpRelay.MAX_PENDING_CLIENTS` (1024) entries, oldest evicted first, so xids
-whose replies never arrive cannot grow it without limit; an evicted entry only
-costs the port-68 fallback, which is where a real client listens anyway. Raise
-the class attribute if a deployment genuinely has more than 1024 exchanges in
-flight at once.
+`DhcpRelay` tracks `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
+recorded on forward and read on reply, so clients on non-standard ports still
+get routed correctly; it falls back to port 68 when the exchange was never
+observed by this relay instance.
+
+- **Keyed by client as well as transaction.** An xid alone is not an identity:
+  it is cleartext in a broadcast DISCOVER, so any host on the segment can read
+  one and send its own request carrying it. Keyed by xid alone that overwrote
+  the victim's entry and the reply went to the attacker's port. An entry is
+  also never replaced by a request from a *different* source address.
+- **Read, not consumed.** Every configured server sends its own reply, and they
+  all belong to the same client, so the entry stays until
+  `DhcpRelay.PENDING_TTL_SECONDS` (60) rather than being popped by whichever
+  arrives first.
+- **The entry is not only a port.** It also carries the ingress interface
+  (`ifindex`/`local_ip`), which is what pins the reply back onto the client's
+  segment on a wildcard bind — so a client on port 68 is recorded too, even
+  though its port needs no lookup.
+- Bounded at `DhcpRelay.MAX_PENDING_CLIENTS` (1024), oldest evicted first, so
+  exchanges whose replies never arrive cannot grow it without limit. An evicted
+  entry costs the port-68 fallback and the interface pin. Raise either class
+  attribute for a deployment with more exchanges genuinely in flight.
 
 ## Capture (`capture.py`)
 
