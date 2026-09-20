@@ -170,7 +170,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Removed the stale `pydhcp packet --encode` CLI flag and replaced it with a real packet encoding
   mode backed by structured packet helpers.
 
-## [0.2.1-rc.1] - 2026-07-12
+## 0.2.1-rc.1 - 2026-07-12
 
 ### Added
 - Expanded DHCP option-type registrations so common well-defined options decode to typed values.
@@ -183,7 +183,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Made `DhcpMessage.encode()` idempotent and tolerant of reserved flag bits during decode.
 - Corrected `DhcpMessage.dumps()` field labels and `secs` packing behavior.
 
-## [0.2.0] - 2026-07-12
+## 0.2.0 - 2026-07-12
 
 ### Added
 - Created `benchmarks/bench_parse.py` packet parsing and serialization performance benchmarks.
@@ -224,7 +224,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Fixed options encoding `OverflowError` when option size limit is infinite.
 - Fixed `BaseDhcpOptionCode.__int__` returning constant zero, correcting enum integer conversion for option codes.
 
-## [0.1.0] - 2026-07-11
+## 0.1.0 - 2026-07-11
 
 ### Added
 
@@ -236,7 +236,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 [0.5.0]: https://github.com/jose-pr/pydhcp/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/jose-pr/pydhcp/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/jose-pr/pydhcp/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/jose-pr/pydhcp/compare/v0.2.1-rc.1...v0.3.0
-[0.2.1-rc.1]: https://github.com/jose-pr/pydhcp/compare/v0.2.0...v0.2.1-rc.1
-[0.2.0]: https://github.com/jose-pr/pydhcp/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/jose-pr/pydhcp/releases/tag/v0.1.0
+[0.3.0]: https://github.com/jose-pr/pydhcp/compare/5d1f19e7bac784c926966eaf8561a3c588b2f5f2...v0.3.0
