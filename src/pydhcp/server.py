@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy as _copy
+import math as _math
 import socket as _socket
 from .packet.message import DhcpMessage, NoClientIdentity
 from .listener import DhcpListener as _Base, ListenSpec, RequestContext
@@ -188,6 +189,27 @@ class DhcpServer(_Base):
         if value == _const.INFINITE_LEASE_TIME:
             return _inf if self.ALLOW_INFINITE_LEASE else float(self.MAX_LEASE_SECONDS)
         return float(max(self.MIN_LEASE_SECONDS, min(value, self.MAX_LEASE_SECONDS)))
+
+    @staticmethod
+    def _has_time_left(lease: DhcpLease) -> bool:
+        """Whether `lease` still has a lease time worth advertising.
+
+        `_create_response` sets yiaddr and option 51 only when the remaining
+        time is positive, but sent the reply either way -- so a lease that had
+        expired within the second produced a DHCPACK carrying neither an address
+        nor a lease time. RFC 2131 Table 3 makes option 51 a MUST in an ACK to a
+        REQUEST; clients either reject that reply or configure 0.0.0.0.
+
+        `lease_seconds` enforces MIN_LEASE_SECONDS, so the base server cannot
+        reach this. An overriding `acquire_lease` can, which is exactly why the
+        check lives on the reply path rather than in the allocator.
+        """
+        expires = lease.expires
+        if expires is None:
+            return False
+        if expires == _inf or not isinstance(expires, _dt.datetime):
+            return True
+        return (expires - _dt.datetime.now()).total_seconds() > 0
 
     def _probe_lease(
         self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
@@ -428,7 +450,7 @@ class DhcpServer(_Base):
         # A DISCOVER is a probe, so it may look and reserve but must not extend
         # an existing binding -- see `_NonExtendingBackend`.
         lease = self._probe_lease(client_id, actual_server_id, msg)
-        if not lease:
+        if not lease or not self._has_time_left(lease):
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
             )
@@ -479,7 +501,7 @@ class DhcpServer(_Base):
         )
         if not ip_req:
             ip_req = msg.ciaddr
-        if ip_req == lease.ip:
+        if ip_req == lease.ip and self._has_time_left(lease):
             resp_ty = _enum.DhcpMessageType.DHCPACK
             # Only now is anything agreed, so this is where the lease time the
             # ACK advertises is actually committed.
@@ -487,6 +509,9 @@ class DhcpServer(_Base):
             if committed is not None:
                 lease = committed
         else:
+            # A lease with no time left NAKs rather than ACKing nothing: the
+            # client is told to start over, which is recoverable, instead of
+            # being handed an ACK with no address in it.
             resp_ty = _enum.DhcpMessageType.DHCPNAK
         resp = self._create_response(msg, lease, actual_server_id, resp_ty)
         self._filter_and_send(msg, resp, context, resp_ty)
@@ -599,7 +624,11 @@ class DhcpServer(_Base):
             ):
                 expires = _const.INFINITE_LEASE_TIME
             else:
-                expires = int((lease.expires - _dt.datetime.now()).total_seconds())
+                # Round up, not down. Truncating sent a 3600-second lease as
+                # 3599 -- a different number than the one granted, every time.
+                expires = _math.ceil(
+                    (lease.expires - _dt.datetime.now()).total_seconds()
+                )
                 expires = min(expires, _const.INFINITE_LEASE_TIME)
             if expires > 0:
                 resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = expires
@@ -680,6 +709,27 @@ class DhcpServer(_Base):
             if max_size_opt is not None
             else _const.DHCP_MIN_LEGAL_PACKET_SIZE
         )
+        if max_size < _const.DHCP_MIN_LEGAL_PACKET_SIZE:
+            # RFC 2132 s9.10 sets 576 as the minimum legal value of option 57.
+            # Below 268 `encode` raises outright, so a client advertising 200
+            # got no reply at all and every such packet logged an error with no
+            # XID -- log spam driven from the network. Between 268 and 575 it
+            # succeeds but overloads sname/file for no reason.
+            #
+            # Debug, not warning: the value is the client's to choose and a
+            # wrong one is not this server's error, while a warning here is
+            # attacker-drivable -- the same trap the per-packet unknown-htype
+            # warning fell into.
+            LOGGER.debug(
+                f"[XID={msg.xid:08x}] Client advertised a maximum message size of "
+                f"{max_size}, below the RFC 2132 minimum of "
+                f"{_const.DHCP_MIN_LEGAL_PACKET_SIZE}; using the minimum"
+            )
+            max_size = _const.DHCP_MIN_LEGAL_PACKET_SIZE
+        # No upper clamp: what the reply costs is decided by what this server
+        # has to say, not by the ceiling the client offers, so an inflated 57
+        # buys an attacker nothing and clamping it to a guessed MTU would break
+        # a jumbo-frame segment that legitimately asked for more.
         data = resp.encode(max_size)
 
         dest: _net.IPv4
