@@ -16,6 +16,8 @@ class DhcpMetrics:
         "leases_allocated",
         "leases_renewed",
         "leases_released",
+        "leases_declined",
+        "releases_ignored",
         "packets_dropped_hop_limit",
         "packets_dropped_untrusted",
         "replies_dropped_overflow",
@@ -26,6 +28,15 @@ class DhcpMetrics:
     leases_allocated: int
     leases_renewed: int
     leases_released: int
+    #: DHCPDECLINEs. Counted apart from releases because they mean the
+    #: opposite: the client found the address already in use, which is an
+    #: address-conflict signal an operator needs to see, and folding it into
+    #: `leases_released` made a conflict storm look like orderly shutdowns.
+    leases_declined: int
+    #: DHCPRELEASEs refused because the address named did not match the stored
+    #: binding. Visible so "nobody is releasing" reads differently from
+    #: "somebody is releasing addresses they do not hold".
+    releases_ignored: int
     packets_dropped_hop_limit: int
     packets_dropped_untrusted: int
     #: Replies discarded because the client's reply queue was full.

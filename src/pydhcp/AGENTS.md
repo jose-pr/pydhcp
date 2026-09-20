@@ -107,8 +107,18 @@ client build helpers below to keep the exchange unicast.
     a finite 136-year lease. Override the method or the four attributes; this
     is the base allocator's policy only, so an `.acquire_lease()` override
     that builds its own lease is unaffected.
-  - `.release_lease(client_id, server_id, msg) -> None` — override point,
-    releases via the lease backend.
+  - `.release_lease(client_id, server_id, msg) -> bool` — override point,
+    releases via the lease backend; returns whether a binding actually went
+    away. It does **not** touch metrics: an orderly `DHCPRELEASE`, a
+    `DHCPDECLINE` reporting an address conflict, and a reclaim after the client
+    chose another server all arrive here, and only the caller knows which, so
+    the caller counts. An override that wants the counters moved should return
+    the bool faithfully rather than incrementing anything itself.
+  - `.handle_release()` releases only when the binding matches: RFC 2131 §4.4.6
+    puts the address being given up in `ciaddr`, and a `DHCPRELEASE` naming a
+    *different* address than the client holds is ignored and counted in
+    `releases_ignored`. Releasing on client identifier alone let a late or
+    duplicated RELEASE for an old address delete the client's current binding.
   - `.get_inform_options(server_id, msg) -> DhcpOptions` — override point for
     DHCPINFORM-only option sets (no address allocated). Same default set, and
     the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
@@ -319,8 +329,14 @@ IPv6-only interface can break at runtime.
     used to repeat the list, which is how one gets incremented but never
     reported.
   - Today: `packets_received`, `packets_sent`, `leases_allocated`,
-    `leases_renewed`, `leases_released`, `packets_dropped_hop_limit`,
-    `packets_dropped_untrusted`, `replies_dropped_overflow`.
+    `leases_renewed`, `leases_released`, `leases_declined`, `releases_ignored`,
+    `packets_dropped_hop_limit`, `packets_dropped_untrusted`,
+    `replies_dropped_overflow`.
+  - `leases_declined` counts `DHCPDECLINE`, which used to land in
+    `leases_released` though it means the opposite — the client found the
+    address already in use. An address-conflict storm read as orderly
+    shutdowns. `releases_ignored` counts releases refused for naming an address
+    the client does not hold.
 
 ## Constants (`constants.py`)
 

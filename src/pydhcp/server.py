@@ -190,6 +190,31 @@ class DhcpServer(_Base):
             return _inf if self.ALLOW_INFINITE_LEASE else float(self.MAX_LEASE_SECONDS)
         return float(max(self.MIN_LEASE_SECONDS, min(value, self.MAX_LEASE_SECONDS)))
 
+    def _is_our_server_id(
+        self, server_id: _net.IPv4, actual_server_id: _net.IPv4
+    ) -> bool:
+        """Whether option 54 names *this* server, on any of its addresses.
+
+        It used to be compared against the receiving interface alone, so on a
+        host with two addresses on one broadcast domain -- a secondary IP, or
+        two NICs on one VLAN, which is the Windows default binding and what
+        `per_interface=True` produces -- both sockets saw the client's broadcast
+        REQUEST. Socket A ACKed; socket B then read the same option 54 as a
+        *foreign* server and deleted the binding the client had just accepted,
+        freeing the address for someone else. Measured on a three-address host:
+        the binding was present after A and gone after B.
+
+        The lease backend is shared across every socket, so the comparison has
+        to be against every address this host holds, not the one the packet
+        happened to arrive on.
+        """
+        if server_id == actual_server_id:
+            return True
+        return any(
+            interface.ip == server_id
+            for interface in _net.host_ip_interfaces(family=None)
+        )
+
     @staticmethod
     def _has_time_left(lease: DhcpLease) -> bool:
         """Whether `lease` still has a lease time worth advertising.
@@ -354,15 +379,19 @@ class DhcpServer(_Base):
 
     def release_lease(
         self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
-    ) -> None:
-        """Release any lease associated with `client_id`.
+    ) -> bool:
+        """Release any lease associated with `client_id`; True if one went away.
 
         Override this method when lease release needs to update an external store
         or emit custom audit records. Quarantining a declined address is handled
         by `quarantine_address`, which `handle_decline` calls before this.
+
+        Counting is the *caller's* job, not this method's, because only the
+        caller knows why: an orderly DHCPRELEASE, a DHCPDECLINE reporting an
+        address conflict, and a reclaim after the client chose another server
+        are three different events that all arrive here.
         """
-        if self.lease_backend.release(client_id):
-            self.metrics.leases_released += 1
+        return self.lease_backend.release(client_id)
 
     def get_inform_options(self, server_id: _net.IPv4, msg: DhcpMessage) -> DhcpOptions:
         """Return configuration options for DHCPINFORM responses.
@@ -416,9 +445,14 @@ class DhcpServer(_Base):
         msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
 
-        if server_id is not None and server_id != actual_server_id:
+        if server_id is not None and not self._is_our_server_id(
+            server_id, actual_server_id
+        ):
             if msg_ty is _enum.DhcpMessageType.DHCPREQUEST:
-                self.release_lease(client_id, server_id, msg)
+                # The client selected a different server, so give the
+                # reservation back (RFC 2131 4.3.2).
+                if self.release_lease(client_id, server_id, msg):
+                    self.metrics.leases_released += 1
             else:
                 LOGGER.warning(
                     f"[XID={msg.xid:08x}] Received a message for {server_id} by {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -533,16 +567,37 @@ class DhcpServer(_Base):
             declined = existing.ip if existing is not None else None
         if declined is not None:
             self.quarantine_address(declined)
+        # Counted as a decline, not a release: the client found the address
+        # already in use, which is the opposite of an orderly hand-back. Both
+        # landing in `leases_released` made an address-conflict storm read as
+        # normal client shutdowns.
+        self.metrics.leases_declined += 1
         self.release_lease(client_id, actual_server_id, msg)
 
     def handle_release(self, msg: DhcpMessage, context: RequestContext) -> None:
-        """Handle DHCPRELEASE by releasing the client's lease through `release_lease`."""
+        """Handle DHCPRELEASE, but only for the address the client actually holds."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPRELEASE from {context.client}|{client_id}"
         )
-        self.release_lease(client_id, actual_server_id, msg)
+        # RFC 2131 4.4.6: the client puts the address being given up in ciaddr.
+        # Releasing on client identifier alone meant a late or duplicated
+        # RELEASE naming an *old* address deleted whatever binding that client
+        # holds now -- and the address then went to someone else while the
+        # client was still using it.
+        existing = self.lease_backend.lookup(client_id)
+        if existing is not None and msg.ciaddr != _net.WILDCARD_IPv4:
+            if existing.ip != msg.ciaddr:
+                LOGGER.warning(
+                    f"[XID={msg.xid:08x}] Ignoring DHCPRELEASE from "
+                    f"{context.client}|{client_id} for {msg.ciaddr}: it holds "
+                    f"{existing.ip}"
+                )
+                self.metrics.releases_ignored += 1
+                return
+        if self.release_lease(client_id, actual_server_id, msg):
+            self.metrics.leases_released += 1
 
     def handle_inform(self, msg: DhcpMessage, context: RequestContext) -> None:
         """Handle DHCPINFORM without requiring address allocation."""
