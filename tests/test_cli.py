@@ -351,7 +351,9 @@ def test_cmd_server(mock_dhcp_server_cls):
     cmd = Server(config=None, listen="127.0.0.1:6767")
     cmd()
 
-    mock_dhcp_server_cls.assert_called_with(listen="127.0.0.1:6767")
+    mock_dhcp_server_cls.assert_called_with(
+        listen="127.0.0.1:6767", per_interface=False
+    )
     assert mock_server.bind.called
     assert mock_server.listen.called
 
@@ -371,7 +373,7 @@ def test_cmd_relay(mock_dhcp_relay_cls):
 
     cmd = Relay(
         listen="127.0.0.1:6767",
-        server=["192.0.2.1", "192.0.2.2:6768"],
+        server=("192.0.2.1", "192.0.2.2:6768"),
         max_hops=10,
         insert_relay_agent_info=True,
         circuit_id="aabb",
@@ -386,6 +388,7 @@ def test_cmd_relay(mock_dhcp_relay_cls):
         insert_relay_agent_info=True,
         circuit_id=b"\xaa\xbb",
         remote_id=None,
+        per_interface=False,
     )
     assert mock_relay.bind.called
     assert mock_relay.listen.called
@@ -404,7 +407,139 @@ def test_app_parses_relay_subcommand() -> None:
     parser = App._parser_()
     instance = parser.parse_args(["relay", "--server", "192.0.2.1"])
     assert isinstance(instance, Relay)
-    assert instance.server == ["192.0.2.1"]
+    assert tuple(instance.server) == ("192.0.2.1",)
+
+
+def test_relay_server_default_is_not_shared_between_instances() -> None:
+    """`server` must not default to a mutable object owned by the class.
+
+    It used to be `[]`, so `a.server is b.server is Relay.server` and a single
+    `.append` rewrote the default that every parser built afterwards would hand
+    out. A tuple cannot be appended to at all.
+    """
+    a = Relay()
+    b = Relay()
+    assert a.server == () and b.server == ()
+
+    with pytest.raises(AttributeError):
+        a.server.append("192.0.2.1")
+
+    a.server = ("192.0.2.1",)
+    assert b.server == ()
+    assert Relay().server == ()
+
+
+@pytest.mark.parametrize(
+    "argv, expected",
+    [
+        ([], ()),
+        (["--server", "192.0.2.1"], ("192.0.2.1",)),
+        (["-s", "192.0.2.1", "-s", "192.0.2.2"], ("192.0.2.1", "192.0.2.2")),
+    ],
+)
+def test_relay_server_flag_collects_zero_one_or_many(argv, expected) -> None:
+    parser = App._parser_()
+    instance = parser.parse_args(["relay", *argv])
+    assert tuple(instance.server) == expected
+
+
+@pytest.mark.parametrize("subcommand", ["server", "relay", "capture"])
+def test_per_interface_is_reachable_from_every_listening_subcommand(
+    subcommand: str,
+) -> None:
+    """Both DhcpServer and DhcpRelay take `per_interface`; only capture exposed it.
+
+    A supported knob with no CLI route is unreachable -- and `--config` exists
+    only on `server`, so relay had no second route either.
+    """
+    parser = App._parser_()
+    instance = parser.parse_args([subcommand, "--per-interface"])
+    assert instance.per_interface is True
+    assert parser.parse_args([subcommand]).per_interface is False
+
+
+@patch("pydhcp.cli.DhcpServer")
+def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
+    Server(config=None, listen="127.0.0.1:6767", per_interface=True)()
+
+    mock_dhcp_server_cls.assert_called_with(listen="127.0.0.1:6767", per_interface=True)
+
+
+@patch("pydhcp.cli.DhcpRelay")
+def test_cmd_relay_forwards_per_interface(mock_dhcp_relay_cls) -> None:
+    Relay(server=("192.0.2.1",), per_interface=True)()
+
+    assert mock_dhcp_relay_cls.call_args.kwargs["per_interface"] is True
+
+
+@pytest.mark.parametrize(
+    "flag, value",
+    [("circuit_id", "0a01"), ("remote_id", "0b02")],
+)
+@patch("pydhcp.cli.DhcpRelay")
+def test_relay_rejects_ids_without_insert_flag(
+    mock_dhcp_relay_cls, flag: str, value: str
+) -> None:
+    """The help text promised this; nothing enforced it.
+
+    `_insert_relay_agent_info` returns early when the flag is off, so the ids
+    were silently discarded and upstream servers saw no option 82.
+    """
+    cmd = Relay(server=("192.0.2.1",), **{flag: value})
+    with pytest.raises(ValueError) as error:
+        cmd()
+
+    message = str(error.value)
+    assert f"--{flag.replace('_', '-')}" in message
+    assert "--insert-relay-agent-info" in message
+    assert not mock_dhcp_relay_cls.called
+
+
+@patch("pydhcp.cli.DhcpRelay")
+def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
+    Relay(
+        server=("192.0.2.1",),
+        insert_relay_agent_info=True,
+        circuit_id="0a01",
+        remote_id="0b02",
+    )()
+
+    kwargs = mock_dhcp_relay_cls.call_args.kwargs
+    assert kwargs["insert_relay_agent_info"] is True
+    assert kwargs["circuit_id"] == b"\x0a\x01"
+    assert kwargs["remote_id"] == b"\x0b\x02"
+
+
+@patch("pydhcp.cli.DhcpRelay")
+def test_relay_warns_when_insert_flag_has_no_ids(mock_dhcp_relay_cls, caplog) -> None:
+    """The flag alone builds an empty sub-option list and inserts nothing."""
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        Relay(server=("192.0.2.1",), insert_relay_agent_info=True)()
+
+    assert any(
+        "--insert-relay-agent-info" in record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING
+    )
+    assert mock_dhcp_relay_cls.called
+
+
+def test_relay_id_misuse_is_reported_as_a_clean_cli_error(monkeypatch, capsys) -> None:
+    """main() already renders a ValueError as `pydhcp: error:`, not a traceback."""
+    monkeypatch.delenv("PYDHCP_TRACEBACK", raising=False)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["pydhcp", "relay", "-s", "192.0.2.1", "--circuit-id", "0a01"],
+    )
+
+    with pytest.raises(SystemExit) as exit_info:
+        main()
+
+    assert exit_info.value.code == 1
+    err = capsys.readouterr().err
+    assert err.startswith("pydhcp: error:")
+    assert "--circuit-id" in err and "--insert-relay-agent-info" in err
 
 
 def test_yaml_capture_survives_a_second_run(tmp_path) -> None:
@@ -535,8 +670,9 @@ def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
     captured = {}
 
     class FakeServer:
-        def __init__(self, listen):
+        def __init__(self, listen, per_interface=False):
             captured["listen"] = listen
+            captured["per_interface"] = per_interface
 
         def bind(self):
             pass

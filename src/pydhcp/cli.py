@@ -68,6 +68,10 @@ class Server(_Command):
     "Listen address/port spec, for example '*' or '127.0.0.1:6767,127.0.0.1:6768'"
     ("--listen", "-l")
 
+    per_interface: bool = False
+    "Bind each interface separately instead of using wildcard packet-info routing"
+    ("--per-interface",)
+
     def __call__(self) -> None:
         config: _ty.Dict[str, _ty.Any] = {}
         if self.config:
@@ -88,7 +92,7 @@ class Server(_Command):
             )
 
         self._logger_.info("Starting DHCP server, listening on: %s...", listen)
-        server = DhcpServer(listen=listen)
+        server = DhcpServer(listen=listen, per_interface=self.per_interface)
         try:
             server.bind()
             server.listen()
@@ -113,7 +117,11 @@ class Relay(_Command):
     "Listen address/port spec, for example '*' or '127.0.0.1:6767,127.0.0.1:6768'"
     ("--listen", "-l")
 
-    server: _ty.List[str] = []
+    # A tuple, not a list: a mutable class-level default is shared by every
+    # instance -- `a.server is b.server is Relay.server` -- so one command
+    # appending to it would change the default every parser built afterwards
+    # sees. duho copies at parser-build time, which hid it on the shipped path.
+    server: _ty.Tuple[str, ...] = ()
     "Upstream DHCP server address, optionally host:port (repeatable)"
     ("--server", "-s")
 
@@ -133,15 +141,48 @@ class Relay(_Command):
     "Hex-encoded remote ID sub-option (requires --insert-relay-agent-info)"
     ("--remote-id",)
 
+    per_interface: bool = False
+    "Bind each interface separately instead of using wildcard packet-info routing"
+    ("--per-interface",)
+
     def __call__(self) -> None:
+        # The help text has always said these "require --insert-relay-agent-info",
+        # and nothing enforced it: `_insert_relay_agent_info` returns early when
+        # the flag is off, so `-s 10.0.0.1 --circuit-id 0a01` forwarded packets
+        # with no option 82 and said nothing. Checked here rather than in
+        # DhcpRelay because the library documents these as independent kwargs
+        # and tests construct it that way -- raising there is an API break.
+        ignored = [
+            flag
+            for flag, value in (
+                ("--circuit-id", self.circuit_id),
+                ("--remote-id", self.remote_id),
+            )
+            if value
+        ]
+        if ignored and not self.insert_relay_agent_info:
+            raise ValueError(
+                f"{' and '.join(ignored)} require --insert-relay-agent-info; "
+                "without it no relay agent information option is added at all"
+            )
+
         server_addresses = [_parse_server_address(addr) for addr in self.server]
         circuit_id = bytes.fromhex(self.circuit_id) if self.circuit_id else None
         remote_id = bytes.fromhex(self.remote_id) if self.remote_id else None
 
+        if self.insert_relay_agent_info and not ignored:
+            # An empty sub-option list inserts nothing, so the flag alone is a
+            # no-op. A warning rather than an error: the flag is the library's
+            # documented switch and a future sub-option could make it meaningful.
+            self._logger_.warning(
+                "--insert-relay-agent-info was given without --circuit-id or "
+                "--remote-id, so no relay agent information option will be added"
+            )
+
         self._logger_.info(
             "Starting DHCP relay, listening on: %s, forwarding to: %s...",
             self.listen or "*",
-            self.server,
+            ", ".join(self.server),
         )
         relay = DhcpRelay(
             listen=self.listen or "*",
@@ -150,6 +191,7 @@ class Relay(_Command):
             insert_relay_agent_info=self.insert_relay_agent_info,
             circuit_id=circuit_id,
             remote_id=remote_id,
+            per_interface=self.per_interface,
         )
         try:
             relay.bind()
