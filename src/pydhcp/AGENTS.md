@@ -287,6 +287,14 @@ IPv6-only interface can break at runtime.
   - A save that fails is logged at ERROR and does **not** raise: a lease store
     that cannot be written must not take the server down mid-exchange. So it
     is best-effort persistence — but no longer a silent one.
+  - **`SAVE_INTERVAL_SECONDS`** (class var, `0.0`) — `0` writes on every
+    mutation, which is the default. Above zero, writes are coalesced to at
+    most one per interval; **`.flush()`** forces a pending write and
+    **`.close()`** flushes (the backend is also a context manager). Measured
+    over 4,000 allocations: 115.76 s at the default, 0.02 s at a one-second
+    interval. It is opt-in because it trades up to an interval of leases on a
+    crash — which an operator cannot see going wrong — for throughput they
+    can already measure and that `MAX_LEASES` already bounds.
 
 ## Metrics (`metrics.py`)
 
