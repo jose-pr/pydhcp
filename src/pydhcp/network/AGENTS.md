@@ -27,6 +27,22 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
   - **A display type.** The wire hardware address (`chaddr`, option 61) is raw
     `bytes` throughout `packet/` and never passes through here — `chaddr`
     permits `hlen` up to 16 for non-Ethernet `htype`, while a MAC is exactly 6.
+- **`HardwareAddressType`** (`IntEnum`) — the IANA ARP hardware types used by
+  DHCP (the BOOTP `htype` field), `NONE` (0) through `HFI` (37), including
+  `INFINIBAND` (32) for RFC 4390 IPoIB. Any other octet 0–255 becomes a cached
+  **unnamed** pseudo-member, so a value a client sent is never rewritten.
+  - `.label() -> str` — the member name, or `HTYPE_<n>` for an unnamed one.
+    Use this, not `.name`, which is `None` for unnamed members;
+    `to_mapping()` emits it and `HardwareAddressType("HTYPE_<n>")` reads it
+    back.
+  - `.dumps(address: bytes) -> str` renders colon-hex for `ETHERNET`, else
+    `repr(address)`.
+  - Also re-exported as `pydhcp.packet.HardwareAddressType`, which is where
+    the rest of the message-header enums live and the spelling most code
+    uses. It is *defined* here, beside `MACAddress`, because
+    `pydhcp.options.type` needs it to name a client identifier's type octet
+    and `pydhcp.packet.enums` imports `pydhcp.options.type` — defining it
+    there made that a cycle.
 - **`SocketAddress(ip, port=None)`** (`NamedTuple[ip: IPv4, port: int]`) —
   `ip` may be a `str`, an `IPv4`, or a bound `socket.socket` (reads
   `getsockname()`, in which case `port` must be omitted); passing a

@@ -5,7 +5,7 @@ import typing as _ty
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
-from ...network import IPv4 as _IP, IPv4Interface as _Interface, IPv4Network as _Network
+from ...network import IPv4 as _IP, IPv4Network as _Network
 from .base import DhcpOptionType
 from .domain import decode_domain_name, encode_domain_name, split_domain_name
 from ... import nvt as _nvt
@@ -99,6 +99,9 @@ class ClasslessRoute(DhcpOptionType):
         if not isinstance(other, ClasslessRoute):
             return NotImplemented
         return (self.gateway, self.network) == (other.gateway, other.network)
+
+    def __hash__(self) -> int:
+        return hash((self.gateway, self.network))
 
     def __json__(self) -> list[_ty.Any]:
         return [str(self.gateway), str(self.network)]
@@ -346,6 +349,9 @@ class RdnssSelection(DhcpOptionType):
             other.secondary,
             list(other.domains),
         )
+
+    def __hash__(self) -> int:
+        return hash((self.flags, self.primary, self.secondary, tuple(self.domains)))
 
     def __json__(self) -> list[_ty.Any]:
         return [
@@ -646,6 +652,9 @@ class StatusCode(DhcpOptionType):
         if not isinstance(other, StatusCode):
             return NotImplemented
         return (self.code, self.message) == (other.code, other.message)
+
+    def __hash__(self) -> int:
+        return hash((self.code, self.message))
 
     def __repr__(self) -> str:
         return f"StatusCode(code={self.code}, message={self.message!r})"

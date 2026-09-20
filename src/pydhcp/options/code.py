@@ -1,7 +1,7 @@
 import typing as _ty
 import enum as _enum
 
-from . import base as _options
+from .base import BaseDhcpOptionCode
 from .type import Bytes, DhcpOptionType
 
 _CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
@@ -9,7 +9,7 @@ _REGISTRY_LOADED = False
 _PSEUDO_MEMBERS: dict[int, "DhcpOptionCode"] = {}
 
 
-class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
+class DhcpOptionCode(BaseDhcpOptionCode, _enum.IntEnum):
     @classmethod
     def _missing_(cls, value: object) -> "_ty.Optional[DhcpOptionCode]":
         """Return an opaque pseudo-member for any byte value without one.
@@ -54,7 +54,7 @@ class DhcpOptionCode(_options.BaseDhcpOptionCode, _enum.IntEnum):
     def label(self) -> str:
         label = getattr(self, "name", None)
         if not isinstance(label, str):
-            return _options.BaseDhcpOptionCode.label(self)
+            return BaseDhcpOptionCode.label(self)
         return label
 
     #

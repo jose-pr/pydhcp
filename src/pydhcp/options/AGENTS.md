@@ -9,7 +9,15 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
 ## Container (`__init__.py`)
 
 - **`DhcpOptions(codemap=None)`** (`MutableMapping[int, bytearray]`) — the
-  option bag carried by `DhcpMessage.options`. `codemap` defaults to
+  option bag carried by `DhcpMessage.options`.
+  - **`get()` decodes; `[]` does not.** `options[53]` is
+    `bytearray(b"\x05")` while `options.get(53)` is
+    `DhcpMessageType.DHCPACK` — deliberately, and the only asymmetry in the
+    container. Everything inherited from `MutableMapping` goes through
+    `__getitem__`, so `dict(options)`, `.values()`, `.pop()`, `.setdefault()`
+    and `.popitem()` all yield **raw `bytearray`s**, like `[]` and not like
+    `.get()`. Write `get(code, decode=False)` when you want the bytes.
+    `.items()` is the other deviation: see below. `codemap` defaults to
   `DhcpOptionCode`; pass a custom `BaseDhcpOptionCode` subclass to change
   code→type resolution. `__setitem__`/`__getitem__` key on the raw `int`
   code; values may be set as a `DhcpOptionType`, `bytes`/`bytearray`/
@@ -23,10 +31,12 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
     (default) uses the code's registered `DhcpOptionType`; `decode=False`
     returns the raw `bytearray`; `decode=<type[DhcpOptionType]>` or
     `decode=<Callable[[bytearray], T]>` overrides the codec explicitly.
-  - **`.items(decoded=True) -> ItemsView[...]`** — same `decoded` overloads
-    as `.get`'s `decode`; `decoded=False` yields raw `(int, bytearray)`
-    pairs, `True`/a codemap type yields `(BaseDhcpOptionCode, DhcpOptionType)`
-    pairs.
+  - **`.items(decoded=True) -> list[DhcpOption]`** — `decoded=True` (default)
+    or a codemap type returns a **`list`** of `DhcpOption` `(code, value)`
+    pairs, freshly decoded; `decoded=False` returns the mapping's own
+    `ItemsView[int, bytearray]` of raw payloads. Only the raw form is a live
+    view — the decoded form builds new pairs, so it has no `.mapping` and no
+    set operations.
   - **`.append(option)`** / **`.replace(option)`** — `option` is a
     `DhcpOption` or `(code, value)` tuple; `.append` concatenates onto any
     existing bytes for that code (RFC 3396 long-option splitting on
@@ -90,10 +100,25 @@ memoryview) -> tuple[Self, int]` (classmethod decode + bytes consumed),
 for structured (JSON/YAML/TOML/INI) round-tripping. `_dhcp_decode(bytes) ->
 Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 
+**Hashability**: every record codec is hashable and its hash agrees with its
+`__eq__`, so decoded values can go into a `set` or be used as dict keys. The
+**list** codecs (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList`,
+`PcpServerList`, `UriList`, `CccOption`, the `Vi*`/`MoS*` containers) are
+mutable `list` subclasses and so are deliberately **not** hashable — build a
+`tuple` from one if you need a key.
+
 - **`DhcpOptionType`** — the base protocol above.
 - **`List[T]`** (generic, subscript with a `DhcpOptionType`, e.g.
   `List[IPv4Address]`) — a homogeneous repeated-record list; items are
   normalized through `T(...)` on append/extend/`__setitem__`.
+- **`RecordList[T]`** (`List[T]` subclass) — the same container for a record
+  type built from **two** constructor arguments (`T(code, value)`). It differs
+  from `List` only in normalization: a `tuple` argument is one record, not a
+  sequence of items, so `EncapsulatedOptions((1, b"ab"))` is a single TLV;
+  a `list` argument is several records. `EncapsulatedOptions`,
+  `ViVendorSpecificInformation`, `ViVendorClass`, `MoSIpv4AddressList`,
+  `MoSFqdnList` and `CccOption` are all `RecordList` subclasses. Subclass a
+  subscripted form — `class MyOption(RecordList[MyRecord])`.
 - **`DhcpOptionCodes[C]`** (`List[C]` subclass) — a list of raw option-code
   ints, used for `PARAMETER_REQUEST_LIST`-style options; falls back to a
   plain `int` (≤255) when the code type can't construct the item.
@@ -217,8 +242,8 @@ it. `MAX_LABEL_OCTETS` (63) and `MAX_NAME_OCTETS` (255) are the limits.
   compression pointers: with no enclosing message a pointer cannot resolve, and
   read as a length, `0xC0` silently yields a wrong name.
 
-This module deliberately imports nothing from the package: `options.type` and
-`options.ccc` import each other and work only by statement order.
+This module deliberately imports nothing from the package, so every codec
+carrying a name can reach it with no import-order constraint.
 
 ### MoS records (`mos.py`, RFC 5678)
 
@@ -229,7 +254,7 @@ This module deliberately imports nothing from the package: `options.type` and
   (non-compressed domain labels) and its list container, shared by
   `IPV4_FQDN_MOS`.
 
-### CCC sub-options (`../ccc.py`, ISPWORKS/CableLabs CCC)
+### CCC sub-options (`type/ccc.py`, ISPWORKS/CableLabs CCC)
 
 - **`CccOption`** — the option-125-style TLV container for CCC
   sub-options; **`CccSubOption`** — the sub-option TLV record base.

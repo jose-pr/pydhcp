@@ -5,7 +5,7 @@ import typing as _ty
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
-from .base import DhcpOptionType
+from .base import DhcpOptionType, RecordList, hashable_payload
 from .scalar import Bytes
 
 
@@ -87,6 +87,9 @@ class TlvOption(DhcpOptionType):
             return NotImplemented
         return (self.code, self.value) == (other.code, other.value)
 
+    def __hash__(self) -> int:
+        return hash((self.code, self.value))
+
     def __json__(self) -> list[_ty.Any]:
         return [self.code, self.value.__json__()]
 
@@ -97,27 +100,12 @@ class TlvOption(DhcpOptionType):
         return len(self.value) + 2
 
 
-class EncapsulatedOptions(DhcpOptionType, list[TlvOption]):
-    def __init__(self, *items: _ty.Any):
-        if len(items) == 1 and isinstance(items[0], list):
-            self.extend(items[0])
-            return
-        for item in items:
-            self.append(item)
+class EncapsulatedOptions(RecordList[TlvOption]):
+    """TLV container used to build vendor-specific sub-option payloads."""
 
-    @classmethod
-    def _normalize(cls, item: _ty.Any) -> TlvOption:
-        if isinstance(item, TlvOption):
-            return item
-        code, value = item
-        return TlvOption(code, value)
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
-
+    # Only the *read* framing is its own: unlike a plain record list this one
+    # honours the PAD (0) and END (255) markers that appear inside an
+    # encapsulated options field, so it cannot share `List._dhcp_read`.
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         self = cls()
@@ -139,15 +127,6 @@ class EncapsulatedOptions(DhcpOptionType, list[TlvOption]):
             self.append(TlvOption(code, option[idx : idx + length]))
             idx += length
         return self, idx
-
-    def _dhcp_write(self, data: bytearray) -> int:
-        written = 0
-        for item in self:
-            written += item._dhcp_write(data)
-        return written
-
-    def __json__(self) -> list[list[_ty.Any]]:
-        return [item.__json__() for item in self]
 
 
 class VendorSpecificInformation(Bytes):
@@ -181,6 +160,9 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
             other.value,
         )
 
+    def __hash__(self) -> int:
+        return hash((self.enterprise_number, self.value))
+
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]
 
@@ -207,50 +189,8 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
         return 5 + len(self.value)
 
 
-class ViVendorSpecificInformation(
-    DhcpOptionType, list[ViVendorSpecificInformationRecord]
-):
+class ViVendorSpecificInformation(RecordList[ViVendorSpecificInformationRecord]):
     """RFC 3925 vendor-identifying vendor-specific information records."""
-
-    def __init__(self, *items: _ty.Any):
-        if len(items) == 1 and isinstance(items[0], list):
-            self.extend(items[0])
-            return
-        for item in items:
-            self.append(item)
-
-    @classmethod
-    def _normalize(cls, item: _ty.Any) -> ViVendorSpecificInformationRecord:
-        if isinstance(item, ViVendorSpecificInformationRecord):
-            return item
-        enterprise_number, value = item
-        return ViVendorSpecificInformationRecord(enterprise_number, value)
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
-
-    @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
-        self = cls()
-        idx = 0
-        size = len(option)
-        while idx < size:
-            record, read = ViVendorSpecificInformationRecord._dhcp_read(option[idx:])
-            self.append(record)
-            idx += read
-        return self, size
-
-    def _dhcp_write(self, data: bytearray) -> int:
-        written = 0
-        for item in self:
-            written += item._dhcp_write(data)
-        return written
-
-    def __json__(self) -> list[list[_ty.Any]]:
-        return [item.__json__() for item in self]
 
 
 class ViVendorClassRecord(DhcpOptionType):
@@ -274,6 +214,9 @@ class ViVendorClassRecord(DhcpOptionType):
             other.enterprise_number,
             other.value,
         )
+
+    def __hash__(self) -> int:
+        return hash((self.enterprise_number, hashable_payload(self.value)))
 
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]
@@ -306,45 +249,5 @@ class ViVendorClassRecord(DhcpOptionType):
         return 5 + payload_len
 
 
-class ViVendorClass(DhcpOptionType, list[ViVendorClassRecord]):
+class ViVendorClass(RecordList[ViVendorClassRecord]):
     """RFC 3925 vendor-identifying vendor class records."""
-
-    def __init__(self, *items: _ty.Any):
-        if len(items) == 1 and isinstance(items[0], list):
-            self.extend(items[0])
-            return
-        for item in items:
-            self.append(item)
-
-    @classmethod
-    def _normalize(cls, item: _ty.Any) -> ViVendorClassRecord:
-        if isinstance(item, ViVendorClassRecord):
-            return item
-        enterprise_number, value = item
-        return ViVendorClassRecord(enterprise_number, value)
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
-
-    @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
-        self = cls()
-        idx = 0
-        size = len(option)
-        while idx < size:
-            record, read = ViVendorClassRecord._dhcp_read(option[idx:])
-            self.append(record)
-            idx += read
-        return self, size
-
-    def _dhcp_write(self, data: bytearray) -> int:
-        written = 0
-        for item in self:
-            written += item._dhcp_write(data)
-        return written
-
-    def __json__(self) -> list[list[_ty.Any]]:
-        return [item.__json__() for item in self]

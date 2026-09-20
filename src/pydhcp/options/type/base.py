@@ -56,6 +56,25 @@ _T = _ty.TypeVar("_T", bound=DhcpOptionType)
 _C = _ty.TypeVar("_C", bound="BaseDhcpOptionCode")
 
 
+def hashable_payload(value: _ty.Any) -> _ty.Any:
+    """A hashable stand-in for a payload value, for use inside `__hash__`.
+
+    Ten record codecs define `__eq__` and so were left unhashable by Python's
+    `__hash__ = None` rule, while `Bytes`, `String`, `IPv4Address` and the
+    integer codecs stayed hashable through their bases -- so
+    `set(options.get(code))` worked or raised `TypeError` depending on which
+    option the caller happened to touch. Several of those records hold a
+    payload that may itself be a list codec (`List[IPv4Address]`, `UserClass`,
+    a MoS label list), which is what stops a plain `hash((a, b))` from working.
+
+    Every such codec is a flat sequence of hashable items, so the tuple of its
+    items hashes consistently with the element-wise `__eq__` beside it.
+    """
+    if isinstance(value, list):
+        return tuple(hashable_payload(item) for item in value)
+    return value
+
+
 class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
     """Typed DHCP option list container."""
 
@@ -103,6 +122,38 @@ class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
 
     def __json__(self) -> list[_ty.Any]:
         return [item.__json__() for item in self]
+
+
+class RecordList(List[_T]):
+    """Typed list of two-field records, normalized from `(first, second)` pairs.
+
+    Five containers repeated `List`'s whole shape around a record type that
+    takes two constructor arguments -- the MoS options, the two RFC 3925 `Vi*`
+    options, option 82's encapsulated TLVs and the CCC option. They differ from
+    `List` in exactly one place: a record is *itself* a two-element sequence, so
+    `List.__init__`'s rule that a tuple argument is a sequence of items would
+    split one `(code, value)` record into two items. Here only a `list` spells
+    "several records"; a tuple is one record.
+
+    Subclass a subscripted form (`class X(RecordList[SomeRecord])`) rather than
+    setting a `_RECORD_TYPE` attribute -- `_args_[0]` is the same information and
+    `_dhcp_read`/`_normalize` already read it.
+    """
+
+    def __init__(self, *items: _ty.Any):
+        if len(items) == 1 and isinstance(items[0], list):
+            self.extend(items[0])
+            return
+        for item in items:
+            self.append(item)
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> _T:
+        ty = cls._args_[0]
+        if isinstance(item, _ty.cast(_ty.Any, ty)):
+            return _ty.cast(_T, item)
+        first, second = item
+        return _ty.cast(_T, _ty.cast(_ty.Any, ty)(first, second))
 
 
 class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]

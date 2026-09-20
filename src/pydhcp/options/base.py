@@ -1,11 +1,6 @@
 from __future__ import annotations
 import typing as _ty
-import struct as _struct
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
-
-from ..network import IPv4 as _IP
 from .type import Bytes, DhcpOptionType
 
 

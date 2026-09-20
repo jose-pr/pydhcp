@@ -4,6 +4,14 @@ import typing as _ty
 
 from ..options.type import DhcpOptionType
 
+# `htype` is a message-header field, so this is its documented home and stays
+# part of `pydhcp.packet`'s surface -- but the enum itself lives in
+# `pydhcp.network`, beside `MACAddress`. `options.type.scalar` needs it to name
+# a client identifier's type octet, and this module imports `options.type`, so
+# defining it here forced that use to be a function-local import re-executed on
+# every `ClientIdentifier.__repr__`.
+from ..network import HardwareAddressType as HardwareAddressType
+
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
@@ -116,98 +124,3 @@ class Flags(_enum.Flag):
     UNICAST = 0
     BROADCAST = 1 << 15
     """Set by client that cant listen to unicast response as it doesnt have an ip yet"""
-
-
-#: Pseudo-members for hardware types with no name, cached so identity holds.
-_HTYPE_PSEUDO_MEMBERS: "dict[int, HardwareAddressType]" = {}
-
-
-class HardwareAddressType(_enum.IntEnum):
-    """IANA ARP hardware types, as used by the BOOTP `htype` field.
-
-    Values 0-37 of the IANA "Number Hardware Type (hrd)" registry that are in
-    use for DHCP; anything else in an octet becomes an unnamed pseudo-member
-    rather than being rewritten (see `_missing_`).
-    """
-
-    NONE = 0
-    ETHERNET = 1
-    EXPERIMENTAL_ETHERNET = 2
-    AX25 = 3
-    PRONET = 4
-    CHAOS = 5
-    IEEE_802 = 6
-    ARCNET = 7
-    HYPERCHANNEL = 8
-    LANSTAR = 9
-    AUTONET = 10
-    LOCALTALK = 11
-    LOCALNET = 12
-    ULTRA_LINK = 13
-    SMDS = 14
-    FRAME_RELAY = 15
-    ATM_16 = 16
-    HDLC = 17
-    FIBRE_CHANNEL = 18
-    ATM_19 = 19
-    SERIAL_LINE = 20
-    ATM_21 = 21
-    MIL_STD_188_220 = 22
-    METRICOM = 23
-    IEEE_1394 = 24
-    MAPOS = 25
-    TWINAXIAL = 26
-    EUI_64 = 27
-    HIPARP = 28
-    IP_ARP_over_ISO_7816_3 = 29
-    ARPSEC = 30
-    IPSEC_TUNNEL = 31
-    INFINIBAND = 32
-    CAI = 33
-    WIEGAND = 34
-    PURE_IP = 35
-    HW_EXP1 = 36
-    HFI = 37
-
-    @classmethod
-    def _missing_(cls, value: object) -> "_ty.Optional[HardwareAddressType]":
-        """Return an unnamed pseudo-member for any octet without one.
-
-        Rewriting an unknown type to ETHERNET was destructive in exactly the way
-        a relay must not be: RFC 1542 s4.1.2 has a relay alter giaddr and hops
-        and nothing else, so forwarding an IPoIB request (RFC 4390, htype 32)
-        handed the server a different htype than the client sent. The derived
-        client identifier is built from this value too, so it changed as well.
-        """
-        if isinstance(value, str):
-            # The round-trip form emitted by `label()`, so a message that went
-            # out through to_mapping()/JSON comes back with its type intact.
-            if value.startswith("HTYPE_") and value[6:].isdigit():
-                value = int(value[6:])
-            else:
-                return None
-        if not isinstance(value, int) or isinstance(value, bool):
-            return None
-        if not 0 <= value <= 255:
-            return None
-        pseudo = _HTYPE_PSEUDO_MEMBERS.get(value)
-        if pseudo is None:
-            pseudo = int.__new__(cls, value)
-            pseudo._name_ = None  # type: ignore[assignment]
-            pseudo._value_ = value
-            _HTYPE_PSEUDO_MEMBERS[value] = pseudo
-        return pseudo
-
-    def label(self) -> str:
-        """Name of this hardware type, or `HTYPE_<n>` when it has none."""
-        return self._name_ or f"HTYPE_{self.value}"
-
-    def __repr__(self) -> str:
-        # Without this an unnamed member reports `<HardwareAddressType.None: 32>`,
-        # which reads as the NONE member (value 0) rather than "no name".
-        return f"<{type(self).__name__}.{self.label()}: {self.value}>"
-
-    def dumps(self, address: bytes) -> str:
-        if self is HardwareAddressType.ETHERNET:
-            return address.hex(":", 1).upper()
-        return repr(address)

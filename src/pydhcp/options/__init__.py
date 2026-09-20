@@ -16,6 +16,29 @@ _R = _ty.TypeVar("_R")
 
 
 class DhcpOptions(_ty.MutableMapping[int, bytearray]):
+    """The option bag: a mutable mapping of option code to **raw** payload.
+
+    Two members deliberately do not mean what `MutableMapping` says they mean,
+    and both `type: ignore[override]`s below mark exactly that:
+
+    * **`get()` decodes; `[]` does not.** `options[53]` is
+      `bytearray(b'\\x05')`, `options.get(53)` is `DhcpMessageType.DHCPACK`.
+      Everything the ABC supplies -- `values()`, `pop()`, `setdefault()`,
+      `popitem()`, `update()`, and `dict(options)` -- routes through
+      `__getitem__`, so all of it yields raw `bytearray`s like `[]`, not
+      decoded values like `get()`. Reach for `get(code, decode=False)` when you
+      want the bytes and you want to say so.
+    * **`items()` returns a `list`, not a view.** The decoded form has to build
+      `DhcpOption` pairs, so there is nothing to keep a live view of; only
+      `items(decoded=False)` is the ABC's `ItemsView`.
+
+    This asymmetry is the API, not drift: `get(..., decode=...)` is the
+    documented surface every caller uses, and making it return raw bytes to
+    satisfy the ABC would trade a real API for a formal one. It is pinned by
+    `tests/test_options.py::test_get_decodes_and_getitem_does_not`, which fails
+    if anyone "fixes" it the other way.
+    """
+
     def __init__(self, codemap: _ty.Optional[type[BaseDhcpOptionCode]] = None) -> None:
         if codemap is None:
             codemap = DhcpOptionCode
@@ -137,6 +160,9 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def __getitem__(self, _key: int) -> bytearray:
         return self._options[_key]
 
+    # Deliberate ABC deviation -- see the class docstring. `Mapping.get` is
+    # declared to return the mapping's value type (`bytearray`); this one
+    # decodes by default and returns a `DhcpOptionType`.
     @_ty.overload  # type: ignore[override]
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: type[T]
@@ -250,29 +276,31 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def __iter__(self) -> _ty.Iterator[int]:
         return self._options.__iter__()
 
+    # Deliberate ABC deviation -- see the class docstring. The decoded forms
+    # return a `list[DhcpOption]`, not an `ItemsView`: decoding builds new pairs,
+    # so there is no live view to hand back, and the old `ItemsView` annotation
+    # promised `.mapping` and set operations that the list has never had. Only
+    # `decoded=False` is the mapping's own view.
     @_ty.overload  # type: ignore[override]
-    def items(self) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]: ...
+    def items(self) -> list[DhcpOption]: ...
 
     @_ty.overload
     def items(self, decoded: _ty.Literal[False]) -> _ty.ItemsView[int, bytearray]: ...
 
     @_ty.overload
-    def items(
-        self, decoded: _ty.Literal[True]
-    ) -> _ty.ItemsView[BaseDhcpOptionCode, DhcpOptionType]: ...
+    def items(self, decoded: _ty.Literal[True]) -> list[DhcpOption]: ...
 
     @_ty.overload
-    def items(self, decoded: type[C]) -> _ty.ItemsView[C, DhcpOptionType]: ...
+    def items(self, decoded: type[C]) -> list[DhcpOption]: ...
 
     def items(
         self, decoded: _ty.Union[bool, type[BaseDhcpOptionCode]] = True
-    ) -> _ty.Any:
-        items = self._options.items()
-        if decoded is True:
-            decoded = self._codemap
-        if decoded:
-            items = [decoded.decode(*option) for option in items]  # type: ignore
-        return items
+    ) -> _ty.Union[list[DhcpOption], _ty.ItemsView[int, bytearray]]:
+        raw = self._options.items()
+        if not decoded:
+            return raw
+        codemap = self._codemap if decoded is True else decoded
+        return [codemap.decode(code, value) for code, value in raw]
 
     def __contains__(self, __key: object) -> bool:
         return self._options.__contains__(__key)

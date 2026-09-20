@@ -19,7 +19,7 @@ current with the code in the same commit that changes it.
 ```
 src/pydhcp/        the package (src layout — an editable install or PYTHONPATH is needed)
   packet/          DhcpMessage, enums, structured formats
-  options/         DhcpOptions, DhcpOptionCode, type/ codecs, ccc.py
+  options/         DhcpOptions, DhcpOptionCode, type/ payload codecs (incl. ccc.py)
   network/         addresses and host interface discovery
 tests/             pytest suite, including tests/integration (real sockets on loopback)
 examples/          runnable examples; tests/test_examples.py imports each one

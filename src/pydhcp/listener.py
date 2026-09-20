@@ -665,7 +665,7 @@ class AsyncDhcpListener:
     def __init__(
         self,
         listen: ListenSpec = None,
-        max_packet_size: _ty.Optional[int] = None,
+        max_packet_size: int | None = None,
         per_interface: bool | None = None,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE

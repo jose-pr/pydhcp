@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy as _copy
 import math as _math
-import socket as _socket
 from .packet.message import DhcpMessage, NoClientIdentity
 from .listener import DhcpListener as _Base, ListenSpec, RequestContext
 from . import constants as _const, network as _net
@@ -136,9 +135,9 @@ class DhcpServer(_Base):
     def __init__(
         self,
         listen: ListenSpec = None,
-        select_timeout: _ty.Optional[float] = None,
-        max_packet_size: _ty.Optional[int] = None,
-        lease_backend: _ty.Optional[LeaseBackend] = None,
+        select_timeout: float | None = None,
+        max_packet_size: int | None = None,
+        lease_backend: LeaseBackend | None = None,
         per_interface: bool | None = None,
     ) -> None:
         super().__init__(
@@ -872,8 +871,8 @@ class AsyncDhcpServer(_AsyncBase, DhcpServer):  # type: ignore[misc]
     def __init__(
         self,
         listen: ListenSpec = None,
-        max_packet_size: _ty.Optional[int] = None,
-        lease_backend: _ty.Optional[LeaseBackend] = None,
+        max_packet_size: int | None = None,
+        lease_backend: LeaseBackend | None = None,
         per_interface: bool | None = None,
     ) -> None:
         _AsyncBase.__init__(

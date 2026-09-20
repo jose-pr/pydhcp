@@ -10,7 +10,6 @@ from math import inf as _inf
 
 from .network import IPv4
 from .options import DhcpOptions
-from .constants import INFINITE_LEASE_TIME
 from .log import LOGGER
 
 

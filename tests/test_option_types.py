@@ -793,7 +793,7 @@ def test_ccc_and_mos_inherit_the_shared_checks():
     """Convergence has to reach the callers, or it is just a fourth copy."""
     import pytest as _pytest
 
-    from pydhcp.options.ccc import (
+    from pydhcp.options.type.ccc import (
         _decode_no_compression_domain,
         _encode_no_compression_domain,
     )
@@ -1005,3 +1005,49 @@ def test_two_generic_classes_do_not_share_a_cache():
     # each class owns its cache; a subscripted class does not write into its base
     assert "__concrete__" in Other.__dict__
     assert "__concrete__" not in List[U8].__dict__
+
+
+def test_record_codecs_are_hashable_and_lists_are_not():
+    """A codec that defined `__eq__` and no `__hash__` was silently unhashable.
+
+    Python sets `__hash__ = None` for such a class, so `set(...)` or a dict key
+    over decoded option values worked or raised `TypeError` depending purely on
+    which option the caller happened to touch -- `Bytes`, `String`,
+    `IPv4Address` and the integer codecs were hashable through their bases while
+    ten record types were not. List codecs are a different case: they are
+    genuinely mutable, so `list.__hash__ is None` is correct for them and this
+    test asserts that too, to keep a future "fix" from making them hashable.
+    """
+    import pydhcp.options.type as _type
+
+    records = []
+    lists = []
+    for name in _type.__all__:
+        obj = getattr(_type, name)
+        if not isinstance(obj, type):
+            continue
+        (lists if issubclass(obj, list) else records).append(name)
+
+    assert [n for n in records if getattr(_type, n).__hash__ is None] == []
+    assert [n for n in lists if getattr(_type, n).__hash__ is not None] == []
+
+
+def test_hash_agrees_with_eq_for_records_holding_a_list_payload():
+    """The cases a naive `hash((a, b))` would have raised on.
+
+    `ViVendorClassRecord.value` is a `UserClass` and a MoS record's value is a
+    label/address list -- both `list` subclasses, and both compared element-wise
+    by the `__eq__` beside the hash.
+    """
+    a = ViVendorClassRecord(3561, [b"alpha", b"beta"])
+    b = ViVendorClassRecord(3561, [b"alpha", b"beta"])
+    assert a == b and hash(a) == hash(b)
+    assert len({a, b}) == 1
+
+    c = MoSFqdnRecord(1, ["alpha.example"])
+    d = MoSFqdnRecord(1, ["alpha.example"])
+    assert c == d and hash(c) == hash(d)
+    assert len({c, d}) == 1
+
+    e = ClasslessRoute("10.0.0.1", "192.0.2.0/24")
+    assert len({e, ClasslessRoute("10.0.0.1", "192.0.2.0/24")}) == 1

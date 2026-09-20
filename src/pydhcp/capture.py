@@ -7,7 +7,6 @@ import re as _re
 import typing as _ty
 
 from . import network as _net
-from .packet import enums as _enum
 from .listener import DhcpListener, ListenSpec, RequestContext
 from .log import LOGGER
 from .options import DhcpOptionCode

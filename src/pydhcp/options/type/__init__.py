@@ -1,7 +1,45 @@
 from .base import (
     DhcpOptionType as DhcpOptionType,
     List as List,
+    RecordList as RecordList,
     DhcpOptionCodes as DhcpOptionCodes,
+)
+
+# The submodule order below is alphabetical and carries no meaning. It used to
+# carry one: `ccc` lived outside this package and imported `.type` back, so it
+# worked only while it was imported last, and hoisting this block produced an
+# ImportError from a partially initialised module. It is now a sibling that
+# imports `.base`/`.net`/`.scalar` directly, so any order works.
+from .ccc import (
+    CccOption as CccOption,
+    CccSubOption as CccSubOption,
+    CccPrimaryDhcpServerAddress as CccPrimaryDhcpServerAddress,
+    CccSecondaryDhcpServerAddress as CccSecondaryDhcpServerAddress,
+    CccProvisioningServerAddress as CccProvisioningServerAddress,
+    CccProvisioningServerFqdn as CccProvisioningServerFqdn,
+    CccKerberosRealmName as CccKerberosRealmName,
+    CccAsReqAsRepBackoffRetry as CccAsReqAsRepBackoffRetry,
+    CccApReqApRepBackoffRetry as CccApReqApRepBackoffRetry,
+    CccTicketGrantingServerUtilization as CccTicketGrantingServerUtilization,
+    CccProvisioningTimer as CccProvisioningTimer,
+    CccSecurityTicketControl as CccSecurityTicketControl,
+    CccKdcServerAddressList as CccKdcServerAddressList,
+    CccPrimaryDhcpServerAddressSubOption as CccPrimaryDhcpServerAddressSubOption,
+    CccSecondaryDhcpServerAddressSubOption as CccSecondaryDhcpServerAddressSubOption,
+    CccProvisioningServerAddressSubOption as CccProvisioningServerAddressSubOption,
+    CccAsReqAsRepBackoffRetrySubOption as CccAsReqAsRepBackoffRetrySubOption,
+    CccApReqApRepBackoffRetrySubOption as CccApReqApRepBackoffRetrySubOption,
+    CccKerberosRealmNameSubOption as CccKerberosRealmNameSubOption,
+    CccTicketGrantingServerUtilizationSubOption as CccTicketGrantingServerUtilizationSubOption,
+    CccProvisioningTimerSubOption as CccProvisioningTimerSubOption,
+    CccSecurityTicketControlSubOption as CccSecurityTicketControlSubOption,
+    CccKdcServerAddressSubOption as CccKdcServerAddressSubOption,
+)
+from .mos import (
+    MoSIpv4AddressRecord as MoSIpv4AddressRecord,
+    MoSFqdnRecord as MoSFqdnRecord,
+    MoSIpv4AddressList as MoSIpv4AddressList,
+    MoSFqdnList as MoSFqdnList,
 )
 from .net import (
     IPv4Address as IPv4Address,
@@ -43,42 +81,11 @@ from .vendor import (
     ViVendorClassRecord as ViVendorClassRecord,
     ViVendorClass as ViVendorClass,
 )
-from .mos import (
-    MoSIpv4AddressRecord as MoSIpv4AddressRecord,
-    MoSFqdnRecord as MoSFqdnRecord,
-    MoSIpv4AddressList as MoSIpv4AddressList,
-    MoSFqdnList as MoSFqdnList,
-)
-
-from ..ccc import (
-    CccOption as CccOption,
-    CccSubOption as CccSubOption,
-    CccPrimaryDhcpServerAddress as CccPrimaryDhcpServerAddress,
-    CccSecondaryDhcpServerAddress as CccSecondaryDhcpServerAddress,
-    CccProvisioningServerAddress as CccProvisioningServerAddress,
-    CccProvisioningServerFqdn as CccProvisioningServerFqdn,
-    CccKerberosRealmName as CccKerberosRealmName,
-    CccAsReqAsRepBackoffRetry as CccAsReqAsRepBackoffRetry,
-    CccApReqApRepBackoffRetry as CccApReqApRepBackoffRetry,
-    CccTicketGrantingServerUtilization as CccTicketGrantingServerUtilization,
-    CccProvisioningTimer as CccProvisioningTimer,
-    CccSecurityTicketControl as CccSecurityTicketControl,
-    CccKdcServerAddressList as CccKdcServerAddressList,
-    CccPrimaryDhcpServerAddressSubOption as CccPrimaryDhcpServerAddressSubOption,
-    CccSecondaryDhcpServerAddressSubOption as CccSecondaryDhcpServerAddressSubOption,
-    CccProvisioningServerAddressSubOption as CccProvisioningServerAddressSubOption,
-    CccAsReqAsRepBackoffRetrySubOption as CccAsReqAsRepBackoffRetrySubOption,
-    CccApReqApRepBackoffRetrySubOption as CccApReqApRepBackoffRetrySubOption,
-    CccKerberosRealmNameSubOption as CccKerberosRealmNameSubOption,
-    CccTicketGrantingServerUtilizationSubOption as CccTicketGrantingServerUtilizationSubOption,
-    CccProvisioningTimerSubOption as CccProvisioningTimerSubOption,
-    CccSecurityTicketControlSubOption as CccSecurityTicketControlSubOption,
-    CccKdcServerAddressSubOption as CccKdcServerAddressSubOption,
-)
 
 __all__ = [
     "DhcpOptionType",
     "List",
+    "RecordList",
     "DhcpOptionCodes",
     "IPv4Address",
     "ClasslessRoute",

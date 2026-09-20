@@ -8,9 +8,11 @@ compression pointer, only one enforced the 255-octet name limit -- so the same
 malformed input was accepted, rejected or silently misread depending on which
 option it arrived in.
 
-This module deliberately imports nothing from the package. `options.type` and
-`options.ccc` import each other and work only by statement order, so a shared
-helper that pulled in either would be one more thing depending on that ordering.
+This module deliberately imports nothing from the package, so every codec that
+carries a name can reach it with no ordering constraint. It was written that way
+because `options.type` and `options.ccc` imported each other and worked only by
+statement order; that cycle is gone -- `ccc` is now `options/type/ccc.py` and
+imports its siblings directly -- and keeping this a leaf keeps it from coming back.
 """
 
 from __future__ import annotations

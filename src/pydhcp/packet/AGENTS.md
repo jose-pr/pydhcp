@@ -100,16 +100,11 @@ top-level package header.
 - **`OpCode`** (`IntEnum`) — `BOOTREQUEST = 1`, `BOOTREPLY = 2`.
 - **`DhcpPort`** (`IntEnum`) — `SERVER = 67`, `CLIENT = 68`.
 - **`Flags`** (`Flag`) — `UNICAST = 0`, `BROADCAST = 1 << 15`.
-- **`HardwareAddressType`** (`IntEnum`) — the IANA ARP hardware types used by
-  DHCP, `NONE` (0) through `HFI` (37), including `INFINIBAND` (32) for
-  RFC 4390 IPoIB. Any other octet 0–255 becomes a cached **unnamed**
-  pseudo-member, so a value a client sent is never rewritten.
-  - `.label() -> str` — the member name, or `HTYPE_<n>` for an unnamed one.
-    Use this, not `.name`, which is `None` for unnamed members;
-    `to_mapping()` emits it and `HardwareAddressType("HTYPE_<n>")` reads it
-    back.
-  - `.dumps(address: bytes) -> str` renders colon-hex for `ETHERNET`, else
-    `repr(address)`.
+- **`HardwareAddressType`** (`IntEnum`) — **defined in `pydhcp.network`** and
+  re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
+  the spelling to use for the `htype` header field. It lives one layer down
+  because `pydhcp.options.type` needs it too and this module imports
+  `pydhcp.options.type`. See `src/pydhcp/network/AGENTS.md` for the full entry.
 
 ## Structured (de)serialization (`structured.py`)
 

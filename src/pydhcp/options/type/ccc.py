@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import typing as _ty
 
-from .. import network as _net
-from .type import Boolean, Bytes, DhcpOptionType, IPv4Address, List, U8
-from .type.domain import decode_domain_name, encode_domain_name
+from ... import network as _net
+from .base import DhcpOptionType, List, RecordList, hashable_payload
+from .domain import decode_domain_name, encode_domain_name
+from .net import IPv4Address
+from .scalar import Boolean, Bytes, U8
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
@@ -135,6 +137,9 @@ class CccProvisioningServerAddress(DhcpOptionType):
             return NotImplemented
         return (self.kind, self.value) == (other.kind, other.value)
 
+    def __hash__(self) -> int:
+        return hash((self.kind, self.value))
+
 
 class CccPrimaryDhcpServerAddress(IPv4Address):
     """CCC sub-option 1 primary DHCP server address."""
@@ -194,6 +199,11 @@ class CccAsReqAsRepBackoffRetry(DhcpOptionType):
             other.initial_timeout,
             other.maximum_timeout,
             other.maximum_retry_count,
+        )
+
+    def __hash__(self) -> int:
+        return hash(
+            (self.initial_timeout, self.maximum_timeout, self.maximum_retry_count)
         )
 
     def __json__(self) -> list[int]:
@@ -292,6 +302,9 @@ class CccSubOption(DhcpOptionType):
             return NotImplemented
         return (self.code, self.value) == (other.code, other.value)
 
+    def __hash__(self) -> int:
+        return hash((self.code, hashable_payload(self.value)))
+
     def __json__(self) -> list[_ty.Any]:
         value = self.value
         if isinstance(value, DhcpOptionType):
@@ -385,29 +398,19 @@ _CCC_SUBOPTION_TYPES: dict[int, type[CccSubOption]] = {
 }
 
 
-class CccOption(DhcpOptionType, list[CccSubOption]):
+class CccOption(RecordList[CccSubOption]):
     """CCC option container preserving unknown sub-options."""
-
-    def __init__(self, *items: _ty.Any):
-        if len(items) == 1 and isinstance(items[0], list):
-            self.extend(items[0])
-            return
-        for item in items:
-            self.append(item)
 
     @classmethod
     def _normalize(cls, item: _ty.Any) -> CccSubOption:
+        # Its own, because the record class is chosen by the sub-option code
+        # rather than fixed for the container: an unknown code must still round
+        # trip, as the plain `CccSubOption` fallback.
         if isinstance(item, CccSubOption):
             return item
         code, value = item
         record_type = _CCC_SUBOPTION_TYPES.get(int(code), CccSubOption)
         return record_type(int(code), value)
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: _ty.Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
     def _read_record(cls, option: memoryview) -> tuple[CccSubOption, int]:
@@ -423,6 +426,8 @@ class CccOption(DhcpOptionType, list[CccSubOption]):
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        # Its own, because each record's class comes from `_read_record`'s code
+        # lookup, not from the container's item type.
         self = cls()
         idx = 0
         size = len(option)
@@ -431,12 +436,3 @@ class CccOption(DhcpOptionType, list[CccSubOption]):
             self.append(record)
             idx += read
         return self, size
-
-    def _dhcp_write(self, data: bytearray) -> int:
-        written = 0
-        for item in self:
-            written += item._dhcp_write(data)
-        return written
-
-    def __json__(self) -> list[list[_ty.Any]]:
-        return [item.__json__() for item in self]

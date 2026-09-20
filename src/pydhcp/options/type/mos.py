@@ -5,7 +5,7 @@ import typing as _ty
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
-from .base import DhcpOptionType, List
+from .base import DhcpOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
 from .net import IPv4Address
 from .scalar import Bytes
@@ -75,6 +75,9 @@ class _MoSSubOption(DhcpOptionType):
         if not isinstance(other, _MoSSubOption):
             return NotImplemented
         return (self.code, self.value) == (other.code, other.value)
+
+    def __hash__(self) -> int:
+        return hash((self.code, hashable_payload(self.value)))
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(code={self.code!r}, value={self.value!r})"
@@ -194,57 +197,9 @@ class MoSFqdnRecord(_MoSFqdnSubOption):
     """RFC 5678 MoS sub-option record carrying FQDN label sequences."""
 
 
-class _MoSOptionBase(DhcpOptionType, list[_MoSSubOption]):
-    _RECORD_TYPE: type[_MoSSubOption] = _MoSSubOption
-
-    def __init__(self, *items: _ty.Any):
-        if len(items) == 1 and isinstance(items[0], list):
-            self.extend(items[0])
-            return
-        for item in items:
-            self.append(item)
-
-    @classmethod
-    def _normalize(cls, item: _ty.Any) -> _MoSSubOption:
-        if isinstance(item, cls._RECORD_TYPE):
-            return item
-        code, value = item
-        return cls._RECORD_TYPE(code, value)
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
-
-    @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
-        self = cls()
-        idx = 0
-        size = len(option)
-        while idx < size:
-            record, read = cls._RECORD_TYPE._dhcp_read(option[idx:])
-            self.append(record)
-            idx += read
-        return self, size
-
-    def _dhcp_write(self, data: bytearray) -> int:
-        written = 0
-        for item in self:
-            written += item._dhcp_write(data)
-        return written
-
-    def __json__(self) -> list[list[_ty.Any]]:
-        return [item.__json__() for item in self]
-
-
-class MoSIpv4AddressList(_MoSOptionBase):
+class MoSIpv4AddressList(RecordList[MoSIpv4AddressRecord]):
     """RFC 5678 MoS option carrying IPv4 address sub-options."""
 
-    _RECORD_TYPE = MoSIpv4AddressRecord
 
-
-class MoSFqdnList(_MoSOptionBase):
+class MoSFqdnList(RecordList[MoSFqdnRecord]):
     """RFC 5678 MoS option carrying FQDN sub-options."""
-
-    _RECORD_TYPE = MoSFqdnRecord

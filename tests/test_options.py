@@ -919,3 +919,43 @@ def test_reassigning_an_option_keeps_its_position():
         int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
         int(DhcpOptionCode.ROUTER),
     ]
+
+
+def test_get_decodes_and_getitem_does_not():
+    """Pins the container's one deliberate asymmetry, in both directions.
+
+    `DhcpOptions` declares `MutableMapping[int, bytearray]`, and `get()` does
+    not honour it: it decodes. That is the documented API -- `get(..., decode=)`
+    is the surface every caller uses -- so this test exists to stop the
+    asymmetry being "fixed" into conformance, which would silently change what
+    every `options.get(code)` in the wild returns.
+
+    Everything the ABC supplies routes through `__getitem__`, so it all yields
+    raw bytes; only `get()` and `items()` decode.
+    """
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPACK
+
+    code = int(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+    raw = bytearray([DhcpMessageType.DHCPACK.value])
+
+    # `get()` decodes, `[]` does not.
+    assert options.get(code) == DhcpMessageType.DHCPACK
+    assert options[code] == raw
+    assert not isinstance(options[code], DhcpMessageType)
+
+    # ...and every inherited MutableMapping accessor follows `[]`, not `get()`.
+    assert dict(options)[code] == raw
+    assert list(options.values()) == [raw]
+    assert options.setdefault(code, bytearray()) == raw
+
+    # `decode=False` is how you ask `get()` for what `[]` gives you.
+    assert options.get(code, decode=False) == raw
+
+    # `items()` is the other deviation: decoded is a freshly built list of
+    # `DhcpOption` pairs, raw is the mapping's own live view.
+    decoded_items = options.items()
+    assert isinstance(decoded_items, list)
+    assert [value for _code, value in decoded_items] == [DhcpMessageType.DHCPACK]
+    assert not isinstance(options.items(decoded=False), list)
+    assert dict(options.items(decoded=False)) == {code: raw}

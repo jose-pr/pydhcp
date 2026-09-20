@@ -2,8 +2,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
 import enum as _enum
-from ...log import LOGGER
 from ... import nvt as _nvt
+from ...network import HardwareAddressType as _HardwareAddressType
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
@@ -306,9 +306,7 @@ class ClientIdentifier(Bytes):
         addr = self[1:]
         ty_str = str(ty_val)
         try:
-            from ...packet.enums import HardwareAddressType
-
-            ty_str = HardwareAddressType(ty_val).name
+            ty_str = _HardwareAddressType(ty_val).name
         except ValueError:
             ...
         maybe = f"{ty_str}({addr.hex(':').upper()})"
