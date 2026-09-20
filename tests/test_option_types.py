@@ -970,3 +970,38 @@ def test_vendor_class_identifier_keeps_binary_payloads():
     # the ordinary ASCII case is unchanged
     assert str(codec._dhcp_decode(b"MSFT 5.0")) == "MSFT 5.0"
     assert codec._dhcp_decode(b"MSFT 5.0")._dhcp_encode() == b"MSFT 5.0"
+
+
+# --- a subscripted generic must be the same class every time ---
+
+
+def test_generic_subscription_is_cached():
+    """`List[X] is List[X]` was False: the cache never hit.
+
+    The key was normalised to a tuple only on the miss path, so the lookup
+    asked for `X` while the store had written `(X,)`. Every subscription built
+    a fresh class, and two class objects for one type make identity and
+    issubclass checks unreliable.
+    """
+    assert List[IPv4Address] is List[IPv4Address]
+    assert List[U8] is List[U8]
+    assert List[U8] is not List[IPv4Address]
+    assert List[IPv4Address]._args_ == (IPv4Address,)
+
+
+def test_two_generic_classes_do_not_share_a_cache():
+    """`__concrete__` lived on the metaclass, keyed only by the arguments.
+
+    Invisible while the cache never hit -- and fixing the lookup alone would
+    have exposed it, serving one class's subscription from another's entry.
+    """
+    from pydhcp._utils import GenericMeta
+
+    class Other(list, metaclass=GenericMeta):
+        pass
+
+    assert Other[U8] is not List[U8]
+    assert Other[U8] is Other[U8]
+    # each class owns its cache; a subscripted class does not write into its base
+    assert "__concrete__" in Other.__dict__
+    assert "__concrete__" not in List[U8].__dict__
