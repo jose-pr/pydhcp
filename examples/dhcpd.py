@@ -4,7 +4,7 @@ import datetime as dt
 import logging
 import sys
 
-from pydhcp import DhcpOptions, DhcpServer, log, netutils
+from pydhcp import DhcpOptions, DhcpServer, log, network
 from pydhcp.options import DhcpOptionCode
 from pydhcp.packet.message import DhcpMessage
 from pydhcp.server import DhcpLease
@@ -25,7 +25,7 @@ class ExampleDhcpServer(DhcpServer):
     def acquire_lease(
         self,
         client_id: str,
-        server_id: netutils.IPv4,
+        server_id: network.IPv4,
         msg: DhcpMessage,
     ) -> DhcpLease | None:
         lease = super().acquire_lease(client_id, server_id, msg)
@@ -33,7 +33,7 @@ class ExampleDhcpServer(DhcpServer):
             return lease
 
         server_interface = next(
-            netutils.host_ip_interfaces(lambda interface: interface.ip == server_id),
+            network.host_ip_interfaces(lambda interface: interface.ip == server_id),
             None,
         )
         if server_interface is None:
