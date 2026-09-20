@@ -393,3 +393,190 @@ def test_decode_applies_no_minimum_size():
         assert decoded.xid == message.xid, f"{size}-octet message was not decoded"
 
     assert len(bytes(message.encode())) == 300, "what we send is still padded"
+
+
+def _first_option_code(wire):
+    """The code octet of the first TLV after the magic cookie."""
+    return bytes(wire)[240]
+
+
+def _overloading_message(count, payload_size):
+    """A message whose options force `encode(576)` to overload sname/file."""
+    options = DhcpOptions()
+    options[DhcpOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPACK.value]
+    )
+    for index in range(count):
+        options[200 + index] = bytearray(b"X" * payload_size)
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.options = options
+    message.sname = "tftp.example.test"
+    message.file = "pxelinux.0"
+    return message
+
+
+def test_message_type_leads_the_options_field_whether_or_not_we_overload():
+    """RFC 2131 s3 walks the protocol by message type, and receivers read option
+    53 before parsing the rest -- it is what says whether the packet is for them.
+
+    The ordering step existed but reached neither path: the non-overload path
+    kept the `options.encode()` taken for sizing, which predates the move, and
+    the overload path then put OPTION_OVERLOAD in front of it. Measured on the
+    bytes, not the mapping: the mapping never showed the defect, because the
+    move *was* applied to it.
+    """
+    # Non-overload: option 53 is inserted last, so only the reordering can put
+    # it first.
+    options = DhcpOptions()
+    options[DhcpOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
+    options[DhcpOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\xfe")
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPACK.value]
+    )
+    plain = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    plain.options = options
+
+    wire = bytes(plain.encode())
+    assert _first_option_code(wire) == int(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+    assert wire[241:243] == b"\x01\x05", "53 must carry its own length and payload"
+
+    # Overload, both flavours. OPTION_OVERLOAD is written after the reordering
+    # and used to be pushed in front of the message type.
+    for count, payload_size, expected in (
+        (2, 180, 1),  # SNAME
+        (2, 160, 2),  # FILE
+        (2, 220, 3),  # BOTH
+    ):
+        message = _overloading_message(count, payload_size)
+        wire = bytes(message.encode(576))
+        decoded = DhcpMessage.decode(bytearray(wire))
+
+        assert (
+            decoded.options.get(DhcpOptionCode.OPTION_OVERLOAD) == expected
+        ), f"{count}x{payload_size} did not overload as expected"
+        assert _first_option_code(wire) == int(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        assert (
+            decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+            == DhcpMessageType.DHCPACK
+        )
+
+
+def test_encode_refuses_a_size_it_cannot_honour_instead_of_substituting_576():
+    """`max_packetsize or DHCP_MIN_LEGAL_PACKET_SIZE` made an explicit 0 mean 576.
+
+    Quietly encoding to a number other than the one the caller named is exactly
+    the failure this module has spent the most effort removing: a caller asking
+    for 0 has a wrong belief, and answering it with a 300-octet packet hides
+    that. 269 is the real floor -- 268 of IPv4/UDP/header/cookie overhead plus
+    the END octet -- and is NOT 576: RFC 2132 s9.10's 576 constrains what a
+    client may advertise in option 57, not this API.
+    """
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+
+    for refused in (0, -1, 1, 100, 267, 268):
+        with pytest.raises(ValueError) as excinfo:
+            message.encode(refused)
+        assert "269" in str(excinfo.value), "the error must name the real floor"
+        assert str(refused) in str(excinfo.value), "and the value it was given"
+
+    # No argument still means 576, and every size from the floor up that used to
+    # work still does -- including the sub-576 ones.
+    assert len(bytes(message.encode())) == 300
+    for accepted in (272, 280, 299, 300, 312, 548, 575, 576, 1500):
+        assert len(bytes(message.encode(accepted))) <= accepted
+
+
+def test_over_long_sname_and_file_are_refused_rather_than_truncated():
+    """Silent truncation is worse than the struct.error it sits next to.
+
+    `file` is the PXE boot filename: a truncated one sends the client to a TFTP
+    path that does not exist and nothing in the exchange says why. Measured
+    2026-09-20: a 100-character sname and a 200-character file both encoded
+    "successfully" at 300 octets, carrying only the first 64 and 128 octets.
+    """
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+
+    message.sname = "s" * 65
+    with pytest.raises(ValueError, match="sname"):
+        message.encode()
+
+    message.sname = "s" * 64  # exact fit still encodes
+    assert bytes(message.encode())[44:108] == b"s" * 64
+
+    # Octets, not characters: a 33-character Latin-1 name is 66 octets.
+    message.sname = "é" * 33
+    with pytest.raises(ValueError, match="sname"):
+        message.encode()
+
+    message.sname = ""
+    message.file = "f" * 129
+    with pytest.raises(ValueError, match="file"):
+        message.encode()
+
+    message.file = "f" * 128
+    assert bytes(message.encode())[108:236] == b"f" * 128
+
+    # chaddr shares the pattern and the fix.
+    message.file = ""
+    message.chaddr = b"\xaa" * 20
+    with pytest.raises(ValueError, match="chaddr"):
+        message.encode()
+
+
+def test_overloading_still_moves_a_long_sname_and_file_into_options():
+    """The truncation guard must not fire on values the encoder legitimately
+    moved out: when overloading, sname/file carry option fragments instead, and
+    the real names travel in options 66 and 67."""
+    message = _overloading_message(2, 220)
+
+    wire = message.encode(576)
+    decoded = DhcpMessage.decode(bytearray(wire))
+
+    assert decoded.options.get(DhcpOptionCode.OPTION_OVERLOAD) == 3, "sname and file"
+    assert bytes(wire)[44:108] != b"tftp.example.test".ljust(
+        64, b"\x00"
+    ), "the sname field should hold option fragments, not the literal name"
+    assert decoded.sname == "tftp.example.test"
+    assert decoded.file == "pxelinux.0"
+
+
+def test_out_of_range_header_fields_name_the_field():
+    """`pack_into` names the struct format character, not the field.
+
+    Measured 2026-09-20: hops=256, hlen=256 and xid=2**32 each produced
+    `'B' format requires 0 <= number <= 255` (or `'I' ...`), from which a caller
+    cannot tell which of the four B-format fields was wrong -- and `struct.error`
+    is neither ValueError nor TypeError, so an `except ValueError` on a send
+    path did not catch it at all.
+    """
+    for field, value in (
+        ("hops", 256),
+        ("hops", -1),
+        ("hlen", 256),
+        ("xid", 2**32),
+        ("xid", -1),
+    ):
+        message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+        setattr(message, field, value)
+        with pytest.raises(ValueError, match=field):
+            message.encode()
+
+    # hlen is bounded by 16, not 255: chaddr is a 16-octet field, so a larger
+    # hlen has the receiver read past it into sname. decode() already rejected
+    # it with the same bound, so hlen=17 encoded happily and would not decode.
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.hlen = 17
+    with pytest.raises(ValueError, match="hlen"):
+        message.encode()
+    message.hlen = 16
+    message.chaddr = b"\xaa" * 16
+    assert DhcpMessage.decode(bytearray(message.encode())).hlen == 16
+
+    # secs is clamped, not rejected: it is elapsed time the client reports, and
+    # an overlong one is not a caller error.
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.secs = timedelta(seconds=100_000)
+    assert DhcpMessage.decode(bytearray(message.encode())).secs == timedelta(
+        seconds=0xFFFF
+    )

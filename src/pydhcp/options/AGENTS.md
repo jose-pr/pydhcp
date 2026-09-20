@@ -14,6 +14,11 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
   code→type resolution. `__setitem__`/`__getitem__` key on the raw `int`
   code; values may be set as a `DhcpOptionType`, `bytes`/`bytearray`/
   `memoryview`, or any value the registered codec's constructor accepts.
+  `__setitem__` is **atomic** — a codec that raises leaves the previous
+  value (or the key's absence) untouched rather than an emptied option —
+  and **copies** what it is given, so a `bytearray` the caller keeps and
+  mutates afterwards does not write through into the stored option.
+  Re-assigning an existing code keeps its position; order is wire-visible.
   - **`.get(key, default=None, *, decode=True) -> Any`** — `decode=True`
     (default) uses the code's registered `DhcpOptionType`; `decode=False`
     returns the raw `bytearray`; `decode=<type[DhcpOptionType]>` or

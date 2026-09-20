@@ -369,7 +369,8 @@ Not re-exported from the top-level package — import from `pydhcp.constants`.
   "silently discard" it otherwise, so a shorter message is droppable, not
   merely unusual.
 - **`DHCP_MIN_LEGAL_PACKET_SIZE`** (576) — the smallest message every client
-  must accept (RFC 2131 §2), and `encode()`'s default `max_packetsize`.
+  must accept (RFC 2131 §2), and `encode()`'s default `max_packetsize` — its
+  default, not its minimum: `encode()` accepts anything from 269 up.
   Exceeding it needs the client's option 57 (`MAXIMUM_DHCP_MESSAGE_SIZE`);
   `DhcpRelay._encode_for_forward` reads that option rather than shrinking a
   reply it is only forwarding.

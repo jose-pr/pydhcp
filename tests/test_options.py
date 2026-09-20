@@ -850,3 +850,72 @@ def test_unregistered_codes_fall_back_to_opaque_bytes():
         DhcpOptionCode(256)
     with pytest.raises(ValueError):
         DhcpOptionCode(-1)
+
+
+def test_a_failing_set_leaves_the_previous_value_intact():
+    """__setitem__ built the payload in place, so a codec that raised part-way
+    left the option *emptied* rather than unchanged.
+
+    A zero-length option is legal on the wire -- RFC 4039's RAPID_COMMIT is one
+    -- so the wreckage encodes and sends cleanly: the failed set silently
+    becomes a valid option meaning something else. Here the victim would be
+    SERVER_IDENTIFIER, and a client that reads an empty one has no server to
+    renew against.
+    """
+    options = DhcpOptions()
+    options[DhcpOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
+
+    with pytest.raises(Exception):
+        options[DhcpOptionCode.SERVER_IDENTIFIER] = "not-an-ip-address"
+
+    assert bytes(options[int(DhcpOptionCode.SERVER_IDENTIFIER)]) == b"\x0a\x00\x00\x01"
+    assert bytes(options.encode()) == b"\x36\x04\x0a\x00\x00\x01\xff"
+
+    # And a failing set on a key that was not there must not create it, empty.
+    fresh = DhcpOptions()
+    with pytest.raises(Exception):
+        fresh[DhcpOptionCode.SERVER_IDENTIFIER] = "not-an-ip-address"
+    assert int(DhcpOptionCode.SERVER_IDENTIFIER) not in fresh
+
+
+def test_setting_a_bytearray_copies_it_instead_of_aliasing_the_caller():
+    """A bytearray argument used to be stored by reference.
+
+    Every other accepted type was already copied, which is what made the
+    exception invisible: it only bites when a caller happens to reuse or mutate
+    the buffer afterwards. `DhcpOptions.copy()` exists because this same
+    aliasing bit the server's lease path.
+    """
+    options = DhcpOptions()
+    buffer = bytearray(b"\x0a\x00\x00\x01")
+    options[DhcpOptionCode.ROUTER] = buffer
+
+    buffer[0] = 0xFF
+    buffer.extend(b"\xde\xad")
+
+    assert bytes(options[int(DhcpOptionCode.ROUTER)]) == b"\x0a\x00\x00\x01"
+    assert options[int(DhcpOptionCode.ROUTER)] is not buffer
+
+    # The reverse direction too: the stored payload must not be the object a
+    # later caller mutates through.
+    stored = options.get(DhcpOptionCode.ROUTER, decode=False)
+    assert stored is not buffer
+
+
+def test_reassigning_an_option_keeps_its_position():
+    """The options order is wire-visible -- `encode` puts DHCP_MESSAGE_TYPE
+    first -- so swapping the payload in must not move the key to the end."""
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPACK.value]
+    )
+    options[DhcpOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\xfe")
+
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPOFFER.value]
+    )
+
+    assert [code for code, _ in _walk(options.encode())] == [
+        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
+        int(DhcpOptionCode.ROUTER),
+    ]

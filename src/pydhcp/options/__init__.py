@@ -209,16 +209,37 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         self[int(opt.code)] = opt.value
 
     def __setitem__(self, __key: int, __value: _ty.Any) -> None:
+        """Store an option, building the payload before it is visible.
+
+        Two properties the obvious implementation does not have:
+
+        * **Atomic.** The old code did `setdefault(key, bytearray()).clear()`
+          and then `_dhcp_write` into that same buffer, so a codec that raised
+          part-way left the option *emptied* -- or, for a key that was not
+          there before, newly present and empty. A zero-length option is legal
+          on the wire (RFC 4039's RAPID_COMMIT is one), so the wreckage encodes
+          and sends cleanly: the failed set becomes a valid option meaning
+          something else. Building into a scratch buffer and assigning only on
+          success leaves the previous value untouched instead.
+        * **Non-aliasing.** A `bytearray` argument used to be stored by
+          reference, so the caller kept a live handle on the stored option and
+          later mutations of their own buffer silently rewrote it. Every other
+          accepted type was already copied, which made the exception invisible
+          until a `bytearray` happened to be reused. `DhcpOptions.copy()` exists
+          because that same aliasing bit the server's lease path.
+
+        Assigning an existing key keeps its position: `OrderedDict` only
+        reorders on insert, and the options order is wire-visible (`encode`
+        puts DHCP_MESSAGE_TYPE first).
+        """
         if not isinstance(__value, (bytes, memoryview, bytearray, DhcpOptionType)):
             __value = self._codemap.from_code(__key).get_type()(__value)  # type: ignore[call-arg]
+        data = bytearray()
         if isinstance(__value, DhcpOptionType):
-            data = self._options.setdefault(__key, bytearray())
-            data.clear()
             __value._dhcp_write(data)
         else:
-            if not isinstance(__value, bytearray):
-                __value = bytearray(__value)
-            self._options[__key] = __value
+            data.extend(__value)
+        self._options[__key] = data
 
     def __delitem__(self, __key: int) -> None:
         return self._options.__delitem__(__key)

@@ -26,6 +26,66 @@ _FIXED_HEADER_SIZE = 236
 _MAGIC_COOKIE_END = 240
 _HEADER_STRUCT = _struct.Struct("!BBBBIHHIIII")
 
+#: Everything `encode`'s `max_packetsize` budget is spent on before the first
+#: option octet. `max_packetsize` measures the whole IP datagram -- which is why
+#: its default is RFC 2131 s2's 576-octet minimum datagram and not a message
+#: length -- so the overhead is 20 (IPv4) + 8 (UDP), then the 236-octet fixed
+#: header and the 4-octet magic cookie:
+#:
+#:     268 = 28 (UDP_MIN_PACKET_SIZE) + 240 (_MAGIC_COOKIE_END)
+_ENCODE_FIXED_OVERHEAD = _const.UDP_MIN_PACKET_SIZE + _MAGIC_COOKIE_END
+
+#: Smallest `max_packetsize` that can produce a packet: the overhead plus one
+#: octet for the END marker. Measured 2026-09-20 across 266..284 -- 268 does
+#: reach the encoder, but leaves a zero-length options field and dies inside
+#: `partial_encode` on "Invalid Options Max Size", which names neither the
+#: argument nor the shortfall.
+_MIN_ENCODE_PACKET_SIZE = _ENCODE_FIXED_OVERHEAD + 1
+
+#: Fixed widths of the BOOTP text fields, RFC 2131 s2 figure 1.
+_SNAME_FIELD_SIZE = 64
+_FILE_FIELD_SIZE = 128
+_CHADDR_FIELD_SIZE = 16
+
+
+def _check_header_int(field: str, value: _ty.Any, maximum: int) -> int:
+    """Range-check a fixed-width header field before `struct` sees it.
+
+    `_HEADER_STRUCT.pack_into` raises `struct.error` for an out-of-range value
+    and names the *format character*, not the field: measured 2026-09-20,
+    `hops=256`, `hlen=256` and `xid=2**32` each produced
+    `'B' format requires 0 <= number <= 255` (or `'I' ...`), from which a caller
+    cannot tell which of the four `B` fields was wrong. `struct.error` is also
+    neither `ValueError` nor `TypeError`, so an `except ValueError` around a
+    send path did not catch it.
+    """
+    if isinstance(value, int) and 0 <= value <= maximum:
+        return int(value)
+    raise ValueError(
+        f"{field}={value!r} does not fit its header field: "
+        f"it must be an integer in 0..{maximum}"
+    )
+
+
+def _check_bootp_field(field: str, value: _ty.Sized, width: int) -> None:
+    """Refuse to silently truncate a fixed-width BOOTP field.
+
+    `sname`, `file` and `chaddr` were packed with `.ljust(width)[:width]`, so an
+    over-long value lost its tail with no error and no log line. Measured
+    2026-09-20: a 100-character `sname` and a 200-character `file` both encoded
+    "successfully" at 300 octets, carrying the first 64 and 128 octets. `file`
+    is the PXE boot filename -- a truncated one sends the client to a TFTP path
+    that does not exist, and nothing in the exchange reports why it failed.
+
+    Over-long options are handled instead of truncated (see `encode`'s overload
+    branches), which is what makes doing neither here indefensible.
+    """
+    if len(value) > width:
+        raise ValueError(
+            f"{field} is {len(value)} octets and does not fit its "
+            f"{width}-octet BOOTP field"
+        )
+
 
 def _strip_hex_text(value: str) -> str:
     return "".join(ch for ch in value if ch not in " \t\r\n:")
@@ -437,10 +497,56 @@ class DhcpMessage:
     def encode(
         self, max_packetsize: int = _const.DHCP_MIN_LEGAL_PACKET_SIZE
     ) -> bytearray:
-        max_packetsize = int(max_packetsize or _const.DHCP_MIN_LEGAL_PACKET_SIZE)
-        max_options_field_size = max_packetsize - 264 - len(self.MAGIC_COOKIE)
-        if max_options_field_size < 0:
-            raise ValueError(f"{max_packetsize} is too small for a DHCP packet")
+        """Serialize the message, fitting it into `max_packetsize` octets.
+
+        `max_packetsize` is the whole **IP datagram**, not the DHCP message, so
+        the options field gets what is left after a fixed overhead:
+
+            max_options_field_size = max_packetsize - 268
+            268 = 20 (IPv4) + 8 (UDP) + 236 (fixed header) + 4 (magic cookie)
+
+        The default, `DHCP_MIN_LEGAL_PACKET_SIZE` (576), is RFC 2131 s2's
+        minimum datagram and leaves 308 octets for options. **269** is the floor
+        -- 268 of overhead plus the one octet the END marker needs -- and
+        anything below it raises `ValueError`, **including an explicit 0**: the
+        argument used to run through `max_packetsize or DHCP_MIN_LEGAL_PACKET_SIZE`,
+        so `encode(0)` quietly encoded to 576 instead. Silently using a number
+        other than the one the caller named is the failure mode this module has
+        spent the most time removing, and a caller passing 0 has a wrong belief
+        worth reporting.
+
+        Carrying any option at all needs 272: one option costs a code octet, a
+        length octet and at least one more before END. Between 269 and 271 only
+        an option-less message encodes, which is not a legal DHCP message
+        anyway (RFC 2131 s3 requires option 53), so the floor is left at the
+        arithmetic 269 rather than raising it to 272 and refusing calls that
+        work today.
+
+        Note that 576 is *not* a lower bound here. RFC 2132 s9.10's 576 minimum
+        constrains what a client may advertise in option 57, which the server
+        clamps on receipt; it does not constrain this API, and `encode(280)` is
+        a legitimate call (it is tested).
+
+        The result is padded up to `BOOTP_MIN_PACKET_SIZE` (300) with PAD octets
+        after END, or to `max_packetsize` when that is smaller.
+
+        Raises:
+            ValueError: `max_packetsize` is below 269, or a header field is out
+                of range, or `sname`/`file`/`chaddr` does not fit its fixed
+                field.
+            OverflowError: the options do not fit even with overloading.
+        """
+        max_packetsize = int(max_packetsize)
+        if max_packetsize < _MIN_ENCODE_PACKET_SIZE:
+            raise ValueError(
+                f"max_packetsize={max_packetsize} cannot hold a DHCP packet: "
+                f"the minimum is {_MIN_ENCODE_PACKET_SIZE}, being "
+                f"{_const.UDP_MIN_PACKET_SIZE} octets of IPv4 and UDP header, "
+                f"{_FIXED_HEADER_SIZE} of fixed header, "
+                f"{_MAGIC_COOKIE_END - _FIXED_HEADER_SIZE} of magic cookie and "
+                "1 for the END marker"
+            )
+        max_options_field_size = max_packetsize - _ENCODE_FIXED_OVERHEAD
 
         options = self.options.copy()
         # Whether THIS encode overloads is decided below, so drop any marker the
@@ -476,16 +582,29 @@ class DhcpMessage:
         else:
             overload = _type.OptionOverload.NONE
 
+        if overload is not _type.OptionOverload.NONE:
+            options._options[int(DhcpOptionCode.OPTION_OVERLOAD)] = bytearray(
+                [overload.value]
+            )
+            options._options.move_to_end(int(DhcpOptionCode.OPTION_OVERLOAD), False)
+
+        # DHCP_MESSAGE_TYPE leads the options field on BOTH paths. RFC 2131 s3
+        # walks the protocol by message type, and implementations do read option
+        # 53 before parsing the rest -- it is what tells a receiver whether the
+        # packet is even for it. This move was already here, and led on neither
+        # path: the non-overload path kept the `options.encode()` taken above
+        # for sizing, which predates the move, while the overload path then put
+        # OPTION_OVERLOAD in front of it (measured 2026-09-20: code 52 was the
+        # first TLV after the cookie). Hence both the placement after the
+        # overload marker and the re-encode below -- two encodes of the same
+        # message used to disagree on the wire depending on whether it happened
+        # to overload.
         try:
             options._options.move_to_end(int(DhcpOptionCode.DHCP_MESSAGE_TYPE), False)
         except KeyError:
             pass
 
         if overload is not _type.OptionOverload.NONE:
-            options._options[int(DhcpOptionCode.OPTION_OVERLOAD)] = bytearray(
-                [overload.value]
-            )
-            options._options.move_to_end(int(DhcpOptionCode.OPTION_OVERLOAD), False)
             options_field, leftover = options.partial_encode(max_options_field_size)
 
             if (
@@ -507,6 +626,18 @@ class DhcpMessage:
                     "DHCP options exceed maximum packet size: "
                     f"{len(leftover)} option(s) did not fit"
                 )
+        else:
+            # The encode above measured the size; this one carries the order.
+            options_field = options.encode()
+
+        # Validate what is actually packed, not what the caller set: encode()
+        # legitimately *moves* a long sname/file out into options 66 and 67 when
+        # it overloads, and `sname_bytes`/`file_bytes` are then the option
+        # fragments `partial_encode` produced, already bounded by the field
+        # width it was given.
+        _check_bootp_field("sname", sname_bytes, _SNAME_FIELD_SIZE)
+        _check_bootp_field("file", file_bytes, _FILE_FIELD_SIZE)
+        _check_bootp_field("chaddr", self.chaddr, _CHADDR_FIELD_SIZE)
 
         data = bytearray(28)
         _HEADER_STRUCT.pack_into(
@@ -514,9 +645,16 @@ class DhcpMessage:
             0,
             self.op.value,
             int(self.htype),
-            self.hlen,
-            self.hops,
-            self.xid,
+            # 16, not 255: `chaddr` is a 16-octet field, so a larger `hlen` is a
+            # lie the receiver acts on -- it reads past chaddr into `sname`.
+            # `decode` already rejects it with the same bound, and the two
+            # disagreed: hlen=17 encoded happily and would not decode back.
+            _check_header_int("hlen", self.hlen, _CHADDR_FIELD_SIZE),
+            _check_header_int("hops", self.hops, 0xFF),
+            _check_header_int("xid", self.xid, 0xFFFFFFFF),
+            # `secs` is clamped rather than rejected: it is an elapsed time the
+            # client reports, an overlong one is not a caller error, and RFC
+            # 2131 s4.4.1 only requires it to be monotonic within an exchange.
             min(0xFFFF, max(0, int(self.secs.total_seconds()))),
             self.flags.value,
             int(self.ciaddr),
@@ -524,9 +662,11 @@ class DhcpMessage:
             int(self.siaddr),
             int(self.giaddr),
         )
-        data.extend(self.chaddr.ljust(16, b"\x00")[:16])
-        data.extend(sname_bytes.ljust(64, b"\x00")[:64])
-        data.extend(file_bytes.ljust(128, b"\x00")[:128])
+        # No trailing `[:width]` slice: it was the silent truncation, and
+        # `_check_bootp_field` above has already refused anything longer.
+        data.extend(self.chaddr.ljust(_CHADDR_FIELD_SIZE, b"\x00"))
+        data.extend(sname_bytes.ljust(_SNAME_FIELD_SIZE, b"\x00"))
+        data.extend(file_bytes.ljust(_FILE_FIELD_SIZE, b"\x00"))
         data.extend(self.MAGIC_COOKIE)
         data.extend(options_field)
 

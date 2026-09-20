@@ -34,13 +34,36 @@ top-level package header.
     RFC 3396 `OPTION_OVERLOAD` (decodes overflow options packed into the
     `file`/`sname` fields).
   - **`.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) ->
-    bytearray`** — serializes to wire bytes. Raises `ValueError` if
-    `max_packetsize` is too small for even a bare packet, and
-    `OverflowError` if options still don't fit after using RFC 3396 overload
-    packing into `file`/`sname`. `DHCP_MESSAGE_TYPE` is always moved to the
-    front of the options field. The result is padded with PAD octets (after
-    END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC 1542 §2.1 lets a relay
-    agent require — never past a `max_packetsize` smaller than that.
+    bytearray`** — serializes to wire bytes. `max_packetsize` budgets the
+    whole **IP datagram**, not the message: the options field gets
+    `max_packetsize − 268`, where `268 = 20 (IPv4) + 8 (UDP) + 236 (fixed
+    header) + 4 (magic cookie)`.
+    - **`ValueError`** if `max_packetsize` is below **269** (the overhead
+      plus the END octet), **including an explicit `0`** — it is not
+      rewritten to the default. 576 is *not* a lower bound here: RFC 2132
+      §9.10's minimum constrains the client's option 57, which `DhcpServer`
+      clamps on receipt, and `encode(280)` is a legitimate call. Carrying
+      any option at all needs 272.
+    - **`ValueError`** naming the field if `hops` (0–255), `hlen` (0–**16**,
+      matching `.decode()`, since `chaddr` is a 16-octet field) or `xid`
+      (0–2³²−1) is out of range — previously a bare `struct.error`, which
+      names the format character rather than the field and is neither
+      `ValueError` nor `TypeError`. `secs` is **clamped** to 0–65535 rather
+      than rejected: it is elapsed time the client reports.
+    - **`ValueError`** naming the field if `sname` (>64 octets encoded),
+      `file` (>128) or `chaddr` (>16) does not fit — these were **silently
+      truncated**, and a truncated `file` is a PXE boot filename that points
+      nowhere. Values the encoder legitimately *moves* into options 66/67
+      when overloading are unaffected; the check is on what is packed.
+    - **`OverflowError`** if options still don't fit after RFC 3396 overload
+      packing into `file`/`sname`.
+
+    `DHCP_MESSAGE_TYPE` is always the **first** TLV after the magic cookie,
+    overloading or not (and ahead of `OPTION_OVERLOAD`) — RFC 2131 §3 has
+    receivers read option 53 before parsing the rest. The result is padded
+    with PAD octets (after END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC
+    1542 §2.1 lets a relay agent require — never past a `max_packetsize`
+    smaller than that.
   - **`.to_mapping() -> dict[str, Any]`** / **`DhcpMessage.from_mapping(data:
     Mapping[str, Any]) -> DhcpMessage`** — structured round-trip to/from a
     plain dict. Option keys are the option's label when it has one, else its
