@@ -42,7 +42,7 @@ from conftest import CHADDR, build_request
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "pydhcp"
 
 
-# --- Phase 1: the async halves must be a mixin, not a copy -------------------
+# --- The async halves must be a mixin, not a copy ----------------------------
 #
 # Measured, not read. Every check below is over the parsed source.
 

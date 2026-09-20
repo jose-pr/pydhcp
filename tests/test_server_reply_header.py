@@ -30,10 +30,10 @@ def _request() -> DhcpMessage:
         options=options,
         hops=3,
         secs=timedelta(seconds=41),
-        ciaddr=IPv4("10.9.9.9"),
-        yiaddr=IPv4("10.8.8.8"),
-        siaddr=IPv4("10.7.7.7"),
-        giaddr=IPv4("10.6.6.6"),
+        ciaddr=IPv4("203.0.113.9"),
+        yiaddr=IPv4("203.0.113.8"),
+        siaddr=IPv4("203.0.113.7"),
+        giaddr=IPv4("203.0.113.6"),
         sname="attacker-tftp.example",
         file="evil/boot.img",
     )
@@ -84,7 +84,7 @@ def test_ack_still_echoes_ciaddr(server, lease) -> None:
     resp = server._create_response(
         _request(), lease, SERVER_ID, DhcpMessageType.DHCPACK
     )
-    assert resp.ciaddr == IPv4("10.9.9.9")
+    assert resp.ciaddr == IPv4("203.0.113.9")
 
 
 @pytest.mark.parametrize(
@@ -102,7 +102,7 @@ def test_giaddr_is_echoed_so_a_relay_can_route_the_reply(
     over-broad fix this review has already had to back out twice.
     """
     resp = server._create_response(_request(), lease, SERVER_ID, resp_ty)
-    assert resp.giaddr == IPv4("10.6.6.6")
+    assert resp.giaddr == IPv4("203.0.113.6")
 
 
 @pytest.mark.parametrize(
