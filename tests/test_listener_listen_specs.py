@@ -92,14 +92,27 @@ def _wildcard_socket():
 
 
 def _a_real_interface():
+    """An interface both of the resolver's two lookups can find.
+
+    Not simply "the first non-loopback one with an index". `_resolve_interface`
+    looks up by index first and falls back to matching the address against
+    `host_ip_interfaces()`, and the two enumerations disagree: link-local
+    (APIPA, 169.254.0.0/16) addresses appear only in the indexed one. This box
+    grows and drops transient `Wi-Fi 2/3/4` adapters holding exactly those, and
+    one appearing at the head of the list made the address-fallback test fail
+    mid-sweep on a docs-only commit. Pick one that is in both.
+    """
     import pytest
 
-    from pydhcp.network import _iter_indexed_interfaces
+    from pydhcp.network import _iter_indexed_interfaces, host_ip_interfaces
 
+    addressable = {str(i.ip) for i in host_ip_interfaces(family=None)}
     for index, interface in _iter_indexed_interfaces(family=4):
-        if index and not interface.ip.is_loopback:
+        if not index or interface.ip.is_loopback:
+            continue
+        if str(interface.ip) in addressable:
             return index, interface
-    pytest.skip("no non-loopback IPv4 interface with a usable index on this host")
+    pytest.skip("no non-loopback IPv4 interface resolvable by index and address")
 
 
 def test_resolve_interface_prefers_pktinfo_over_getsockname() -> None:
