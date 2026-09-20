@@ -43,9 +43,19 @@ top-level package header.
     agent require — never past a `max_packetsize` smaller than that.
   - **`.to_mapping() -> dict[str, Any]`** / **`DhcpMessage.from_mapping(data:
     Mapping[str, Any]) -> DhcpMessage`** — structured round-trip to/from a
-    plain dict (option keys are the option's label when known, else its
-    numeric code as a string; unrecognized option values fall back to raw
-    hex bytes). Backs the JSON/YAML/TOML/INI helpers below.
+    plain dict. Option keys are the option's label when it has one, else its
+    **numeric code** as a string (every unnamed code shares the label
+    `"UNKNOWN"`, so using it collided them onto one key).
+    - The round trip is **byte-exact**: each option is loaded back at dump
+      time, and one whose readable form does not reproduce the original
+      octets is written as **`{"hex": "..."}`** instead
+      (`DhcpMessage.HEX_VALUE_KEY`). That covers text holding a non-UTF-8
+      octet, a payload the codec normalises, and a length the codec does not
+      preserve. The form survives JSON, YAML, TOML and INI alike.
+    - Integer options serialize as plain `int`, not as the `U16`/`U32`
+      subclass — YAML cannot represent the subclass and TOML writes something
+      it cannot read back.
+    Backs the JSON/YAML/TOML/INI helpers below.
   - **`.client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
     `htype.value + chaddr`; returned as uppercase colon-hex. Raises
