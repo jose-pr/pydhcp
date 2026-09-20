@@ -75,7 +75,7 @@ executed once per accepted packet with the structured packet on stdin.
 - Explicit endpoint lists avoid interface-enumeration surprises while debugging.
 
 ```bash
-pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768 --log-level debug
+pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768 -v
 ```
 
 ## Useful commands

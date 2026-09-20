@@ -121,7 +121,7 @@ pydhcp server --listen 127.0.0.1:6767 --loglevel pydhcp=DEBUG
 
 ## Development
 
-See development notes for environment setup, dependency install, and test commands.
+See [`AGENTS.md`](AGENTS.md) for environment setup, dependency install, and test commands.
 
 For comprehensive validation in GitHub Actions, the test workflow also supports
 manual `workflow_dispatch` runs and safe `ci-*` tags. Benchmarks stay repo-local and opt-in:
@@ -130,10 +130,10 @@ the benchmark harness included. The repository wrapper and individual benchmark 
 write structured JSON reports for local comparison or CI artifact upload:
 
 ```bash
-.\.venv\3.12.10\Scripts\python.exe benchmarks\run.py --suite parse --iterations 10000 --json-output benchmark-results/bench_parse.json
-.\.venv\3.12.10\Scripts\python.exe benchmarks\run.py --suite options --iterations 1000 --json-output benchmark-results/bench_options.json
-.\.venv\3.12.10\Scripts\python.exe benchmarks\bench_parse.py --iterations 10000 --json-output benchmark-results/bench_parse.json
-.\.venv\3.12.10\Scripts\python.exe benchmarks\bench_options.py --iterations 1000 --json-output benchmark-results/bench_options.json
+python benchmarks\run.py --suite parse --iterations 10000 --json-output benchmark-results/bench_parse.json
+python benchmarks\run.py --suite options --iterations 1000 --json-output benchmark-results/bench_options.json
+python benchmarks\bench_parse.py --iterations 10000 --json-output benchmark-results/bench_parse.json
+python benchmarks\bench_options.py --iterations 1000 --json-output benchmark-results/bench_options.json
 ```
 
 ### Releasing

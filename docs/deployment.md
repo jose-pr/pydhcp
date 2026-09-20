@@ -24,7 +24,7 @@ Description=pydhcp server
 After=network-online.target
 
 [Service]
-ExecStart=/opt/pydhcp/.venv/bin/pydhcp server --help
+ExecStart=/opt/pydhcp/.venv/bin/pydhcp server --config /etc/pydhcp/server.yaml
 Restart=on-failure
 User=pydhcp
 Group=pydhcp
@@ -33,7 +33,10 @@ Group=pydhcp
 WantedBy=multi-user.target
 ```
 
-Replace `--help` with the server arguments you actually want in production. The CLI accepts JSON or INI configuration files through `--config`.
+The CLI accepts JSON, YAML, TOML and INI configuration files through `--config` (TOML needs Python 3.11+ or the `pydhcp[toml]` extra). An explicit `--listen` overrides whatever the file says.
+
+Port 67 is privileged: run the unit as root, or grant the interpreter the capability once with
+`sudo setcap 'cap_net_bind_service=+ep' /opt/pydhcp/.venv/bin/python3` and keep `User=pydhcp`. Without one of the two the service fails to bind, which pydhcp reports as a `PermissionError` naming the port.
 
 ## Docker
 

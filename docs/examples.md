@@ -88,7 +88,7 @@ server.listen()
 The CLI accepts comma-separated endpoint strings for the same workflow.
 
 ```bash
-pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768 --log-level debug
+pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768 -v
 ```
 
 ## Basic packet client
