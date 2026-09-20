@@ -335,18 +335,47 @@ def test_cmd_server(mock_dhcp_server_cls):
     cmd()
 
     mock_dhcp_server_cls.assert_called_with(
-        listen="127.0.0.1:6767", per_interface=False
+        listen="127.0.0.1:6767", per_interface=False, lease_backend=None
     )
     assert mock_server.bind.called
     assert mock_server.listen.called
 
 
 def test_parse_server_address_host_only():
-    assert _parse_server_address("192.0.2.1") == "192.0.2.1"
+    """A bare host now arrives at DhcpRelay already carrying the default port.
+
+    It used to be handed through as the raw string and defaulted inside
+    `_normalize_server_address`; the value reaching the relay is the same
+    upstream either way.
+    """
+    assert _parse_server_address("192.0.2.1") == ("192.0.2.1", 67)
 
 
 def test_parse_server_address_host_port():
     assert _parse_server_address("192.0.2.1:6767") == ("192.0.2.1", 6767)
+
+
+def test_parse_server_address_shares_the_listener_parser():
+    """Three host:port parsers disagreed; this one is no longer its own.
+
+    Measured on the old CLI parser, which split on a lone ':': `[::1]:6767` has
+    three, so the whole bracketed string fell through unparsed as a host, while
+    `listener._split_host_port` read the same text as ('::1', 6767). Note this
+    does not make an IPv6 upstream *work* -- `relay._normalize_server_address`
+    still calls IPv4() on whatever it gets -- it makes one syntax mean one
+    thing.
+    """
+    from pydhcp.listener import _split_host_port
+
+    assert _parse_server_address("[::1]:6767") == _split_host_port("[::1]:6767")
+
+
+def test_parse_server_address_rejects_a_bare_port():
+    """`_split_host_port` defaults an empty host to the wildcard, which is a
+    listen address, not somewhere to forward to. The old parser turned
+    `--server :6767` into ('0.0.0.0', 6767) and relayed into the void."""
+    with pytest.raises(ValueError, match="upstream host"):
+        _parse_server_address(":6767")
 
 
 @patch("pydhcp.cli.DhcpRelay")
@@ -366,7 +395,7 @@ def test_cmd_relay(mock_dhcp_relay_cls):
 
     mock_dhcp_relay_cls.assert_called_with(
         listen="127.0.0.1:6767",
-        server_addresses=["192.0.2.1", ("192.0.2.2", 6768)],
+        server_addresses=[("192.0.2.1", 67), ("192.0.2.2", 6768)],
         max_hops=10,
         insert_relay_agent_info=True,
         circuit_id=b"\xaa\xbb",
@@ -445,7 +474,9 @@ def test_per_interface_is_reachable_from_every_listening_subcommand(
 def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
     Server(config=None, listen="127.0.0.1:6767", per_interface=True)()
 
-    mock_dhcp_server_cls.assert_called_with(listen="127.0.0.1:6767", per_interface=True)
+    mock_dhcp_server_cls.assert_called_with(
+        listen="127.0.0.1:6767", per_interface=True, lease_backend=None
+    )
 
 
 @patch("pydhcp.cli.DhcpRelay")
@@ -653,9 +684,10 @@ def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
     captured = {}
 
     class FakeServer:
-        def __init__(self, listen, per_interface=False):
+        def __init__(self, listen, per_interface=False, lease_backend=None):
             captured["listen"] = listen
             captured["per_interface"] = per_interface
+            self.lease_backend = lease_backend
 
         def bind(self):
             pass

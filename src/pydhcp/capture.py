@@ -3,19 +3,33 @@ from __future__ import annotations
 import dataclasses as _data
 import datetime as _dt
 import enum as _enum_base
+import logging as _logging
 import re as _re
+import string as _string
 import typing as _ty
 
 from . import network as _net
 from .listener import AsyncDhcpListener, DhcpListener, ListenSpec, RequestContext
-from .log import LOGGER
 from .options import DhcpOptionCode
 from .packet.message import DhcpMessage, NoClientIdentity
 from .options import DhcpOptionType
 
+#: This module's logger, a child of the package logger `pydhcp` (which
+#: `.listener` above has already imported, installing its `NullHandler`).
+LOGGER = _logging.getLogger(__name__)
+
 CapturePredicate = _ty.Callable[["CaptureEvent"], bool]
 CaptureHook = _ty.Callable[["CaptureEvent"], None]
 CaptureSink = _ty.Callable[["CaptureEvent"], None]
+
+#: The placeholders `CaptureEvent.format_filename` fills in, and so the only
+#: ones a `--output-mode per-capture` filename pattern may name.
+FILENAME_FIELDS: _ty.Final = ("client_id", "timestamp", "msg_type", "xid", "format")
+
+#: The subset of those that differs between two packets of one capture. A
+#: pattern naming none of them resolves to the same filename for packets that
+#: agree on the rest, and each record then overwrites the last.
+UNIQUE_FILENAME_FIELDS: _ty.Final = frozenset({"timestamp", "xid"})
 
 _SAFE_FILENAME_RE = _re.compile(r"[^A-Za-z0-9_.-]+")
 _AND_SEPARATOR_RE = _re.compile(r"\s+and\s+", _re.IGNORECASE)
@@ -82,6 +96,51 @@ class CaptureEvent:
             "format": _sanitize_filename_value(format),
         }
         return pattern.format(**values)
+
+
+def validate_filename_pattern(pattern: str) -> frozenset[str]:
+    """Check a per-capture filename pattern; return the fields it names.
+
+    Raises `ValueError` for a malformed pattern or one naming a placeholder
+    `format_filename` cannot fill. This belongs at startup because
+    `format_filename` is only ever called from the receive handler, where a
+    `KeyError` lands inside the listener's per-packet `except` -- so
+    `--output "cap_{mac}.json"` started cleanly, recorded nothing, and logged
+    the same traceback once per packet on the segment instead of once.
+
+    Format specs are allowed (`{client_id:>12}`): `string.Formatter().parse`
+    hands back the field name separately from its spec. Anything else that is
+    not a bare field name -- `{}`, `{0}`, `{xid.real}` -- is rejected, because
+    `format_filename` formats against a plain dict of the five values and
+    nothing else resolves against it.
+    """
+
+    def fields_of(text: str) -> "_ty.Iterator[str]":
+        try:
+            parsed = list(_string.Formatter().parse(text))
+        except ValueError as error:
+            raise ValueError(
+                f"Invalid capture filename pattern {pattern!r}: {error}"
+            ) from None
+        for _literal, field, spec, _conversion in parsed:
+            if field is not None:
+                yield field
+            # `str.format` resolves one level of nesting inside a spec, e.g.
+            # `{xid:{format}}`, and those names have to be real too.
+            if spec:
+                yield from fields_of(spec)
+
+    used: set[str] = set()
+    for field in fields_of(pattern):
+        if field not in FILENAME_FIELDS:
+            named = "{}" if not field else "{" + field + "}"
+            raise ValueError(
+                f"Invalid capture filename pattern {pattern!r}: {named} is not a "
+                f"capture field. Available: "
+                + ", ".join("{" + name + "}" for name in FILENAME_FIELDS)
+            )
+        used.add(field)
+    return frozenset(used)
 
 
 def compile_capture_filter(text: str | None) -> CapturePredicate:

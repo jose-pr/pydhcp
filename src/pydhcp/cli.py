@@ -13,14 +13,26 @@ import typing as _ty
 import duho
 from duho import AUTO, Cli, Cmd, DefaultsFormatter, LoggingArgs, Meta
 
-from .capture import CaptureEvent, DhcpCapture
+from .capture import (
+    UNIQUE_FILENAME_FIELDS,
+    CaptureEvent,
+    DhcpCapture,
+    validate_filename_pattern,
+)
+from .listener import _split_host_port
 from .network import host_ip_interfaces
 from .server import DhcpServer
+from .lease import FileLeaseBackend, LeaseBackend
 from .relay import DEFAULT_MAX_HOPS, DhcpRelay
 from .config import load_config
+from .packet.enums import DhcpPort
 from .packet.message import DhcpMessage
 from .packet.structured import dump_message, load_message
-from .log import LOGGER
+
+#: This module's logger, a child of the package logger `pydhcp` -- which is
+#: what `-v`/`--loglevel pydhcp:DEBUG` configure, and what the imports above
+#: have already set up with its `NullHandler`.
+LOGGER = _logging.getLogger(__name__)
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 CAPTURE_FORMATS = ("json", "yaml", "toml", "ini")
@@ -72,6 +84,10 @@ class Server(_Command):
     "Bind each interface separately instead of using wildcard packet-info routing"
     ("--per-interface",)
 
+    lease_file: _ty.Optional[str] = None
+    "Persist leases to this JSON file instead of keeping them in memory"
+    ("--lease-file",)
+
     def __call__(self) -> None:
         config: _ty.Dict[str, _ty.Any] = {}
         if self.config:
@@ -83,7 +99,8 @@ class Server(_Command):
         # said, which is the opposite of what every other CLI does and gives no
         # way to override a shared config for one run.
         listen = self.listen or server_config.get("listen") or "*"
-        unknown = sorted(set(server_config) - {"listen"})
+        lease_file = self.lease_file or server_config.get("lease_file")
+        unknown = sorted(set(server_config) - {"listen", "lease_file"})
         if unknown:
             self._logger_.warning(
                 "Ignoring unsupported key(s) under [server] in %s: %s",
@@ -91,21 +108,55 @@ class Server(_Command):
                 ", ".join(unknown),
             )
 
+        # A persistent backend is the difference between a restart keeping every
+        # client on its address and every client renumbering. deployment.md has
+        # always told operators to mount lease storage; until now the CLI had no
+        # way to write to it, so the volume stayed empty.
+        backend: _ty.Optional[LeaseBackend] = None
+        if lease_file:
+            backend = FileLeaseBackend(lease_file)
+            self._logger_.info("Persisting leases to %s", lease_file)
+
         self._logger_.info("Starting DHCP server, listening on: %s...", listen)
-        server = DhcpServer(listen=listen, per_interface=self.per_interface)
+        server = DhcpServer(
+            listen=listen,
+            per_interface=self.per_interface,
+            lease_backend=backend,
+        )
         try:
             server.bind()
             server.listen()
         except KeyboardInterrupt:
             self._logger_.info("Stopping server...")
             server.stop()
+        finally:
+            # Flush a coalescing backend, and let the in-memory one no-op.
+            close = getattr(server.lease_backend, "close", None)
+            if close is not None:
+                close()
 
 
-def _parse_server_address(value: str) -> "tuple[str, int] | str":
-    if value.count(":") == 1:
-        host, port_text = value.rsplit(":", 1)
-        return (host or "0.0.0.0", int(port_text))
-    return value
+def _parse_server_address(value: str) -> "tuple[str, int]":
+    """Split one `--server` argument into `(host, port)`, port 67 by default.
+
+    Shares the listener's parser rather than repeating it. The hand-rolled one
+    here split on a lone ':', which made `--server "[::1]:6767"` -- three colons
+    -- fall through as a single opaque host string; the listener reads the same
+    text as `("::1", 6767)`. Two parsers, two answers for the same syntax.
+
+    An empty host is rejected here even though `_split_host_port` defaults it to
+    `0.0.0.0`: the wildcard means "every local address" and is a reasonable
+    thing to *listen* on, but as the address of an upstream server to forward
+    *to* it is meaningless, so `--server :6767` is a typo worth reporting.
+    """
+    text = value.strip()
+    if not text or (text.startswith(":") and not text.startswith("::")):
+        raise ValueError(
+            f"--server needs an upstream host address, got {value!r}; "
+            "a bare port has no server to forward to"
+        )
+    host, port = _split_host_port(text)
+    return host, int(DhcpPort.SERVER) if port is None else port
 
 
 class Relay(_Command):
@@ -483,11 +534,9 @@ def _load_capture_hook(
                 f"{hook_path}"
             ) from expired
         if result.stdout:
-            _logging.getLogger("pydhcp").debug(
-                "Capture hook command output: %s", result.stdout.strip()
-            )
+            LOGGER.debug("Capture hook command output: %s", result.stdout.strip())
         if result.returncode != 0:
-            _logging.getLogger("pydhcp").error(
+            LOGGER.error(
                 "Capture hook command failed (%s): %s",
                 result.returncode,
                 result.stderr.strip(),
@@ -548,10 +597,24 @@ class Capture(_Command):
         try:
             output = self.output if self.output is not None else pathlib.Path("-")
             output_mode = _infer_output_mode(output, self.output_mode)
-            if output_mode == "per-capture" and str(output) == "-":
-                raise ValueError(
-                    "--output-mode per-capture requires --output to be a filename pattern"
-                )
+            if output_mode == "per-capture":
+                if str(output) == "-":
+                    raise ValueError(
+                        "--output-mode per-capture requires --output to be a "
+                        "filename pattern"
+                    )
+                # Both checks run before binding, for the same reason the
+                # capture filter is compiled eagerly: the pattern is only ever
+                # expanded inside the receive handler, so a mistake there costs
+                # one message per packet and no recording at all.
+                used_fields = validate_filename_pattern(str(output))
+                if not used_fields & UNIQUE_FILENAME_FIELDS:
+                    self._logger_.warning(
+                        "--output pattern %s names neither {timestamp} nor {xid}, "
+                        "so any two packets agreeing on the rest of it resolve to "
+                        "the same file and only the last one is kept",
+                        output,
+                    )
             packet_format = _infer_capture_format(output, self.packet_format)
             if packet_format in ("toml", "ini") and output_mode != "per-capture":
                 # Concatenating records produces a file no parser will read: TOML
