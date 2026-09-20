@@ -39,7 +39,9 @@ DhcpOptionCode.MTU_PLATEAU.register_type(List[U16])
 DhcpOptionCode.MASK_DISCOVERY.register_type(Boolean)
 DhcpOptionCode.MASK_SUPPLIER.register_type(Boolean)
 DhcpOptionCode.NON_LOCAL_SOURCE_ROUTING.register_type(Boolean)
-DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST.register_type(DomainList)
+# RFC 4280 s4.6: 'DNS name compression MUST NOT be used.' The compressed
+# DomainList emitted a 0xC0 pointer into a payload whose RFC forbids one.
+DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST.register_type(UncompressedDomainList)
 DhcpOptionCode.BCMCS_IPV4_ADDRESS.register_type(List[IPv4Address])
 DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME.register_type(U32)
 # RFC 4388 s6.1: 'Len n (multiple of 4), Address 1 ... Address n'. A single
@@ -146,6 +148,8 @@ DhcpOptionCode.RAPID_COMMIT.register_type(Flag)
 # RFC 6704 s3.1.2: one octet per supported algorithm. Boolean made a
 # two-algorithm payload undecodable, and False wrote the undefined 0.
 DhcpOptionCode.FORCERENEW_NONCE_CAPABLE.register_type(List[U8])
+# RFC 6731 s4.3 defers to RFC 3315 s8: a domain name list in DHCP 'MUST NOT
+# be stored in compressed form'. RdnssSelection holds an UncompressedDomainList.
 DhcpOptionCode.RDNSS_SELECTION.register_type(RdnssSelection)
 # RFC 6926 s6.2.2: a status octet plus an optional UTF-8 message.
 DhcpOptionCode.STATUS_CODE.register_type(StatusCode)

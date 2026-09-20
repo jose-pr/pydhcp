@@ -27,6 +27,15 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
   and **copies** what it is given, so a `bytearray` the caller keeps and
   mutates afterwards does not write through into the stored option.
   Re-assigning an existing code keeps its position; order is wire-visible.
+  `__setitem__` and `.append()` **check the code**: it must be an `int`
+  (`bool` is refused) in `MIN_OPTION_CODE`..`MAX_OPTION_CODE` (**1..254**,
+  both exported from `pydhcp.options`). `0` (PAD) and `255` (END) raise
+  `ValueError` — they are wire framing, not options, and storing under them
+  used to emit `00 02 ..` / `ff 02 ..` TLVs that a receiver reads as padding
+  and as end-of-options. A code above 255 raises here too, rather than at
+  `encode()` with `byte must be in range(0, 256)`. `.decode()` is
+  deliberately **not** checked: receive stays liberal and already treats 0
+  and 255 as framing.
   - **`.get(key, default=None, *, decode=True) -> Any`** — `decode=True`
     (default) uses the code's registered `DhcpOptionType`; `decode=False`
     returns the raw `bytearray`; `decode=<type[DhcpOptionType]>` or
@@ -73,18 +82,30 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
   application code never needs to call it directly. Unregistered codes
   (`PAD`, `END`, and any code without a `registry.py` entry) fall back to
   `Bytes` (opaque).
+  **`.register_type()` loads the built-in registry first**, so *your*
+  registration is always the later write and survives the lazy load —
+  registering before anything triggered it used to be silently undone by it.
+  The load is serialized and the "loaded" flag is published only once
+  `registry.py` has finished, so a concurrent `get_type()` never sees the
+  `Bytes` placeholder for a code being registered, and an import that
+  *raises* is retried on the next call instead of being remembered as done.
 - **`BaseDhcpOptionCode`** — protocol/base for a custom code enum:
   `.get_type()`, `.label()`, `.from_code(code: int)` (classmethod,
   constructs/looks up a code value), `.normalize(code, value) -> DhcpOption`,
   `.decode(code, value: bytearray) -> DhcpOption`. Subclass this (instead of
   `DhcpOptionCode`) to build an application-specific option-code enum with
   its own codec bindings, and pass it as `DhcpOptions(codemap=...)`.
+  `int(code)` is the `value` attribute (an `IntEnum` member has one) or, for
+  an `int` subclass, its own integer identity; a subclass with **neither**
+  raises `TypeError` rather than answering `0`, which is PAD. `repr()` never
+  raises, so such a code still prints as `[000]UNKNOWN` while you debug it.
 - **`DhcpOption`** (`NamedTuple[code: int | BaseDhcpOptionCode, value:
   DhcpOptionType]`) — one decoded/normalized option pair, as returned by
   `.decode`/`.normalize` and accepted by `DhcpOptions.append`/`.replace`.
 
 **Gotcha**: `PAD` and `END` are intentionally never registered — they're
-zero-length wire markers, not payload-bearing codecs.
+zero-length wire markers, not payload-bearing codecs. They are also not
+storable: `options[0]` / `options[255]` raise, see `DhcpOptions` above.
 
 **Gotcha**: option 43 (`VENDOR_SPECIFIC_INFORMATION`) is registered as
 opaque `Bytes` by default — TLV parsing is opt-in via `TlvOption`, not
@@ -102,7 +123,8 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 
 **Hashability**: every record codec is hashable and its hash agrees with its
 `__eq__`, so decoded values can go into a `set` or be used as dict keys. The
-**list** codecs (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList`,
+**list** codecs (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList` and
+`UncompressedDomainList`,
 `PcpServerList`, `UriList`, `CccOption`, the `Vi*`/`MoS*` containers) are
 mutable `list` subclasses and so are deliberately **not** hashable — build a
 `tuple` from one if you need a key.
@@ -176,6 +198,26 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   measured on the uncompressed form — and an over-long label raises rather
   than writing a length octet that collides with the pointer flag bits. An
   empty entry is the root name and encodes as a single zero octet.
+  Normalizes like `List[T]`: a `list`/`tuple` argument is several entries,
+  **anything else is one entry**, and every entry must be a `str`
+  (`TypeError` otherwise). So `DomainList("corp")` is `["corp"]` — it is a
+  `list[str]` subclass, and without this a bare `str` was read as an
+  iterable of *characters*. Registered for `DOMAIN_SEARCH` (119, RFC 3397)
+  and `SIP_UA_CONFIG_SERVICE_DOMAINS` (141, RFC 6011 §4.1), the two options
+  that **require** the compressed form.
+- **`UncompressedDomainList`** (`DomainList` subclass) — the same container,
+  encoding through the shared `type/domain.py` name encoder so it never
+  emits a compression pointer. Registered for `BCMCS_DOMAIN_NAME_LIST` (88)
+  and used for `RdnssSelection.domains` (146), whose RFCs forbid
+  compression: RFC 4280 §4.6 ("DNS name compression MUST NOT be used") and
+  RFC 6731 §4.3 via RFC 3315 §8 ("MUST NOT be stored in compressed form").
+  **Encode-only** — decoding is `DomainList`'s and still resolves a pointer
+  that arrives, because a payload from a non-conforming peer is readable and
+  this package is liberal on receive.
+  *Gotcha*: this is chosen by the **registry**, so `options[88] = [...]`
+  gets it. Assigning an explicit `DomainList(...)` instance to option 88
+  bypasses the registry (any `DhcpOptionType` is written as given) and
+  compresses — pass a plain list, or `UncompressedDomainList`.
 - **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0)`** — RFC 4702 client FQDN
   (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/`FLAG_O`/`FLAG_E`/
   `FLAG_N` are the defined bits; the name is RFC 1035 wire format when `FLAG_E`
@@ -186,7 +228,9 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   IPv4 addresses, written as a leading encoding octet. A plain list infers its
   encoding. `.values` is a list of strings either way.
 - **`RdnssSelection(flags, primary, secondary, domains=None)`** — RFC 6731
-  RDNSS selection record.
+  RDNSS selection record. `.domains` is an `UncompressedDomainList` and
+  normalizes like one, so `RdnssSelection(..., "a.com").domains` is
+  `["a.com"]` rather than one entry per character.
 - **`DomainName`** — a single **uncompressed** RFC 1035 name as the whole
   payload, through the shared name helpers (so the 63/255-octet limits apply
   and a compression pointer is refused). Registered for `V4_DOTS_RI` (147,
@@ -229,8 +273,9 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 ### Domain names (`type/domain.py`)
 
 Internal, but the single source of truth for every option carrying an RFC 1035
-name — options 81, 120, 122, 139/140 and the 3397 search list all route here,
-so a malformed name is accepted or refused identically whichever option carries
+name — options 81, 120, 122, 139/140, 88/146 (via
+`UncompressedDomainList`) and the 3397 search list all route here, so a
+malformed name is accepted or refused identically whichever option carries
 it. `MAX_LABEL_OCTETS` (63) and `MAX_NAME_OCTETS` (255) are the limits.
 
 - `split_domain_name(name, what, allow_root=False) -> list[str]` — validate and

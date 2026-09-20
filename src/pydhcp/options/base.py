@@ -16,9 +16,22 @@ class BaseDhcpOptionCode:
         return cls(code)  # type: ignore[call-arg]
 
     def __int__(self) -> int:
+        """The option code as a byte value.
+
+        A subclass that carries neither a `value` (the enum case) nor an
+        integer identity of its own has no option code, and this used to
+        answer `0` for it. Zero is not a neutral answer: it is PAD, the wire
+        padding marker, so such a code silently addressed option 0 -- it
+        stored, encoded and emitted as a PAD TLV. Raising says what is true.
+        """
         if hasattr(self, "value"):
             return int(self.value)
-        return 0
+        if isinstance(self, int):
+            return int.__index__(self)
+        raise TypeError(
+            f"{type(self).__name__} has no option-code value: give the class an "
+            "int `value` (an IntEnum member does) or make it an `int` subclass"
+        )
 
     def __json__(self) -> int:
         return int(self)

@@ -88,7 +88,13 @@ def test_typed_registrations_and_aliases():
     # RFC 3361 s3.1: an encoding octet selects names (0) or addresses (1),
     # so this is not a bare address list.
     assert DhcpOptionCode.SIP_SERVERS.get_type() is SipServers
-    assert DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST.get_type().__name__ == "DomainList"
+    # RFC 4280 s4.6: "DNS name compression MUST NOT be used" -- so option 88 is
+    # NOT the compressed `DomainList` that RFC 3397's option 119 is. Details and
+    # the measured payloads: tests/test_options_domain_lists.py.
+    assert (
+        DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST.get_type().__name__
+        == "UncompressedDomainList"
+    )
     assert DhcpOptionCode.BCMCS_IPV4_ADDRESS.get_type()._args_[0] is IPv4Address
     assert DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME.get_type().__name__ == "U32"
     assert DhcpOptionCode.ASSOCIATED_IP.get_type()._args_[0] is IPv4Address

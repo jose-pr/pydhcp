@@ -14,6 +14,43 @@ T = _ty.TypeVar("T", bound=DhcpOptionType)
 C = _ty.TypeVar("C", bound=BaseDhcpOptionCode)
 _R = _ty.TypeVar("_R")
 
+#: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
+#: markers rather than options -- see `_check_code`.
+MIN_OPTION_CODE = 1
+MAX_OPTION_CODE = 254
+
+
+def _check_code(key: _ty.Any) -> int:
+    """Return `key` as a storable option code, or raise.
+
+    Stores used to accept anything: `options[0]` and `options[255]` encoded as
+    real `00 02 ..` / `ff 02 ..` TLVs, which a receiver reads as padding and as
+    end-of-options -- the first silently discards the payload, the second makes
+    every option after it disappear. `options[300]` was accepted too and only
+    failed at `encode()`, with `byte must be in range(0, 256)` naming neither
+    the option nor the code. `decode()` deliberately does not come through
+    here: receive stays liberal, and it already handles 0 and 255 as framing.
+    """
+    if isinstance(key, bool) or not isinstance(key, int):
+        # `_builtins.type`: importing `.type` binds the submodule as this
+        # module's global `type`, shadowing the builtin.
+        raise TypeError(
+            f"option code must be an int, not {_builtins.type(key).__name__}"
+        )
+    code = int(key)
+    if code == 0:
+        raise ValueError("option code 0 is PAD, a padding marker, not an option")
+    if code == 255:
+        raise ValueError(
+            "option code 255 is END, the end-of-options marker, not an option"
+        )
+    if not MIN_OPTION_CODE <= code <= MAX_OPTION_CODE:
+        raise ValueError(
+            f"option code must be in range "
+            f"{MIN_OPTION_CODE}-{MAX_OPTION_CODE}, got {code}"
+        )
+    return code
+
 
 class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     """The option bag: a mutable mapping of option code to **raw** payload.
@@ -228,7 +265,8 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
     def append(self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
-        opt.value._dhcp_write(self._options.setdefault(int(opt.code), bytearray()))
+        code = _check_code(int(opt.code))
+        opt.value._dhcp_write(self._options.setdefault(code, bytearray()))
 
     def replace(self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
@@ -257,15 +295,21 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         Assigning an existing key keeps its position: `OrderedDict` only
         reorders on insert, and the options order is wire-visible (`encode`
         puts DHCP_MESSAGE_TYPE first).
+
+        The key is checked first -- see `_check_code`. PAD (0) and END (255)
+        are framing, not options, and a code outside 0-255 has no wire form at
+        all; all three used to be stored and only noticed, if ever, by the
+        receiver.
         """
+        key = _check_code(__key)
         if not isinstance(__value, (bytes, memoryview, bytearray, DhcpOptionType)):
-            __value = self._codemap.from_code(__key).get_type()(__value)  # type: ignore[call-arg]
+            __value = self._codemap.from_code(key).get_type()(__value)  # type: ignore[call-arg]
         data = bytearray()
         if isinstance(__value, DhcpOptionType):
             __value._dhcp_write(data)
         else:
             data.extend(__value)
-        self._options[__key] = data
+        self._options[key] = data
 
     def __delitem__(self, __key: int) -> None:
         return self._options.__delitem__(__key)

@@ -167,7 +167,38 @@ class StaticRoute(_IPv4PairList):
 
 
 class DomainList(DhcpOptionType, list[str]):
-    """RFC 1035 domain-name list with compression support."""
+    """RFC 1035 domain-name list with compression support.
+
+    Normalizes like `List[T]` does, and for the same reason. With no
+    `__init__` this inherited `list`'s, where a `str` argument is an
+    *iterable of characters*: `DomainList("corp")` was `["c", "o", "r", "p"]`
+    and `options[119] = "corp"` silently offered the client four
+    single-letter search domains. A bare name is one entry; pass a list for
+    several.
+    """
+
+    def __init__(self, *items: _ty.Any) -> None:
+        # Same rule as `List.__init__`: a list/tuple argument is a sequence of
+        # entries, anything else is a single entry.
+        for group in items:
+            self.extend(group if isinstance(group, (tuple, list)) else (group,))
+
+    @staticmethod
+    def _normalize(item: _ty.Any) -> str:
+        if not isinstance(item, str):
+            raise TypeError(
+                f"domain-list entries must be str, not {type(item).__name__}"
+            )
+        return item
+
+    def __setitem__(self, idx: _ty.Any, item: str) -> None:  # type: ignore[override]
+        list.__setitem__(self, idx, self._normalize(item))
+
+    def append(self, item: str) -> None:
+        list.append(self, self._normalize(item))
+
+    def extend(self, __iterable: Iterable[str]) -> None:
+        list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
@@ -314,6 +345,45 @@ class DomainList(DhcpOptionType, list[str]):
         return len(data)
 
 
+class UncompressedDomainList(DomainList):
+    """A domain-name list for the options that forbid DNS name compression.
+
+    RFC 3397's search list (option 119) is compressed on purpose. Two other
+    options carrying a name list are not, and both were registered as plain
+    `DomainList`, so pydhcp emitted a `0xC0` pointer into payloads whose own
+    RFCs forbid one:
+
+    * option 88, BCMCS controller domain names -- RFC 4280 §4.6: "The domain
+      names MUST be concatenated and encoded using the technique described in
+      Section 3.3 of [RFC1035]. DNS name compression MUST NOT be used."
+    * option 146, RDNSS selection -- RFC 6731 §4.3 defers to RFC 3315 §8: "A
+      domain name, or list of domain names, in DHCP MUST NOT be stored in
+      compressed form, as described in section 4.1.4 of RFC 1035."
+
+    Measured before the split, `["a.example.com", "b.example.com"]` encoded as
+    `01 61 07 example 03 com 00 01 62 c0 02` for option 88 -- the second name
+    ending in a pointer a conforming receiver is not required to follow.
+
+    **Encode only.** Decoding stays `DomainList`'s: a pointer that arrives
+    resolves unambiguously inside the option, and the receive path in this
+    package is deliberately liberal, so refusing one would turn a readable
+    packet from a non-conforming peer into a decode failure. The RFCs
+    constrain what is sent, and that is what changes here.
+    """
+
+    def _dhcp_write(self, data: bytearray) -> int:
+        written = 0
+        for domain in self:
+            # The shared encoder in `type/domain.py`, exactly as options 81,
+            # 120, 122, 139 and 140 use it -- one set of name rules for the
+            # whole package. `allow_root` keeps `DomainList`'s treatment of an
+            # empty entry as the root name, a single zero octet.
+            encoded = encode_domain_name(domain, "domain-list entry", allow_root=True)
+            data.extend(encoded)
+            written += len(encoded)
+        return written
+
+
 class RdnssSelection(DhcpOptionType):
     """RFC 6731 RDNSS selection payload."""
 
@@ -322,7 +392,7 @@ class RdnssSelection(DhcpOptionType):
         flags: int,
         primary: _IP,
         secondary: _IP,
-        domains: DomainList | None = None,
+        domains: _ty.Any = None,
     ) -> None:
         self.flags = int(flags)
         self.primary = _IP(primary)
@@ -330,8 +400,11 @@ class RdnssSelection(DhcpOptionType):
         self.domains = self._normalize_domains(domains or [])
 
     @staticmethod
-    def _normalize_domains(domains: _ty.Iterable[str]) -> DomainList:
-        normalized = DomainList(domains)
+    def _normalize_domains(domains: _ty.Any) -> UncompressedDomainList:
+        # Uncompressed: RFC 6731 §4.3 defers to RFC 3315 §8, which forbids the
+        # compressed form. A bare `str` is one domain here, not one per
+        # character -- see `DomainList`.
+        normalized = UncompressedDomainList(domains)
         if normalized and normalized[-1] == "":
             normalized.pop()
         return normalized
@@ -343,7 +416,7 @@ class RdnssSelection(DhcpOptionType):
         flags = option[0]
         primary = _IP(option[1:5].tobytes())
         secondary = _IP(option[5:9].tobytes())
-        domains, read = DomainList._dhcp_read(option[9:])
+        domains, read = UncompressedDomainList._dhcp_read(option[9:])
         return cls(flags, primary, secondary, domains), 9 + read
 
     def _dhcp_write(self, data: bytearray) -> int:
