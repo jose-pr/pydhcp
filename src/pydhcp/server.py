@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy as _copy
 import socket as _socket
 from .packet.message import DhcpMessage, NoClientIdentity
 from .listener import DhcpListener as _Base, ListenSpec, RequestContext
@@ -30,6 +31,65 @@ def _is_loopback(context: RequestContext) -> bool:
         if candidate is not None:
             return bool(candidate.is_loopback)
     return False
+
+
+class _NonExtendingBackend:
+    """A lease backend view that will not push an existing lease further out.
+
+    RFC 2131 s4.3.1 makes DHCPDISCOVER a probe: the server checks for a binding
+    and offers it, but nothing is agreed until the client REQUESTs. `renew` ran
+    anyway on that path -- measured: a DISCOVER carrying option 51 = 999999
+    pushed an existing 60-second lease twelve days out and incremented
+    `leases_renewed`. A DHCPREQUEST about to be NAKed renewed for the same
+    reason, so a client asking for the wrong address still got its old address
+    held longer, and `FileLeaseBackend` rewrote the file for each such packet.
+
+    Only *extension* is suppressed, which is the whole of the measured defect.
+    `allocate` still passes straight through, because reserving the address you
+    are about to offer is ordinary server behaviour and the base allocator only
+    ever allocates the address the client asked for -- so on the base
+    implementation the allocating path is exactly the path that goes on to ACK.
+    Suppressing it too would also mean offering an address a full store could
+    not actually hand over, turning today's honest silence into an offer
+    followed by silence.
+
+    The view is swapped in rather than `acquire_lease` being split, because
+    `acquire_lease` is the documented extension point for pools and
+    reservations: an override must still get to decide what to offer, and must
+    still not extend anything while deciding. `__getattr__` forwards
+    `lookup_by_ip` and any backend-specific helper so a custom backend keeps
+    working.
+    """
+
+    def __init__(self, inner: LeaseBackend) -> None:
+        self._inner = inner
+
+    def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]:
+        return self._inner.lookup(client_id)
+
+    def allocate(
+        self,
+        client_id: str,
+        ip: _net.IPv4,
+        ttl: float,
+        options: _ty.Optional[DhcpOptions] = None,
+    ) -> _ty.Optional[DhcpLease]:
+        return self._inner.allocate(client_id, ip, ttl, options)
+
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]:
+        """Report the binding as it stands, unextended and unwritten.
+
+        Returning the very object `lookup` gave is what lets `acquire_lease`
+        tell a real renewal from this one without knowing which backend it is
+        talking to -- see the identity check there.
+        """
+        return self._inner.lookup(client_id)
+
+    def release(self, client_id: str) -> bool:
+        return False
+
+    def __getattr__(self, name: str) -> _ty.Any:
+        return getattr(self._inner, name)
 
 
 class DhcpServer(_Base):
@@ -129,6 +189,25 @@ class DhcpServer(_Base):
             return _inf if self.ALLOW_INFINITE_LEASE else float(self.MAX_LEASE_SECONDS)
         return float(max(self.MIN_LEASE_SECONDS, min(value, self.MAX_LEASE_SECONDS)))
 
+    def _probe_lease(
+        self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
+    ) -> _ty.Optional[DhcpLease]:
+        """`acquire_lease` on a path that has not agreed anything yet.
+
+        A shallow copy of the server carries the non-extending backend view, so
+        an overridden `acquire_lease` -- which reaches the store through
+        `self.lease_backend` -- is bound by it too, and nothing is mutated on
+        the real server. A copy rather than swapping the attribute in place and
+        restoring it: the attribute swap is visible to any other thread handling
+        a packet, and the base backend is explicitly documented as shareable
+        between several running servers.
+        """
+        probe = _copy.copy(self)
+        probe.lease_backend = _ty.cast(
+            LeaseBackend, _NonExtendingBackend(self.lease_backend)
+        )
+        return probe.acquire_lease(client_id, server_id, msg)
+
     def acquire_lease(
         self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
     ) -> _ty.Optional[DhcpLease]:
@@ -149,7 +228,12 @@ class DhcpServer(_Base):
         if existing:
             renewed = self.lease_backend.renew(client_id, self.lease_seconds(msg))
             if renewed:
-                self.metrics.leases_renewed += 1
+                # `_NonExtendingBackend.renew` hands back the object `lookup`
+                # returned, so identity is what separates a real renewal from a
+                # probe that merely looked. Counting the probe is how a DISCOVER
+                # came to inflate `leases_renewed`.
+                if renewed is not existing:
+                    self.metrics.leases_renewed += 1
                 return renewed
             return existing
 
@@ -341,7 +425,9 @@ class DhcpServer(_Base):
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPDISCOVER from {context.client}|{client_id}"
         )
-        lease = self.acquire_lease(client_id, actual_server_id, msg)
+        # A DISCOVER is a probe, so it may look and reserve but must not extend
+        # an existing binding -- see `_NonExtendingBackend`.
+        lease = self._probe_lease(client_id, actual_server_id, msg)
         if not lease:
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -379,7 +465,10 @@ class DhcpServer(_Base):
             )
             return
 
-        lease = self.acquire_lease(client_id, actual_server_id, msg)
+        # Decide first, on a view that cannot extend the binding: a REQUEST for
+        # the wrong address is about to be NAKed, and renewing the address it is
+        # being refused was exactly backwards.
+        lease = self._probe_lease(client_id, actual_server_id, msg)
         if not lease:
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -392,6 +481,11 @@ class DhcpServer(_Base):
             ip_req = msg.ciaddr
         if ip_req == lease.ip:
             resp_ty = _enum.DhcpMessageType.DHCPACK
+            # Only now is anything agreed, so this is where the lease time the
+            # ACK advertises is actually committed.
+            committed = self.acquire_lease(client_id, actual_server_id, msg)
+            if committed is not None:
+                lease = committed
         else:
             resp_ty = _enum.DhcpMessageType.DHCPNAK
         resp = self._create_response(msg, lease, actual_server_id, resp_ty)
