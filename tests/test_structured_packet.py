@@ -1,36 +1,17 @@
 from __future__ import annotations
 
 import pytest
-from datetime import timedelta
 
 from pydhcp import DhcpMessage, DhcpOptions
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DhcpMessageType
 from pydhcp.options import DhcpOptionCode
-from pydhcp.network import IPv4
 from pydhcp.packet.structured import dump_message, load_mapping, load_message
 from pydhcp.packet import structured
+from conftest import build_request
 
 
 def _sample_packet() -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x12345678,
-        secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=b"\x00\x11\x22\x33\x44\x55",
-        sname="",
-        file="",
-        options=options,
-    )
+    return build_request(DhcpMessageType.DHCPDISCOVER)
 
 
 @pytest.mark.parametrize("format_name", ["json", "yaml", "toml", "ini"])
@@ -72,33 +53,15 @@ def test_toml_encode_without_writer_reports_not_implemented(monkeypatch) -> None
 
 
 def _message_with_option(code, payload):
-    from datetime import timedelta
 
-    from pydhcp.network import IPv4
     from pydhcp.options import DhcpOptionCode, DhcpOptions
-    from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+    from pydhcp.packet import DhcpMessageType
     from pydhcp.packet.message import DhcpMessage
 
     options = DhcpOptions()
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
     options[code] = bytearray(payload)
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x1234,
-        secs=timedelta(0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=b"\x00\x11\x22\x33\x44\x55",
-        sname="",
-        file="",
-        options=options,
-    )
+    return build_request(options=options, xid=0x1234)
 
 
 def _require_format(fmt):

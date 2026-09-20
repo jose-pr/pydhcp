@@ -9,28 +9,11 @@ from pydhcp.options import DhcpOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
 from pydhcp.server import DhcpServer
+from conftest import build_request
 
 
 def _message(message_type: DhcpMessageType) -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x12345678,
-        secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=b"\x00\x11\x22\x33\x44\x55",
-        sname="",
-        file="",
-        options=options,
-    )
+    return build_request(message_type)
 
 
 def _context(transport: Mock) -> RequestContext:
@@ -568,23 +551,7 @@ def _discover_requesting(seconds=None):
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
     if seconds is not None:
         options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = _optype.U32(seconds)
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x1234,
-        secs=timedelta(0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=b"\x00\x11\x22\x33\x44\x55",
-        sname="",
-        file="",
-        options=options,
-    )
+    return build_request(options=options, xid=0x1234)
 
 
 def test_client_cannot_choose_its_own_lease_length():

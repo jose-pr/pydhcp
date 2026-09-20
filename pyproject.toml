@@ -61,7 +61,10 @@ exclude = ["/.*", "*.local.*"]
 exclude = ["*.local.*"]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+# "tests" so the helpers in tests/conftest.py can be imported by name from
+# tests/integration/ as well, rather than relying on collection order to have
+# put tests/ on sys.path first.
+pythonpath = ["src", "tests"]
 testpaths = ["tests"]
 
 [tool.black]

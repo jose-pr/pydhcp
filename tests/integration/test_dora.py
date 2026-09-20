@@ -1,47 +1,31 @@
 import socket
-import threading
-import time
 import pytest
 import ipaddress
-from datetime import timedelta
 from unittest.mock import Mock
 from pydhcp import (
     DhcpServer,
     DhcpMessage,
-    DhcpLease,
     DhcpOptions,
     RequestContext,
     NetworkInterface,
 )
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DhcpMessageType, Flags, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import SocketAddress, IPv4
+from conftest import FixedLeaseServer, build_request, wait_bound
+
+CHADDR = b"\x11\x22\x33\x44\x55\x66"
 
 
-class MockDhcpServer(DhcpServer):
-    DEFAULT_PORTS = (6767,)
-
-    def acquire_lease(self, client_id, server_id, msg):
-        from datetime import datetime, timedelta
-
-        options = DhcpOptions()
-        options[DhcpOptionCode.ROUTER] = IPv4("127.0.0.1")
-        return DhcpLease(
-            IPv4("127.0.0.1"), datetime.now() + timedelta(seconds=10), options
-        )
+class MockDhcpServer(FixedLeaseServer):
+    LEASE_SECONDS = 10
 
 
 @pytest.fixture
 def run_dora_server():
     server = MockDhcpServer(listen=[("127.0.0.1", 0)])
     thread = server.start()
-
-    import time
-
-    start_t = time.time()
-    while not server.bound_addresses and time.time() - start_t < 2.0:
-        time.sleep(0.01)
-
+    wait_bound(server)
     yield server
     server.stop()
     if thread:
@@ -58,23 +42,7 @@ def test_dora_sequence(run_dora_server):
         # 1. Send DISCOVER
         opts = DhcpOptions()
         opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-        discover = DhcpMessage(
-            op=OpCode.BOOTREQUEST,
-            htype=HardwareAddressType.ETHERNET,
-            hlen=6,
-            hops=0,
-            xid=0x12345678,
-            secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
-            ciaddr=IPv4("0.0.0.0"),
-            yiaddr=IPv4("0.0.0.0"),
-            siaddr=IPv4("0.0.0.0"),
-            giaddr=IPv4("0.0.0.0"),
-            chaddr=b"\x11\x22\x33\x44\x55\x66",
-            sname="",
-            file="",
-            options=opts,
-        )
+        discover = build_request(options=opts, chaddr=CHADDR)
         client.sendto(discover.encode(), ("127.0.0.1", server_port))
 
         # 2. Recv OFFER
@@ -95,23 +63,7 @@ def test_dora_sequence(run_dora_server):
             DhcpOptionCode.SERVER_IDENTIFIER
         )
 
-        request = DhcpMessage(
-            op=OpCode.BOOTREQUEST,
-            htype=HardwareAddressType.ETHERNET,
-            hlen=6,
-            hops=0,
-            xid=0x12345678,
-            secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
-            ciaddr=IPv4("0.0.0.0"),
-            yiaddr=IPv4("0.0.0.0"),
-            siaddr=IPv4("0.0.0.0"),
-            giaddr=IPv4("0.0.0.0"),
-            chaddr=b"\x11\x22\x33\x44\x55\x66",
-            sname="",
-            file="",
-            options=req_opts,
-        )
+        request = build_request(options=req_opts, chaddr=CHADDR)
         client.sendto(request.encode(), ("127.0.0.1", server_port))
 
         # 4. Recv ACK
@@ -145,23 +97,7 @@ def test_routing_rfc2131():
     # Test case 1: giaddr set (should send to giaddr on port 67)
     opts = DhcpOptions()
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    msg = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x12345678,
-        secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("192.168.1.1"),
-        chaddr=b"\x11\x22\x33\x44\x55\x66",
-        sname="",
-        file="",
-        options=opts,
-    )
+    msg = build_request(options=opts, giaddr=IPv4("192.168.1.1"), chaddr=CHADDR)
 
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
@@ -209,23 +145,7 @@ def test_relay_agent_information_echoed_in_reply():
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
     relay_info = RelayAgentInformation([TlvOption(1, b"circuit-id")])
     opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
-    msg = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x12345678,
-        secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("192.168.1.1"),
-        chaddr=b"\x11\x22\x33\x44\x55\x66",
-        sname="",
-        file="",
-        options=opts,
-    )
+    msg = build_request(options=opts, giaddr=IPv4("192.168.1.1"), chaddr=CHADDR)
 
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
@@ -279,13 +199,7 @@ def test_dora_with_lease_persistence(tmp_path):
     server = MockDhcpServerWithBackend(listen=[("127.0.0.1", 0)], lease_backend=backend)
 
     thread = server.start()
-
-    import time
-
-    start_t = time.time()
-    while not server.bound_addresses and time.time() - start_t < 2.0:
-        time.sleep(0.01)
-
+    wait_bound(server)
     server_port = server.bound_addresses[0].port
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
@@ -296,23 +210,7 @@ def test_dora_with_lease_persistence(tmp_path):
         opts = DhcpOptions()
         opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
         opts[DhcpOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
-        discover = DhcpMessage(
-            op=OpCode.BOOTREQUEST,
-            htype=HardwareAddressType.ETHERNET,
-            hlen=6,
-            hops=0,
-            xid=0x12345678,
-            secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
-            ciaddr=IPv4("0.0.0.0"),
-            yiaddr=IPv4("0.0.0.0"),
-            siaddr=IPv4("0.0.0.0"),
-            giaddr=IPv4("0.0.0.0"),
-            chaddr=b"\x11\x22\x33\x44\x55\x66",
-            sname="",
-            file="",
-            options=opts,
-        )
+        discover = build_request(options=opts, chaddr=CHADDR)
         client.sendto(discover.encode(), ("127.0.0.1", server_port))
 
         # 2. Recv OFFER
@@ -339,23 +237,7 @@ def test_dora_with_lease_persistence(tmp_path):
             DhcpOptionCode.SERVER_IDENTIFIER
         )
 
-        request = DhcpMessage(
-            op=OpCode.BOOTREQUEST,
-            htype=HardwareAddressType.ETHERNET,
-            hlen=6,
-            hops=0,
-            xid=0x12345678,
-            secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
-            ciaddr=IPv4("0.0.0.0"),
-            yiaddr=IPv4("0.0.0.0"),
-            siaddr=IPv4("0.0.0.0"),
-            giaddr=IPv4("0.0.0.0"),
-            chaddr=b"\x11\x22\x33\x44\x55\x66",
-            sname="",
-            file="",
-            options=req_opts,
-        )
+        request = build_request(options=req_opts, chaddr=CHADDR)
         client.sendto(request.encode(), ("127.0.0.1", server_port))
 
         # 4. Recv ACK

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 import pytest
 
@@ -14,9 +14,10 @@ from pydhcp import (
     RequestContext,
 )
 from pydhcp.capture import compile_capture_filter
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DhcpMessageType, Flags
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4, SocketAddress
+from conftest import build_request
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
 # A hardware address with hex letters in it, so a case-insensitive comparison is
@@ -37,22 +38,8 @@ def _message(
     options = DhcpOptions()
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
     options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + chaddr)
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x1234ABCD,
-        secs=timedelta(seconds=0),
-        flags=Flags.BROADCAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=chaddr,
-        sname="",
-        file="",
-        options=options,
+    return build_request(
+        options=options, xid=0x1234ABCD, flags=Flags.BROADCAST, chaddr=chaddr
     )
 
 

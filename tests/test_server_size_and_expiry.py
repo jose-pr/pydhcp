@@ -11,8 +11,9 @@ from pydhcp import constants as const
 from pydhcp.lease import DhcpLease, InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
 from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DhcpMessageType
 from pydhcp.server import DhcpServer
+from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
 SERVED = ipaddress.IPv4Interface("10.0.0.1/24")
@@ -25,23 +26,7 @@ def _message(
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
     if max_size is not None:
         options[DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE] = max_size
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x12345678,
-        secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=CHADDR,
-        sname="",
-        file="",
-        options=options,
-    )
+    return build_request(options=options)
 
 
 def _context(transport: Mock) -> RequestContext:

@@ -2,21 +2,20 @@ import ipaddress
 import queue
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from unittest.mock import Mock
 
 from pydhcp import (
     DhcpClient,
-    DhcpLease,
     DhcpMessage,
     DhcpOptions,
-    DhcpServer,
     NetworkInterface,
     RequestContext,
 )
 from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4, SocketAddress
+from conftest import FixedLeaseServer, wait_bound
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
 
@@ -145,32 +144,15 @@ def test_client_send_uses_bound_udp_transport(monkeypatch) -> None:
     assert (0xCAFEBABE, CHADDR) in client._pending_keys
 
 
-class _FixedLeaseServer(DhcpServer):
-    DEFAULT_PORTS = (6767,)
-
-    def acquire_lease(self, client_id, server_id, msg):
-        options = DhcpOptions()
-        options[DhcpOptionCode.ROUTER] = IPv4("127.0.0.1")
-        return DhcpLease(
-            IPv4("127.0.0.1"), datetime.now() + timedelta(seconds=60), options
-        )
-
-
-def _wait_bound(listener, timeout: float = 2.0) -> None:
-    deadline = time.time() + timeout
-    while not listener.bound_addresses and time.time() < deadline:
-        time.sleep(0.01)
-
-
 def test_client_dora_against_real_server() -> None:
-    server = _FixedLeaseServer(listen=[("127.0.0.1", 0)])
+    server = FixedLeaseServer(listen=[("127.0.0.1", 0)])
     thread = server.start()
-    _wait_bound(server)
+    wait_bound(server)
     server_port = server.bound_addresses[0].port
 
     client = DhcpClient(listen=("127.0.0.1", 0))
     client_thread = client.start()
-    _wait_bound(client)
+    wait_bound(client)
     try:
         ack = client.dora(
             CHADDR,

@@ -1,7 +1,6 @@
 """RELEASE and DECLINE are verified before they act (`server-31`, `server-14`)."""
 
 import ipaddress
-from datetime import timedelta
 from unittest.mock import Mock
 
 import pytest
@@ -10,8 +9,9 @@ from pydhcp import DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
 from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DhcpMessageType
 from pydhcp.server import DhcpServer
+from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
 IFACE_A = ipaddress.IPv4Interface("10.0.0.1/24")
@@ -30,23 +30,7 @@ def _message(
         options[DhcpOptionCode.SERVER_IDENTIFIER] = server_id
     if requested_ip is not None:
         options[DhcpOptionCode.REQUESTED_IP] = requested_ip
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
-        xid=0x12345678,
-        secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
-        ciaddr=IPv4(ciaddr),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
-        chaddr=CHADDR,
-        sname="",
-        file="",
-        options=options,
-    )
+    return build_request(options=options, ciaddr=IPv4(ciaddr))
 
 
 def _context(interface: ipaddress.IPv4Interface) -> RequestContext:

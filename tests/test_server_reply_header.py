@@ -14,8 +14,9 @@ from pydhcp import DhcpMessage, DhcpOptions
 from pydhcp.lease import DhcpLease, InMemoryLeaseBackend
 from pydhcp.network import IPv4
 from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DhcpMessageType, OpCode
 from pydhcp.server import DhcpServer
+from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
 SERVER_ID = IPv4("10.0.0.1")
@@ -25,22 +26,16 @@ def _request() -> DhcpMessage:
     """A request whose sender filled in fields that are not its to choose."""
     options = DhcpOptions()
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
+    return build_request(
+        options=options,
         hops=3,
-        xid=0x12345678,
         secs=timedelta(seconds=41),
-        flags=Flags.UNICAST,
         ciaddr=IPv4("10.9.9.9"),
         yiaddr=IPv4("10.8.8.8"),
         siaddr=IPv4("10.7.7.7"),
         giaddr=IPv4("10.6.6.6"),
-        chaddr=CHADDR,
         sname="attacker-tftp.example",
         file="evil/boot.img",
-        options=options,
     )
 
 

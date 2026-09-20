@@ -5,6 +5,7 @@ from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions
 from pydhcp.packet import DhcpMessageType, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import SocketAddress, IPv4
+from conftest import build_request
 
 
 class MockAsyncDhcpServer(AsyncDhcpServer):
@@ -19,9 +20,12 @@ class MockAsyncDhcpServer(AsyncDhcpServer):
 
 def test_async_server_lifecycle():
     async def run_test():
-        # Bind to a high port on localhost for testing
-        server = MockAsyncDhcpServer(listen=[("127.0.0.1", 10067)])
+        # Port 0, then read the port back: a fixed test port collides with
+        # whatever else holds it, and on Windows the collision surfaces as
+        # WSAEACCES rather than "address in use".
+        server = MockAsyncDhcpServer(listen=[("127.0.0.1", 0)])
         await server.start()
+        server_port = server.bound_addresses[0].port
 
         # We want to send a UDP packet and get a response
         client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -29,34 +33,12 @@ def test_async_server_lifecycle():
 
         # Construct a DHCP DISCOVER message
         from datetime import timedelta
-        from pydhcp.packet import HardwareAddressType, Flags
 
-        options = DhcpOptions()
-        options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-
-        msg = DhcpMessage(
-            op=OpCode.BOOTREQUEST,
-            htype=HardwareAddressType.ETHERNET,
-            hlen=6,
-            hops=0,
-            xid=0x3903F326,
-            secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
-            ciaddr=IPv4("0.0.0.0"),
-            yiaddr=IPv4("0.0.0.0"),
-            siaddr=IPv4("0.0.0.0"),
-            giaddr=IPv4("0.0.0.0"),
-            chaddr=b"\x00\x11\x22\x33\x44\x55",
-            sname="",
-            file="",
-            options=options,
-        )
-
-        data = msg.encode()
+        data = build_request(DhcpMessageType.DHCPDISCOVER, xid=0x3903F326).encode()
 
         loop = asyncio.get_running_loop()
         # Send the packet to the server
-        client_sock.sendto(data, ("127.0.0.1", 10067))
+        client_sock.sendto(data, ("127.0.0.1", server_port))
 
         # Wait for the response
         try:
@@ -234,31 +216,7 @@ def test_async_handlers_stay_serialised() -> None:
 
 
 def _discover_bytes() -> bytes:
-    from datetime import timedelta
-
-    from pydhcp.packet import Flags, HardwareAddressType, OpCode
-
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    return bytes(
-        DhcpMessage(
-            op=OpCode.BOOTREQUEST,
-            htype=HardwareAddressType.ETHERNET,
-            hlen=6,
-            hops=0,
-            xid=0x5A5A5A5A,
-            secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
-            ciaddr=IPv4("0.0.0.0"),
-            yiaddr=IPv4("0.0.0.0"),
-            siaddr=IPv4("0.0.0.0"),
-            giaddr=IPv4("0.0.0.0"),
-            chaddr=b"\x00\x11\x22\x33\x44\x55",
-            sname="",
-            file="",
-            options=options,
-        ).encode()
-    )
+    return bytes(build_request(DhcpMessageType.DHCPDISCOVER, xid=0x5A5A5A5A).encode())
 
 
 def test_async_listener_uses_the_same_receive_path_as_the_sync_one():
