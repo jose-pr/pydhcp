@@ -182,10 +182,45 @@ class InMemoryLeaseBackend:
 
 
 class FileLeaseBackend(InMemoryLeaseBackend):
+    """Leases persisted to JSON.
+
+    Every mutation writes the whole file by default, which is O(store) each
+    time. `SAVE_INTERVAL_SECONDS` above zero coalesces instead: a mutation marks
+    the store dirty and the file is rewritten at most that often, with
+    `flush()` and `close()` forcing one.
+
+    Off by default deliberately. Coalescing trades a property the operator
+    cannot see going wrong -- up to an interval of leases lost on a crash -- for
+    one they can already measure and which `MAX_LEASES` already bounds. A
+    default that silently gives up durability for throughput is the wrong way
+    round; a deployment that wants the trade can ask for it.
+    """
+
+    #: Seconds to coalesce writes over. 0 writes on every mutation.
+    SAVE_INTERVAL_SECONDS: float = 0.0
+
     def __init__(self, filepath: str = "leases.json") -> None:
         super().__init__()
         self.filepath = filepath
+        self._dirty = False
+        self._last_save = float("-inf")
         self._load()
+
+    def flush(self) -> None:
+        """Write now if anything is pending. Safe to call when nothing is."""
+        with self._lock:
+            if self._dirty:
+                self._write_now()
+
+    def close(self) -> None:
+        """Flush before going away, so a clean shutdown loses nothing."""
+        self.flush()
+
+    def __enter__(self) -> "FileLeaseBackend":
+        return self
+
+    def __exit__(self, *_exc: _ty.Any) -> None:
+        self.close()
 
     def _load(self) -> None:
         if not _os.path.exists(self.filepath):
@@ -240,7 +275,19 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         )
 
     def _save(self) -> None:
+        """Record that the store changed, and write if a write is due."""
         with self._lock:
+            self._dirty = True
+            if self.SAVE_INTERVAL_SECONDS <= 0:
+                self._write_now()
+                return
+            if _time.monotonic() - self._last_save >= self.SAVE_INTERVAL_SECONDS:
+                self._write_now()
+
+    def _write_now(self) -> None:
+        with self._lock:
+            self._dirty = False
+            self._last_save = _time.monotonic()
             # First clean up expired leases
             for client_id in list(self._leases.keys()):
                 self.lookup(client_id)

@@ -305,3 +305,65 @@ def test_a_full_store_does_not_flood_the_log(caplog):
     assert len(full_reports) == 1, len(full_reports)
     # the count is still exact, it just is not one line each
     assert backend.refused_while_full == 450
+
+
+# --- write coalescing is opt-in, and off does not change ---
+
+
+def test_default_still_writes_on_every_mutation(tmp_path):
+    """Durability is the property an operator cannot see going wrong.
+
+    Coalescing trades up to an interval of leases on a crash for throughput the
+    operator can already measure and that MAX_LEASES already bounds, so it must
+    not arrive by default.
+    """
+    import json
+
+    path = tmp_path / "leases.json"
+    backend = FileLeaseBackend(str(path))
+    assert backend.SAVE_INTERVAL_SECONDS == 0
+
+    backend.allocate("client-a", IPv4("10.0.0.5"), 60)
+    # on disk immediately, with no flush() call
+    assert list(json.loads(path.read_text(encoding="utf-8"))) == ["client-a"]
+
+
+def test_coalescing_defers_writes_and_flush_forces_one(tmp_path):
+    """With an interval set, the file is written at most that often."""
+    import json
+
+    class Coalesced(FileLeaseBackend):
+        SAVE_INTERVAL_SECONDS = 3600.0  # never due during the test
+
+    path = tmp_path / "leases.json"
+    backend = Coalesced(str(path))
+
+    backend.allocate("client-a", IPv4("10.0.0.5"), 60)  # first write is due
+    backend.allocate("client-b", IPv4("10.0.0.6"), 60)  # this one is not
+    assert list(json.loads(path.read_text(encoding="utf-8"))) == ["client-a"]
+
+    backend.flush()
+    assert sorted(json.loads(path.read_text(encoding="utf-8"))) == [
+        "client-a",
+        "client-b",
+    ]
+
+    # flush with nothing pending is a no-op, not an error
+    backend.flush()
+
+
+def test_close_flushes_so_a_clean_shutdown_loses_nothing(tmp_path):
+    import json
+
+    class Coalesced(FileLeaseBackend):
+        SAVE_INTERVAL_SECONDS = 3600.0
+
+    path = tmp_path / "leases.json"
+    with Coalesced(str(path)) as backend:
+        backend.allocate("client-a", IPv4("10.0.0.5"), 60)
+        backend.allocate("client-b", IPv4("10.0.0.6"), 60)
+
+    assert sorted(json.loads(path.read_text(encoding="utf-8"))) == [
+        "client-a",
+        "client-b",
+    ]
