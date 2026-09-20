@@ -22,6 +22,18 @@ from .server import _is_loopback
 
 ServerAddress = _ty.Union[_net.IPv4, str, tuple[_ty.Union[_net.IPv4, str], int]]
 
+#: Hard ceiling from RFC 1542 4.1.1: "The relay agent MUST silently discard
+#: BOOTREQUEST messages whose `hops` field exceeds the value 16." A threshold
+#: above this could never be reached anyway -- and past 254 the incremented
+#: value overflows the one-octet field and makes `encode` raise.
+RFC1542_MAX_HOPS = 16
+
+#: Default threshold. The same clause: "The default setting for a configurable
+#: threshold SHOULD be 4." This was 16 -- the absolute ceiling used as though it
+#: were the default. Four relays deep is already an unusual topology; a
+#: deployment that genuinely needs more passes `max_hops` explicitly.
+DEFAULT_MAX_HOPS = 4
+
 
 class PendingClient(_ty.NamedTuple):
     """Where a forwarded request came from, so its reply can be sent back there.
@@ -79,7 +91,7 @@ class DhcpRelay(_Base):
         self,
         listen: ListenSpec = None,
         server_addresses: _ty.Sequence[ServerAddress] = (),
-        max_hops: int = 16,
+        max_hops: int = DEFAULT_MAX_HOPS,
         insert_relay_agent_info: bool = False,
         circuit_id: _ty.Optional[bytes] = None,
         remote_id: _ty.Optional[bytes] = None,
@@ -97,6 +109,11 @@ class DhcpRelay(_Base):
             per_interface=per_interface,
         )
         self.server_addresses = [_normalize_server_address(a) for a in server_addresses]
+        if not 0 <= max_hops <= RFC1542_MAX_HOPS:
+            raise ValueError(
+                f"max_hops must be between 0 and {RFC1542_MAX_HOPS} "
+                f"(RFC 1542 4.1.1), got {max_hops}"
+            )
         self.max_hops = max_hops
         self.insert_relay_agent_info = insert_relay_agent_info
         self.circuit_id = circuit_id
@@ -182,17 +199,28 @@ class DhcpRelay(_Base):
             self.metrics.packets_dropped_untrusted += 1
             return
 
+        # RFC 1542 4.1.1 discards a request whose hops field *exceeds* the
+        # threshold, so the test is on the value as received. Incrementing
+        # first and comparing that dropped a request one hop early: with
+        # max_hops=2, a request that had legitimately crossed two relays --
+        # hops=2, which the third relay is entitled to forward -- was refused,
+        # and the parameter behaved as "maximum minus one" while being named
+        # for the maximum.
+        if msg.hops > self.max_hops:
+            # Debug, not warning: this is reachable by anyone who can put a
+            # packet on the segment, and the counter below is the signal an
+            # operator actually watches.
+            LOGGER.debug(
+                f"[XID={msg.xid:08x}] Dropping request from {context.client}: hop count {msg.hops} exceeds max_hops={self.max_hops}"
+            )
+            self.metrics.packets_dropped_hop_limit += 1
+            return
+
         forwarded = DhcpMessage(**msg.__dict__.copy())
         # A shallow __dict__ copy shares the options container, so stamping this
         # copy would edit the caller's message.
         forwarded.options = msg.options.copy()
         forwarded.hops = msg.hops + 1
-        if forwarded.hops > self.max_hops:
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Dropping request from {context.client}: hop count {forwarded.hops} exceeds max_hops={self.max_hops}"
-            )
-            self.metrics.packets_dropped_hop_limit += 1
-            return
 
         if forwarded.giaddr == _net.WILDCARD_IPv4:
             forwarded.giaddr = _ty.cast(_net.IPv4, context.interface.ip)

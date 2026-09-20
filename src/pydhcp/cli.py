@@ -16,7 +16,7 @@ from duho import AUTO, Cli, Cmd, DefaultsFormatter, LoggingArgs, Meta
 from .capture import CaptureEvent, DhcpCapture
 from .network import host_ip_interfaces
 from .server import DhcpServer
-from .relay import DhcpRelay
+from .relay import DEFAULT_MAX_HOPS, DhcpRelay
 from .config import load_config
 from .packet.message import DhcpMessage
 from .packet.structured import dump_message, load_message
@@ -125,8 +125,8 @@ class Relay(_Command):
     "Upstream DHCP server address, optionally host:port (repeatable)"
     ("--server", "-s")
 
-    max_hops: int = 16
-    "Drop requests exceeding this hop count"
+    max_hops: int = DEFAULT_MAX_HOPS
+    "Drop requests whose hop count exceeds this (RFC 1542 default 4, max 16)"
     ("--max-hops",)
 
     insert_relay_agent_info: bool = False

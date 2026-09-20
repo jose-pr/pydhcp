@@ -149,17 +149,52 @@ def test_forward_to_servers_is_idempotent_when_giaddr_already_set():
 
 
 def test_forward_to_servers_drops_packet_over_hop_limit():
+    """RFC 1542 4.1.1 discards a request whose hops field *exceeds* the threshold.
+
+    This test used to assert that max_hops=2 dropped hops=2, which pinned the
+    off-by-one rather than catching it: a request at hops=2 has crossed two
+    relays and this one is entitled to forward it. Rewritten to the RFC, not
+    adjusted to keep passing.
+    """
     relay = DhcpRelay(
         listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], max_hops=2
     )
     context = _context()
-    msg = _discover(hops=2)
 
-    relay.handle(msg, context)
+    relay.handle(_discover(hops=3), context)
 
     context.transport.send.assert_not_called()
     assert relay.metrics.packets_dropped_hop_limit == 1
     assert relay.metrics.packets_sent == 0
+
+
+def test_a_request_at_exactly_the_hop_limit_is_still_forwarded():
+    """The boundary the old assertion had on the wrong side."""
+    relay = DhcpRelay(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], max_hops=2
+    )
+    context = _context()
+
+    relay.handle(_discover(hops=2), context)
+
+    assert relay.metrics.packets_dropped_hop_limit == 0
+    assert context.transport.send.call_count == 1
+    forwarded = DhcpMessage.decode(context.transport.send.call_args.args[0])
+    assert forwarded.hops == 3, "the relay must still count itself"
+
+
+def test_the_default_threshold_is_the_rfc_default_not_the_ceiling():
+    relay = DhcpRelay(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    assert relay.max_hops == 4
+
+
+@pytest.mark.parametrize("bad", [-1, 17, 255, 1000])
+def test_a_threshold_outside_the_rfc_range_is_refused(bad):
+    """Above 254 the incremented value also overflows the one-octet field."""
+    with pytest.raises(ValueError, match="RFC 1542"):
+        DhcpRelay(
+            listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], max_hops=bad
+        )
 
 
 def test_relay_agent_info_inserted_when_enabled():

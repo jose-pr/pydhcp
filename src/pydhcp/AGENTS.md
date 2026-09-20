@@ -207,7 +207,7 @@ that's never started will always time out waiting for a reply.
 
 ## Relay (`relay.py`)
 
-- **`DhcpRelay(listen=None, server_addresses=(), max_hops=16,
+- **`DhcpRelay(listen=None, server_addresses=(), max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
   select_timeout=None, max_packet_size=None, per_interface=None)`**
   (`DhcpListener` subclass) — RFC 1542 / RFC 2131 §4.1 / RFC 3046 relay
@@ -215,10 +215,15 @@ that's never started will always time out waiting for a reply.
   a string, or a `(host, port)` tuple; bare entries default to port 67) —
   raises `ValueError` otherwise. `insert_relay_agent_info=True` adds option
   82 with `circuit_id`/`remote_id` sub-options (skipped, with a warning, if
-  the request already carries one).
+  the request already carries one). **`max_hops` defaults to 4**, the RFC 1542
+  §4.1.1 default, and must be 0..16 -- that clause's hard ceiling -- or the
+  constructor raises `ValueError`. It was previously 16: the ceiling used as
+  though it were the default.
   - `.handle(msg, context) -> None` — forwards `BOOTREQUEST` to every
     configured server (stamping `giaddr` and incrementing `hops`; drops and
-    counts in `metrics.packets_dropped_hop_limit` once `hops > max_hops`) and
+    counts in `metrics.packets_dropped_hop_limit` when the *received* `hops`
+    exceeds `max_hops`, so a request at exactly the threshold is still
+    forwarded -- RFC 1542 §4.1.1) and
     forwards `BOOTREPLY` back to the original client.
 
 **Gotcha**: a relay reply must not assume the client listens on well-known
