@@ -721,3 +721,107 @@ def test_python_dash_m_pydhcp_works():
     assert result.returncode == 0, result.stderr
     assert "No module named" not in result.stderr
     assert "usage: pydhcp" in result.stdout
+
+
+# --- a client must not decide how many files land on the operator's disk ---
+
+
+def _capture_event_with_client_id(client_id: bytes):
+    """A capture event whose client identifier the 'client' chose."""
+    import datetime as _dt
+    import ipaddress
+    from datetime import timedelta
+    from unittest.mock import Mock
+
+    from pydhcp.capture import CaptureEvent
+    from pydhcp.listener import RequestContext
+    from pydhcp.network import IPv4, NetworkInterface, SocketAddress
+    from pydhcp.options import DhcpOptionCode, DhcpOptions
+    from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+    from pydhcp.packet.message import DhcpMessage
+
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(client_id)
+    message = DhcpMessage(
+        OpCode.BOOTREQUEST,
+        HardwareAddressType.ETHERNET,
+        6,
+        0,
+        0x1234,
+        timedelta(0),
+        Flags.UNICAST,
+        IPv4("0.0.0.0"),
+        IPv4("0.0.0.0"),
+        IPv4("0.0.0.0"),
+        IPv4("0.0.0.0"),
+        b"\x00\x11\x22\x33\x44\x55",
+        "",
+        "",
+        options,
+    )
+    context = RequestContext(
+        transport=Mock(),
+        interface=NetworkInterface(
+            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
+        ),
+        client=SocketAddress(IPv4("10.0.0.50"), 68),
+        client_mac=b"\x00\x11\x22\x33\x44\x55",
+    )
+    return CaptureEvent(message, context, _dt.datetime.now(tz=_dt.timezone.utc))
+
+
+def test_per_capture_file_count_is_bounded(tmp_path, caplog):
+    """The filename pattern interpolates values the client chooses.
+
+    Measured before the cap: 5,000 forged client identifiers produced 5,000
+    files. An unauthenticated sender decided how much of the operator's disk to
+    use, and `capture` is exactly what an operator leaves running.
+    """
+    import logging
+
+    from pydhcp import cli
+
+    pattern = str(tmp_path / "{client_id}.{format}")
+    state: dict = {"first": True}
+
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        for index in range(cli.MAX_PER_CAPTURE_FILES + 50):
+            cli._write_capture_record(
+                _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
+                output=pattern,
+                output_mode="per-capture",
+                packet_format="json",
+                state=state,
+            )
+
+    assert len(list(tmp_path.iterdir())) == cli.MAX_PER_CAPTURE_FILES
+    assert state["per_capture_refused"] == 50
+    # reported once, not once per refused packet -- the thing filling the disk
+    # is a flood, so a line each would hand over the log as a second target
+    reports = [r for r in caplog.records if "per-capture files" in r.getMessage()]
+    assert len(reports) == 1, len(reports)
+
+
+def test_a_pattern_the_client_cannot_influence_is_not_limited(tmp_path):
+    """A fixed pattern overwrites one file, so the cap must not apply to it.
+
+    Counting distinct paths rather than writes is what keeps this case free:
+    the same name is rewritten, and rewriting is always allowed.
+    """
+    from pydhcp import cli
+
+    pattern = str(tmp_path / "capture.{format}")
+    state: dict = {"first": True}
+
+    for index in range(cli.MAX_PER_CAPTURE_FILES + 200):
+        cli._write_capture_record(
+            _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
+            output=pattern,
+            output_mode="per-capture",
+            packet_format="json",
+            state=state,
+        )
+
+    assert [p.name for p in tmp_path.iterdir()] == ["capture.json"]
+    assert state.get("per_capture_refused", 0) == 0

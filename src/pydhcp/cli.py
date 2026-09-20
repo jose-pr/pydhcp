@@ -20,6 +20,7 @@ from .relay import DhcpRelay
 from .config import load_config
 from .packet.message import DhcpMessage
 from .packet.structured import dump_message, load_message
+from .log import LOGGER
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 CAPTURE_FORMATS = ("json", "yaml", "toml", "ini")
@@ -284,6 +285,39 @@ def _stream_separator(packet_format: str, first: bool) -> str:
     return "---\n"
 
 
+#: How many distinct files one `--output-mode per-capture` run may create.
+#: The filename pattern interpolates values the *client* chooses -- the client
+#: identifier above all -- so without a bound, one unauthenticated sender
+#: decides how many files land on the operator's disk. Measured: 5,000 forged
+#: identifiers produced 5,000 files.
+MAX_PER_CAPTURE_FILES = 1000
+
+
+def _per_capture_budget(state: "dict[str, _ty.Any]", path: pathlib.Path) -> bool:
+    """Whether this run may still create `path`. Rewriting a file is always fine.
+
+    Counted per run rather than per name so that a pattern *without* a
+    client-chosen component -- which simply overwrites one file -- is not
+    limited at all.
+    """
+    seen = state.setdefault("per_capture_files", set())
+    if path in seen:
+        return True
+    if len(seen) < MAX_PER_CAPTURE_FILES:
+        seen.add(path)
+        return True
+    if not state.get("per_capture_full_reported"):
+        state["per_capture_full_reported"] = True
+        LOGGER.warning(
+            f"Reached {MAX_PER_CAPTURE_FILES} per-capture files; not creating more. "
+            "The filename pattern includes a value the client chooses, so a flood "
+            "of forged identifiers would otherwise fill the disk. Raise "
+            "MAX_PER_CAPTURE_FILES, or use a pattern without {client_id}."
+        )
+    state["per_capture_refused"] = state.get("per_capture_refused", 0) + 1
+    return False
+
+
 def _write_capture_record(
     event: CaptureEvent,
     *,
@@ -298,6 +332,8 @@ def _write_capture_record(
         if target == "-":
             raise ValueError("--output-mode per-capture requires a filename pattern")
         path = pathlib.Path(event.format_filename(target, packet_format))
+        if not _per_capture_budget(state, path):
+            return payload
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(payload, encoding="utf-8")
         return payload
