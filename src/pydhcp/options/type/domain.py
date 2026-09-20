@@ -108,5 +108,19 @@ def decode_domain_name(
             )
         if idx + length > size:
             raise ValueError(f"{what} is truncated")
-        labels.append(option[idx : idx + length].tobytes().decode("utf-8"))
+        label = option[idx : idx + length].tobytes().decode("utf-8")
+        if "." in label:
+            # The names here are joined with "." to make a string, so a label
+            # that already contains one is indistinguishable from a boundary and
+            # does not survive a round trip: b"\x03a.b\x01c\x00" decoded to
+            # "a.b.c" and re-encoded as THREE labels, a different name than
+            # arrived. RFC 1035 3.1 makes the length octet the only delimiter,
+            # so a dot inside a label is legal on the wire and merely
+            # unrepresentable in this form -- refusing it says so, where
+            # accepting it silently rewrites the name.
+            raise ValueError(
+                f"{what} has a label containing '.' ({label!r}), which cannot "
+                "be represented unambiguously in dotted form"
+            )
+        labels.append(label)
         idx += length

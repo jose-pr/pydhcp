@@ -207,8 +207,20 @@ class DomainList(DhcpOptionType, list[str]):
             else:
                 dc = view[id : ptr_or_len + id]
                 if len(dc) != ptr_or_len:
-                    raise ValueError()
-                components[start] = ("label", dc.tobytes().decode(), id + ptr_or_len)
+                    raise ValueError(
+                        f"search list is truncated: a label declares {ptr_or_len} "
+                        f"octets but only {len(dc)} remain"
+                    )
+                label = dc.tobytes().decode()
+                if "." in label:
+                    # Same reason as `domain.decode_domain_name`: these names
+                    # are joined with ".", so a label already containing one
+                    # re-encodes as a different number of labels than arrived.
+                    raise ValueError(
+                        f"search list has a label containing '.' ({label!r}), "
+                        "which cannot be represented unambiguously in dotted form"
+                    )
+                components[start] = ("label", label, id + ptr_or_len)
                 id += ptr_or_len
 
         def get_dn(start: int) -> list[str]:
@@ -272,15 +284,28 @@ class DomainList(DhcpOptionType, list[str]):
                         if pair <= _pair:
                             continue
                     for n in cn[:-pair]:
-                        cidx += 1 + len(n)
+                        # Octets, not characters. A compression pointer is a
+                        # byte offset into the option, so counting characters
+                        # here aimed every pointer past a non-ASCII label at the
+                        # wrong byte.
+                        cidx += 1 + len(n.encode())
 
                     parent = cidx, pair
                     unique = domain[:-pair]
 
             components.append((domain, len(data)))
             for comp in unique:
-                data.append(len(comp))
-                data.extend(comp.encode())
+                # RFC 1035 3.1: a label's length octet counts OCTETS. This
+                # counted characters, so `bücher.example` declared 6 for a
+                # 7-octet label: the wire bytes were corrupt, and this encoder's
+                # own decoder either raised a bare ValueError or read the
+                # remainder as different labels entirely -- measured,
+                # ['éé.x.com', 'y.x.com'] came back as ['<0xef><0xbf><0xbd>',
+                # 'x.com', 'y']. `split_domain_name` validates in octets, so the
+                # length check and the length written now agree.
+                encoded = comp.encode()
+                data.append(len(encoded))
+                data.extend(encoded)
             if parent is None:
                 data.append(0x00)
             else:
