@@ -33,6 +33,10 @@ DhcpMessage` etc. all work directly off the top-level package.
     returns `None` if already started.
   - `.stop() -> None` / `.wait() -> None` — signal and block on the
     cancellation `threading.Event`.
+  - **`.bound_addresses -> tuple[SocketAddress, ...]`** — what this listener is
+    actually bound to, read from the sockets rather than from the requested
+    spec. Empty before `.bind()` and after `.stop()`/`.close()`. This is how a
+    caller that passed port 0 learns the ephemeral port it was given.
   - `.handle(msg, context) -> None` — override point; base implementation is
     a no-op. Called for every successfully decoded packet.
 - **`AsyncDhcpListener(listen=None, max_packet_size=None,
@@ -49,6 +53,7 @@ DhcpMessage` etc. all work directly off the top-level package.
     at a time and in arrival order — which is also what keeps a caller's
     compound lease operation ("free? then allocate") atomic, since the
     backend's own lock does not span two calls.
+  - `.bound_addresses` — as on `DhcpListener`.
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
     (there is no blocking loop to enter — use `start()` then `wait()`).
