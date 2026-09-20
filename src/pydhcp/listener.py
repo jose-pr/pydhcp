@@ -852,7 +852,36 @@ class AsyncDhcpListener:
         coroutine nobody awaited, so the server kept running with its ports
         bound, and mypy accepted it. Returning an already-finished future keeps
         the `await` form working from inside a running loop.
+
+        Called from the handler worker thread -- which is exactly what
+        `DhcpCapture.hook_fail_fast` and the capture CLI's `--count` sink do --
+        the close is handed back to the event loop instead of being run inline.
+        Nothing it touches is thread-safe: `loop.remove_reader`,
+        `transport.close()` and `asyncio.Event.set()` all finish through
+        `loop.call_soon`, which queues a callback *without* waking the loop.
+        Measured with a handler calling `stop()` on its worker: the selector
+        loop (Linux) never woke and `await wait()` blocked forever, while
+        Windows' proactor loop returned in 7 ms -- the same
+        green-on-one-platform shape as every other defect in this file.
         """
+        loop = self._loop
+        if loop is not None and not loop.is_closed():
+            try:
+                running: "_asyncio.AbstractEventLoop | None" = (
+                    _asyncio.get_running_loop()
+                )
+            except RuntimeError:
+                running = None
+            if running is not loop:
+                try:
+                    loop.call_soon_threadsafe(self._close_endpoints)
+                except RuntimeError:  # pragma: no cover - loop closed since
+                    return self._close_endpoints()
+                return None
+        return self._close_endpoints()
+
+    def _close_endpoints(self) -> _ty.Any:
+        """The body of `stop()`, always on the event loop's own thread."""
         stopped, self._stopped = self._stopped, None
         if stopped is not None:
             stopped.set()

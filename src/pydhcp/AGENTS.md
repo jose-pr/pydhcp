@@ -47,6 +47,16 @@ DhcpMessage` etc. all work directly off the top-level package.
   coroutine — it is reached through the inherited `DhcpListener` contract,
   where nobody awaits it — but `await .stop()` still works. Same `.handle()`
   override point and per-instance `self.metrics`.
+  - **`.stop()` is safe to call from a handler**, which runs on the worker
+    thread rather than on the loop: it hands the close back to the loop with
+    `call_soon_threadsafe` instead of running it inline. Nothing it touches is
+    thread-safe — `remove_reader`, `transport.close()` and `Event.set()` all
+    finish through `loop.call_soon`, which queues a callback *without* waking
+    the loop. Measured with a handler calling `stop()` on its worker: Linux's
+    selector loop never woke and `await wait()` blocked forever, while
+    Windows' proactor loop returned in 7 ms. The close is therefore not
+    synchronous when called this way — `bound_addresses` empties on the loop's
+    next turn, not before `stop()` returns.
   - Handlers run on a single worker thread, not on the event loop: `.handle()`
     is ordinary blocking code, so running it inline stalled every other
     coroutine in the host application. One worker, so handlers still run one
