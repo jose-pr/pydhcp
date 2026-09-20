@@ -210,9 +210,12 @@ class DhcpServer(_Base):
         """
         if server_id == actual_server_id:
             return True
+        # filter=False for the same reason as in `_resolve_interface`: this asks
+        # whether we *hold* an address, not whether it is one worth serving
+        # from, and the default filter hides link-local ones.
         return any(
             interface.ip == server_id
-            for interface in _net.host_ip_interfaces(family=None)
+            for interface in _net.host_ip_interfaces(filter=False, family=None)
         )
 
     @staticmethod

@@ -410,7 +410,15 @@ def _resolve_interface_uncached(
     # Matched against pydhcp's own per-address view, since the caller expects a
     # NetworkInterface. netimps.interface_for() answers the same question but
     # returns its own Interface type, which is the wrong shape here.
-    for i in _net.host_ip_interfaces(family=None):
+    # filter=False: the default excludes APIPA (169.254/16), and that default is
+    # about *which addresses are worth serving from* -- a different question
+    # from *which interface did this packet arrive on*. With the filter on, an
+    # interface whose only address is link-local was absent from this list and
+    # could never be resolved, so it degraded to the synthetic `unknown[...]`
+    # below with a /32 and no MAC -- losing the prefix the server derives its
+    # pool from. An APIPA-only NIC is the normal state of an isolated
+    # DHCP-only segment, which is the condition APIPA exists to signal.
+    for i in _net.host_ip_interfaces(filter=False, family=None):
         if str(i.ip) == local_ip:
             return i
 
