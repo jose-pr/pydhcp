@@ -6,6 +6,7 @@ import typing as _ty
 
 from .packet.message import DhcpMessage
 from .listener import (
+    AsyncDhcpListener as _AsyncBase,
     DhcpListener as _Base,
     ListenSpec,
     PktInfoUdpTransport as _PktInfoUdpTransport,
@@ -100,14 +101,41 @@ class DhcpRelay(_Base):
         max_packet_size: _ty.Optional[int] = None,
         per_interface: bool | None = None,
     ) -> None:
-        if not server_addresses:
-            raise ValueError("DhcpRelay requires at least one server address")
         super().__init__(
             listen=listen,
             select_timeout=select_timeout,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
         )
+        self._init_relay_state(
+            server_addresses,
+            max_hops=max_hops,
+            insert_relay_agent_info=insert_relay_agent_info,
+            circuit_id=circuit_id,
+            remote_id=remote_id,
+            trust_client_relay_agent_info=trust_client_relay_agent_info,
+        )
+
+    def _init_relay_state(
+        self,
+        server_addresses: _ty.Sequence[ServerAddress] = (),
+        *,
+        max_hops: int = DEFAULT_MAX_HOPS,
+        insert_relay_agent_info: bool = False,
+        circuit_id: _ty.Optional[bytes] = None,
+        remote_id: _ty.Optional[bytes] = None,
+        trust_client_relay_agent_info: bool = False,
+    ) -> None:
+        """Set up the state and validation every relay variant needs.
+
+        `AsyncDhcpRelay` cannot call this class's `__init__` (its own base takes
+        a different argument set), so without this it would have to re-implement
+        the body -- which is precisely how `AsyncDhcpServer` came to be missing
+        `_declined`, and how a `max_hops` range check would end up enforced on
+        one relay and not the other.
+        """
+        if not server_addresses:
+            raise ValueError("DhcpRelay requires at least one server address")
         self.server_addresses = [_normalize_server_address(a) for a in server_addresses]
         if not 0 <= max_hops <= RFC1542_MAX_HOPS:
             raise ValueError(
@@ -374,3 +402,56 @@ class DhcpRelay(_Base):
             data, dest, client_port, msg.chaddr
         )
         self.metrics.packets_sent += 1
+
+
+class AsyncDhcpRelay(_AsyncBase, DhcpRelay):  # type: ignore[misc]
+    """`DhcpRelay`'s forwarding policy on the asyncio listener.
+
+    Mixed the way `AsyncDhcpServer` is, and for the same reason: every line of
+    the receive path -- `_pktinfo_supported`, `_recv_with_pktinfo`,
+    `_context_for`, `_bind_sockets` -- stays in `listener.py` where both
+    listeners reach it. The async half of this project has been written as a
+    *copy* once already, and a hardcoded `_pktinfo = False` then left it
+    receiving nothing at all on Linux while passing every unit test.
+
+    `_pending_clients` is unguarded, exactly as on `DhcpRelay`. What keeps it
+    safe here is that `AsyncDhcpListener` runs handlers on a single worker
+    thread, so `handle()` is still serialised and in arrival order.
+    """
+
+    #: Read off the sync class rather than repeated: `AsyncDhcpListener`'s
+    #: all-ports default comes first in the MRO and would otherwise win, so a
+    #: relay would also bind the client port 68.
+    DEFAULT_PORTS = DhcpRelay.DEFAULT_PORTS
+
+    def __init__(
+        self,
+        listen: ListenSpec = None,
+        server_addresses: _ty.Sequence[ServerAddress] = (),
+        max_hops: int = DEFAULT_MAX_HOPS,
+        insert_relay_agent_info: bool = False,
+        circuit_id: _ty.Optional[bytes] = None,
+        remote_id: _ty.Optional[bytes] = None,
+        trust_client_relay_agent_info: bool = False,
+        max_packet_size: _ty.Optional[int] = None,
+        per_interface: bool | None = None,
+    ) -> None:
+        _AsyncBase.__init__(
+            self,
+            listen=listen,
+            max_packet_size=max_packet_size,
+            per_interface=per_interface,
+        )
+        self._init_relay_state(
+            server_addresses,
+            max_hops=max_hops,
+            insert_relay_agent_info=insert_relay_agent_info,
+            circuit_id=circuit_id,
+            remote_id=remote_id,
+            trust_client_relay_agent_info=trust_client_relay_agent_info,
+        )
+
+    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
+        # Both bases define handle() and AsyncDhcpListener's no-op comes first
+        # in the MRO; without this the relay would receive and forward nothing.
+        DhcpRelay.handle(self, msg, context)

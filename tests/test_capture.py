@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 
 from pydhcp import (
+    AsyncDhcpCapture,
     CaptureEvent,
     DhcpCapture,
     DhcpMessage,
@@ -24,6 +25,19 @@ CHADDR = b"\x00\x11\x22\x33\x44\x55"
 # actually exercised; this is the address `pydhcp interfaces` was measured
 # printing as `68-F7-D8-E5-1E-83`.
 ALPHA_CHADDR = bytes.fromhex("68f7d8e51e83")
+
+
+@pytest.fixture(params=[DhcpCapture, AsyncDhcpCapture], ids=["sync", "async"])
+def capture_class(request):
+    """Every capture-policy test runs against both captures.
+
+    Parametrized rather than duplicated: `AsyncDhcpCapture` takes the same
+    arguments minus `select_timeout`, and `handle()` is ordinary synchronous
+    code on both -- on the async listener it runs on the handler worker thread,
+    not on the event loop, so calling it directly here is the same call the
+    listener makes.
+    """
+    return request.param
 
 
 class _Transport:
@@ -225,10 +239,10 @@ def test_capture_event_formats_safe_filenames() -> None:
     ) == ("out/01_00_11_22_33_44_55/20260714T123015.000000Z_DHCPDISCOVER_1234ABCD.json")
 
 
-def test_dhcp_capture_invokes_sink_and_hook_for_accepted_packet() -> None:
+def test_dhcp_capture_invokes_sink_and_hook_for_accepted_packet(capture_class) -> None:
     seen = []
     hooked = []
-    capture = DhcpCapture(
+    capture = capture_class(
         listen=("127.0.0.1", 6767),
         packet_filter="msg_type=DHCPDISCOVER",
         sink=seen.append,
@@ -242,14 +256,14 @@ def test_dhcp_capture_invokes_sink_and_hook_for_accepted_packet() -> None:
     assert hooked == seen
 
 
-def test_dhcp_capture_logs_hook_errors_without_fail_fast() -> None:
+def test_dhcp_capture_logs_hook_errors_without_fail_fast(capture_class) -> None:
     seen = []
 
     def bad_hook(event):
         seen.append(event)
         raise RuntimeError("boom")
 
-    capture = DhcpCapture(listen=("127.0.0.1", 6767), hook=bad_hook)
+    capture = capture_class(listen=("127.0.0.1", 6767), hook=bad_hook)
 
     capture.handle(_message(), _context())
 
@@ -257,11 +271,11 @@ def test_dhcp_capture_logs_hook_errors_without_fail_fast() -> None:
     assert len(seen) == 1
 
 
-def test_dhcp_capture_hook_fail_fast_raises() -> None:
+def test_dhcp_capture_hook_fail_fast_raises(capture_class) -> None:
     def bad_hook(event):
         raise RuntimeError("boom")
 
-    capture = DhcpCapture(
+    capture = capture_class(
         listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
     )
 
@@ -269,14 +283,45 @@ def test_dhcp_capture_hook_fail_fast_raises() -> None:
         capture.handle(_message(), _context())
 
 
-def test_dhcp_capture_hook_fail_fast_stops_the_capture() -> None:
+def test_dhcp_capture_hook_fail_fast_stops_the_capture(capture_class) -> None:
     """Re-raising alone changed nothing.
 
     handle() runs inside the listener's per-packet try, which logs and carries
     on, so a capture with --hook-fail-fast kept running through every packet and
     still exited 0. Measured on loopback before this: the hook fired for all
     three packets and the listener thread was still alive.
+
+    The two listeners stop by different mechanisms (a cancellation token versus
+    closing the endpoints), so what is asserted here is the part that has to be
+    the same on both: the real `stop()` is called and the reason is recorded.
+    `tests/test_async.py` drives the async mechanism itself, on a live loop.
     """
+
+    def bad_hook(event):
+        raise RuntimeError("boom")
+
+    class RecordingCapture(capture_class):  # type: ignore[valid-type,misc]
+        stop_calls = 0
+
+        def stop(self):
+            type(self).stop_calls += 1
+            return super().stop()
+
+    capture = RecordingCapture(
+        listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
+    )
+
+    with pytest.raises(RuntimeError):
+        capture.handle(_message(), _context())
+
+    # the loop is asked to stop, and the reason is recorded so a caller can tell
+    # this from an ordinary shutdown
+    assert isinstance(capture.hook_error, RuntimeError)
+    assert RecordingCapture.stop_calls == 1
+
+
+def test_dhcp_capture_sync_fail_fast_sets_the_cancellation_token() -> None:
+    """The sync mechanism specifically: `stop()` sets the token `listen()` polls."""
 
     def bad_hook(event):
         raise RuntimeError("boom")
@@ -293,17 +338,14 @@ def test_dhcp_capture_hook_fail_fast_stops_the_capture() -> None:
     with pytest.raises(RuntimeError):
         capture.handle(_message(), _context())
 
-    # the loop is asked to stop, and the reason is recorded so a caller can tell
-    # this from an ordinary shutdown
-    assert isinstance(capture.hook_error, RuntimeError)
     assert capture._cancellation_token.is_set()
 
 
-def test_dhcp_capture_hook_error_stays_none_without_fail_fast() -> None:
+def test_dhcp_capture_hook_error_stays_none_without_fail_fast(capture_class) -> None:
     def bad_hook(event):
         raise RuntimeError("boom")
 
-    capture = DhcpCapture(listen=("127.0.0.1", 6767), hook=bad_hook)
+    capture = capture_class(listen=("127.0.0.1", 6767), hook=bad_hook)
 
     capture.handle(_message(), _context())
 

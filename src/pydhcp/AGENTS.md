@@ -236,6 +236,21 @@ that's never started will always time out waiting for a reply.
     forwarded -- RFC 1542 §4.1.1) and
     forwards `BOOTREPLY` back to the original client.
 
+- **`AsyncDhcpRelay(listen=None, server_addresses=(), max_hops=4,
+  insert_relay_agent_info=False, circuit_id=None, remote_id=None,
+  trust_client_relay_agent_info=False, max_packet_size=None,
+  per_interface=None)`** — the same forwarding policy running on
+  `AsyncDhcpListener`, the way `AsyncDhcpServer` relates to `DhcpServer`.
+  `isinstance(x, DhcpRelay)` holds. Identical arguments minus `select_timeout`
+  (the sync receive loop's poll interval, which asyncio has no use for), and
+  both constructors share `_init_relay_state()`, so the `server_addresses` and
+  `max_hops` validation cannot be enforced on one and not the other. Drive it
+  with `await .start()` / `await .wait()` / `.stop()`.
+  - `_pending_clients` is unguarded on both. What keeps it safe here is that
+    `AsyncDhcpListener` runs handlers on **one** worker thread, so `handle()`
+    is still serialised and in arrival order — the same guarantee the lease
+    backends rely on. A handler pool would make this a data race.
+
 **Gotcha**: a relay reply must not assume the client listens on well-known
 port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
 `DhcpRelay` tracks `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
@@ -299,6 +314,22 @@ observed by this relay instance.
 to satisfy `SocketAddress`; an IPv6-only interface isn't actually handled
 (`NetworkInterface.ip` is `IPv4Address | IPv6Address`) — capture on an
 IPv6-only interface can break at runtime.
+
+- **`AsyncDhcpCapture(listen=None, packet_filter=None, sink=None, hook=None,
+  hook_fail_fast=False, max_packet_size=None, per_interface=None)`** — the same
+  filter/sink/hook policy running on `AsyncDhcpListener`.
+  `isinstance(x, DhcpCapture)` holds. Identical arguments minus
+  `select_timeout`, and both constructors share `_init_capture_state()`. Drive
+  it with `await .start()` / `await .wait()` / `.stop()` rather than
+  `.listen()`, and check `.hook_error` after `.wait()` returns.
+  - `accepted_count`, `hook_error` and whatever a `sink` keeps are unguarded on
+    both, and the single handler worker is again the whole guarantee — the sink
+    runs on it too, so a per-run budget such as the CLI's `--count` needs no
+    lock and no library-side state of its own.
+  - `hook_fail_fast` stops the capture through `AsyncDhcpListener.stop()`,
+    called from that worker thread; see the `.stop()` note under
+    `AsyncDhcpListener` for why the close is deferred to the loop and is not
+    complete by the time `handle()` re-raises.
 
 ## Leases (`lease.py`)
 

@@ -77,10 +77,11 @@ from .network import (
 )
 from .server import DhcpServer as DhcpServer, AsyncDhcpServer as AsyncDhcpServer
 from .client import DhcpClient as DhcpClient
-from .relay import DhcpRelay as DhcpRelay
+from .relay import DhcpRelay as DhcpRelay, AsyncDhcpRelay as AsyncDhcpRelay
 from .capture import (
     CaptureEvent as CaptureEvent,
     DhcpCapture as DhcpCapture,
+    AsyncDhcpCapture as AsyncDhcpCapture,
     compile_capture_filter as compile_capture_filter,
 )
 from .lease import (
@@ -164,8 +165,10 @@ __all__ = [
     "AsyncDhcpServer",
     "DhcpClient",
     "DhcpRelay",
+    "AsyncDhcpRelay",
     "CaptureEvent",
     "DhcpCapture",
+    "AsyncDhcpCapture",
     "compile_capture_filter",
     "DhcpLease",
     "LeaseBackend",

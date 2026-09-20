@@ -7,7 +7,7 @@ import re as _re
 import typing as _ty
 
 from . import network as _net
-from .listener import DhcpListener, ListenSpec, RequestContext
+from .listener import AsyncDhcpListener, DhcpListener, ListenSpec, RequestContext
 from .log import LOGGER
 from .options import DhcpOptionCode
 from .packet.message import DhcpMessage, NoClientIdentity
@@ -132,6 +132,27 @@ class DhcpCapture(DhcpListener):
             max_packet_size=max_packet_size,
             per_interface=per_interface,
         )
+        self._init_capture_state(
+            packet_filter=packet_filter,
+            sink=sink,
+            hook=hook,
+            hook_fail_fast=hook_fail_fast,
+        )
+
+    def _init_capture_state(
+        self,
+        packet_filter: str | CapturePredicate | None = None,
+        sink: CaptureSink | None = None,
+        hook: CaptureHook | None = None,
+        hook_fail_fast: bool = False,
+    ) -> None:
+        """Set up the state every capture variant needs.
+
+        `AsyncDhcpCapture` cannot call this class's `__init__` (its own base
+        takes a different argument set), so one method both constructors call is
+        what keeps the two from drifting -- the way `AsyncDhcpServer` drifted
+        from `DhcpServer` until `_init_server_state` existed.
+        """
         self.packet_filter = (
             compile_capture_filter(packet_filter)
             if isinstance(packet_filter, str) or packet_filter is None
@@ -172,6 +193,53 @@ class DhcpCapture(DhcpListener):
                     self.hook_error = exc
                     self.stop()
                     raise
+
+
+class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
+    """`DhcpCapture`'s filter/sink/hook policy on the asyncio listener.
+
+    Mixed the way `AsyncDhcpServer` is: no receive-path code is repeated here,
+    so the `IP_PKTINFO` wildcard path, the interface resolution and the bind
+    diagnostics are the same ones the sync capture uses.
+
+    `accepted_count`, `hook_error` and anything a `sink` keeps are unguarded,
+    exactly as on `DhcpCapture`. What keeps them safe is that
+    `AsyncDhcpListener` runs handlers on a single worker thread -- including
+    the sink, so the capture CLI's `--count` budget needs no lock and no
+    library-side state of its own.
+
+    `hook_fail_fast` stops the capture through `AsyncDhcpListener.stop()`,
+    which is not a coroutine and is called from that worker thread; it hands
+    the close back to the event loop rather than touching it from off-thread.
+    """
+
+    def __init__(
+        self,
+        listen: ListenSpec = None,
+        packet_filter: str | CapturePredicate | None = None,
+        sink: CaptureSink | None = None,
+        hook: CaptureHook | None = None,
+        hook_fail_fast: bool = False,
+        max_packet_size: int | None = None,
+        per_interface: bool | None = None,
+    ) -> None:
+        AsyncDhcpListener.__init__(
+            self,
+            listen=listen,
+            max_packet_size=max_packet_size,
+            per_interface=per_interface,
+        )
+        self._init_capture_state(
+            packet_filter=packet_filter,
+            sink=sink,
+            hook=hook,
+            hook_fail_fast=hook_fail_fast,
+        )
+
+    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
+        # Both bases define handle() and AsyncDhcpListener's no-op comes first
+        # in the MRO; without this the capture would record nothing.
+        DhcpCapture.handle(self, msg, context)
 
 
 def _sanitize_filename_value(value: str) -> str:
