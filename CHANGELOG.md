@@ -7,6 +7,102 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+The 0.5.2 review remediation: 91 commits against a 339-finding multi-agent review.
+
+### Added
+
+- `AsyncDhcpRelay` and `AsyncDhcpCapture`, completing async parity. Mixed onto
+  `AsyncDhcpListener` rather than copied, so the `IP_PKTINFO` receive path and every
+  fix it gains are shared; a test parses both classes and fails if any receive-path
+  line is duplicated. Verified with ISC dhclient over a veth pair.
+- `DhcpListener.bound_addresses` / `AsyncDhcpListener.bound_addresses` — what a
+  listener is actually bound to, read from the sockets. This is how a caller that
+  passed port 0 learns the port it was given.
+- `FileLeaseBackend.SAVE_INTERVAL_SECONDS`, with `flush()`, `close()` and context-manager
+  support: opt-in write coalescing. **Off by default** — coalescing trades a property
+  the operator cannot see going wrong (leases lost on a crash) for one they can already
+  measure, which is the wrong way round for a default.
+- `pydhcp server --lease-file PATH` (also `lease_file` under `[server]` in a config
+  file). `docs/deployment.md` had always told operators to mount lease storage; until
+  now the CLI had no way to write to it, so the volume stayed empty and every client
+  renumbered on restart.
+- `pydhcp server --per-interface` and `pydhcp relay --per-interface` — both classes
+  already took the argument; only the CLI could not reach it.
+- `python -m pydhcp` as an entry point.
+- `UncompressedDomainList`, and `RecordList[T]` for codecs whose entries are records.
+
+### Fixed
+
+**The one that mattered most.** On Linux and macOS the default wildcard server received
+nothing at all: the `IP_PKTINFO` path discarded the local address and interface index at
+the line that needed them, so the server answered with identifier `0.0.0.0` and no
+client ever completed a DORA. Measured against ISC dhclient 4.4.3: retransmitting
+DISCOVER until it gave up, before; bound, after.
+
+- **Server (RFC 2131).** A DHCPDISCOVER no longer extends the lease it is only probing,
+  and a REQUEST about to be NAKed no longer renews the address it is refusing. Replies
+  carry the server's `siaddr`/`sname`/`file` instead of echoing the client's — a client
+  could nominate its own next-server and boot file, which is the pair a PXE client acts
+  on. A DHCPRELEASE is checked against `ciaddr` before it frees anything. Option 54 is
+  compared against every address this host holds, so a second socket on the same segment
+  no longer deletes the binding the first just granted. Option 57 below the RFC 2132
+  minimum is floored rather than making `encode` raise and the client get nothing. A
+  lease with no time left produces no OFFER and NAKs a REQUEST rather than ACKing an
+  empty reply. Lease length is the server's policy, honouring the RFC 2132 infinity
+  sentinel. The base server no longer claims to be the network's router and resolver.
+- **Wire format.** Every encoded packet leads with the message type on both encode
+  paths. `sname`, `file` and `chaddr` raise instead of being silently truncated, and
+  `hlen` is bounded to what `decode` accepts. Domain labels are measured in octets, not
+  characters — every non-ASCII name was going out corrupt. Options 88 and 146 encode
+  uncompressed, as RFC 4280 §4.6 and RFC 6731 require; 119 and 141 still compress, as
+  theirs require. Outgoing messages are padded to the 300-octet BOOTP minimum. Six
+  option codecs match the wire forms their RFCs define.
+- **Relay.** A request is dropped only when its hop count *exceeds* the threshold
+  (RFC 1542 §4.1.1) — it was refused one hop early — and the default is now the RFC's 4
+  rather than its ceiling of 16. A relayed exchange is identified by client as well as
+  transaction, so a forged xid cannot redirect an OFFER.
+- **Client.** Retransmissions back off with jitter instead of repeating one interval,
+  and carry a real `secs`. Replies match on `(xid, chaddr)`, so two exchanges on one
+  client no longer consume each other's replies.
+- **Async.** `stop()` called from a handler no longer hangs the loop on Linux — nothing
+  it touched was thread-safe, and the selector loop never woke.
+- **Lease store.** Bounded, so a forged-identity flood cannot exhaust it. The file
+  survives a crash and no longer loses leases silently.
+- **Capture and CLI.** Filter keywords match whatever their case — an uppercase `AND`
+  compiled, matched nothing and reported nothing. Filter values are checked once at
+  startup instead of raising per packet. A per-capture filename pattern is validated
+  before binding. A capture run cannot create unbounded files per client identifier.
+  The CLI calls itself `pydhcp`.
+- **Registry.** A subscripted generic is the same class every time. A user's
+  `register_type()` is no longer overwritten by the lazy registry load, and a failed
+  load is retried rather than leaving every code as `Bytes`.
+
+### Changed
+
+- `DhcpServer.release_lease()` returns `bool` and no longer touches metrics — an orderly
+  release, a DECLINE reporting an address conflict, and a reclaim after the client chose
+  another server all arrive there, and only the caller knows which.
+- `DhcpMetrics` gains `leases_declined` and `releases_ignored`. DECLINE used to count as
+  a release, so an address-conflict storm read as orderly shutdowns.
+- `DhcpRelay(max_hops=...)` defaults to 4 and must be 0..16.
+- `DhcpClient(timeout=...)` is the *initial* retransmission interval, so a default call
+  now takes up to ~14 s rather than ~6 s before giving up.
+- The package installs a `NullHandler` and logs under `pydhcp.<module>`. With logging
+  otherwise unconfigured this **silences** the WARNING-and-above that `logging.lastResort`
+  used to print; configure a handler to see them.
+- `DhcpOptions` rejects codes 0 and 255 on assignment — they are structural markers, not
+  options. Receive stays liberal.
+- Both import cycles removed; `HardwareAddressType` now lives in `pydhcp.network` and is
+  re-exported from `pydhcp.packet`.
+
+### Documentation
+
+- The option code registry — 163 RFC-documented members — reaches the API reference for
+  the first time.
+- A repo-root `AGENTS.md`, which two shipped headers already cited.
+- README and CHANGELOG links that only resolved inside a checkout, and CHANGELOG compare
+  links naming three tags that never existed.
+
 ## [0.5.2] - 2026-08-16
 
 ### Changed

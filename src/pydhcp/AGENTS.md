@@ -5,9 +5,25 @@ Header-file-style reference for the top-level `pydhcp` package: every
 gotchas, so this module can be consumed without reading its source. For the
 project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 `network`, `options`, and `packet` subpackages have their own headers
-(`src/pydhcp/{network,options,packet}/AGENTS.md`); `pydhcp/__init__.py`
-re-exports everything from those subpackages too, so `from pydhcp import
-DhcpMessage` etc. all work directly off the top-level package.
+(`src/pydhcp/{network,options,packet}/AGENTS.md`).
+
+**`pydhcp/__init__.py` re-exports much of those subpackages, but not all of
+them** — the previous wording said "everything", and 17 documented or
+subpackage names are not importable from `pydhcp`, among them `DhcpMetrics`,
+`ListenSpec`, `load_config`, `main`, `DhcpMessageType`, `DhcpPort`, `Flags`,
+`HardwareAddressType`, `OpCode`, `host_ip_interfaces` and `WILDCARD_IPv4`.
+`from pydhcp import DhcpMessage` works; `from pydhcp import DhcpMessageType`
+does not. Import from the owning module when a name is not in `__all__`
+(82 names today).
+
+**Name collision, worth knowing before you annotate anything**:
+`pydhcp.IPv4Address` is the option **codec** (`pydhcp.options.type.net`), not
+`ipaddress.IPv4Address`. The codec subclasses the stdlib type, so
+`isinstance(codec_value, ipaddress.IPv4Address)` is True — but the direction
+you actually write, `isinstance(interface.ip, pydhcp.IPv4Address)`, is
+**False**. The stdlib type is re-exported as **`pydhcp.IPv4`**. `List`,
+`String`, `Bytes`, `Boolean` and `U8`/`U16`/`U32` are codecs too, and shadow
+builtins and `typing` names under `from pydhcp import *`.
 
 ## Listener / transport (`listener.py`)
 
@@ -21,22 +37,59 @@ DhcpMessage` etc. all work directly off the top-level package.
   (65535). `per_interface=True` disables `IP_PKTINFO` wildcard routing and
   binds one socket per interface instead. Every instance owns
   `self.metrics: DhcpMetrics` — there is no global metrics singleton.
+  - **Wildcard expansion uses the APIPA-filtered address list.** `"*"` without
+    `IP_PKTINFO` becomes one socket per `host_ip_interfaces()` address, which
+    excludes 169.254/16: binding is *selection* (which addresses this process
+    answers on), not *resolution* (which interface a datagram arrived on, which
+    uses `filter=False`). A link-local address means DHCP did not answer —
+    RFC 3927 §1.5 does not assign those by DHCP. Name one explicitly in
+    `listen` to bind it anyway.
+  - **`REUSE_ADDRESS`** (class var, `False`) — whether to set `SO_REUSEADDR`.
+    Off, because a second listener binding a port the first already holds then
+    *succeeds silently* and receives nothing while the first gets every
+    datagram (Windows, and Linux for UDP when both sockets set it). On Windows
+    the default bind sets `SO_EXCLUSIVEADDRUSE` instead, without which a later
+    `SO_REUSEADDR` socket can still take the address. A class attribute, so
+    every subclass inherits it and a subclass or instance can opt back in.
   - `.bind() -> None` — open/refresh sockets for `self._listen`; raises
     `PermissionError` for privileged ports (<1024 without rights) and
-    `OSError` for `EADDRINUSE`, both with an actionable message.
+    `OSError` for `EADDRINUSE`, both with an actionable message. **Idempotent,
+    port 0 included**: an open socket is matched against the address it was
+    *asked* for, so a re-bind keeps the ephemeral port it already has rather
+    than closing that socket and taking a new port. A Windows `WSAEACCES` is
+    reported as in-use, not as a privilege problem — that platform has no
+    privileged ports, and the address is simply held exclusively elsewhere.
   - `.listen() -> None` — blocking receive loop; decodes each datagram,
     resolves the receiving `NetworkInterface`, builds a `RequestContext`, and
-    calls `self.handle(msg, context)`. Catches and logs per-packet exceptions
-    (not `KeyboardInterrupt`) so one bad packet never kills the loop.
-  - `.start(cancellation_token=None) -> Thread | None` — runs `.listen()` on
-    a background thread and installs a `SIGINT` handler that calls `.stop()`;
-    returns `None` if already started.
+    calls `self.handle(msg, context)`. Receive, decode and `handle()` failures
+    are caught and reported separately (never `KeyboardInterrupt`) so one bad
+    packet never kills the loop; only the `handle()` one carries a traceback.
+    A datagram larger than `max_packet_size` is **dropped, not decoded from its
+    truncated half**. The loop rechecks the cancellation token between sockets,
+    so a handler that calls `.stop()` is not called again for the rest of the
+    ready set. **`.listen()` closes the sockets on its way out**, so `.stop()`
+    plus joining the thread actually releases the ports.
+  - `.start(cancellation_token=None) -> Thread | None` — runs `.listen()` on a
+    **daemon** thread named `pydhcp-listener` (nothing in the loop ends by
+    itself, so a non-daemon one meant a process that forgot to stop never
+    exited) and installs a `SIGINT` handler that calls `.stop()`; returns
+    `None` if already started. That handler is given back by `.close()` **on
+    the main thread only** — `signal.signal` raises anywhere else, so the
+    receive thread's own teardown deliberately leaves it installed for a later
+    `.close()` to restore.
   - `.stop() -> None` / `.wait() -> None` — signal and block on the
-    cancellation `threading.Event`.
+    cancellation `threading.Event`. `.stop()` only asks the loop to exit; the
+    close happens on the receive thread, up to `select_timeout` later.
   - **`.bound_addresses -> tuple[SocketAddress, ...]`** — what this listener is
     actually bound to, read from the sockets rather than from the requested
-    spec. Empty before `.bind()` and after `.stop()`/`.close()`. This is how a
-    caller that passed port 0 learns the ephemeral port it was given.
+    spec. Empty before `.bind()` and after `.close()` — and after `.stop()`
+    *once the receive loop has actually exited*, which is why a caller that
+    cares should join the thread `.start()` returned. This is how a caller that
+    passed port 0 learns the ephemeral port it was given.
+  - **`.packets_dropped_truncated`** / **`.packets_dropped_error`** (ints) —
+    datagrams that did not fit `max_packet_size`, and datagrams lost to an
+    error anywhere in receive/decode/handle. Plain attributes on the listener,
+    not `DhcpMetrics` fields, so `.snapshot()` does not report them.
   - `.handle(msg, context) -> None` — override point; base implementation is
     a no-op. Called for every successfully decoded packet.
 - **`AsyncDhcpListener(listen=None, max_packet_size=None,
@@ -63,7 +116,9 @@ DhcpMessage` etc. all work directly off the top-level package.
     at a time and in arrival order — which is also what keeps a caller's
     compound lease operation ("free? then allocate") atomic, since the
     backend's own lock does not span two calls.
-  - `.bound_addresses` — as on `DhcpListener`.
+  - `.bound_addresses`, `.REUSE_ADDRESS`, `.packets_dropped_truncated` and
+    `.packets_dropped_error` — as on `DhcpListener`, including the oversized
+    -datagram drop.
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
     (there is no blocking loop to enter — use `start()` then `wait()`).
@@ -72,11 +127,26 @@ DhcpMessage` etc. all work directly off the top-level package.
     carry `IP_PKTINFO`, which is absent on those platforms anyway.
 - **`Transport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
   bytes) -> int`; base raises `NotImplementedError`.
-- **`UdpTransport(socket)`** — plain UDP send; unicast failures automatically
-  retry as a broadcast (logged as a warning).
+- **`UdpTransport(socket)`** — plain UDP send. A destination of `0.0.0.0`
+  ("this client has no address yet") is sent to `255.255.255.255`, per
+  RFC 2131 §4.1. A failed **unicast** retries as a broadcast (logged as a
+  warning); a failed **broadcast** raises, since the retry would be the
+  identical syscall.
+  - **Caveat**: that retry does not know whether broadcast was an acceptable
+    delivery for this particular reply. It is right for a client with no
+    address yet and wrong for one the server deliberately unicast to (a
+    RENEWING client at its own `ciaddr`, a relay at `giaddr`), where it puts
+    the reply's `yiaddr`, `chaddr`, lease options and echoed
+    `RELAY_AGENT_INFORMATION` in front of the whole segment. Deciding this
+    properly needs a signal from the caller that `Transport.send` does not
+    currently carry.
 - **`PktInfoUdpTransport(socket)`** — POSIX `IP_PKTINFO`-aware transport for
-  wildcard sockets; falls back to `UdpTransport.send` when `ifindex`/
-  `local_ip` aren't set or the platform lacks `sendmsg`/`IP_PKTINFO`.
+  wildcard sockets. Falls back to `UdpTransport.send` when `ifindex`/
+  `local_ip` aren't set or the platform lacks `sendmsg`/`IP_PKTINFO`. If the
+  pinned `sendmsg` itself **fails** (a stale `ifindex`, a `local_ip` no longer
+  on that adapter) it retries once, unpinned, **to the same destination** — it
+  does not go through `UdpTransport.send`, so a failed unicast is never
+  escalated into a broadcast here; the error propagates instead.
 - **`RequestContext`** (`NamedTuple`) — `transport: Transport`, `interface:
   NetworkInterface`, `client: SocketAddress`, `client_mac: bytes`,
   `ifindex: int | None = None`, `local_ip: IPv4 | None = None`. Handlers use
@@ -132,6 +202,12 @@ client build helpers below to keep the exchange unicast.
   - `.get_inform_options(server_id, msg) -> DhcpOptions` — override point for
     DHCPINFORM-only option sets (no address allocated). Same default set, and
     the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
+  - **"Which host interface holds `server_id`" is memoised until the next
+    `.bind()`.** Both the allocating path and the DHCPINFORM path need it, and
+    both enumerated every host adapter per packet — 1181 µs of a 1539 µs
+    `handle()` on one measured box, now 148 µs. The consequence to know: an
+    address this host gains or loses **without re-binding** is not noticed,
+    exactly as for the listener's own interface-resolution cache.
   - `.handle_discover/.handle_request/.handle_decline/.handle_release/
     .handle_inform(msg, context) -> None` — per-message-type handlers called
     from `.handle()`; each is independently overridable.
@@ -251,6 +327,10 @@ that's never started will always time out waiting for a reply.
     is still serialised and in arrival order — the same guarantee the lease
     backends rely on. A handler pool would make this a data race.
 
+- **`ServerAddress`** (`pydhcp.relay`, not re-exported from the top level) —
+  the type of each `server_addresses` entry: `IPv4 | str | tuple[IPv4 | str,
+  int]`. A bare entry defaults to port 67.
+
 **Gotcha**: a relay reply must not assume the client listens on well-known
 port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
 `DhcpRelay` tracks `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
@@ -295,7 +375,24 @@ observed by this relay instance.
   `.destination` (`SocketAddress`), `.message_type` (str name or `"UNKNOWN"`),
   `.client_id` (str), `.xid` (8-hex-digit str). `.format_filename(pattern,
   format) -> str` fills `{client_id}`/`{timestamp}`/`{msg_type}`/`{xid}`/
-  `{format}` placeholders (each value filesystem-sanitized).
+  `{format}` placeholders (each value filesystem-sanitized). It is called per
+  packet, from inside the receive handler — check the pattern once at startup
+  with `validate_filename_pattern` rather than letting it raise there.
+- **`FILENAME_FIELDS`** — the five names above, in order; the only placeholders
+  `format_filename` can fill.
+- **`UNIQUE_FILENAME_FIELDS`** — `{"timestamp", "xid"}`, the subset that
+  differs between two packets of one capture. A pattern naming none of them
+  resolves to the same filename for packets that agree on the rest, so each
+  record overwrites the last.
+- **`validate_filename_pattern(pattern) -> frozenset[str]`** — returns the
+  fields `pattern` names; raises `ValueError` for a malformed pattern or a
+  placeholder that is not in `FILENAME_FIELDS`. Format specs are fine
+  (`{client_id:>12}`), including one level of nesting; positional (`{}`,
+  `{0}`) and attribute/index access (`{xid.real}`) are not, because
+  `format_filename` formats against a plain dict of the five values. Intersect
+  the result with `UNIQUE_FILENAME_FIELDS` to tell whether records will
+  overwrite. Not re-exported from the top-level package — import it from
+  `pydhcp.capture`.
 - **`compile_capture_filter(text) -> Callable[[CaptureEvent], bool]`** —
   `None`/blank → always-true. Otherwise parses `and`-joined `key=value`
   clauses (`or` unsupported, raises `ValueError`). Both keywords are matched
@@ -312,7 +409,9 @@ observed by this relay instance.
 
 **Gotcha**: `CaptureEvent.destination` casts `context.interface.ip` to `IPv4`
 to satisfy `SocketAddress`; an IPv6-only interface isn't actually handled
-(`NetworkInterface.ip` is `IPv4Address | IPv6Address`) — capture on an
+(`NetworkInterface.ip` is `ipaddress.IPv4Address | ipaddress.IPv6Address`
+— spelled out because `pydhcp.IPv4Address` is a *different* thing, see the
+name-collision note at the top) — capture on an
 IPv6-only interface can break at runtime.
 
 - **`AsyncDhcpCapture(listen=None, packet_filter=None, sink=None, hook=None,
@@ -330,6 +429,13 @@ IPv6-only interface can break at runtime.
     called from that worker thread; see the `.stop()` note under
     `AsyncDhcpListener` for why the close is deferred to the loop and is not
     complete by the time `handle()` re-raises.
+
+- **Type aliases** (`pydhcp.capture`, not re-exported from the top level, so
+  import them from the module): **`CaptureSink = Callable[[CaptureEvent],
+  None]`**, **`CaptureHook = Callable[[CaptureEvent], None]`**, and
+  **`CapturePredicate = Callable[[CaptureEvent], bool]`** — the three callable
+  shapes `DhcpCapture`/`AsyncDhcpCapture` accept. A `packet_filter` string is
+  compiled to a `CapturePredicate`; passing one directly skips the parser.
 
 ## Leases (`lease.py`)
 
@@ -398,6 +504,7 @@ IPv6-only interface can break at runtime.
   - Today: `packets_received`, `packets_sent`, `leases_allocated`,
     `leases_renewed`, `leases_released`, `leases_declined`, `releases_ignored`,
     `packets_dropped_hop_limit`, `packets_dropped_untrusted`,
+    `packets_dropped_truncated`, `packets_dropped_error`,
     `replies_dropped_overflow`.
   - `leases_declined` counts `DHCPDECLINE`, which used to land in
     `leases_released` though it means the opposite — the client found the
@@ -449,6 +556,18 @@ lossless on the wire and safe on a screen; use them rather than calling
 fails at write time. Anything rendering one must call `display()` first —
 `DhcpMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
 
+## Logging (`log.py`)
+
+- **`LOGGER`** — the package logger, `logging.getLogger("pydhcp")`. Every
+  module logs through its own `getLogger(__name__)` child, so an embedder can
+  raise or silence one component (`pydhcp.listener`, `pydhcp.server`) without
+  touching the others; they all propagate to `pydhcp`.
+- The package installs a `NullHandler` on `pydhcp`, per the stdlib guidance for
+  libraries. One consequence worth knowing: with logging otherwise
+  unconfigured, `logging.lastResort` would print WARNING and above to stderr,
+  and a `NullHandler` counts as a handler, so those lines go silent instead.
+  Configure a handler to see them. The CLI is unaffected — it installs its own.
+
 ## Config loading (`config.py`)
 
 - **`load_config(filepath: str) -> dict[str, Any]`** — dispatches on the
@@ -496,6 +615,34 @@ stayed at the root level and the library's output never appeared.
   `--server` simply reaches `DhcpRelay(...)`, which already raises
   `ValueError("DhcpRelay requires at least one server address")` — no need
   to duplicate that validation at the argparse layer.
+- Each `--server` value is split by **`listener._split_host_port`**, the same
+  parser the `--listen` specs go through, and reaches `DhcpRelay` as a
+  `(host, port)` tuple with port 67 supplied when the argument names none.
+  The CLI used to carry its own splitter, which disagreed with the listener's
+  on anything with more than one colon. One difference from `--listen`: an
+  empty host is **rejected** here rather than defaulted to `0.0.0.0` — the
+  wildcard is a place to listen, not an upstream to forward to. This is not
+  IPv6 support: `relay._normalize_server_address` still calls `IPv4()` on
+  whatever it receives, so an IPv6 upstream now fails with a clearer message
+  rather than a different one.
+- **`capture --output-mode per-capture` validates its filename pattern before
+  binding**, via `capture.validate_filename_pattern`: an unknown placeholder
+  is a startup `ValueError`, and a pattern naming neither `{timestamp}` nor
+  `{xid}` gets a warning that records will overwrite each other. Both are
+  invisible otherwise — the pattern is expanded per packet inside the receive
+  handler, where the listener logs the exception and carries on, so
+  `--output "cap_{mac}.json"` recorded nothing while logging once per packet.
+  The overwrite case is a **warning, not an error, deliberately** — see
+  `MAX_PER_CAPTURE_FILES` next.
+- **`MAX_PER_CAPTURE_FILES`** (1000) — how many *distinct* files one
+  `per-capture` run may create. The pattern interpolates values the client
+  chooses, so without a bound one unauthenticated sender decides how much of
+  the operator's disk to use (measured: 5,000 forged identifiers, 5,000
+  files). Past the cap, new paths are refused, with the reason logged once.
+  Rewriting an already-seen path is always free, which is what leaves a
+  pattern the client cannot influence unlimited — so the overwrite case above
+  must stay a warning: refusing it, or minting a suffixed new path per packet,
+  would make a long run reach the cap and silently stop recording.
 
 **Gotchas (duho field declarations, Python 3.9 target)**:
 - A **class-body field annotation** (not a bare function annotation) is

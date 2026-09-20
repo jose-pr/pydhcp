@@ -7,7 +7,9 @@
 1. Run the server under a dedicated service account.
 2. Make sure the host can bind the DHCP ports you expect to use.
 3. Confirm the selected interface has the address range you want to serve.
-4. Keep lease persistence enabled if you need stable client assignment across restarts.
+4. Pass `--lease-file /var/lib/pydhcp/leases.json` if you need stable client
+   assignment across restarts. Without it the server keeps leases in memory
+   only, and every client renumbers when the process restarts.
 5. Implement address-pool policy in a `DhcpServer` subclass or custom lease backend before serving a real network.
 
 The built-in server is a base implementation, not a full IPAM system. It is useful for
@@ -43,11 +45,19 @@ Port 67 is privileged: run the unit as root, or grant the interpreter the capabi
 The server can also run inside a container if the container is allowed to bind the needed UDP ports and see the host network.
 
 - Prefer host networking for real DHCP service.
-- Mount configuration and lease storage explicitly.
+- Mount configuration and lease storage explicitly, and point `--lease-file`
+  at the mounted path — a mounted volume stays empty unless the server is
+  told to write to it.
 - Keep logs on stdout/stderr so orchestrators can collect them.
 
 ## Operational notes
 
 - Use the CLI `interfaces` command to confirm interface detection before serving traffic.
-- If you are debugging packet flow, turn on debug logging and look for the transaction ID in the output.
-- Keep an eye on lease backend state after restarts if you are not using the in-memory backend.
+- If you are debugging packet flow, raise the level (`-v`, repeatable, or
+  `--loglevel pydhcp:DEBUG`) and look for the transaction ID — every packet
+  line carries `[XID=...]`. Components log under `pydhcp.<module>`, so
+  `--loglevel pydhcp.listener:DEBUG` narrows it to the receive path.
+- After a restart, check the lease file is being written: `FileLeaseBackend`
+  rewrites it on every mutation by default, and a deployment that raises
+  `SAVE_INTERVAL_SECONDS` to coalesce writes trades up to one interval of
+  leases on a crash.
