@@ -157,12 +157,15 @@ def test_close_releases_every_bound_socket() -> None:
 
     listener = DhcpListener(listen=("127.0.0.1", 0))
     listener.bind()
+    # The private list on purpose: the claim is that the OS sockets were
+    # *closed*, which `bound_addresses` cannot express -- it reports addresses,
+    # and a closed socket simply stops appearing.
     sockets = list(listener._sockets)
     assert sockets
 
     listener.close()
 
-    assert listener._sockets == []
+    assert listener.bound_addresses == ()
     for sock in sockets:
         assert sock.fileno() == -1
 
@@ -171,10 +174,10 @@ def test_listener_is_a_context_manager() -> None:
     from pydhcp.listener import DhcpListener
 
     with DhcpListener(listen=("127.0.0.1", 0)) as listener:
-        assert listener._sockets
-        sockets = list(listener._sockets)
+        assert listener.bound_addresses
+        sockets = list(listener._sockets)  # see above: closed-ness, not addresses
 
-    assert listener._sockets == []
+    assert listener.bound_addresses == ()
     for sock in sockets:
         assert sock.fileno() == -1
 
@@ -258,3 +261,27 @@ def test_interface_resolution_is_cached_and_cleared_by_bind() -> None:
     finally:
         listener_module._resolve_interface_uncached = original
         sock.close()
+
+
+def test_bound_addresses_reports_the_ephemeral_port() -> None:
+    """Binding port 0 gives a port only the socket knows.
+
+    Without a public accessor the only way to learn it was to reach into the
+    private `_sockets` list, which the suite did in twenty-one places -- and
+    which anyone writing a test or a tool against pydhcp had to do too.
+    """
+    from pydhcp.listener import DhcpListener
+
+    listener = DhcpListener(listen=("127.0.0.1", 0))
+    assert listener.bound_addresses == ()
+
+    listener.bind()
+    try:
+        addresses = listener.bound_addresses
+        assert len(addresses) == 1
+        assert str(addresses[0].ip) == "127.0.0.1"
+        assert addresses[0].port != 0, "the ephemeral port was not reported"
+    finally:
+        listener.close()
+
+    assert listener.bound_addresses == ()

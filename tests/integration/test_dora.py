@@ -39,7 +39,7 @@ def run_dora_server():
     import time
 
     start_t = time.time()
-    while not server._sockets and time.time() - start_t < 2.0:
+    while not server.bound_addresses and time.time() - start_t < 2.0:
         time.sleep(0.01)
 
     yield server
@@ -49,7 +49,7 @@ def run_dora_server():
 
 
 def test_dora_sequence(run_dora_server):
-    server_port = run_dora_server._sockets[0].getsockname()[1]
+    server_port = run_dora_server.bound_addresses[0].port
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
     client.settimeout(2.0)
@@ -283,10 +283,10 @@ def test_dora_with_lease_persistence(tmp_path):
     import time
 
     start_t = time.time()
-    while not server._sockets and time.time() - start_t < 2.0:
+    while not server.bound_addresses and time.time() - start_t < 2.0:
         time.sleep(0.01)
 
-    server_port = server._sockets[0].getsockname()[1]
+    server_port = server.bound_addresses[0].port
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
     client.settimeout(2.0)

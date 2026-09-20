@@ -126,9 +126,9 @@ def test_async_stop_works_without_await():
     async def main():
         server = AsyncDhcpServer(listen=("127.0.0.1", 0))
         server.bind()
-        assert server._sockets
+        assert server.bound_addresses
         server.stop()  # no await
-        assert server._sockets == []
+        assert server.bound_addresses == ()
 
     asyncio.run(main())
 
@@ -142,9 +142,9 @@ def test_async_stop_still_supports_await():
     async def main():
         server = AsyncDhcpServer(listen=("127.0.0.1", 0))
         server.bind()
-        assert server._sockets
+        assert server.bound_addresses
         await server.stop()
-        assert server._sockets == []
+        assert server.bound_addresses == ()
 
     asyncio.run(main())
 
@@ -171,7 +171,7 @@ def test_async_handler_does_not_run_on_the_event_loop() -> None:
         server = ThreadRecordingServer(listen=("127.0.0.1", 0))
         await server.start()
         seen["loop"] = threading.current_thread()
-        port = server._sockets[0].getsockname()[1]
+        port = server.bound_addresses[0].port
         try:
             sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sender.sendto(_discover_bytes(), ("127.0.0.1", port))
@@ -214,7 +214,7 @@ def test_async_handlers_stay_serialised() -> None:
     async def main():
         server = OverlapDetectingServer(listen=("127.0.0.1", 0))
         await server.start()
-        port = server._sockets[0].getsockname()[1]
+        port = server.bound_addresses[0].port
         try:
             sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             for _ in range(5):

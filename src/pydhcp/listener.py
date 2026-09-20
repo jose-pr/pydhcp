@@ -455,6 +455,25 @@ class DhcpListener:
         self._cancellation_token: _thread.Event | None = None
         self.metrics = DhcpMetrics()
 
+    @property
+    def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
+        """The addresses this listener is currently bound to.
+
+        Empty before `bind()` and after `stop()`/`close()`. Asking the socket
+        rather than repeating `self._listen` is the point: binding port 0 gives
+        an ephemeral port that only the socket knows, which is how a test or a
+        tool discovers where to send. Without this the only way to find out was
+        to reach into the private socket list, which the tests did in twenty-one
+        places.
+        """
+        addresses = []
+        for sock in self._sockets:
+            try:
+                addresses.append(_net.SocketAddress(sock))
+            except OSError:  # pragma: no cover - socket closed underneath us
+                continue
+        return tuple(addresses)
+
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         pass
 
@@ -737,6 +756,25 @@ class AsyncDhcpListener:
                 f"Encounter error handling async request from {client} : "
                 f"{e.__class__.__name__} | {e}"
             )
+
+    @property
+    def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
+        """The addresses this listener is currently bound to.
+
+        Empty before `bind()` and after `stop()`/`close()`. Asking the socket
+        rather than repeating `self._listen` is the point: binding port 0 gives
+        an ephemeral port that only the socket knows, which is how a test or a
+        tool discovers where to send. Without this the only way to find out was
+        to reach into the private socket list, which the tests did in twenty-one
+        places.
+        """
+        addresses = []
+        for sock in self._sockets:
+            try:
+                addresses.append(_net.SocketAddress(sock))
+            except OSError:  # pragma: no cover - socket closed underneath us
+                continue
+        return tuple(addresses)
 
     def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
         pass

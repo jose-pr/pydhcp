@@ -156,7 +156,7 @@ class _FixedLeaseServer(DhcpServer):
 
 def _wait_bound(listener, timeout: float = 2.0) -> None:
     deadline = time.time() + timeout
-    while not listener._sockets and time.time() < deadline:
+    while not listener.bound_addresses and time.time() < deadline:
         time.sleep(0.01)
 
 
@@ -164,7 +164,7 @@ def test_client_dora_against_real_server() -> None:
     server = _FixedLeaseServer(listen=[("127.0.0.1", 0)])
     thread = server.start()
     _wait_bound(server)
-    server_port = server._sockets[0].getsockname()[1]
+    server_port = server.bound_addresses[0].port
 
     client = DhcpClient(listen=("127.0.0.1", 0))
     client_thread = client.start()
