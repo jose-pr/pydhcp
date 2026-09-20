@@ -356,6 +356,11 @@ fails at write time. Anything rendering one must call `display()` first —
 
 ## CLI (`cli.py`)
 
+Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both
+reach `cli.main()`, and both report themselves as `pydhcp` in usage and error
+lines. The program name comes from `App._parsername_`, not the class name,
+which duho would otherwise use.
+
 Built on [`duho`](https://pypi.org/project/duho/) (a declarative CLI
 framework: `duho.Cli`/`duho.Cmd` classes with annotated fields instead of
 hand-built `argparse`). Each subcommand is a `Cmd` subclass — a data class of
