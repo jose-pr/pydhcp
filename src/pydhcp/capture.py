@@ -19,6 +19,9 @@ CaptureHook = _ty.Callable[["CaptureEvent"], None]
 CaptureSink = _ty.Callable[["CaptureEvent"], None]
 
 _SAFE_FILENAME_RE = _re.compile(r"[^A-Za-z0-9_.-]+")
+_AND_SEPARATOR_RE = _re.compile(r"\s+and\s+", _re.IGNORECASE)
+_OR_TOKEN_RE = _re.compile(r"(?:^|\s)or(?:\s|$)", _re.IGNORECASE)
+_HEX_SEPARATOR_RE = _re.compile(r"[:.-]")
 
 
 @_data.dataclass(frozen=True)
@@ -86,8 +89,15 @@ def compile_capture_filter(text: str | None) -> CapturePredicate:
     if text is None or not text.strip():
         return lambda event: True
 
-    checks: list[tuple[str, str]] = []
-    for part in _re.split(r"\s+and\s+", text.strip()):
+    checks: list[CapturePredicate] = []
+    # Both the `and` split and the `or` rejection are case-insensitive. Measured
+    # with the case-sensitive versions: `src=192.0.2.55 AND msg_type=DHCPDISCOVER`
+    # compiled into one clause whose value was the whole remainder, and
+    # `msg_type=DHCPDISCOVER OR msg_type=DHCPOFFER` compiled too (the lowercase
+    # `or` correctly raised). Both then matched every packet away and exited 0 --
+    # indistinguishable from "no traffic", which is the exact conclusion someone
+    # runs a capture to reach.
+    for part in _AND_SEPARATOR_RE.split(text.strip()):
         if not part or "=" not in part:
             raise ValueError(f"Unsupported capture filter expression: {part!r}")
         key, value = part.split("=", 1)
@@ -95,13 +105,12 @@ def compile_capture_filter(text: str | None) -> CapturePredicate:
         value = value.strip()
         if not key or not value:
             raise ValueError(f"Unsupported capture filter expression: {part!r}")
-        if key == "or" or " or " in part:
+        if key.lower() == "or" or _OR_TOKEN_RE.search(part):
             raise ValueError("Capture filters support 'and' only")
-        _validate_filter_key(key)
-        checks.append((key, value))
+        checks.append(_compile_clause(key, value))
 
     def predicate(event: CaptureEvent) -> bool:
-        return all(_match_filter(event, key, value) for key, value in checks)
+        return all(check(event) for check in checks)
 
     return predicate
 
@@ -170,20 +179,49 @@ def _sanitize_filename_value(value: str) -> str:
     return _SAFE_FILENAME_RE.sub("_", value).strip("._") or "unknown"
 
 
-def _validate_filter_key(key: str) -> None:
-    if key in {
-        "op",
-        "msg_type",
-        "xid",
-        "client_id",
-        "chaddr",
-        "src",
-        "src_port",
-        "dst",
-        "dst_port",
-        "interface",
-    }:
-        return
+def _compile_clause(key: str, value: str) -> CapturePredicate:
+    """Build the per-packet test for one `key=value` clause.
+
+    The value is converted here, not inside the returned predicate. Converting
+    per packet meant `xid=zz` compiled cleanly and then raised `ValueError` from
+    inside the listener's per-packet handler for every packet on the segment --
+    a log flood where one startup error belonged.
+    """
+    if key == "op":
+        return lambda event: event.message.op.name == value
+    if key == "msg_type":
+        return lambda event: event.message_type == value
+    if key == "xid":
+        xid = _filter_int(key, value, base=0)
+        return lambda event: event.message.xid == xid
+    if key == "client_id":
+        # `DhcpMessage.client_id()` always returns colon-separated hex, so
+        # stripping separators cannot corrupt a free-form identifier -- while
+        # `pydhcp interfaces` prints hardware addresses uppercase-hyphenated
+        # (`MACAddress.__str__`, e.g. 68-F7-D8-E5-1E-83), which was the one form
+        # the colon-only comparison rejected. Pasting from that command matched
+        # nothing.
+        wanted_id = _hex_digits(value)
+        return lambda event: _hex_digits(event.client_id) == wanted_id
+    if key == "chaddr":
+        # Same normalization. `chaddr` is raw bytes with `hlen` up to 16, so it
+        # is compared as hex digits rather than parsed as a 6-byte MAC.
+        wanted_chaddr = _hex_digits(value)
+        return lambda event: event.message.chaddr.hex() == wanted_chaddr
+    if key == "src":
+        src_ip = _filter_ip(key, value)
+        return lambda event: event.source.ip == src_ip
+    if key == "src_port":
+        src_port = _filter_int(key, value)
+        return lambda event: event.source.port == src_port
+    if key == "dst":
+        dst_ip = _filter_ip(key, value)
+        return lambda event: event.destination.ip == dst_ip
+    if key == "dst_port":
+        dst_port = _filter_int(key, value)
+        return lambda event: event.destination.port == dst_port
+    if key == "interface":
+        return lambda event: event.context.interface.name == value
     if key.startswith("option.") and len(key) > len("option."):
         option_key = key[len("option.") :]
         if not option_key.isdigit():
@@ -193,35 +231,30 @@ def _validate_filter_key(key: str) -> None:
                 raise ValueError(
                     f"Unsupported DHCP option filter key: {key!r}"
                 ) from None
-        return
+        return lambda event: _option_value(event.message, option_key) == value
     raise ValueError(f"Unsupported capture filter key: {key!r}")
 
 
-def _match_filter(event: CaptureEvent, key: str, value: str) -> bool:
-    if key == "op":
-        return event.message.op.name == value
-    if key == "msg_type":
-        return event.message_type == value
-    if key == "xid":
-        return event.message.xid == int(value, 0)
-    if key == "client_id":
-        return event.client_id == value.upper()
-    if key == "chaddr":
-        return event.message.chaddr.hex(":").upper() == value.upper()
-    if key == "src":
-        return str(event.source.ip) == value
-    if key == "src_port":
-        return event.source.port == int(value)
-    if key == "dst":
-        return str(event.destination.ip) == value
-    if key == "dst_port":
-        return event.destination.port == int(value)
-    if key == "interface":
-        return event.context.interface.name == value
-    if key.startswith("option."):
-        option_value = _option_value(event.message, key[len("option.") :])
-        return option_value == value
-    raise ValueError(f"Unsupported capture filter key: {key!r}")
+def _hex_digits(value: str) -> str:
+    return _HEX_SEPARATOR_RE.sub("", value).lower()
+
+
+def _filter_int(key: str, value: str, base: int = 10) -> int:
+    try:
+        return int(value, base)
+    except ValueError:
+        raise ValueError(
+            f"Capture filter {key}= expects an integer, got {value!r}"
+        ) from None
+
+
+def _filter_ip(key: str, value: str) -> _net.IPv4:
+    try:
+        return _net.IPv4(value)
+    except ValueError:
+        raise ValueError(
+            f"Capture filter {key}= expects an IPv4 address, got {value!r}"
+        ) from None
 
 
 def _option_value(message: DhcpMessage, key: str) -> str | None:

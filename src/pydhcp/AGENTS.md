@@ -237,11 +237,17 @@ observed by this relay instance.
   `{format}` placeholders (each value filesystem-sanitized).
 - **`compile_capture_filter(text) -> Callable[[CaptureEvent], bool]`** —
   `None`/blank → always-true. Otherwise parses `and`-joined `key=value`
-  clauses (`or` unsupported, raises `ValueError`). Keys: `op`, `msg_type`,
-  `xid` (int, any base), `client_id`, `chaddr`, `src`, `src_port`, `dst`,
-  `dst_port`, `interface`, or `option.<NAME_OR_CODE>` (compares the option's
-  decoded/enum-name or string value). Unknown keys raise `ValueError`
-  eagerly, at compile time.
+  clauses (`or` unsupported, raises `ValueError`). Both keywords are matched
+  **case-insensitively**: `AND`/`And` join clauses, `OR`/`Or`/`or` raise.
+  Keys: `op`, `msg_type`, `xid` (int, any base), `client_id`, `chaddr`,
+  `src`, `src_port`, `dst`, `dst_port`, `interface`, or
+  `option.<NAME_OR_CODE>` (compares the option's decoded/enum-name or string
+  value). `client_id` and `chaddr` compare as separator-free hex, so
+  `00:11:22:33:44:55`, `00-11-22-33-44-55` and `001122334455` are all the same
+  filter. Unknown keys **and unparseable values** raise `ValueError` eagerly,
+  at compile time: `xid`, `src_port` and `dst_port` must parse as integers and
+  `src`/`dst` as IPv4 addresses, so a typo is one startup error instead of one
+  per packet — or, for `src`/`dst`, instead of a filter that matches nothing.
 
 **Gotcha**: `CaptureEvent.destination` casts `context.interface.ip` to `IPv4`
 to satisfy `SocketAddress`; an IPv6-only interface isn't actually handled

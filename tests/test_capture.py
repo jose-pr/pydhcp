@@ -19,6 +19,10 @@ from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4, SocketAddress
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
+# A hardware address with hex letters in it, so a case-insensitive comparison is
+# actually exercised; this is the address `pydhcp interfaces` was measured
+# printing as `68-F7-D8-E5-1E-83`.
+ALPHA_CHADDR = bytes.fromhex("68f7d8e51e83")
 
 
 class _Transport:
@@ -28,10 +32,11 @@ class _Transport:
 
 def _message(
     message_type: DhcpMessageType = DhcpMessageType.DHCPDISCOVER,
+    chaddr: bytes = CHADDR,
 ) -> DhcpMessage:
     options = DhcpOptions()
     options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
-    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + CHADDR)
+    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + chaddr)
     return DhcpMessage(
         op=OpCode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
@@ -44,7 +49,7 @@ def _message(
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
         giaddr=IPv4("0.0.0.0"),
-        chaddr=CHADDR,
+        chaddr=chaddr,
         sname="",
         file="",
         options=options,
@@ -114,6 +119,112 @@ def test_compile_capture_filter_rejects_non_matching_events(filter_text: str) ->
 def test_compile_capture_filter_rejects_malformed_expressions(filter_text: str) -> None:
     with pytest.raises(ValueError):
         compile_capture_filter(filter_text)
+
+
+@pytest.mark.parametrize("joiner", ["and", "AND", "And"])
+def test_compile_capture_filter_joins_clauses_in_any_case(joiner: str) -> None:
+    """An uppercase `AND` used to be swallowed into the preceding value.
+
+    Measured before this: `src=192.0.2.55 AND msg_type=DHCPDISCOVER` compiled to
+    a single `src=` clause whose value was the whole remainder, so the capture
+    matched nothing and exited 0 -- the same output as a quiet segment.
+    """
+    event = _event()
+
+    assert compile_capture_filter(f"src=192.0.2.55 {joiner} msg_type=DHCPDISCOVER")(
+        event
+    )
+    # the second clause is really evaluated, not just parsed away
+    assert not compile_capture_filter(f"src=192.0.2.55 {joiner} msg_type=DHCPREQUEST")(
+        event
+    )
+
+
+@pytest.mark.parametrize("joiner", ["or", "OR", "Or"])
+def test_compile_capture_filter_rejects_or_in_any_case(joiner: str) -> None:
+    with pytest.raises(ValueError, match="'and' only"):
+        compile_capture_filter(f"msg_type=DHCPDISCOVER {joiner} msg_type=DHCPOFFER")
+
+
+@pytest.mark.parametrize(
+    "filter_text",
+    [
+        "xid=zz",
+        "xid=0xnope",
+        "src_port=abc",
+        "dst_port=six",
+        "src=not.an.ip",
+        "dst=192.0.2.300",
+    ],
+)
+def test_compile_capture_filter_rejects_bad_values_at_compile_time(
+    filter_text: str,
+) -> None:
+    """A bad value is one startup error, not one per packet.
+
+    These used to compile and then raise from inside the listener's per-packet
+    handler for every packet on the segment (or, for `src`/`dst`, to silently
+    match nothing).
+    """
+    with pytest.raises(ValueError):
+        compile_capture_filter(filter_text)
+
+
+@pytest.mark.parametrize(
+    "filter_text",
+    [
+        f"xid={0x1234ABCD}",
+        "xid=0x1234abcd",
+        "src_port=68",
+        "src=192.0.2.55",
+        "dst=192.0.2.1",
+    ],
+)
+def test_compile_capture_filter_accepts_well_formed_values(filter_text: str) -> None:
+    assert compile_capture_filter(filter_text)(_event())
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "68-F7-D8-E5-1E-83",  # exactly what `pydhcp interfaces` prints
+        "68:F7:D8:E5:1E:83",
+        "68:f7:d8:e5:1e:83",
+        "68f7.d8e5.1e83",
+        "68f7d8e51e83",
+    ],
+)
+def test_chaddr_filter_ignores_separator_and_case(value: str) -> None:
+    """Copy-pasting a MAC out of `pydhcp interfaces` has to work.
+
+    The comparison was colon-form-only, which is the one form that command does
+    not print -- so the pasted filter matched nothing, silently.
+    """
+    event = _event(_message(chaddr=ALPHA_CHADDR))
+
+    assert compile_capture_filter(f"chaddr={value}")(event)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "01-68-F7-D8-E5-1E-83",
+        "01:68:F7:D8:E5:1E:83",
+        "01:68:f7:d8:e5:1e:83",
+        "0168f7d8e51e83",
+    ],
+)
+def test_client_id_filter_ignores_separator_and_case(value: str) -> None:
+    event = _event(_message(chaddr=ALPHA_CHADDR))
+
+    assert compile_capture_filter(f"client_id={value}")(event)
+
+
+def test_hardware_address_filters_still_reject_other_addresses() -> None:
+    event = _event(_message(chaddr=ALPHA_CHADDR))
+
+    assert not compile_capture_filter("chaddr=68-F7-D8-E5-1E-84")(event)
+    assert not compile_capture_filter("client_id=01-68-F7-D8-E5-1E-84")(event)
 
 
 def test_capture_event_formats_safe_filenames() -> None:
