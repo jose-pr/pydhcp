@@ -430,7 +430,21 @@ class DhcpServer(_Base):
             # every other such client shares.
             LOGGER.warning(f"[XID={msg.xid:08x}] Ignoring unidentifiable client: {e}")
             return
-        msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        # Decoded once, and guarded. `DhcpMessageType` has no pseudo-member for
+        # an unassigned value, so option 53 = 99 raised straight out of
+        # `handle()`. The listener's catch-all caught it, but its log line
+        # carries no XID, client or type -- so the one packet an operator would
+        # want to identify produced the one message that cannot identify it.
+        try:
+            msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        except ValueError as e:
+            raw = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE, decode=False)
+            LOGGER.warning(
+                f"[XID={msg.xid:08x}] Dropping a message from "
+                f"{context.client}|{client_id} with an unusable DHCP message "
+                f"type (option 53 = {bytes(raw).hex() if raw else '<absent>'}): {e}"
+            )
+            return
         msg_ty_name = (
             msg_ty.name
             if (msg_ty is not None and hasattr(msg_ty, "name"))
@@ -442,7 +456,6 @@ class DhcpServer(_Base):
         server_id: _ty.Optional[_net.IPv4] = msg.options.get(
             DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
-        msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
 
         if server_id is not None and not self._is_our_server_id(
