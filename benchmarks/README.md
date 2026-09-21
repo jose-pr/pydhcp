@@ -114,7 +114,7 @@ iterations}` report for one run. That is a debugging aid for a single
 measurement — it carries no median and is **not** what `compare_bench.py`
 reads. Use `run.py --save` for anything that will be compared.
 
-## The baseline in  comes from CI
+## The baseline in `results/` comes from CI
 
 This directory is tracked, but it is deliberately empty in the repository until
 a CI benchmark run populates it. A local run measures the machine it ran on:
