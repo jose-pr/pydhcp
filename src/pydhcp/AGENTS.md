@@ -235,11 +235,30 @@ client build helpers below to keep the exchange unicast.
 - **`DhcpClient(listen=None, select_timeout=None, max_packet_size=None,
   per_interface=None)`** (`DhcpListener` subclass) — packet-level client for
   tests/troubleshooting; does **not** configure OS network interfaces.
-  - `.build_discover/.build_request/.build_inform/.build_release/
-    .build_decline(chaddr, *, xid=None, ..., broadcast=True) -> DhcpMessage`
-    — construct (but don't send) each message type. `chaddr` is required
-    bytes; `xid` defaults to a random 32-bit value; `client_identifier` and
-    `parameter_request_list` are added to every builder that accepts them.
+  - The five builders construct a message without sending it. `chaddr` is
+    required positional bytes and `xid` defaults to a random 32-bit value on
+    all five, but **the rest of the signature differs per message type** — they
+    were previously documented as one signature, which was wrong for three of
+    them. Three take a **required keyword-only** argument, and only the first
+    two accept `broadcast`:
+    - `.build_discover(chaddr, *, xid=None, client_identifier=None,
+      parameter_request_list=None, broadcast=True) -> DhcpMessage`
+    - `.build_request(chaddr, *, xid=None, requested_ip=None,
+      server_identifier=None, ciaddr=None, client_identifier=None,
+      parameter_request_list=None, broadcast=True) -> DhcpMessage`
+    - `.build_inform(chaddr, *, ciaddr, xid=None, client_identifier=None,
+      parameter_request_list=None) -> DhcpMessage` — **`ciaddr` required**
+    - `.build_release(chaddr, *, ciaddr, server_identifier=None, xid=None,
+      client_identifier=None) -> DhcpMessage` — **`ciaddr` required**
+    - `.build_decline(chaddr, *, requested_ip, server_identifier=None,
+      xid=None, client_identifier=None) -> DhcpMessage` —
+      **`requested_ip` required**
+
+    The asymmetry is RFC 2131, not an oversight: INFORM and RELEASE come from a
+    client that already holds its address, so `ciaddr` is the whole point of
+    the message; DECLINE names the address being refused. None of the three is
+    sent by a client with no address, so none has a broadcast flag to set.
+    `parameter_request_list` is accepted only where a reply carries options.
   - `.send(message, destination=IPv4("255.255.255.255"),
     port=DhcpPort.SERVER) -> int` — binds lazily on first call, sends via a
     fresh `UdpTransport`, and tracks the message's `(xid, chaddr)` in
