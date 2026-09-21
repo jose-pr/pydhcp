@@ -7,7 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-The 0.5.2 review remediation: 91 commits against a 339-finding multi-agent review.
+## [0.6.0] - 2026-09-21
+
+The 0.5.2 review remediation: 115 commits closing all 339 findings of a multi-agent
+review, verified per-commit on Windows and Linux and against ISC dhclient on a
+veth pair.
 
 ### Added
 
@@ -354,7 +358,8 @@ convention: a name that still resolves is a name nobody migrates off.
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/jose-pr/pydhcp/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/jose-pr/pydhcp/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/jose-pr/pydhcp/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/jose-pr/pydhcp/compare/v0.4.1...v0.5.0

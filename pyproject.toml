@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pydhcp"
-version = "0.5.2"
+version = "0.6.0"
 authors = [{ name = "jose-pr" }]
 description = "A Python DHCP library and server implementation"
 readme = "README.md"
