@@ -182,9 +182,9 @@ def test_domain_list_round_trip(domains: list[str]) -> None:
     decoded = DomainList._dhcp_decode(encoded)
     assert list(decoded) == domains
     # Repeated names are where RFC 1035 compression pointers get emitted, and a
-    # pointer that terminates an entry used to drop everything after it (see
-    # plans/completed/domain_list_compression_pointer_bug.md). The count is the
-    # assertion that catches a recurrence.
+    # pointer that terminates an entry used to drop every name after it. The
+    # count is the assertion that catches a recurrence -- comparing only the
+    # contents would pass while entries went missing.
     assert len(list(decoded)) == len(domains)
     assert DomainList._dhcp_decode(decoded._dhcp_encode()) == decoded
 
