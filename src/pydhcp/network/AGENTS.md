@@ -2,8 +2,10 @@
 
 Header-file-style reference for `pydhcp.network`: network address types and
 host interface discovery. All exports are also re-exported from the
-top-level `pydhcp` package. See the repo-root `AGENTS.md` for the project
-overview and `src/pydhcp/AGENTS.md` for the top-level package header.
+top-level `pydhcp` package. The top-level package header ships beside this
+one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
+<https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
+of the installed package).
 
 ## Address types
 

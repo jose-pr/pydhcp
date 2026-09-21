@@ -5,7 +5,7 @@ Header-file-style reference for the top-level `pydhcp` package: every
 gotchas, so this module can be consumed without reading its source. For the
 project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 `network`, `options`, and `packet` subpackages have their own headers
-(`src/pydhcp/{network,options,packet}/AGENTS.md`).
+(they ship as `pydhcp/{network,options,packet}/AGENTS.md`).
 
 **`pydhcp/__init__.py` re-exports much of those subpackages, but not all of
 them** — the previous wording said "everything", and 17 documented or
@@ -86,10 +86,12 @@ builtins and `typing` names under `from pydhcp import *`.
     *once the receive loop has actually exited*, which is why a caller that
     cares should join the thread `.start()` returned. This is how a caller that
     passed port 0 learns the ephemeral port it was given.
-  - **`.packets_dropped_truncated`** / **`.packets_dropped_error`** (ints) —
-    datagrams that did not fit `max_packet_size`, and datagrams lost to an
-    error anywhere in receive/decode/handle. Plain attributes on the listener,
-    not `DhcpMetrics` fields, so `.snapshot()` does not report them.
+  - **`metrics.packets_dropped_truncated`** / **`metrics.packets_dropped_error`**
+    — datagrams that did not fit `max_packet_size`, and datagrams lost to an
+    error anywhere in receive/decode/handle. They are `DhcpMetrics` fields, so
+    `.snapshot()` reports them: they briefly landed as plain listener
+    attributes, which is the exact failure `DhcpMetrics.FIELDS` exists to
+    prevent — a counter incremented but absent from the snapshot.
   - `.handle(msg, context) -> None` — override point; base implementation is
     a no-op. Called for every successfully decoded packet.
 - **`AsyncDhcpListener(listen=None, max_packet_size=None,

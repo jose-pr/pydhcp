@@ -2,8 +2,9 @@
 
 Header-file-style reference for `pydhcp.packet`: the DHCP wire message
 format plus JSON/YAML/TOML/INI structured (de)serialization. All exports are
-also re-exported from the top-level `pydhcp` package. See the repo-root
-`AGENTS.md` for the project overview and `src/pydhcp/AGENTS.md` for the
+also re-exported from the top-level `pydhcp` package. The top-level package
+header ships beside this one as `pydhcp/AGENTS.md`; for the project overview
+see <https://github.com/jose-pr/pydhcp>. That file is the
 top-level package header.
 
 ## Message (`message.py`)
@@ -120,7 +121,7 @@ is a separate typing decision.
   re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
   the spelling to use for the `htype` header field. It lives one layer down
   because `pydhcp.options.type` needs it too and this module imports
-  `pydhcp.options.type`. See `src/pydhcp/network/AGENTS.md` for the full entry.
+  `pydhcp.options.type`. See `pydhcp/network/AGENTS.md` for the full entry.
 
 ## Structured (de)serialization (`structured.py`)
 
