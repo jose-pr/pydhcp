@@ -152,7 +152,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         that a receiver reads word-aligned, which is a property of the consumer,
         not of DHCP; RFC 2131 itself requires no alignment. Removing it would
         take away a documented public parameter, which pre-1.0 is a MINOR bump
-        (see decision D03), for no measured benefit.
+        under this project's versioning policy, for no measured benefit.
         """
         if maxsize is None:
             maxsize = _inf
