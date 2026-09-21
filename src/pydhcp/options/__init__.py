@@ -109,11 +109,21 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             length = options[1]
             remaining = len(options) - 2
             if length > remaining:
+                # Keep what arrived only if there is something to keep. A
+                # trailing option that declares a length and supplies *nothing*
+                # used to be stored with an empty payload, which is worse than
+                # dropping it: the option reads as present and then raises the
+                # moment anything decodes it, moving the failure out of this
+                # deliberately lenient decoder and into whatever handler touches
+                # the value. Measured -- a DHCPREQUEST ending in the two bytes
+                # `50 04` made `DhcpServer.handle` raise "IPv4Address payload
+                # must be exactly 4 octets, got 0", from any sender.
                 LOGGER.warning(
                     f"Option {code} at offset {offset} claims {length} bytes but only {remaining} available"
                 )
                 data = options[2:]
-                self._options.setdefault(code, bytearray()).extend(data)
+                if data:
+                    self._options.setdefault(code, bytearray()).extend(data)
                 options = options[len(options) :]
                 continue
 

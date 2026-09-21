@@ -104,3 +104,35 @@ def test_truncated_options(caplog):
     assert f"Option 1 at offset {end} claims 4 bytes but only 0 available" in (
         caplog.text
     )
+
+    # The point of the leniency is that the rest of the packet survives -- a
+    # truncated trailing option must not cost the message its header or the
+    # options that decoded cleanly. Only the log line was asserted before, so
+    # a decoder that returned a blank message, or dropped every option, or
+    # kept reading past the end, would have passed.
+    assert decoded.op is OpCode.BOOTREQUEST
+    assert decoded.xid == 0x3903F326
+    assert decoded.chaddr == b"\x00\x11\x22\x33\x44\x55"
+    assert (
+        decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        == DhcpMessageType.DHCPDISCOVER
+    )
+
+    # And what the truncated option itself becomes: **dropped**, because it
+    # supplied no octets at all. It used to be kept with an empty payload,
+    # which read as present and then raised
+    # `ValueError: IPv4Address payload must be exactly 4 octets, got 0` the
+    # moment anything decoded it -- a remote packet raising out of a
+    # deliberately *lenient* path, reachable by any sender. This assertion was
+    # written to pin that behaviour and name the open question; the question is
+    # now answered, and the containment tests live in
+    # tests/test_truncated_option_containment.py.
+    #
+    # A truncation that supplies *some* octets still keeps them: only the empty
+    # case is unusable, and dropping every truncated option would discard the
+    # value this leniency exists to preserve.
+    assert DhcpOptionCode.SUBNET_MASK not in decoded.options
+    assert decoded.options.get(DhcpOptionCode.SUBNET_MASK, decode=False) is None
+    assert [code for code, _ in decoded.options.items(decoded=False)] == [
+        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
+    ]
