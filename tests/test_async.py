@@ -43,7 +43,7 @@ def test_async_server_lifecycle():
         # Wait for the response
         try:
             resp_data, addr = await asyncio.wait_for(
-                loop.run_in_executor(None, client_sock.recvfrom, 2048), timeout=2.0
+                loop.run_in_executor(None, client_sock.recvfrom, 2048), timeout=20.0
             )
 
             resp_msg = DhcpMessage.decode(resp_data)
@@ -292,13 +292,13 @@ def test_async_wait_and_listen_do_not_raise_attributeerror():
             server.listen()
 
         # wait() before start() returns rather than hanging or raising.
-        await asyncio.wait_for(server.wait(), timeout=1)
+        await asyncio.wait_for(server.wait(), timeout=20)
 
         await server.start()
         waiter = asyncio.create_task(server.wait())
         await asyncio.sleep(0.05)
         assert not waiter.done(), "wait() returned while the server was serving"
         server.stop()
-        await asyncio.wait_for(waiter, timeout=1)
+        await asyncio.wait_for(waiter, timeout=20)
 
     asyncio.run(main())

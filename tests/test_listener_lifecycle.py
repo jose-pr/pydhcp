@@ -114,13 +114,20 @@ def test_a_started_listener_does_not_keep_the_process_alive() -> None:
         [sys.executable, "-c", source],
         capture_output=True,
         text=True,
-        timeout=20,
+        # Generous on purpose. The defect was a process that never exits, so
+        # `TimeoutExpired` here IS the assertion -- an unbounded hang is caught
+        # by any bound. A tight one would instead measure how loaded the
+        # machine is, which is not the property under test and which failed
+        # this suite once on a box running three other pytest runs.
+        timeout=60,
     )
     elapsed = time.monotonic() - started
 
     assert "started" in completed.stdout
     assert completed.returncode == 0, completed.stderr
-    assert elapsed < 10, f"the process took {elapsed:.1f}s to exit"
+    # Reported, not asserted: see the timeout note above. The pass/fail signal
+    # is "did it exit at all", and `subprocess.run` already provides it.
+    print(f"forgetful listener process exited in {elapsed:.1f}s")
 
 
 def _src_dir():
