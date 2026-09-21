@@ -53,7 +53,9 @@ overview and `src/pydhcp/AGENTS.md` for the top-level package header.
   - **`.decode(options: memoryview, base_offset=0) -> memoryview`** — parses
     a raw TLV options buffer into `self`, returning any unconsumed tail
     (used internally by `DhcpMessage.decode` for the options field and, on
-    RFC 3396 overload, the `file`/`sname` fields). Malformed lengths log a
+    **RFC 2132 §9.3** option overload, the `file`/`sname` fields — that is
+    option 52, a different mechanism from the RFC 3396 long-option
+    splitting cited above). Malformed lengths log a
     warning rather than raising.
   - **`.encode(word_size=1) -> bytearray`** / **`.partial_encode(maxsize,
     word_size=1) -> tuple[bytearray, DhcpOptions | None]`** — serialize to
@@ -149,7 +151,11 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 
 - **`Bytes(src=None)`** — opaque byte payload; `src` a `str` (hex),
   bytes-like, or `None`. The default codec fallback for unregistered codes.
-- **`String`** — RFC 2132 NVT-ASCII text, null-terminated on the wire.
+- **`String`** — RFC 2132 NVT-ASCII text. **Not** null-terminated: the
+  length octet delimits it, so a trailing NUL would be part of the value.
+  Measured, `String("abc")` encodes to `b"abc"`. (Some senders do append
+  one; `decode` keeps whatever arrived rather than stripping it, because
+  stripping would change a value that round-trips.)
   Octets that are not valid UTF-8 are **preserved**, not replaced (logged), so
   the value re-encodes to exactly what arrived — a hostname or boot filename in
   another encoding survives being forwarded. They are held as surrogates, so
@@ -299,20 +305,26 @@ carrying a name can reach it with no import-order constraint.
   (non-compressed domain labels) and its list container, shared by
   `IPV4_FQDN_MOS`.
 
-### CCC sub-options (`type/ccc.py`, ISPWORKS/CableLabs CCC)
+### CCC sub-options (`type/ccc.py`, RFC 3495 CableLabs Client Configuration)
 
-- **`CccOption`** — the option-125-style TLV container for CCC
-  sub-options; **`CccSubOption`** — the sub-option TLV record base.
+- **`CccOption`** — the TLV sub-option container for **option 122**
+  (RFC 3495). It is *not* "option-125-style": option 125 carries
+  enterprise-number records, as this header says a few sections up, and the
+  two are different shapes. **`CccSubOption`** — the sub-option TLV record base.
 - Typed sub-option payloads, each a thin wrapper with its own
   `_dhcp_read`/`_dhcp_write`: **`CccPrimaryDhcpServerAddress`** /
-  **`CccSecondaryDhcpServerAddress`** / **`CccProvisioningServerAddress`**
-  (`IPv4Address`-backed), **`CccProvisioningServerFqdn`** /
-  **`CccKerberosRealmName`** (no-DNS-compression domain text),
-  **`CccAsReqAsRepBackoffRetry`** / **`CccApReqApRepBackoffRetry`** /
-  **`CccProvisioningTimer`** (integer backoff/timer values),
-  **`CccTicketGrantingServerUtilization`** / **`CccSecurityTicketControl`**
-  (`U8`/`Boolean`-backed flags), **`CccKdcServerAddressList`** (`List[
-  IPv4Address]`). Each has a matching `*SubOption` TLV-record wrapper
+  **`CccSecondaryDhcpServerAddress`** (`IPv4Address`-backed);
+  **`CccProvisioningServerAddress`**, which is **not** `IPv4Address`-backed but
+  a *tagged union* — a leading type octet selects an IPv4 address (1) or an
+  FQDN (0), so it carries whichever the sender used;
+  **`CccProvisioningServerFqdn`** / **`CccKerberosRealmName`**
+  (no-DNS-compression domain text); **`CccAsReqAsRepBackoffRetry`** /
+  **`CccApReqApRepBackoffRetry`** / **`CccProvisioningTimer`** (integer
+  backoff/timer values); **`CccTicketGrantingServerUtilization`**, a
+  `Boolean`; **`CccSecurityTicketControl`**, a **16-bit integer mask** and not
+  a flag — the two were previously documented together as "`U8`/`Boolean`-backed
+  flags", which was wrong for both; and **`CccKdcServerAddressList`**
+  (`List[IPv4Address]`). Each has a matching `*SubOption` TLV-record wrapper
   (**`CccPrimaryDhcpServerAddressSubOption`**,
   **`CccSecondaryDhcpServerAddressSubOption`**,
   **`CccProvisioningServerAddressSubOption`**,
