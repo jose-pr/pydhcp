@@ -80,7 +80,13 @@ class CccProvisioningServerAddress(DhcpOptionType):
         if isinstance(value, str):
             try:
                 return "ipv4", IPv4Address(value)
-            except Exception:
+            except ValueError:
+                # `ValueError` only: `ipaddress.AddressValueError` (its
+                # subclass) is what a non-address string raises -- measured
+                # across 'not-an-ip', '', 'www.example.com', '1.2.3.4.5' and
+                # '999.1.1.1'. A bare `except Exception` also swallowed a
+                # genuine defect in the codec and silently reclassified the
+                # value as an FQDN.
                 return "fqdn", CccProvisioningServerFqdn(value)
         if isinstance(value, CccProvisioningServerFqdn):
             return "fqdn", value

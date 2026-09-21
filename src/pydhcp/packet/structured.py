@@ -7,21 +7,20 @@ import typing as _ty
 
 from .message import DhcpMessage
 
-try:
-    import tomllib as _tomllib  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover - Python < 3.11
-    try:
-        import tomli as _tomllib
-    except ImportError:  # pragma: no cover - optional dependency absent
-        _tomllib = None
+# `..config` imports nothing from `pydhcp`, so the dependency is one-way and
+# adds no cycle; the optional-TOML ladder and its three near-identical error
+# messages used to be duplicated verbatim between the two modules.
+from ..config import (
+    _import_toml_reader,
+    _import_toml_writer,
+    _toml_reader_unavailable,
+    _toml_writer_unavailable,
+)
 
-try:
-    import tomli_w as _tomli_w
-except ImportError:  # pragma: no cover - optional dependency absent
-    _tomli_w = None  # type: ignore[assignment]
 import yaml as _yaml  # type: ignore[import-untyped]
 
-_StructuredFormat = _ty.Literal["json", "yaml", "toml", "ini"]
+_tomllib = _import_toml_reader()
+_tomli_w = _import_toml_writer()
 
 
 def _normalize_format(format: str) -> str:
@@ -52,9 +51,7 @@ def load_mapping(text: str, format: str) -> dict[str, _ty.Any]:
         return _ensure_mapping(_yaml.safe_load(text))
     if normalized == "toml":
         if _tomllib is None:
-            raise NotImplementedError(
-                "TOML packet decoding requires Python 3.11+ or the 'tomli' package; use INI format as a stdlib fallback"
-            )
+            raise _toml_reader_unavailable("TOML packet decoding", "INI format")
         return _ensure_mapping(_tomllib.loads(text))
 
     parser = _configparser.ConfigParser(interpolation=None)
@@ -81,10 +78,10 @@ def dump_mapping(data: dict[str, _ty.Any], format: str) -> str:
         return _ty.cast(str, _yaml.safe_dump(data, sort_keys=False))
     if normalized == "toml":
         if _tomli_w is None:
-            raise NotImplementedError(
-                "TOML packet encoding requires the 'tomli-w' package; use INI format as a stdlib fallback"
-            )
-        return _tomli_w.dumps(data)
+            raise _toml_writer_unavailable("TOML packet encoding", "INI format")
+        # The module arrives through a runtime probe, so it is `Any` here --
+        # same cast the untyped `yaml` import needs two lines above.
+        return _ty.cast(str, _tomli_w.dumps(data))
 
     parser = _configparser.ConfigParser(interpolation=None)
     parser.optionxform = str  # type: ignore[method-assign,assignment]

@@ -131,12 +131,17 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             maxsize = _inf
 
         if word_size <= 0:
-            raise ValueError(f"Invalid Options Word Size")
+            raise ValueError(
+                f"Invalid options word size {word_size}: must be a positive number of octets"
+            )
 
         endbytes = b"\xff" + b"\x00" * (word_size - 1)
 
         if maxsize < max(word_size * 2, 4):
-            raise ValueError(f"Invalid Options Max Size")
+            raise ValueError(
+                f"Invalid options max size {maxsize}: needs at least "
+                f"{max(word_size * 2, 4)} octets for a word size of {word_size}"
+            )
 
         tofill = maxsize - word_size
         options = bytearray()

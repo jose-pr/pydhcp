@@ -226,7 +226,11 @@ class DomainList(DhcpOptionType, list[str]):
             is_ptr = ptr_or_len & 0xC0
             if is_ptr:
                 if is_ptr != 0xC0:
-                    raise ValueError()
+                    raise ValueError(
+                        f"search list octet {ptr_or_len:#04x} at offset {start} sets a "
+                        "reserved label-length prefix; RFC 1035 s4.1.4 defines only "
+                        "00 (label) and 11 (compression pointer)"
+                    )
                 components[start] = (
                     "ptr",
                     ((0x3F & ptr_or_len) << 8) | view[id],

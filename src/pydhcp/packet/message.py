@@ -118,31 +118,43 @@ def _coerce_enum_value(enum_type: type[_ty.Any], value: _ty.Any) -> _ty.Any:
 
 
 def _coerce_int(value: _ty.Any) -> int:
-    if isinstance(value, bool):
-        return int(value)
     return int(value)
 
 
 def _coerce_chaddr(value: _ty.Any) -> bytes:
     if isinstance(value, (bytes, bytearray, memoryview)):
         return bytes(value)
+    if isinstance(value, int) and not isinstance(value, bool):
+        # YAML 1.1 reads an unquoted `10:20:30:40:50:55` as a sexagesimal
+        # integer (measured: 8041827055), so hand-authored YAML lost the MAC
+        # before `from_mapping` ever saw it. The generic "must be text or
+        # bytes-like" named the symptom and not the cause.
+        raise TypeError(
+            f"chaddr arrived as the integer {value}, which is how YAML reads an "
+            "unquoted colon-separated MAC address -- quote it "
+            "(chaddr: '10:20:30:40:50:55')"
+        )
     if not isinstance(value, str):
         raise TypeError("chaddr must be text or bytes-like")
     return bytes.fromhex(_strip_hex_text(value))
 
 
-def _decode_option_value(
-    code: int, value: bytearray, codemap: type[BaseDhcpOptionCode]
-) -> _ty.Any:
-    try:
-        option_code = codemap.from_code(code)
-    except Exception:
-        return _type.Bytes(value).__json__()
-    option_type = option_code.get_type()
-    decoded = option_type._dhcp_decode(value)
-    return _enum_name(
-        decoded.__json__() if isinstance(decoded, _type.DhcpOptionType) else decoded
-    )
+def _coerce_bootp_text(value: _ty.Any, field: str) -> str:
+    """Coerce a mapping's `sname`/`file` to text without inventing content.
+
+    A bare `sname:` / `file:` key in YAML (and a JSON `null`) loads as `None`,
+    and the previous `str(data[field])` turned that into the literal four
+    characters `None` -- a silently corrupt packet rather than an error or an
+    empty field. An absent field means "empty", which is what the wire encodes
+    as an all-NUL BOOTP field.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return _nvt.decode(bytes(value))
+    if not isinstance(value, str):
+        raise TypeError(f"{field} must be text or null, not {type(value).__name__}")
+    return value
 
 
 def _coerce_option_value(
@@ -372,8 +384,8 @@ class DhcpMessage:
             siaddr=_net.IPv4(data["siaddr"]),
             giaddr=_net.IPv4(data["giaddr"]),
             chaddr=_coerce_chaddr(data["chaddr"]),
-            sname=str(data["sname"]),
-            file=str(data["file"]),
+            sname=_coerce_bootp_text(data["sname"], "sname"),
+            file=_coerce_bootp_text(data["file"], "file"),
             options=options,
         )
 
@@ -476,7 +488,10 @@ class DhcpMessage:
 
         # opts -> file -> sname
 
-        return DhcpMessage(
+        # `cls`, not `DhcpMessage`: this is a classmethod, and hardcoding the
+        # base made every subclass decode to a plain `DhcpMessage` while
+        # `from_mapping` (which already used `cls`) returned the subclass.
+        return cls(
             op,
             htype,
             hlen,
@@ -726,7 +741,7 @@ class DhcpMessage:
             ("Bootfile", _nvt.display(self.file)),
         ]:
             lines.append(f"{name: <40}: {value}")
-        lines.append(f"OPTIONS:")
+        lines.append("OPTIONS:")
         _codemap = codemap or self.options._codemap
         for _code, _raw in self.options._options.items():
             # Render per option, never as a batch: an unregistered code (93 of 254 are

@@ -25,7 +25,7 @@ class DhcpOptionType:
 
     def _dhcp_encode(self) -> bytes:
         encoded = bytearray()
-        _wrote = self._dhcp_write(encoded)
+        self._dhcp_write(encoded)
         return bytes(encoded)
 
     def __json__(self) -> _ty.Any:
@@ -45,10 +45,15 @@ class DhcpOptionType:
         # any payload), and `if hint:` silently skipped it.
         if hint is not None:
             if todecode != hint:
-                raise ValueError("Wrong option size")
+                raise ValueError(
+                    f"{cls.__name__} payload must be exactly {hint} octets, got {todecode}"
+                )
         decoded, read = cls._dhcp_read(option)
         if read != todecode:
-            raise ValueError("Couldnt decode whole option")
+            raise ValueError(
+                f"{cls.__name__} decoded only {read} of {todecode} octets; "
+                "the payload carries trailing data the codec does not account for"
+            )
         return decoded
 
 
@@ -170,7 +175,9 @@ class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
             ...
         item_int = int(item)
         if item_int > 255:
-            raise ValueError()
+            raise ValueError(
+                f"DHCP option code {item_int} does not fit in one octet (0-255)"
+            )
         return item_int
 
     @classmethod

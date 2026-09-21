@@ -31,7 +31,7 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         option_part = option[:1]
         if len(option_part) != 1:
-            raise ValueError()
+            raise ValueError("DHCP_MESSAGE_TYPE needs 1 octet, got 0 (RFC 2132 s9.6)")
         return cls(option_part[0]), 1
 
     def _dhcp_write(self, data: bytearray) -> int:

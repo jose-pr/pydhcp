@@ -221,7 +221,10 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         option_part = option[: cls.NUMBER_OF_BYTES]
         if len(option_part) != cls.NUMBER_OF_BYTES:
-            raise ValueError()
+            raise ValueError(
+                f"{cls.__name__} needs {cls.NUMBER_OF_BYTES} octets, "
+                f"got {len(option_part)}"
+            )
         return (
             cls(int.from_bytes(option_part, "big", signed=cls.SIGNED)),
             cls.NUMBER_OF_BYTES,
@@ -329,7 +332,7 @@ class OptionOverload(DhcpOptionType, _enum.IntFlag):
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         option_part = option[:1]
         if len(option_part) != 1:
-            raise ValueError()
+            raise ValueError("OPTION_OVERLOAD needs 1 octet, got 0 (RFC 2132 s9.3)")
         return cls(option_part[0]), 1
 
     def _dhcp_write(self, data: bytearray) -> int:
