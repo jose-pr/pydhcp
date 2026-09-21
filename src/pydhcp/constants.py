@@ -12,12 +12,3 @@ DHCP_MIN_LEGAL_PACKET_SIZE: _ty.Final = 576
 BOOTP_MIN_PACKET_SIZE: _ty.Final = 300
 UDP_MIN_PACKET_SIZE: _ty.Final = 28  # IPV4 , 48 for ipv6
 UDP_MAX_PACKET_SIZE: _ty.Final = 65_535
-
-
-class Missing: ...
-
-
-#: Sentinel for "argument not supplied" where `None` is itself a value.
-#: Documented public API (`pydhcp.constants.MISSING`), so relocating it next to
-#: its one consumer in `options/` is a rename of a published name, not tidying.
-MISSING: _ty.Final = Missing()

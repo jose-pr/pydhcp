@@ -10,8 +10,8 @@ from pydhcp import (
     FileLeaseBackend,
     DhcpOptions,
     IPv4,
-    IPv4Address,
 )
+from pydhcp.options.type import IPv4Address
 from pydhcp.options import DhcpOptionCode
 
 

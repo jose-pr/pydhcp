@@ -42,3 +42,15 @@ else:
                 name, (cls,), {}, lambda ns: ns.update(_args_=key_t)
             )
             return concrete
+
+
+class Missing:
+    """Type of the `MISSING` sentinel below."""
+
+
+#: Sentinel for "argument not supplied", where `None` is itself a meaningful
+#: value -- `DhcpOptions.get(code, default=None)` has to tell "no default given"
+#: from "default is None". It lived in `constants.py`, which holds *protocol*
+#: constants (packet sizes, port numbers, the infinite-lease sentinel); this is
+#: a Python idiom, not a DHCP one.
+MISSING: _ty.Final = Missing()

@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import socket
 import time
-from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpOptions, IPv4Address
+from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpOptions
+from pydhcp.options.type import IPv4Address
 from pydhcp.packet import DhcpMessageType
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import IPv4

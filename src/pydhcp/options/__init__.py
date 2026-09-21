@@ -8,6 +8,7 @@ from .type import *  # noqa: F403
 from .code import DhcpOptionCode as DhcpOptionCode
 from .. import constants as _const
 from ..log import LOGGER
+from .._utils import MISSING as _MISSING
 from math import inf as _inf
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
@@ -267,8 +268,8 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             bool, _builtins.type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
         ] = True,
     ) -> _ty.Any:
-        value = self._options.get(__key, _const.MISSING)
-        if value is _const.MISSING:
+        value = self._options.get(__key, _MISSING)
+        if value is _MISSING:
             return default
         assert isinstance(value, bytearray)
         if decode:

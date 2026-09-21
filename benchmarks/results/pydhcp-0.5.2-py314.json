@@ -1,0 +1,50 @@
+{
+  "iterations": {
+    "options": 1000,
+    "parse": 10000,
+    "repeat": 5
+  },
+  "metrics": {
+    "options.decode_0_options": {
+      "max_ms": 0.000627,
+      "median_ms": 0.000615,
+      "min_ms": 0.00061
+    },
+    "options.decode_20_options": {
+      "max_ms": 0.013499,
+      "median_ms": 0.011648,
+      "min_ms": 0.011165
+    },
+    "options.decode_5_options": {
+      "max_ms": 0.003684,
+      "median_ms": 0.003274,
+      "min_ms": 0.003167
+    },
+    "options.lease_allocations_1000_clients": {
+      "max_ms": 5.162114,
+      "median_ms": 4.535688,
+      "min_ms": 4.253097
+    },
+    "options.round_trip_encode_decode": {
+      "max_ms": 0.003578,
+      "median_ms": 0.003119,
+      "min_ms": 0.002808
+    },
+    "parse.decode_packet": {
+      "max_ms": 0.007565,
+      "median_ms": 0.007402,
+      "min_ms": 0.007112
+    },
+    "parse.encode_packet": {
+      "max_ms": 0.013414,
+      "median_ms": 0.01268,
+      "min_ms": 0.012359
+    }
+  },
+  "name": "pydhcp-0.5.2-py314",
+  "platform": "Windows-11-10.0.28000-SP0",
+  "processor": "ARMv8 (64-bit) Family 8 Model 2 Revision 201, Qualcomm Technologies Inc",
+  "pydhcp_version": "0.5.2",
+  "python": "3.14.6",
+  "timestamp": "2026-09-21T01:27:26+00:00"
+}

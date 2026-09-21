@@ -14,9 +14,7 @@ from .options import (
 )
 from .options.type import (
     DhcpOptionType as DhcpOptionType,
-    List as List,
     DhcpOptionCodes as DhcpOptionCodes,
-    IPv4Address as IPv4Address,
     ClasslessRoute as ClasslessRoute,
     PolicyFilter as PolicyFilter,
     StaticRoute as StaticRoute,
@@ -64,9 +62,6 @@ from .options.type import (
     U8 as U8,
     U16 as U16,
     U32 as U32,
-    Boolean as Boolean,
-    String as String,
-    Bytes as Bytes,
 )
 from .network import (
     IPv4 as IPv4,
@@ -104,9 +99,7 @@ __all__ = [
     "DhcpOption",
     "DhcpOptionCode",
     "DhcpOptionType",
-    "List",
     "DhcpOptionCodes",
-    "IPv4Address",
     "ClasslessRoute",
     "PolicyFilter",
     "StaticRoute",
@@ -154,9 +147,6 @@ __all__ = [
     "U8",
     "U16",
     "U32",
-    "Boolean",
-    "String",
-    "Bytes",
     "IPv4",
     "IPv4Interface",
     "IPv4Network",

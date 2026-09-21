@@ -16,14 +16,20 @@ subpackage names are not importable from `pydhcp`, among them `DhcpMetrics`,
 does not. Import from the owning module when a name is not in `__all__`
 (82 names today).
 
-**Name collision, worth knowing before you annotate anything**:
-`pydhcp.IPv4Address` is the option **codec** (`pydhcp.options.type.net`), not
-`ipaddress.IPv4Address`. The codec subclasses the stdlib type, so
-`isinstance(codec_value, ipaddress.IPv4Address)` is True — but the direction
-you actually write, `isinstance(interface.ip, pydhcp.IPv4Address)`, is
-**False**. The stdlib type is re-exported as **`pydhcp.IPv4`**. `List`,
-`String`, `Bytes`, `Boolean` and `U8`/`U16`/`U32` are codecs too, and shadow
-builtins and `typing` names under `from pydhcp import *`.
+**Removed from the top level** (breaking, see the changelog):
+**`IPv4Address`**, **`List`**, **`Bytes`**, **`String`** and **`Boolean`** are
+no longer re-exported here. They are option **codecs** and their bare names did
+not say so — `pydhcp.IPv4Address` was the codec, not `ipaddress.IPv4Address`,
+so `isinstance(interface.ip, pydhcp.IPv4Address)` was **False** while looking
+exactly like the check you meant to write. Import them from
+**`pydhcp.options.type`**, which is where they have always lived. The stdlib
+address type is **`pydhcp.IPv4`**.
+
+The other codecs stay re-exported, including `U8`/`U16`/`U32` and the
+`Ccc*`/`MoS*`/`Vi*` families: nothing in the stdlib or `typing` is called any
+of those, so the bare name already says it is a pydhcp type. The test applied
+was whether a reader meeting the name at top level could mistake it for
+something else.
 
 ## Listener / transport (`listener.py`)
 
@@ -553,8 +559,6 @@ Not re-exported from the top-level package — import from `pydhcp.constants`.
 - **`UDP_MAX_PACKET_SIZE`** (65535) — the listeners' default
   `max_packet_size`.
 - **`INFINITE_LEASE_TIME`** (`0xFFFFFFFF`) — RFC 2131's "infinite" lease.
-- **`MISSING`** / **`Missing`** — sentinel for "argument not supplied", where
-  `None` is a meaningful value.
 
 ## NVT text (`nvt.py`)
 

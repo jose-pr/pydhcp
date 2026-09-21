@@ -2,8 +2,10 @@
 
 Header-file-style reference for `pydhcp.options`: the DHCP options
 container, the option-code registry, and the option payload codecs
-(`pydhcp.options.type`). All exports are also re-exported from the
-top-level `pydhcp` package. The top-level package header ships beside this
+(`pydhcp.options.type`). Most exports are also re-exported from the top-level
+`pydhcp` package -- **except `IPv4Address`, `List`, `Bytes`, `String` and
+`Boolean`**, whose bare names did not say they were codecs; import those from
+`pydhcp.options.type`. The top-level package header ships beside this
 one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
 of the installed package).
@@ -76,6 +78,10 @@ of the installed package).
     options bag to code that mutates it (a response pipeline, an encoder);
     a plain assignment aliases the container *and* its payload buffers, so
     the mutations write straight back into the source.
+
+- The `MISSING` sentinel this module uses to tell "no default given" from
+  "default is `None`" lives in `pydhcp._utils`, not in `pydhcp.constants` — it
+  is a Python idiom rather than a DHCP constant, and it is private.
 
 ## Option codes (`code.py`, `base.py`)
 

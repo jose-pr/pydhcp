@@ -95,6 +95,34 @@ DISCOVER until it gave up, before; bound, after.
 - Both import cycles removed; `HardwareAddressType` now lives in `pydhcp.network` and is
   re-exported from `pydhcp.packet`.
 
+### Removed
+
+**These are the breaking changes in this release**, and the reason it needs a
+MINOR bump rather than a patch: pre-1.0, MINOR means the documented API broke.
+Nothing else here is breaking.
+
+- **`pydhcp.IPv4Address`, `pydhcp.List`, `pydhcp.Bytes`, `pydhcp.String` and
+  `pydhcp.Boolean`** are no longer re-exported from the top level. They are
+  option *codecs*, and their bare names did not say so — `pydhcp.IPv4Address`
+  was the codec rather than `ipaddress.IPv4Address`, so
+  `isinstance(interface.ip, pydhcp.IPv4Address)` was **False** while looking
+  exactly like the check you meant to write. Import them from
+  **`pydhcp.options.type`**, where they have always lived. The stdlib address
+  type remains `pydhcp.IPv4`.
+
+  The other 49 codecs stay, including `U8`/`U16`/`U32` and the `Ccc*`/`MoS*`/
+  `Vi*` families: nothing in the stdlib or `typing` is called any of those, so
+  the bare name already says it is a pydhcp type.
+
+- **`pydhcp.constants.MISSING` / `pydhcp.constants.Missing`** are gone.
+  `constants.py` holds protocol constants — packet sizes, port numbers, the
+  infinite-lease sentinel — and this is a Python idiom for "argument not
+  supplied where `None` is itself a value". It now lives in `pydhcp._utils` and
+  is private; nothing outside the package needed it.
+
+No deprecation aliases were left behind for either, which is this project's
+convention: a name that still resolves is a name nobody migrates off.
+
 ### Documentation
 
 - The option code registry — 163 RFC-documented members — reaches the API reference for
