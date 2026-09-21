@@ -134,11 +134,17 @@ class InMemoryLeaseBackend:
             lease = self._leases.get(client_id)
             if lease is None:
                 return None
-            # Check expiration
+            # `<=`, not `<`: a lease whose expiry instant has arrived is over,
+            # not live for one more tick. With `<`, a zero-second TTL survived
+            # whenever both `datetime.now()` calls landed in the same clock
+            # tick -- invisible on 3.14, where the clock is sub-microsecond,
+            # and reproducible on the 3.9 floor, where it is coarse enough that
+            # allocate and lookup routinely read the same instant. That is the
+            # whole reason the floor is run rather than assumed.
             if (
                 lease.expires != _inf
                 and isinstance(lease.expires, _dt.datetime)
-                and lease.expires < _dt.datetime.now()
+                and lease.expires <= _dt.datetime.now()
             ):
                 self._leases.pop(client_id, None)
                 return None
