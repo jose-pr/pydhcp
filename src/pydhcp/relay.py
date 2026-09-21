@@ -54,10 +54,26 @@ class PendingClient(_ty.NamedTuple):
 
 
 def _normalize_server_address(address: ServerAddress) -> tuple[_net.IPv4, int]:
-    if isinstance(address, tuple):
-        ip, port = address
+    """Coerce one upstream server entry to `(IPv4, port)`.
+
+    The error says what is wrong and what is accepted. `IPv4()`'s own message
+    is "Expected 4 octets in '::1'", which is true and tells an operator who
+    passed an IPv6 address or a hostname neither which argument was at fault
+    nor that only IPv4 is supported -- and it arrives *after* the "Starting
+    DHCP relay" line, so it reads as a runtime failure rather than a bad
+    argument.
+    """
+    ip, port = (
+        address if isinstance(address, tuple) else (address, _enum.DhcpPort.SERVER)
+    )
+    try:
         return _net.IPv4(ip), int(port)
-    return _net.IPv4(address), int(_enum.DhcpPort.SERVER)
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"upstream server address {ip!r} is not an IPv4 address ({e}). "
+            "This relay forwards over IPv4 only, so a hostname or an IPv6 "
+            "address cannot be used here."
+        ) from None
 
 
 class DhcpRelay(_Base):

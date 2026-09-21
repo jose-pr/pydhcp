@@ -230,11 +230,10 @@ class Relay(_Command):
                 "--remote-id, so no relay agent information option will be added"
             )
 
-        self._logger_.info(
-            "Starting DHCP relay, listening on: %s, forwarding to: %s...",
-            self.listen or "*",
-            ", ".join(self.server),
-        )
+        # Construct first, announce second. The constructor is what validates
+        # the upstream addresses and `max_hops`, so announcing first meant a bad
+        # argument was reported *after* "Starting DHCP relay..." and read as a
+        # runtime failure rather than as the argument error it is.
         relay = DhcpRelay(
             listen=self.listen or "*",
             server_addresses=server_addresses,
@@ -243,6 +242,11 @@ class Relay(_Command):
             circuit_id=circuit_id,
             remote_id=remote_id,
             per_interface=self.per_interface,
+        )
+        self._logger_.info(
+            "Starting DHCP relay, listening on: %s, forwarding to: %s...",
+            self.listen or "*",
+            ", ".join(self.server),
         )
         try:
             relay.bind()
