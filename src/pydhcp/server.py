@@ -40,11 +40,6 @@ from .lease import DhcpLease, LeaseBackend
 #: a 255.255.255.255 subnet mask. This lookup returns None there, which is what
 #: keeps the server silent instead.
 #:
-#: Note it does *not* exclude APIPA. `host_ip_interfaces(<callable>)` replaces
-#: the default predicate rather than composing with it, so the filter that
-#: hides 169.254/16 has never applied on this path -- measured, not assumed.
-#: Preserved exactly as it was; changing it is a policy decision, not a
-#: caching one.
 #:
 #: Cleared on every bind, through the same hook as
 #: `listener._INTERFACE_CACHE`: an address the host gains or loses without a
@@ -54,14 +49,33 @@ _register_address_cache(_SERVABLE_INTERFACES)
 
 
 def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterface]:
-    """The host IPv4 interface holding `server_id`, or None if this host has no
-    such address -- in which case there is no network to derive a lease from."""
+    """The host IPv4 interface holding `server_id`, or None if there is none to
+    serve from -- in which case there is no network to derive a lease from.
+
+    The APIPA exclusion is spelled out here rather than left to
+    `host_ip_interfaces`' default, because passing a predicate **replaces** that
+    default rather than composing with it. That is documented behaviour of the
+    enumerator and it silently un-filtered this path: measured, looking up a
+    link-local address returned the adapter holding it. A server whose interface
+    holds only a 169.254/16 address would then have allocated leases from that
+    network, which RFC 3927 s1.5 excludes from DHCP assignment -- an address in
+    that range is self-assigned by definition, so a lease for one collides with
+    whatever already picked it.
+
+    `_is_our_server_id` asks a *different* question -- "do we hold this address
+    at all" -- and deliberately does not filter, because identity is not
+    selection.
+    """
     try:
         return _SERVABLE_INTERFACES[server_id]
     except KeyError:
         pass
     found = next(
-        _net.host_ip_interfaces(lambda interface: interface.ip == server_id), None
+        _net.host_ip_interfaces(
+            lambda interface: interface.ip == server_id
+            and interface.ip not in _net.APIPA
+        ),
+        None,
     )
     _SERVABLE_INTERFACES[server_id] = found
     return found

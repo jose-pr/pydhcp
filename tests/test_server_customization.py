@@ -763,14 +763,27 @@ def _discover_requesting_ip(ip):
 def _servable_interface():
     """A host interface whose network has a spare address to hand out.
 
-    Not simply "the first non-loopback one": this machine's WSL instance puts
-    10.255.255.254/32 first, a host route with no room in it at all, so asking
-    for network_address + 50 was refused for being off-subnet -- on Linux only,
-    while the same test passed on Windows.
-    """
-    from pydhcp.network import host_ip_interfaces
+    Not simply "the first non-loopback one". Two host shapes have broken this:
 
-    for interface in host_ip_interfaces(lambda i: not i.ip.is_loopback):
+    - WSL puts 10.255.255.254/32 first, a host route with no room in it at all,
+      so asking for network_address + 50 was refused for being off-subnet -- on
+      Linux only, while the same test passed on Windows.
+    - This box grows transient link-local adapters (169.254/16, prefixlen 16,
+      which passes the /29 test), and the server now refuses to serve from one:
+      RFC 3927 s1.5 excludes 169.254/16 from DHCP assignment, so
+      `acquire_lease` returns None there. A helper asking for a *servable*
+      interface has to exclude what is not servable.
+
+    Note `host_ip_interfaces(<callable>)` REPLACES its APIPA-excluding default
+    rather than composing with it, so the exclusion has to be spelled out in
+    the predicate -- the same trap that put this check in `_servable_interface`
+    on the server side.
+    """
+    from pydhcp.network import APIPA, host_ip_interfaces
+
+    for interface in host_ip_interfaces(
+        lambda i: not i.ip.is_loopback and i.ip not in APIPA
+    ):
         if interface.network.prefixlen <= 29:
             return interface
     pytest.skip("no host interface with a usable subnet to serve from")
