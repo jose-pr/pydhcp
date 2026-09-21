@@ -139,6 +139,21 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def partial_encode(
         self, maxsize: _ty.Optional[float], word_size: int = 1
     ) -> tuple[bytearray, _ty.Optional["DhcpOptions"]]:
+        """Encode up to `maxsize` octets, returning the bytes and the leftovers.
+
+        `word_size` pads the END marker out to a multiple of that many octets,
+        so the options field finishes on a word boundary: at 4, END is
+        `ff 00 00 00` rather than a bare `ff`. It also reserves that much room
+        rather than one octet when deciding what still fits.
+
+        Nothing in this package passes anything but 1, which has twice made it
+        look like dead code worth deleting. It is not dead — it is *unused
+        here*. The padding exists for callers writing into a fixed-layout buffer
+        that a receiver reads word-aligned, which is a property of the consumer,
+        not of DHCP; RFC 2131 itself requires no alignment. Removing it would
+        take away a documented public parameter, which pre-1.0 is a MINOR bump
+        (see decision D03), for no measured benefit.
+        """
         if maxsize is None:
             maxsize = _inf
 

@@ -64,6 +64,13 @@ of the installed package).
     TLV bytes; `partial_encode` stops once `maxsize` is reached and returns
     the leftover options as a second `DhcpOptions`, used by
     `DhcpMessage.encode`'s RFC 3396 packing.
+    **`word_size`** pads the END marker to a multiple of that many octets, so
+    the options field finishes on a word boundary — at 4, END is
+    `ff 00 00 00` rather than a bare `ff` — and reserves that much room when
+    deciding what still fits. Nothing in this package passes anything but 1;
+    it is there for a caller writing into a fixed-layout buffer read
+    word-aligned, which is a property of that consumer and not of DHCP. RFC
+    2131 requires no alignment.
   - **`.copy() -> DhcpOptions`** — independent copy: same codemap, every
     payload copied into a fresh `bytearray`. Use this before handing an
     options bag to code that mutates it (a response pipeline, an encoder);
