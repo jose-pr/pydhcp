@@ -68,6 +68,14 @@ serve a private or vendor option space instead of the IANA registry above.
 
 ::: pydhcp.server.AsyncDhcpServer
 
+## AsyncDhcpRelay
+
+::: pydhcp.relay.AsyncDhcpRelay
+
+## AsyncDhcpCapture
+
+::: pydhcp.capture.AsyncDhcpCapture
+
 ## DhcpListener
 
 ::: pydhcp.listener.DhcpListener

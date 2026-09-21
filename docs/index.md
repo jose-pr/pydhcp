@@ -5,7 +5,7 @@ A Python DHCP library and server implementation.
 ## Features
 
 - **DHCP Packet Parsing & Construction**: Full control and type safety over DHCP message structures.
-- **Synchronous & Asynchronous Sockets**: Standard threaded listening loops (`DhcpListener`/`DhcpServer`) and modern asyncio endpoints (`AsyncDhcpListener`/`AsyncDhcpServer`).
+- **Synchronous & Asynchronous Sockets**: Standard threaded listening loops (`DhcpListener`/`DhcpServer`/`DhcpRelay`/`DhcpCapture`) and an asyncio counterpart for each (`AsyncDhcpListener`/`AsyncDhcpServer`/`AsyncDhcpRelay`/`AsyncDhcpCapture`). The async halves are mixins over the same receive path, not parallel implementations, so a fix reaches both.
 - **Client & Capture Helpers**: Packet-level client builders and structured DHCP capture output for troubleshooting.
 - **Relay Agent**: `DhcpRelay` forwards client traffic to upstream DHCP servers per RFC 1542 / RFC 2131 §4.1, with hop-limit loop protection and optional RFC 3046 option-82 tagging.
 - **Flexible Options System**: Easy options manipulation using type-safe custom dictionaries.

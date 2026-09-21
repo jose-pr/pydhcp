@@ -50,6 +50,12 @@ server.listen()
 ```
 
 ### Asynchronous Server
+
+Every listener has an asyncio counterpart -- `AsyncDhcpListener`,
+`AsyncDhcpServer`, `AsyncDhcpRelay` and `AsyncDhcpCapture`. They are mixins over
+the same receive path rather than parallel implementations, so a fix reaches both
+halves; a test fails if any receive-path line is duplicated between them.
+
 ```python
 import asyncio
 from pydhcp.server import AsyncDhcpServer
