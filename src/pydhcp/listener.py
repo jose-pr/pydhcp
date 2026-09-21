@@ -34,13 +34,6 @@ MSG_CTRUNC = getattr(_socket, "MSG_CTRUNC", 0)
 #: its own (RFC 2131 s4.1).
 BROADCAST_ADDRESS = "255.255.255.255"
 
-#: WSAEACCES. Windows reports it from `bind()` for an address held by a socket
-#: that asked for exclusive use, or one inside a reserved port range -- never
-#: for a lack of privilege, because Windows has no privileged ports (measured:
-#: binding UDP/67 as an ordinary user succeeds). Python maps it onto errno 13,
-#: which is EACCES on POSIX and *does* mean privilege there.
-_WSAEACCES = 10013
-
 #: WSAEMSGSIZE. Where Linux truncates an oversized datagram and reports it in
 #: the recv flags, Windows fails the call outright with this. Same event, two
 #: shapes; both become `_TruncatedDatagram` so the log and the counter do not
@@ -391,37 +384,31 @@ def _bind_options(reuse_address: bool) -> "list[_net.SocketOption]":
 
 def _raise_bind_error(error: OSError, address: _net.SocketAddress) -> "_ty.NoReturn":
     """Re-raise a failed bind with a diagnosis a reader can act on."""
-    if getattr(error, "winerror", None) == _WSAEACCES:
-        # Python turns WSAEACCES into PermissionError/errno 13, and netimps then
-        # reads that as POSIX EACCES and says "permission denied binding port
-        # N". Measured: binding over a socket holding SO_EXCLUSIVEADDRUSE
-        # produced `PermissionError: permission denied binding port 64514` --
-        # a privilege message about an unprivileged port, sending the reader
-        # after an elevation problem that does not exist on this platform.
-        # Built without the errno positional on purpose: `OSError(13, ...)`
-        # returns a `PermissionError`, so the *type* would go on saying
-        # "privilege" however carefully the message is worded. The errno is
-        # still attached, and the other in-use branch below is a plain OSError
-        # too (EADDRINUSE maps to no builtin subclass).
-        failure = OSError(
-            f"Port {address.port} on {address.ip} is held exclusively by another "
-            f"socket (WSAEACCES); it is in use, not privileged. "
-            f"Try port {address.port + 1000}."
-        )
-        failure.errno = error.errno
-        raise failure from error
-    # netimps recognises the POSIX errnos *and* the Windows WinError
-    # codes, which differ; the DHCP-specific suggestion is appended
-    # rather than replacing the generic diagnosis.
+    # netimps recognises the POSIX errnos *and* the Windows WinError codes,
+    # which differ; the DHCP-specific suggestion is appended rather than
+    # replacing the generic diagnosis.
+    #
+    # The hint decides which kind of failure this is, not the exception type.
+    # Windows reports an exclusively-held address as WSAEACCES, which Python
+    # maps onto errno 13 -- EACCES, which on POSIX really does mean privilege --
+    # so `isinstance(error, PermissionError)` is True for a port that is merely
+    # taken. netimps >= 0.3.1 tells the two apart by platform and says so in the
+    # hint, so asking the hint first is what keeps a Windows in-use failure out
+    # of the privilege branch.
     hint = _netimps.bind_error_hint(error, address.port)
     if hint is None:
         raise error
+    if "in use" in hint:
+        # Built without the errno positional on purpose: `OSError(13, ...)`
+        # comes back a `PermissionError`, because Python picks the subclass
+        # from the errno -- so the *type* would go on saying "privilege"
+        # however carefully the message is worded. The errno is attached
+        # afterwards instead.
+        failure = OSError(f"{hint}; try port {address.port + 1000}.")
+        failure.errno = error.errno
+        raise failure from error
     if isinstance(error, PermissionError) or "permission" in hint.lower():
         raise PermissionError(f"{hint}. Try 6767 for testing.") from error
-    if "in use" in hint:
-        raise OSError(
-            error.errno, f"{hint}; try port {address.port + 1000}."
-        ) from error
     raise OSError(error.errno, hint) from error
 
 
