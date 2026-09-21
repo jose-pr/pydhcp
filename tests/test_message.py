@@ -407,6 +407,30 @@ def _first_option_code(wire):
     return bytes(wire)[240]
 
 
+def _wire_overload_flag(wire):
+    """The value of option 52 as it appears on the wire, or None.
+
+    `decode` consumes option 52 and drops it -- it is framing, like PAD and
+    END -- so a decoded message cannot answer "did this overload?". The wire
+    can, and it is the stronger place to ask: it reads the octets the peer
+    would, rather than trusting our own decoder's bookkeeping.
+    """
+    data = bytes(wire)
+    index = 240
+    while index < len(data):
+        code = data[index]
+        if code == 255:  # END
+            return None
+        if code == 0:  # PAD
+            index += 1
+            continue
+        length = data[index + 1]
+        if code == int(DhcpOptionCode.OPTION_OVERLOAD):
+            return data[index + 2]
+        index += 2 + length
+    return None
+
+
 def _overloading_message(count, payload_size):
     """A message whose options force `encode(576)` to overload sname/file."""
     options = DhcpOptions()
@@ -460,8 +484,11 @@ def test_message_type_leads_the_options_field_whether_or_not_we_overload():
         decoded = DhcpMessage.decode(bytearray(wire))
 
         assert (
-            decoded.options.get(DhcpOptionCode.OPTION_OVERLOAD) == expected
+            _wire_overload_flag(wire) == expected
         ), f"{count}x{payload_size} did not overload as expected"
+        assert (
+            DhcpOptionCode.OPTION_OVERLOAD not in decoded.options
+        ), "decode consumes option 52; leaving it makes the message lie"
         assert _first_option_code(wire) == int(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         assert (
             decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
@@ -540,12 +567,50 @@ def test_overloading_still_moves_a_long_sname_and_file_into_options():
     wire = message.encode(576)
     decoded = DhcpMessage.decode(bytearray(wire))
 
-    assert decoded.options.get(DhcpOptionCode.OPTION_OVERLOAD) == 3, "sname and file"
+    assert _wire_overload_flag(wire) == 3, "sname and file"
     assert bytes(wire)[44:108] != b"tftp.example.test".ljust(
         64, b"\x00"
     ), "the sname field should hold option fragments, not the literal name"
     assert decoded.sname == "tftp.example.test"
     assert decoded.file == "pxelinux.0"
+
+
+def test_an_overloaded_message_round_trips():
+    """decode(encode(m)) == m, even when the encoder had to overload.
+
+    Found by the hypothesis round-trip property on Linux, where a wider router
+    list tipped messages over the 576-octet budget that Windows never reached.
+    `encode` deletes option 52 from the mapping it builds -- the flag describes
+    the framing it is *about to* write, not a value the caller set -- but
+    `decode` kept the flag it had just consumed. So a message that overloaded
+    came back carrying an option its author never set, and comparing the two
+    mappings failed on an option neither side asked for.
+    """
+    # Empty sname/file on purpose. When they hold values the encoder moves
+    # them into options 66/67 to survive the trip, so the decoded mapping
+    # legitimately gains two options -- a round-trip comparison would fail for
+    # a reason that is not the defect. Overflowing with plain options isolates
+    # it, and is what hypothesis generated.
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPACK.value]
+    )
+    options[200] = bytearray(b"X" * 220)
+    options[201] = bytearray(b"X" * 220)
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.options = options
+    message.sname = ""
+    message.file = ""
+
+    wire = message.encode(576)
+    assert _wire_overload_flag(wire) == 3, "the fixture must actually overload"
+
+    decoded = DhcpMessage.decode(bytearray(wire))
+    assert decoded.to_mapping() == message.to_mapping()
+
+    # And it survives a second pass: the re-encode overloads again off the
+    # option payloads, not off a leftover flag.
+    assert _wire_overload_flag(decoded.encode(576)) == 3
 
 
 def test_out_of_range_header_fields_name_the_field():

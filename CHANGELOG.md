@@ -60,7 +60,12 @@ DISCOVER until it gave up, before; bound, after.
   characters — every non-ASCII name was going out corrupt. Options 88 and 146 encode
   uncompressed, as RFC 4280 §4.6 and RFC 6731 require; 119 and 141 still compress, as
   theirs require. Outgoing messages are padded to the 300-octet BOOTP minimum. Six
-  option codecs match the wire forms their RFCs define.
+  option codecs match the wire forms their RFCs define. An option-overloaded message
+  now round-trips: `decode` consumes options 52, 66 and 67 — the framing that says
+  `sname`/`file` hold option fragments, and the two options the encoder parked the
+  real values in — instead of handing them back alongside the fields it restored
+  them into. A decoded message no longer claims an overload it is not carrying, nor
+  reports its server name and boot file twice under two spellings.
 - **Relay.** A request is dropped only when its hop count *exceeds* the threshold
   (RFC 1542 §4.1.1) — it was refused one hop early — and the default is now the RFC's 4
   rather than its ceiling of 16. A relayed exchange is identified by client as well as

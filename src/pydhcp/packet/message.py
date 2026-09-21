@@ -466,25 +466,54 @@ class DhcpMessage:
         else:
             sname_raw = sname_data
 
+        # Option 52 is *framing*, like PAD and END, and `decode` has just
+        # consumed it: the options it pointed at have been moved out of
+        # sname/file, and those fields now hold their literal values. Keeping
+        # it left the decoded message asserting something untrue about itself
+        # -- "my sname/file hold options" -- and broke round-tripping, which is
+        # how a property test caught it: a message encoded at a size that
+        # overloads came back carrying an option its original never had.
+        #
+        # `encode()` already deletes it for exactly this reason, so that a
+        # relay forwarding a decoded reply does not tell the receiver to parse
+        # sname/file as options. Dropping it here means that compensation is
+        # no longer load-bearing.
+        if int(DhcpOptionCode.OPTION_OVERLOAD) in options:
+            del options[int(DhcpOptionCode.OPTION_OVERLOAD)]
+
         sname_str: str = ""
         if sname_raw is not None:
             sname_str = _decode_bootp_field(sname_raw, "sname")
         else:
+            # Same reasoning as option 52 above, one level down. `encode` moves
+            # `sname` into option 66 when it overloads the field, because the
+            # field itself is carrying option fragments. Reading it back into
+            # `sname` and *leaving* the option behind hands the caller the name
+            # twice, under two spellings -- and the decoded message then no
+            # longer matches the one that was encoded. Consume it, so the pair
+            # stays inverse.
             tftp_val = options.get(
                 DhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
             )
             if tftp_val is not None:
                 sname_str = str(tftp_val)
+            if int(DhcpOptionCode.TFTP_SERVER) in options:
+                del options[int(DhcpOptionCode.TFTP_SERVER)]
 
         file_str: str = ""
         if file_raw is not None:
             file_str = _decode_bootp_field(file_raw, "file")
         else:
+            # As with option 66 above: option 67 is where `encode` parked
+            # `file` to free the field for option fragments, so decode takes
+            # it back out rather than reporting it in both places.
             bootfile_val = options.get(
                 DhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
             )
             if bootfile_val is not None:
                 file_str = str(bootfile_val)
+            if int(DhcpOptionCode.BOOTFILE_NAME) in options:
+                del options[int(DhcpOptionCode.BOOTFILE_NAME)]
 
         # opts -> file -> sname
 
