@@ -11,6 +11,8 @@ import socket
 
 import pytest
 
+from conftest import DUPLICATE_UDP_BIND_ALLOWED, LOOPBACK_ALIAS_BINDABLE
+
 from pydhcp.listener import DhcpListener
 
 #: Read from `socket`, not from `pydhcp.listener`: the skips below are about
@@ -50,6 +52,10 @@ def test_rebinding_keeps_the_ephemeral_port_and_the_socket() -> None:
         listener.close()
 
 
+@pytest.mark.skipif(
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="needs a second loopback address; macOS aliases only 127.0.0.1",
+)
 def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
     """The matching change must not defeat the point of matching."""
     # Two *distinct* requests: `_parselisteners` deduplicates, so the same
@@ -107,12 +113,21 @@ def test_a_second_listener_cannot_silently_take_a_bound_port() -> None:
         first.close()
 
 
+@pytest.mark.skipif(
+    not DUPLICATE_UDP_BIND_ALLOWED,
+    reason="BSD/macOS need SO_REUSEPORT to share a UDP port, so there is no "
+    "silent takeover to demonstrate",
+)
 def test_the_duplicate_bind_really_would_have_stolen_the_datagrams() -> None:
     """The half of `transport-11` that makes the silence expensive.
 
     With `SO_REUSEADDR` both sockets bind and exactly one of them -- not the
     one the operator thinks -- is fed. Pinned through the opt-in class so the
     behaviour stays visible now that it is no longer the default.
+
+    Skipped where `SO_REUSEADDR` alone does not permit the duplicate bind: on
+    the BSDs the kernel refuses it outright, which is the safe behaviour this
+    test exists to show the absence of elsewhere.
     """
     first = ReusingListener(listen=("127.0.0.1", 0))
     first.bind()

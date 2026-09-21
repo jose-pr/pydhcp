@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.6.0] - 2026-09-21
 
-The 0.5.2 review remediation: 120 commits closing all 339 findings of a multi-agent
+The 0.5.2 review remediation: 122 commits closing all 339 findings of a multi-agent
 review, verified per-commit on Windows and Linux and against ISC dhclient on a
 veth pair.
 

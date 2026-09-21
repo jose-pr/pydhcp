@@ -10,6 +10,7 @@ each -- so a change to any of them had to be made everywhere or not at all.
 from __future__ import annotations
 
 import contextlib
+import socket
 import time
 import typing as _ty
 from datetime import datetime, timedelta
@@ -22,6 +23,66 @@ from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
 #: The client hardware address most tests use; only tests that care about
 #: telling two clients apart pass their own.
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
+
+
+def _can_bind_loopback_alias(address: str = "127.0.0.2") -> bool:
+    """Is an address other than 127.0.0.1 usable as a second local address?
+
+    Linux routes the whole 127.0.0.0/8 to the loopback, so 127.0.0.2 binds
+    without any setup. macOS aliases **only** 127.0.0.1 onto `lo0`, so the same
+    bind fails with `EADDRNOTAVAIL` until someone runs
+    `ifconfig lo0 alias 127.0.0.2`.
+
+    Probed rather than keyed off `sys.platform`, for the reason the comment in
+    `test_listener_binding.py` already gives about `SO_EXCLUSIVEADDRUSE`: the
+    tests care about what this host can actually do, not about what its name is.
+    A BSD with the alias configured should run these tests, and a Linux without
+    127/8 routing should skip them.
+    """
+    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        probe.bind((address, 0))
+    except OSError:
+        return False
+    else:
+        return True
+    finally:
+        probe.close()
+
+
+def _duplicate_udp_bind_is_allowed() -> bool:
+    """Do two `SO_REUSEADDR` UDP sockets share one port on this host?
+
+    Linux and Windows allow it, which is the whole hazard `transport-11` is
+    about: the second bind succeeds silently and then one socket -- not the one
+    the operator expects -- receives everything. The BSDs, macOS included,
+    require `SO_REUSEPORT` for that and refuse the second bind with
+    `EADDRINUSE`, so there is no silent takeover to demonstrate there.
+    """
+    first = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    second = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # One `except OSError` around the whole probe, not just the second
+        # bind. This runs at import, so anything that escapes here fails
+        # collection for the entire suite on every platform -- a probe must
+        # answer the question or answer "no", never raise.
+        first.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        first.bind(("127.0.0.1", 0))
+        second.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        second.bind(("127.0.0.1", first.getsockname()[1]))
+    except OSError:
+        return False
+    else:
+        return True
+    finally:
+        first.close()
+        second.close()
+
+
+#: Evaluated once at import: both probes open and close real sockets, and the
+#: answer cannot change during a run.
+LOOPBACK_ALIAS_BINDABLE = _can_bind_loopback_alias()
+DUPLICATE_UDP_BIND_ALLOWED = _duplicate_udp_bind_is_allowed()
 
 
 def build_request(

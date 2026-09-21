@@ -55,6 +55,17 @@ jobs:
             python-version: "3.9"
           - os: windows-latest
             python-version: "3.14"
+          # macOS used to run only in the release workflow, which meant its
+          # first run was against a pushed tag. That is exactly what happened
+          # for v0.6.0: three tests failed there on BSD socket semantics Linux
+          # and Windows do not share -- only 127.0.0.1 is aliased onto lo0, and
+          # SO_REUSEADDR alone does not let two UDP sockets share a port -- and
+          # the release stopped at the test gate. A platform whose first signal
+          # arrives at release time is not in the matrix in any useful sense.
+          - os: macos-latest
+            python-version: "3.9"
+          - os: macos-latest
+            python-version: "3.14"
 
     steps:
       - uses: actions/checkout@v4

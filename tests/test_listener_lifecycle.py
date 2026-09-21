@@ -19,7 +19,7 @@ import time
 
 import pytest
 
-from conftest import build_request, running, wait_bound
+from conftest import LOOPBACK_ALIAS_BINDABLE, build_request, running, wait_bound
 from pydhcp.listener import DhcpListener
 
 # --- tests-6: the receive loop releases its sockets ---
@@ -150,11 +150,20 @@ class StoppingListener(DhcpListener):
         self.stop()
 
 
+@pytest.mark.skipif(
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="needs three loopback addresses; macOS aliases only 127.0.0.1",
+)
 def test_a_handler_that_stops_is_not_called_again_in_the_same_turn() -> None:
     """`for socket in rlist:` had no cancellation check, so every socket that
     was already readable in the same `select()` was still serviced after the
     handler asked to stop. Measured: `capture --count 1` wrote 3 records in 3
-    of 3 trials, on a wildcard bind whose three sockets went ready together."""
+    of 3 trials, on a wildcard bind whose three sockets went ready together.
+
+    Three *distinct* local addresses are the point -- one select() must report
+    several sockets ready at once -- so this cannot fall back to three ports on
+    127.0.0.1, and it is skipped where the loopback has no aliases.
+    """
     listener = StoppingListener(
         listen=[("127.0.0.1", 0), ("127.0.0.2", 0), ("127.0.0.3", 0)],
         select_timeout=0.05,
