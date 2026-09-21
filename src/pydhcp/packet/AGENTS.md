@@ -92,6 +92,22 @@ top-level package header.
   - **`.log(src, dst, level: int) -> None`** — logs `.dumps()` framed with a
     header, at `pydhcp`'s `LOGGER`, at the given `logging` level.
 
+**Hand-authoring a message for `load_message`** — two traps, both of which used
+to corrupt silently rather than fail:
+
+- **Quote the MAC.** `chaddr: 10:20:30:40:50:55` unquoted is read by PyYAML as
+  the sexagesimal integer `8041827055`. It now raises and names the cause;
+  write `chaddr: "10:20:30:40:50:55"`.
+- **Omit or quote `sname`/`file`.** A bare `sname:` loads as `None`, and that
+  used to be stringified into the BOOTP field as the four characters `None`.
+  `None` now means empty, and a non-text value raises instead of being
+  stringified.
+
+**`DhcpMessage.decode()` honours `cls`**, so a subclass decodes to itself — it
+used to hard-code `DhcpMessage(...)` while `from_mapping` already used `cls`.
+The annotation still says `-> DhcpMessage` on both; tightening them to `Self`
+is a separate typing decision.
+
 ## Enums (`enums.py`)
 
 - **`DhcpMessageType`** (`IntEnum` + `DhcpOptionType` codec) —
