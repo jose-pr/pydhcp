@@ -103,6 +103,28 @@ DISCOVER until it gave up, before; bound, after.
   options. Receive stays liberal.
 - Both import cycles removed; `HardwareAddressType` now lives in `pydhcp.network` and is
   re-exported from `pydhcp.packet`.
+- **`netimps` is now required as `>=0.3.1,<0.4`** (was `>=0.2.2`). The floor is
+  0.3.1 rather than 0.3.0 for one reason: 0.3.0's `bind_error_hint` read a
+  Windows `WSAEACCES` as POSIX `EACCES` and called a taken port a privilege
+  problem — "permission denied binding port 64514", plus advice to become
+  Administrator, on a platform that has no privileged ports. pydhcp carried its
+  own interception for that; 0.3.1 fixes it upstream, so the workaround is gone
+  and the diagnosis is made in one place again. A port held by another socket is
+  still reported as in use and not as a privilege failure, and still suggests an
+  alternative port; only the wording moves.
+
+  The six entry points this package uses — `normalize_host`, `bind`,
+  `bind_error_hint`, `iter_addresses`, `APIPA`, `MACAddress` — keep their
+  signatures across 0.2.x → 0.3.1. Several of 0.3.0's documented breaks *are*
+  real (`MACAddress` no longer compares equal to its own string spelling, mixed
+  MAC separators are rejected, `normalize_host` raises on an ambiguous
+  multi-colon host); none is reachable from this package, which was checked
+  rather than assumed. pydhcp never compares a hardware address to a string —
+  leases and capture filters key on `str` client identifiers on both sides — and
+  the `normalize_host` inputs that now raise used to fail a step later in
+  `IPv4()` anyway, so the CLI reports a better message for them rather than a
+  worse one. The upper bound is the pre-1.0 rule that a minor bump means the
+  documented API broke.
 
 ### Removed
 
