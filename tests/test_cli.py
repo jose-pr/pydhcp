@@ -36,14 +36,42 @@ from pydhcp.config import load_config
 from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
 from pydhcp.packet.structured import dump_message
 from pydhcp.options import DhcpOptionCode
-from pydhcp.network import IPv4, SocketAddress
+from pydhcp.network import IPv4, MACAddress, SocketAddress
 from conftest import build_request
 
 
-def test_cmd_interfaces():
-    with patch("builtins.print") as mock_print:
-        Interfaces()()
-        assert mock_print.called
+def test_cmd_interfaces(capsys, monkeypatch) -> None:
+    """`assert mock_print.called` was the whole test: the header alone satisfied
+    it, so an `interfaces` that enumerated nothing, or printed the wrong field
+    for every adapter, passed. Enumeration is stubbed because the real one
+    depends on the host -- what is under test is the rendering."""
+    monkeypatch.setattr(
+        "pydhcp.cli.host_ip_interfaces",
+        lambda *args, **kwargs: iter(
+            [
+                NetworkInterface(
+                    "eth0",
+                    ipaddress.IPv4Interface("10.0.0.5/24"),
+                    MACAddress(b"\x00\x11\x22\x33\x44\x55"),
+                ),
+                NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/8")),
+            ]
+        ),
+    )
+
+    Interfaces()()
+
+    assert capsys.readouterr().out.splitlines() == [
+        "Available Network Interfaces:",
+        "Name: eth0",
+        "  IP:   10.0.0.5",
+        "  MAC:  00-11-22-33-44-55",
+        "  Net:  10.0.0.0/24",
+        "Name: lo",
+        "  IP:   127.0.0.1",
+        "  MAC:  None",
+        "  Net:  127.0.0.0/8",
+    ]
 
 
 def _sample_packet() -> DhcpMessage:
@@ -240,7 +268,21 @@ def test_load_capture_hook_command_gets_stdin_and_env(tmp_path, monkeypatch) -> 
 
 
 def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
-    events = [_capture_event()]
+    """`--count N` writes N records and then stops the capture.
+
+    `stopped` was set by the fake and never read, and one event was offered
+    against a `count` of 1 -- so nothing distinguished "stopped after the
+    first" from "there was only ever one". Three events against a count of two
+    is the smallest arrangement where a `--count` that never fires, or fires on
+    the wrong record, changes the result.
+    """
+    events = []
+    for xid in (0xAAAA0001, 0xAAAA0002, 0xAAAA0003):
+        event = _capture_event()
+        event.message.xid = xid
+        events.append(event)
+
+    captures = []
 
     class FakeCapture:
         def __init__(
@@ -249,17 +291,25 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
             self.sink = sink
             self.hook = hook
             self.stopped = False
+            self.delivered = []
             # Part of the contract the CLI reads after listen() returns, to tell
             # a hook failure from an ordinary shutdown.
             self.hook_error = None
+            captures.append(self)
 
         def bind(self):
             pass
 
         def listen(self):
-            self.sink(events[0])
-            if self.hook is not None:
-                self.hook(events[0])
+            # A real listener stops feeding the sink once stop() is called;
+            # without honouring it here, `--count` could not be observed.
+            for event in events:
+                if self.stopped:
+                    return
+                self.delivered.append(event.message.xid)
+                self.sink(event)
+                if self.hook is not None:
+                    self.hook(event)
 
         def stop(self):
             self.stopped = True
@@ -271,7 +321,7 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
         packet_format="json",
         output="-",
         output_mode="stream",
-        count=1,
+        count=2,
         hook=None,
         hook_fail_fast=False,
         per_interface=False,
@@ -279,10 +329,16 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
 
     cmd()
 
-    assert (
-        json.loads(capsys.readouterr().out)["options"]["DHCP_MESSAGE_TYPE"]
-        == "DHCPDISCOVER"
-    )
+    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [record["xid"] for record in records] == [0xAAAA0001, 0xAAAA0002]
+    assert [record["options"]["DHCP_MESSAGE_TYPE"] for record in records] == [
+        "DHCPDISCOVER",
+        "DHCPDISCOVER",
+    ]
+    assert len(captures) == 1
+    # stop() was actually called, and on the second record rather than later.
+    assert captures[0].stopped is True
+    assert captures[0].delivered == [0xAAAA0001, 0xAAAA0002]
 
 
 def test_capture_cli_main_help_lists_capture(monkeypatch, capsys) -> None:
@@ -408,9 +464,14 @@ def test_cmd_relay(mock_dhcp_relay_cls):
 
 def test_relay_cli_relay_help(monkeypatch, capsys) -> None:
     monkeypatch.setattr(sys, "argv", ["pydhcp", "relay", "--help"])
-    with pytest.raises(SystemExit):
+    with pytest.raises(SystemExit) as exc_info:
         main()
     captured = capsys.readouterr()
+    # `--help` exits 0. Without this the test passed on the exit code argparse
+    # uses for a *usage error* too, so a `relay` subcommand that refused to
+    # parse and printed its usage to stdout looked identical to a working one.
+    # Its sibling `test_capture_cli_main_capture_help` has always checked it.
+    assert exc_info.value.code == 0
     assert "--server" in captured.out
     assert "--max-hops" in captured.out
 

@@ -12,6 +12,7 @@ from pydhcp.options.type import (
     Bytes,
     U16,
     U8,
+    U32,
     PolicyFilter,
     StaticRoute,
     UserClass,
@@ -41,6 +42,40 @@ from pydhcp.options.type import (
 )
 
 
+def _assert_scalar(opts, code, width: type, expected: int):
+    """Assert an option decodes to exactly this width *and* this value.
+
+    The type was the whole assertion before, spelled
+    `opts.get(...).__class__.__name__ == "U32"`, so an option that decoded
+    through the right codec to the wrong number passed. Both halves are needed
+    and neither implies the other: `U8(7) == U32(7)` is True (they are `int`
+    subclasses), so value equality alone does not pin the width -- which is why
+    this checks `type(...) is`, not `isinstance`.
+    """
+    value = opts.get(code)
+    assert type(value) is width, f"{code!r}: {type(value).__name__}"
+    assert value == expected, f"{code!r}: {value!r}"
+    return value
+
+
+def _assert_addresses(opts, code, expected: list):
+    """Assert an address-list option decodes to exactly these addresses.
+
+    `isinstance(value[0], IPv4Address)` was the whole assertion before: the
+    list's length, every entry after the first, and every address in it went
+    unchecked, so a codec that stopped after one entry -- or produced the right
+    count of wrong addresses -- passed. The per-element type check is kept as
+    well because `IPv4Address` compares equal to a plain
+    `ipaddress.IPv4Address`, so values alone would not pin the type.
+    """
+    value = opts.get(code)
+    assert [type(item) for item in value] == [IPv4Address] * len(
+        expected
+    ), f"{code!r}: {[type(item).__name__ for item in value]}"
+    assert list(value) == [IPv4Address(a) for a in expected], f"{code!r}: {value!r}"
+    return value
+
+
 def test_options_set_get():
     opts = DhcpOptions()
 
@@ -59,7 +94,10 @@ def test_options_set_get():
     assert opts.get(999, default="hello") == "hello"
 
 
-def test_options_partial_encode():
+def test_options_encode_round_trip():
+    # Renamed: this calls `encode()`, so it never exercised `partial_encode`'s
+    # size limit or its leftover bag -- the two things that name refers to.
+    # The real one is `test_options_partial_encode_splits_and_returns_leftovers`.
     opts = DhcpOptions()
     opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
     opts[DhcpOptionCode.HOSTNAME] = "test-host"
@@ -76,6 +114,44 @@ def test_options_partial_encode():
         == DhcpMessageType.DHCPDISCOVER
     )
     assert decoded_opts.get(DhcpOptionCode.HOSTNAME, decode=String) == "test-host"
+
+
+def test_options_partial_encode_splits_and_returns_leftovers():
+    """`partial_encode(maxsize)` fills the budget and hands back the remainder.
+
+    This is what the old `test_options_partial_encode` was named for and never
+    touched: it called `encode()`, which is `partial_encode(None)` -- no limit,
+    so no split and always a `None` leftover. The split is what a reply near
+    the client's maximum message size depends on, and it was untested.
+    """
+    opts = DhcpOptions()
+    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    opts[DhcpOptionCode.HOSTNAME] = "test-host"
+
+    encoded, leftover = opts.partial_encode(8)
+
+    # Exactly the budget, END included, and never a byte over it.
+    assert len(encoded) == 8
+    assert encoded[-1] == 255
+    # 53/01/01 whole, then as much of the hostname as fits: 0c/02/"te".
+    assert bytes(encoded) == b"\x35\x01\x01\x0c\x02te\xff"
+
+    assert leftover is not None
+    assert leftover.get(DhcpOptionCode.HOSTNAME, decode=False) == bytearray(b"st-host")
+    assert DhcpOptionCode.DHCP_MESSAGE_TYPE not in leftover
+
+    # The fragment that did fit is a complete, decodable option in its own
+    # right -- RFC 3396 s4 requires each instance to carry its own code and
+    # length octet -- rather than a dangling continuation.
+    decoded = DhcpOptions()
+    decoded.decode(memoryview(encoded))
+    assert decoded.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPDISCOVER
+    assert decoded.get(DhcpOptionCode.HOSTNAME, decode=String) == "te"
+
+    # No limit means no split: the contrast is the point.
+    whole, nothing_left = opts.partial_encode(None)
+    assert nothing_left is None
+    assert bytes(whole) == b"\x35\x01\x01\x0c\ttest-host\xff"
 
 
 def test_typed_registrations_and_aliases():
@@ -211,17 +287,17 @@ def test_typed_registrations_and_aliases():
     opts[DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL] = False
     opts[DhcpOptionCode.TRAILER_ENCAPSULATION] = 1
     opts[DhcpOptionCode.FORCERENEW_NONCE_CAPABLE] = [1]
-    assert isinstance(opts.get(DhcpOptionCode.LOG_SERVER)[0], IPv4Address)
+    _assert_addresses(opts, DhcpOptionCode.LOG_SERVER, ["10.0.0.1", "10.0.0.2"])
     assert opts.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == [
         "alpha.example",
         "beta.example",
     ]
-    assert isinstance(opts.get(DhcpOptionCode.BCMCS_IPV4_ADDRESS)[0], IPv4Address)
+    _assert_addresses(opts, DhcpOptionCode.BCMCS_IPV4_ADDRESS, ["10.0.0.7", "10.0.0.8"])
     assert opts.get(DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE) == [U16(1), U16(2)]
     assert opts.get(DhcpOptionCode.PCODE, decode=String) == "Europe/Berlin"
     assert opts.get(DhcpOptionCode.TCODE, decode=String) == "tz.example/ref"
-    assert isinstance(opts.get(DhcpOptionCode.RFC868_TIMESERVER)[0], IPv4Address)
-    assert isinstance(opts.get(DhcpOptionCode.IEN116_NAMESERVER)[0], IPv4Address)
+    _assert_addresses(opts, DhcpOptionCode.RFC868_TIMESERVER, ["10.0.0.4"])
+    _assert_addresses(opts, DhcpOptionCode.IEN116_NAMESERVER, ["10.0.0.5"])
     assert opts.get(DhcpOptionCode.SWAP_SERVER) == IPv4Address("10.0.0.6")
     sip = opts.get(DhcpOptionCode.SIP_SERVERS)
     assert sip == SipServers(["10.0.0.3"], SipServers.ENCODING_ADDRESS)
@@ -241,12 +317,14 @@ def test_typed_registrations_and_aliases():
             (65537, [b"usp", b"agent"]),
         ]
     )
-    assert isinstance(opts.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
+    _assert_addresses(opts, DhcpOptionCode.CAPWAP_AC_V4, ["192.0.2.30", "192.0.2.31"])
     assert opts.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == [
         "service.example",
         "config.example",
     ]
-    assert isinstance(opts.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
+    _assert_addresses(
+        opts, DhcpOptionCode.IPV4_ADDRESS_ANDSF, ["192.0.2.40", "192.0.2.41"]
+    )
     assert opts.get(DhcpOptionCode.V4_SZTP_REDIRECT) == UriList(
         [
             "https://bootstrap.example/one",
@@ -254,20 +332,21 @@ def test_typed_registrations_and_aliases():
         ]
     )
     assert opts.get(DhcpOptionCode.V4_DOTS_RI) == "resolver-a.example"
-    assert isinstance(opts.get(DhcpOptionCode.V4_DOTS_ADDRESS)[0], IPv4Address)
-    assert isinstance(opts.get(DhcpOptionCode.TFTP_SERVER_ADDRESS)[0], IPv4Address)
-    assert (
-        opts.get(DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME).__class__.__name__
-        == "U32"
+    _assert_addresses(
+        opts, DhcpOptionCode.V4_DOTS_ADDRESS, ["192.0.2.50", "192.0.2.51"]
     )
-    assert opts.get(DhcpOptionCode.IPV6_ONLY).__class__.__name__ == "U32"
-    assert opts.get(DhcpOptionCode.BASE_TIME).__class__.__name__ == "U32"
-    assert opts.get(DhcpOptionCode.START_TIME_OF_STATE).__class__.__name__ == "U32"
-    assert opts.get(DhcpOptionCode.QUERY_START_TIME).__class__.__name__ == "U32"
-    assert opts.get(DhcpOptionCode.QUERY_END_TIME).__class__.__name__ == "U32"
-    assert opts.get(DhcpOptionCode.REBOOT_TIME).__class__.__name__ == "U32"
-    assert opts.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
-    assert opts.get(DhcpOptionCode.DATA_SOURCE).__class__.__name__ == "U8"
+    _assert_addresses(
+        opts, DhcpOptionCode.TFTP_SERVER_ADDRESS, ["192.0.2.60", "192.0.2.61"]
+    )
+    _assert_scalar(opts, DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME, U32, 1234)
+    _assert_scalar(opts, DhcpOptionCode.IPV6_ONLY, U32, 4321)
+    _assert_scalar(opts, DhcpOptionCode.BASE_TIME, U32, 111)
+    _assert_scalar(opts, DhcpOptionCode.START_TIME_OF_STATE, U32, 222)
+    _assert_scalar(opts, DhcpOptionCode.QUERY_START_TIME, U32, 333)
+    _assert_scalar(opts, DhcpOptionCode.QUERY_END_TIME, U32, 444)
+    _assert_scalar(opts, DhcpOptionCode.REBOOT_TIME, U32, 555)
+    _assert_scalar(opts, DhcpOptionCode.DHCP_STATE, U8, 7)
+    _assert_scalar(opts, DhcpOptionCode.DATA_SOURCE, U8, 3)
     assert opts.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
     assert (
         opts.get(DhcpOptionCode.MUD_URL_V4, decode=String)
@@ -441,21 +520,20 @@ def test_registered_option_code_round_trips():
         "alpha.example",
         "beta.example",
     ]
-    assert isinstance(decoded.get(DhcpOptionCode.BCMCS_IPV4_ADDRESS)[0], IPv4Address)
+    _assert_addresses(
+        decoded, DhcpOptionCode.BCMCS_IPV4_ADDRESS, ["192.0.2.14", "192.0.2.15"]
+    )
     assert decoded.get(DhcpOptionCode.CLIENT_SYSTEM_ARCHITECTURE) == [U16(1), U16(2)]
     assert decoded.get(DhcpOptionCode.PCODE, decode=String) == "Europe/Berlin"
     assert decoded.get(DhcpOptionCode.TCODE, decode=String) == "tz.example/ref"
     assert decoded.get(DhcpOptionCode.RFC868_TIMESERVER)[0] == IPv4Address("192.0.2.12")
     assert decoded.get(DhcpOptionCode.SWAP_SERVER) == IPv4Address("192.0.2.13")
-    assert (
-        decoded.get(DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME).__class__.__name__
-        == "U32"
-    )
+    _assert_scalar(decoded, DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME, U32, 1234)
     assert decoded.get(DhcpOptionCode.ASSOCIATED_IP) == [
         IPv4Address("192.0.2.20"),
         IPv4Address("192.0.2.21"),
     ]
-    assert decoded.get(DhcpOptionCode.IPV6_ONLY).__class__.__name__ == "U32"
+    _assert_scalar(decoded, DhcpOptionCode.IPV6_ONLY, U32, 4321)
     assert decoded.get(DhcpOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
     assert decoded.get(DhcpOptionCode.NETINFO_TAG, decode=String) == "lab-a"
     assert (
@@ -469,12 +547,16 @@ def test_registered_option_code_round_trips():
             (65537, [b"usp", b"agent"]),
         ]
     )
-    assert isinstance(decoded.get(DhcpOptionCode.CAPWAP_AC_V4)[0], IPv4Address)
+    _assert_addresses(
+        decoded, DhcpOptionCode.CAPWAP_AC_V4, ["192.0.2.30", "192.0.2.31"]
+    )
     assert decoded.get(DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS) == [
         "service.example",
         "config.example",
     ]
-    assert isinstance(decoded.get(DhcpOptionCode.IPV4_ADDRESS_ANDSF)[0], IPv4Address)
+    _assert_addresses(
+        decoded, DhcpOptionCode.IPV4_ADDRESS_ANDSF, ["192.0.2.40", "192.0.2.41"]
+    )
     assert decoded.get(DhcpOptionCode.V4_SZTP_REDIRECT) == UriList(
         [
             "https://bootstrap.example/one",
@@ -482,14 +564,18 @@ def test_registered_option_code_round_trips():
         ]
     )
     assert decoded.get(DhcpOptionCode.V4_DOTS_RI) == "resolver-a.example"
-    assert isinstance(decoded.get(DhcpOptionCode.V4_DOTS_ADDRESS)[0], IPv4Address)
-    assert isinstance(decoded.get(DhcpOptionCode.TFTP_SERVER_ADDRESS)[0], IPv4Address)
-    assert decoded.get(DhcpOptionCode.BASE_TIME).__class__.__name__ == "U32"
-    assert decoded.get(DhcpOptionCode.START_TIME_OF_STATE).__class__.__name__ == "U32"
-    assert decoded.get(DhcpOptionCode.QUERY_START_TIME).__class__.__name__ == "U32"
-    assert decoded.get(DhcpOptionCode.QUERY_END_TIME).__class__.__name__ == "U32"
-    assert decoded.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
-    assert decoded.get(DhcpOptionCode.DATA_SOURCE).__class__.__name__ == "U8"
+    _assert_addresses(
+        decoded, DhcpOptionCode.V4_DOTS_ADDRESS, ["192.0.2.50", "192.0.2.51"]
+    )
+    _assert_addresses(
+        decoded, DhcpOptionCode.TFTP_SERVER_ADDRESS, ["192.0.2.60", "192.0.2.61"]
+    )
+    _assert_scalar(decoded, DhcpOptionCode.BASE_TIME, U32, 111)
+    _assert_scalar(decoded, DhcpOptionCode.START_TIME_OF_STATE, U32, 222)
+    _assert_scalar(decoded, DhcpOptionCode.QUERY_START_TIME, U32, 333)
+    _assert_scalar(decoded, DhcpOptionCode.QUERY_END_TIME, U32, 444)
+    _assert_scalar(decoded, DhcpOptionCode.DHCP_STATE, U8, 7)
+    _assert_scalar(decoded, DhcpOptionCode.DATA_SOURCE, U8, 3)
     assert decoded.get(DhcpOptionCode.V4_PCP_SERVER)[0] == ["192.0.2.70", "192.0.2.71"]
     assert (
         decoded.get(DhcpOptionCode.MUD_URL_V4, decode=String)
@@ -500,7 +586,7 @@ def test_registered_option_code_round_trips():
         == "/pxe/config.cfg"
     )
     assert decoded.get(DhcpOptionCode.PATH_PREFIX, decode=String) == "/pxe/"
-    assert decoded.get(DhcpOptionCode.REBOOT_TIME).__class__.__name__ == "U32"
+    _assert_scalar(decoded, DhcpOptionCode.REBOOT_TIME, U32, 555)
     assert decoded.get(DhcpOptionCode.V4_ACCESS_DOMAIN) == "access.example"
     assert decoded.get(DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL) == Boolean(1)
     assert decoded.get(DhcpOptionCode.MERIT_DUMP_FILE, decode=String) == "crash.dump"
@@ -592,11 +678,8 @@ def test_raw_wire_decoding_for_new_primitive_registrations():
     decoded.decode(memoryview(encoded))
 
     assert decoded.get(DhcpOptionCode.ASSOCIATED_IP) == [IPv4Address("192.0.2.25")]
-    assert (
-        decoded.get(DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME).__class__.__name__
-        == "U32"
-    )
-    assert decoded.get(DhcpOptionCode.DHCP_STATE).__class__.__name__ == "U8"
+    _assert_scalar(decoded, DhcpOptionCode.CLIENT_LAST_TRANSACTION_TIME, U32, 1234)
+    _assert_scalar(decoded, DhcpOptionCode.DHCP_STATE, U8, 7)
     assert decoded.get(DhcpOptionCode.AUTO_CONFIG) == Boolean(1)
     assert decoded.get(DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST) == ["alpha.example"]
 

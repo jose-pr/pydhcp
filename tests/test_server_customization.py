@@ -286,6 +286,68 @@ def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() ->
     assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in reply.options
 
 
+def _reply_option_codes(transport: Mock) -> set:
+    reply, _dest, _port = _sent(transport)
+    return {int(code) for code, _ in reply.options.items(decoded=False)}
+
+
+def test_reply_carries_exactly_the_requested_options_and_the_machinery() -> None:
+    """RFC 2131 4.3.1: the reply carries the requested parameters, and no more.
+
+    Every existing assertion about option 55 is one-sided -- "this option
+    survived the filter" or "the lease still has it". Nothing said what the
+    reply must *not* contain, so a filter that stopped filtering, or was
+    bypassed entirely, passed the whole suite while leaking every option the
+    server holds to a client that asked for two of them. On a real server that
+    is the lease's full option set, which is why the seeded lease here carries
+    a DNS entry the request never asks for.
+
+    The three machinery options are the documented exceptions (4.3.1: message
+    type, server identifier, lease time), so the expected set is exactly the
+    request list plus those.
+    """
+    msg = _message(DhcpMessageType.DHCPDISCOVER)
+    msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
+        [int(DhcpOptionCode.SUBNET_MASK), int(DhcpOptionCode.ROUTER)]
+    )
+    backend = _seeded_backend(msg.client_id())
+    transport = Mock()
+
+    _BackendServer(lease_backend=backend).handle(msg, _context(transport))
+
+    assert _reply_option_codes(transport) == {
+        int(DhcpOptionCode.SUBNET_MASK),
+        int(DhcpOptionCode.ROUTER),
+        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
+        int(DhcpOptionCode.SERVER_IDENTIFIER),
+        int(DhcpOptionCode.IP_ADDRESS_LEASE_TIME),
+    }
+
+
+def test_a_client_that_sends_no_request_list_is_told_everything() -> None:
+    """The other half of the filter: no option 55 means no filtering.
+
+    Asserted alongside the exact-set test above so that "the filter dropped
+    everything" and "the filter dropped nothing" cannot both pass. RFC 2131
+    3.5: absent a request list the server supplies the parameters it has.
+    """
+    msg = _message(DhcpMessageType.DHCPDISCOVER)
+    assert DhcpOptionCode.PARAMETER_REQUEST_LIST not in msg.options
+    backend = _seeded_backend(msg.client_id())
+    transport = Mock()
+
+    _BackendServer(lease_backend=backend).handle(msg, _context(transport))
+
+    assert _reply_option_codes(transport) == {
+        int(DhcpOptionCode.SUBNET_MASK),
+        int(DhcpOptionCode.ROUTER),
+        int(DhcpOptionCode.DNS),
+        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
+        int(DhcpOptionCode.SERVER_IDENTIFIER),
+        int(DhcpOptionCode.IP_ADDRESS_LEASE_TIME),
+    }
+
+
 # --- RFC 2131 4.3.2 / 4.3.5: INIT-REBOOT silence and DHCPINFORM ---
 
 

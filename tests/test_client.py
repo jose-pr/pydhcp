@@ -1,7 +1,7 @@
 import ipaddress
 import queue
+import socket
 import threading
-import time
 from datetime import timedelta
 from unittest.mock import Mock
 
@@ -54,10 +54,18 @@ def _reply(
 
 
 def _assert_round_trips(message: DhcpMessage, message_type: DhcpMessageType) -> None:
+    """Assert the *whole* message survives the wire, not three fields of it.
+
+    Comparing only `op`, `chaddr` and the message type left everything else
+    unguarded: `flags`, `secs`, `ciaddr`/`yiaddr`/`siaddr`/`giaddr`, `sname`,
+    `file` and every option but one could come back different and each of these
+    five builder tests would still pass. `to_mapping()` is the full, decoded
+    form of both header and options, so one comparison covers all of it.
+    """
     restored = DhcpMessage.decode(message.encode())
     assert restored.op == OpCode.BOOTREQUEST
-    assert restored.chaddr == CHADDR
     assert restored.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == message_type
+    assert restored.to_mapping() == message.to_mapping()
 
 
 def test_client_builds_standard_request_messages() -> None:
@@ -166,15 +174,78 @@ def test_client_dora_against_real_server() -> None:
             assert ack.yiaddr == IPv4("127.0.0.1")
 
 
-def test_client_discover_offer_returns_none_without_server() -> None:
-    # `with` so the client's socket is closed: this test leaked a bound socket
-    # on every run, which is what made the suite fail under
-    # `-W error::ResourceWarning`.
-    with DhcpClient(listen=("127.0.0.1", 0)) as client:
-        offer = client.discover_offer(
-            CHADDR, timeout=0.2, retries=0, destination="127.0.0.1", port=6767
+def test_client_discover_offer_receives_a_real_offer() -> None:
+    """`discover_offer` against a live server, with the receive loop running.
+
+    This replaces a test that asserted `discover_offer(...) is None` on a
+    client that was never `start()`ed. Without the receive thread nothing ever
+    reads the socket, so the call could only ever return None -- measured
+    against a live `FixedLeaseServer`: the server logged one packet received
+    and one sent, and `discover_offer` still returned None. The assertion could
+    not fail, so it proved nothing about the client.
+    """
+    server = FixedLeaseServer(listen=[("127.0.0.1", 0)])
+    with running(server):
+        server_port = server.bound_addresses[0].port
+
+        with running(DhcpClient(listen=("127.0.0.1", 0))) as client:
+            offer = client.discover_offer(
+                CHADDR,
+                timeout=2.0,
+                retries=1,
+                destination="127.0.0.1",
+                port=server_port,
+                broadcast=False,
+            )
+
+    assert offer is not None
+    assert (
+        offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+    )
+    assert offer.op == OpCode.BOOTREPLY
+    assert offer.chaddr == CHADDR
+    assert offer.yiaddr == IPv4("127.0.0.1")
+    assert offer.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
+    # Exchanges are cleaned up even on the success path.
+    assert client._pending_keys == set()
+
+
+def test_client_discover_offer_times_out_when_nothing_answers() -> None:
+    """A started client, a real listener that never replies: a genuine timeout.
+
+    The destination is a UDP socket bound here rather than a fixed port: the
+    old version fired a datagram at whatever happened to be on 127.0.0.1:6767,
+    and a host running pydhcp's own default-port server would have been
+    answering it.
+    """
+    silent = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        silent.bind(("127.0.0.1", 0))
+        silent_port = silent.getsockname()[1]
+
+        with running(DhcpClient(listen=("127.0.0.1", 0))) as client:
+            offer = client.discover_offer(
+                CHADDR,
+                timeout=0.2,
+                retries=0,
+                destination="127.0.0.1",
+                port=silent_port,
+                broadcast=False,
+            )
+
+        # The datagram really was sent and really did arrive -- otherwise the
+        # None above would be the old tautology in a new costume.
+        silent.settimeout(1.0)
+        received = DhcpMessage.decode(bytearray(silent.recv(2048)))
+        assert (
+            received.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+            == DhcpMessageType.DHCPDISCOVER
         )
+    finally:
+        silent.close()
+
     assert offer is None
+    assert client._pending_keys == set()
 
 
 # --- the client must stay the same client across a DORA ---
@@ -435,6 +506,77 @@ def test_dora_secs_continues_from_the_discover():
     discover_secs, request_secs = client.secs_sent
     assert discover_secs == 0
     assert request_secs == _StubbedClockClient.WAIT_COST
+
+
+class _NakOnRequestClient(_StubbedClockClient):
+    """Offers on the DISCOVER and refuses the REQUEST with a DHCPNAK."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.naks_delivered = 0
+
+    def send(self, message, destination=IPv4("255.255.255.255"), port=67):
+        self.secs_sent.append(int(message.secs.total_seconds()))
+        self._pending_keys.add(self._pending_key(message))
+        message_type = message.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        if message_type is DhcpMessageType.DHCPDISCOVER:
+            self.handle(_canned_offer(message.xid), None)
+        elif message_type is DhcpMessageType.DHCPREQUEST:
+            nak = _canned_offer(message.xid)
+            nak.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPNAK
+            self.naks_delivered += 1
+            self.handle(nak, None)
+        return 0
+
+
+def test_dora_does_not_mistake_a_dhcpnak_for_an_ack():
+    """RFC 2131 s3.1.5: a DHCPNAK refuses the REQUEST; it is not an address.
+
+    `dora()` returns whatever `_wait_for` hands back, and the only thing
+    standing between a NAK and a caller that believes it holds `yiaddr` is
+    `_wait_for`'s message-type filter. Nothing exercised the NAK path at all,
+    so a filter that stopped discriminating would have gone unnoticed -- and
+    the canned NAK here carries 10.0.0.50 in `yiaddr`, exactly the shape that
+    would be mistaken for a lease.
+    """
+    client = _NakOnRequestClient(listen=("127.0.0.1", 0))
+
+    ack = client.dora(CHADDR, timeout=2.0, retries=1)
+
+    assert ack is None
+    # Two REQUEST attempts, each answered: the NAKs really reached `handle()`
+    # and really matched the exchange, so the None above is a rejection rather
+    # than nothing ever having arrived.
+    assert client.naks_delivered == 2
+    # Routed to the exchange's own queue, not left in the shared one.
+    assert client._replies.qsize() == 0
+    assert client._pending_keys == set()
+
+
+def test_handle_ignores_a_bootrequest():
+    """Only a BOOTREPLY is a reply; `client.py` checks `op` first for a reason.
+
+    A DHCP client sits on a broadcast segment, so every other host's DISCOVER
+    arrives here too. Queued as replies they would be handed to `on_reply` and
+    to any waiting exchange whose (xid, chaddr) they happened to match.
+    """
+    client = DhcpClient(listen=("127.0.0.1", 0))
+    seen: list[DhcpMessage] = []
+    client.on_reply = lambda msg, context: seen.append(msg)  # type: ignore[method-assign]
+
+    request = _canned_offer(0xAABBCCDD)
+    request.op = OpCode.BOOTREQUEST
+    client.handle(request, _context())
+
+    assert client.next_reply(timeout=0) is None
+    assert client.drain_replies() == []
+    assert seen == []
+
+    # The very same message as a reply is accepted, so the rejection above is
+    # the `op` check and not some other mismatch.
+    request.op = OpCode.BOOTREPLY
+    client.handle(request, _context())
+    assert seen == [request]
 
 
 # --- reply matching: an exchange is (xid, chaddr), as it is on the relay ---

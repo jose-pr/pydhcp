@@ -400,10 +400,32 @@ def test_mos_fqdn_option_round_trip_and_rejects_truncated_labels():
 
 
 def test_signed_i32_round_trip():
-    value = I32(-1)
+    """I32 is two's complement and survives a round trip, both signs.
+
+    The name said round trip and the body only ever encoded, so nothing read
+    `\\xff\\xff\\xff\\xff` back -- a `_dhcp_read` that decoded it as the unsigned
+    4294967295 (which is exactly what an unsigned codec does, and the reason
+    this option type exists separately from U32) passed. -1 alone would also
+    not have caught a decoder that simply negated, hence the bounds and a
+    value with distinguishable octets.
+    """
+    for number in (-1, 0, 1, -2147483648, 2147483647, -305419896):
+        value = I32(number)
+        buf = bytearray()
+        assert value._dhcp_write(buf) == 4, number
+        decoded, length = I32._dhcp_read(memoryview(bytes(buf)))
+        assert length == 4, number
+        assert type(decoded) is I32, number
+        assert decoded == number, (number, decoded)
+
+    # The wire form itself, so the test pins two's complement rather than
+    # whatever pair of functions happen to agree with each other.
     buf = bytearray()
-    assert value._dhcp_write(buf) == 4
-    assert buf == b"\xff\xff\xff\xff"
+    I32(-1)._dhcp_write(buf)
+    assert bytes(buf) == b"\xff\xff\xff\xff"
+    buf = bytearray()
+    I32(-305419896)._dhcp_write(buf)
+    assert bytes(buf) == b"\xed\xcb\xa9\x88"
 
 
 def test_domain_list_option():

@@ -41,7 +41,11 @@ def test_message_encode_decode():
     decoded = DhcpMessage.decode(encoded)
     assert decoded.op == OpCode.BOOTREQUEST
     assert decoded.xid == 0x3903F326
-    assert decoded.chaddr.startswith(b"\x00\x11\x22\x33\x44\x55")
+    # Exactly, not as a prefix: `chaddr` is a 16-octet field on the wire and
+    # `decode` trims it back to `hlen`. `startswith` passed just as happily on
+    # the untrimmed form, which is what the trim exists to prevent -- a client
+    # identifier derived from it would carry ten trailing zeros.
+    assert decoded.chaddr == b"\x00\x11\x22\x33\x44\x55"
     assert (
         decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
         == DhcpMessageType.DHCPDISCOVER
@@ -73,8 +77,11 @@ def test_message_edge_cases():
     )
     encoded = msg.encode()
     decoded = DhcpMessage.decode(encoded)
-    assert decoded.sname.startswith("my-server-name")
-    assert decoded.file.startswith("boot-file-path")
+    # Exactly, not as a prefix: `sname` and `file` are NUL-padded 64- and
+    # 128-octet fields, and `startswith` accepted the padded form. A boot file
+    # name carrying 114 trailing NULs is what a PXE client would then fetch.
+    assert decoded.sname == "my-server-name"
+    assert decoded.file == "boot-file-path"
     assert decoded.hops == 1
     assert decoded.secs == timedelta(seconds=5)
     assert decoded.flags == Flags.BROADCAST

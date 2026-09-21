@@ -110,10 +110,25 @@ def test_bad_magic_cookie_raises_value_error():
 
 
 def test_u16_overflow_validation():
-    """Bug 7: U16 raises ValueError on overflow during dhcp_write."""
+    """Bug 7: U16 rejects an out-of-range value at construction *and* on write.
+
+    Both halves in one `pytest.raises` block tested only the first: `U16(65536)`
+    raises on its own, so `_dhcp_write` -- the thing the test was named for and
+    the only one that matters for a value built any other way -- was never
+    reached. Separated, and the write path is fed through `int.__new__` to skip
+    the constructor, exactly as the `U32` test below already does.
+    """
     with pytest.raises(ValueError, match="Number is too big"):
-        u = U16(65536)
-        u._dhcp_write(bytearray())
+        U16(65536)
+
+    unchecked = int.__new__(U16, 65536)
+    with pytest.raises(ValueError, match="Number is too big"):
+        unchecked._dhcp_write(bytearray())
+
+    # And the largest legal value still encodes, in two octets.
+    buf = bytearray()
+    assert U16(65535)._dhcp_write(buf) == 2
+    assert bytes(buf) == b"\xff\xff"
 
 
 def test_u32_validation_on_encode():

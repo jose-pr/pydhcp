@@ -49,13 +49,28 @@ def test_in_memory_lease_backend():
 
 
 def test_lease_expiration():
-    backend = InMemoryLeaseBackend()
-    client_id = "test-client-exp"
+    """An already-elapsed TTL is never handed back by `lookup`.
+
+    The comment said "0 TTL" and the call passed -1, so the boundary the
+    comment described -- `expires == now`, the one an off-by-one in the
+    comparison lands on -- was the single value never tried. Both are asserted
+    now, along with a live lease, so "lookup always returns None" cannot pass.
+    """
     ip = IPv4("192.168.1.200")
 
-    # Allocate with 0 TTL (expires immediately or next lookup)
-    backend.allocate(client_id, ip, -1)
-    assert backend.lookup(client_id) is None
+    for ttl in (0, -1):
+        backend = InMemoryLeaseBackend()
+        client_id = f"test-client-exp-{ttl}"
+        assert backend.allocate(client_id, ip, ttl) is not None
+        assert backend.lookup(client_id) is None, ttl
+
+    # A TTL that has not elapsed is still there, so the two assertions above
+    # are about expiry rather than about `allocate` silently failing.
+    backend = InMemoryLeaseBackend()
+    assert backend.allocate("test-client-live", ip, 60) is not None
+    live = backend.lookup("test-client-live")
+    assert live is not None
+    assert live.ip == ip
 
 
 def test_file_lease_backend(tmp_path):
