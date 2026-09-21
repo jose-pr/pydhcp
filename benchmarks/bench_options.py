@@ -1,3 +1,10 @@
+"""Option-block and lease measurement primitives for the `options` suite.
+
+Each function here takes ONE `timeit` sample per metric. Sampling,
+median/min/max reduction and the comparable result file belong to the
+runner -- see `benchmarks/run.py --save`.
+"""
+
 import argparse
 import json
 import pathlib
@@ -133,6 +140,11 @@ def write_json_report(
     iterations: int,
     benchmarks: OrderedDict[str, dict[str, Any]],
 ) -> None:
+    """Write the raw single-sample report for one run.
+
+    Debugging aid only: it carries no median, so `compare_bench.py` cannot
+    read it. `run.py --save` writes the comparable result.
+    """
     payload = {
         "benchmark": "bench_options",
         "python": sys.version.split()[0],

@@ -55,7 +55,12 @@ Issues = "https://github.com/jose-pr/pydhcp/issues"
 # "*.local.*" is not covered by "/.*": the name does not start with a dot, so a
 # personal override such as src/pydhcp/settings.local.json shipped to PyPI --
 # where it cannot be recalled -- carrying one machine's paths or hostnames.
-exclude = ["/.*", "*.local.*"]
+#
+# benchmarks/results/ is tracked in git (that is what makes a before/after
+# comparison recoverable from history) but has no business in a release: the
+# files are machine-identifying by design -- each records the host CPU string
+# and OS build it was measured on -- and mean nothing to a consumer.
+exclude = ["/.*", "*.local.*", "/benchmarks/results"]
 
 [tool.hatch.build.targets.wheel]
 exclude = ["*.local.*"]

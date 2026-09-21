@@ -22,7 +22,10 @@ CLAUDE*
 build/
 dist/
 site/
-benchmark-results/
+
+# NOTE: benchmarks/results/ is deliberately NOT ignored. Benchmark results are
+# tracked so a before/after comparison is recoverable from history instead of
+# living in a CI artifact that expires.
 
 # Python-specific patterns
 __pycache__/

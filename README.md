@@ -1,5 +1,6 @@
 # pydhcp
 
+[![Tests](https://github.com/jose-pr/pydhcp/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jose-pr/pydhcp/actions/workflows/test.yml)
 [![Version](https://img.shields.io/pypi/v/pydhcp.svg)](https://pypi.org/project/pydhcp/)
 [![Python versions](https://img.shields.io/pypi/pyversions/pydhcp.svg)](https://pypi.org/project/pydhcp/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jose-pr/pydhcp/blob/main/LICENSE)
@@ -126,15 +127,17 @@ See [`AGENTS.md`](https://github.com/jose-pr/pydhcp/blob/main/AGENTS.md) for env
 For comprehensive validation in GitHub Actions, the test workflow also supports
 manual `workflow_dispatch` runs and safe `ci-*` tags. Benchmarks stay repo-local and opt-in:
 use the workflow's `run_benchmarks` input or a `ci-bench-*` tag when you want
-the benchmark harness included. The repository wrapper and individual benchmark scripts can also
-write structured JSON reports for local comparison or CI artifact upload:
+the benchmark harness included.
 
 ```bash
-python benchmarks\run.py --suite parse --iterations 10000 --json-output benchmark-results/bench_parse.json
-python benchmarks\run.py --suite options --iterations 1000 --json-output benchmark-results/bench_options.json
-python benchmarks\bench_parse.py --iterations 10000 --json-output benchmark-results/bench_parse.json
-python benchmarks\bench_options.py --iterations 1000 --json-output benchmark-results/bench_options.json
+python benchmarks/run.py                 # print a summary
+python benchmarks/run.py --save          # write benchmarks/results/<name>.json
+python benchmarks/run.py --suite parse   # one suite instead of all
 ```
+
+Results are min/median/max ms per call over repeated samples; see
+[`benchmarks/README.md`](https://github.com/jose-pr/pydhcp/blob/main/benchmarks/README.md)
+for the schema and for why local timings are not a performance claim.
 
 ### Releasing
 
