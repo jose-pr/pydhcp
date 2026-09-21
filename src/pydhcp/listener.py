@@ -105,26 +105,28 @@ class UdpTransport(Transport):
         port: int,
         client_mac: bytes,
     ) -> int:
-        dest_str = _dest_string(dest)
-
-        # Future RawTransport can be plugged in here to craft L2 Ethernet frames targeting client_mac.
-        # Standard UDP sockets can't directly target L2 MAC on UDP if there is no ARP entry,
-        # so we fall back to broadcast if unicast fails.
-        try:
-            return self._send_to(data, dest_str, port)
-        except Exception as e:
-            if dest_str == BROADCAST_ADDRESS:
-                # The "fallback" would be the identical syscall with identical
-                # arguments, so it can only fail identically -- while the
-                # warning claimed a broadcast retry had been attempted and the
-                # second failure, not the first, is what reached the caller.
-                # A broadcast that fails is usually a missing SO_BROADCAST or a
-                # loopback-bound socket on POSIX, neither of which a retry fixes.
-                raise
-            LOGGER.warning(
-                f"UDP unicast to {dest_str} failed ({e}), falling back to broadcast."
-            )
-            return self._send_to(data, BROADCAST_ADDRESS, port)
+        # No broadcast retry on failure. It was written for the case where a
+        # unicast cannot reach a client that has no address yet -- "standard UDP
+        # sockets can't target an L2 MAC if there is no ARP entry" -- but that
+        # case does not raise: the kernel ARPs for an address nobody answers for
+        # and drops the datagram silently, which is precisely how the original
+        # POSIX no-reply defect went unnoticed. So the retry never fired for
+        # what it was written for, and only ever fired for real socket errors --
+        # EACCES, ENETUNREACH, a closed socket -- where a broadcast is both
+        # useless and a disclosure: it puts a reply the caller deliberately
+        # unicast onto the whole segment, carrying yiaddr, chaddr, the lease
+        # options and any echoed option 82 (`gap1-posix-pktinfo-4`).
+        #
+        # Deciding *whether* a reply should be broadcast belongs to the caller
+        # and is already made there: the server picks 255.255.255.255 for a
+        # client with no address, `_dest_string` maps a 0.0.0.0 destination to
+        # it, and a relay picks the client-facing address. The transport's job
+        # is to send where it was told and report when it cannot.
+        #
+        # Future RawTransport can be plugged in here to craft L2 Ethernet frames
+        # targeting client_mac, which is the real answer for an unconfigured
+        # client on a segment where broadcast is unwanted.
+        return self._send_to(data, _dest_string(dest), port)
 
 
 class PktInfoUdpTransport(UdpTransport):

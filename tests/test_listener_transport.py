@@ -250,9 +250,23 @@ def test_a_wildcard_destination_is_also_only_tried_once() -> None:
     assert sock.sendto_calls == [("255.255.255.255", 68)]
 
 
-def test_a_failed_unicast_still_falls_back_to_broadcast() -> None:
-    """The behaviour the guard must not remove: no ARP entry for an address the
-    client has not configured yet is exactly why the fallback exists."""
+def test_a_failed_unicast_is_not_escalated_to_a_broadcast() -> None:
+    """`gap1-posix-pktinfo-4`. This test used to assert the opposite.
+
+    Its stated rationale was "no ARP entry for an address the client has not
+    configured yet is exactly why the fallback exists" -- and this project has
+    already disproved that premise by measurement. `DhcpServer` documents it:
+    an L2 send to an address the client cannot answer ARP for is dropped by the
+    kernel "with no error at all", which is how the original POSIX no-reply
+    defect stayed hidden. So the retry never fired for the case it was written
+    for.
+
+    What it did fire for is real socket errors, where broadcasting is both
+    useless and a disclosure -- a reply the caller deliberately unicast goes to
+    the whole segment carrying yiaddr, chaddr, the lease options and any echoed
+    option 82. Whether to broadcast is the caller's decision and is already made
+    there.
+    """
     calls: list = []
 
     class OnlyUnicastFails(FailingSocket):
@@ -265,8 +279,22 @@ def test_a_failed_unicast_still_falls_back_to_broadcast() -> None:
     sock = OnlyUnicastFails()
     transport = UdpTransport(sock)  # type: ignore[arg-type]
 
-    assert transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6) == 20
-    assert calls == [("192.0.2.9", 68), ("255.255.255.255", 68)]
+    with pytest.raises(OSError):
+        transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6)
+
+    assert calls == [("192.0.2.9", 68)], "the reply was escalated to a broadcast"
+
+
+def test_a_wildcard_destination_is_still_broadcast() -> None:
+    """The half that must NOT change: 0.0.0.0 means "this client has no address
+    yet", and the limited broadcast is the correct delivery for it -- measured
+    against ISC dhclient, which saw none of the unicast OFFERs."""
+    sock = FailingSocket()
+    transport = UdpTransport(sock)  # type: ignore[arg-type]
+
+    transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6)
+
+    assert sock.sendto_calls == [("255.255.255.255", 68)]
 
 
 def test_the_pktinfo_send_maps_a_wildcard_destination_to_broadcast(
