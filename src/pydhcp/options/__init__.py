@@ -76,7 +76,9 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     if anyone "fixes" it the other way.
     """
 
-    def __init__(self, codemap: _ty.Optional[type[BaseDhcpOptionCode]] = None) -> None:
+    def __init__(
+        self, codemap: _ty.Optional[_builtins.type[BaseDhcpOptionCode]] = None
+    ) -> None:
         if codemap is None:
             codemap = DhcpOptionCode
         self._codemap = codemap
@@ -217,7 +219,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     # decodes by default and returns a `DhcpOptionType`.
     @_ty.overload  # type: ignore[override]
     def get(
-        self, __key: int, default: _ty.Any = None, *, decode: type[T]
+        self, __key: int, default: _ty.Any = None, *, decode: _builtins.type[T]
     ) -> T | None: ...
 
     @_ty.overload
@@ -247,7 +249,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         __key: int,
         default: _ty.Any = None,
         decode: _ty.Union[
-            bool, type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
+            bool, _builtins.type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
         ] = True,
     ) -> _ty.Any:
         value = self._options.get(__key, _const.MISSING)
@@ -256,7 +258,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         assert isinstance(value, bytearray)
         if decode:
             target_decoder: _ty.Union[
-                type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
+                _builtins.type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
             ]
             if decode is True:
                 target_decoder = self._codemap.from_code(__key).get_type()
@@ -350,10 +352,10 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     def items(self, decoded: _ty.Literal[True]) -> list[DhcpOption]: ...
 
     @_ty.overload
-    def items(self, decoded: type[C]) -> list[DhcpOption]: ...
+    def items(self, decoded: _builtins.type[C]) -> list[DhcpOption]: ...
 
     def items(
-        self, decoded: _ty.Union[bool, type[BaseDhcpOptionCode]] = True
+        self, decoded: _ty.Union[bool, _builtins.type[BaseDhcpOptionCode]] = True
     ) -> _ty.Union[list[DhcpOption], _ty.ItemsView[int, bytearray]]:
         raw = self._options.items()
         if not decoded:

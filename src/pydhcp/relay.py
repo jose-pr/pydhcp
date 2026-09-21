@@ -115,7 +115,7 @@ class DhcpRelay(_Base):
         trust_client_relay_agent_info: bool = False,
         select_timeout: _ty.Optional[float] = None,
         max_packet_size: _ty.Optional[int] = None,
-        per_interface: bool | None = None,
+        per_interface: _ty.Optional[bool] = None,
     ) -> None:
         super().__init__(
             listen=listen,
@@ -450,7 +450,7 @@ class AsyncDhcpRelay(_AsyncBase, DhcpRelay):  # type: ignore[misc]
         remote_id: _ty.Optional[bytes] = None,
         trust_client_relay_agent_info: bool = False,
         max_packet_size: _ty.Optional[int] = None,
-        per_interface: bool | None = None,
+        per_interface: _ty.Optional[bool] = None,
     ) -> None:
         _AsyncBase.__init__(
             self,
