@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- `duho` floor raised to `>=0.6.0,<0.7` (was `>=0.5.0,<0.6`). No pydhcp code
+  change was needed: the three duho-0.6 regressions found against a
+  pre-release snapshot (`sys.exit` return typing, an unconditional stderr
+  handler, and logger levels pinned on descendant loggers) are fixed in the
+  release. `duho` 0.6 also added an MCP-over-stdio launch mode, triggered by
+  setting `PYDHCP_MCP=stdio` in the environment; the `pydhcp` CLI (`App`) is
+  left at that default (no opt-out) rather than disabling it.
+
 ## [0.6.0] - 2026-09-21
 
 The 0.5.2 review remediation: 122 commits closing all 339 findings of a multi-agent
