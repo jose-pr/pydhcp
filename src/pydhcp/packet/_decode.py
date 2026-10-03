@@ -29,6 +29,21 @@ class _MessageDecode(_MessageFields):
     def decode(
         cls: "type[_Decoded]", data: _ty.Union[bytes, bytearray, memoryview]
     ) -> _Decoded:
+        """Parse one wire message.
+
+        Liberal on receive, deliberately: there is no minimum size (a 241-octet
+        message -- fixed header, magic cookie, END -- decodes), an `htype` with no
+        IANA name is kept as an unnamed member rather than rewritten, `hlen = 0` is
+        accepted (RFC 4390 requires it for IPoIB), and `sname`/`file` text that is
+        not valid UTF-8 is preserved octet for octet. A relay must forward what it
+        received. RFC 2132 s9.3 overload is honoured: options packed into `file`
+        and `sname` are read back and the fields take their literal values from
+        options 67/66. Constructs `cls`, so a subclass decodes to itself.
+
+        Raises:
+            ValueError: shorter than the fixed header or magic cookie, a wrong
+                magic cookie, `hlen > 16`, or no END marker.
+        """
         if not isinstance(data, memoryview):
             data = memoryview(data)
         if len(data) < _FIXED_HEADER_SIZE:

@@ -50,6 +50,12 @@ class _MessageDisplay(_MessageMapping):
         return cid.hex(":").upper()
 
     def dumps(self, codemap: _ty.Optional[type[BaseDhcpOptionCode]] = None) -> str:
+        """A human-readable multi-line summary: header fields, then each option.
+
+        What `log`/`log_str` and the CLI's ``--format summary`` print. Text fields go
+        through `pydhcp.nvt.display`, so it is always safe for a terminal. `codemap`
+        names the options; it defaults to the message's own.
+        """
         lines = []
         for name, value in [
             ("OP", self.op.name),
@@ -104,12 +110,14 @@ class _MessageDisplay(_MessageMapping):
         return "\n".join(lines)
 
     def log_str(self, src: _ty.Any, dst: _ty.Any) -> str:
+        """`dumps()` under a one-line header naming the op, XID, source and destination."""
         return (
             f"{self.op.name} XID={self.xid:08X} Src: {src} Dst: {dst}\n"
             f"{self.dumps()}"
         )
 
     def __contains__(self, __key: object) -> bool:
+        """Whether the message carries option `__key` (a code or `DhcpOptionCode`)."""
         return self.options.__contains__(__key)
 
     def log(self, src: _ty.Any, dst: _ty.Any, level: int) -> None:

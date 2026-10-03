@@ -113,6 +113,14 @@ class _MessageMapping(_MessageEncode):
     """`to_mapping` / `from_mapping`, byte-exact."""
 
     def to_mapping(self) -> dict[str, _ty.Any]:
+        """The message as a plain dict: header fields, then `options`.
+
+        The basis of the JSON/YAML/TOML/INI helpers, and byte-exact: an option whose
+        readable form would not reproduce its octets -- non-UTF-8 text, a payload
+        its codec normalises, a length the codec does not keep -- is written as
+        ``{HEX_VALUE_KEY: "..."}`` instead. Option keys are the code's name, or its
+        number as a string when it has none. Integers are plain `int`.
+        """
         options: dict[str, _ty.Any] = {}
         for code, value in self.options._options.items():
             try:
@@ -193,6 +201,18 @@ class _MessageMapping(_MessageEncode):
 
     @classmethod
     def from_mapping(cls: "type[_Mapped]", data: _ty.Mapping[str, _ty.Any]) -> _Mapped:
+        """Build a message from a mapping in the shape `to_mapping` produces.
+
+        Accepts option keys by name or number and the ``{HEX_VALUE_KEY: ...}`` raw
+        form, so `to_mapping` -> `from_mapping` round-trips exactly. A MAC written
+        unquoted in YAML (read as a sexagesimal integer) is refused with a message
+        naming the cause, and a missing `sname`/`file` is empty, never the text
+        "None". Constructs `cls`.
+
+        Raises:
+            TypeError: `options` is not a mapping, or a field has the wrong type.
+            ValueError: a field or option value cannot be coerced.
+        """
         options = DhcpOptions()
         raw_options = data.get("options", {})
         if not isinstance(raw_options, _ty.Mapping):
