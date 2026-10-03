@@ -21,6 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `pydhcp.network.SocketOption` is `netimps.SocketOption` (same three fields).
 - `MACAddress.hex()` is inherited from netimps (identical behaviour) rather
   than overridden, and `str(SocketAddress)` is built with `netimps.join_host`.
+- **`DhcpClient`'s retransmission schedule comes from
+  `netimps.backoff_delays(jitter_seconds=1.0)`.** Two deliberate differences
+  from the hand-rolled one, both closer to RFC 2131 §4.1: the ±1 s jitter is
+  applied after the 64 s cap, so a backed-off wait is 63–65 s instead of
+  clamped one-sidedly below 64 (which re-synchronises clients exactly where
+  they spend their time), and the amplitude is capped at the current delay
+  rather than a quarter of it.
 
 ### Removed
 

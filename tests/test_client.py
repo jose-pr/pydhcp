@@ -453,7 +453,9 @@ def test_retransmissions_back_off_instead_of_repeating_one_interval():
     assert len(set(client.intervals)) == 4, client.intervals
     for attempt, interval in enumerate(client.intervals):
         base = 2.0 * 2**attempt
-        assert abs(interval - base) <= min(1.0, base / 4) + 1e-9
+        # +/-1 s around the doubled base (RFC 2131 s4.1), the amplitude capped
+        # at the base itself so a short interval cannot go negative.
+        assert abs(interval - base) <= min(1.0, base) + 1e-9
 
 
 def test_retransmission_interval_is_jittered_within_the_rfc_band():
@@ -461,23 +463,29 @@ def test_retransmission_interval_is_jittered_within_the_rfc_band():
 
     The randomization is the point, not the doubling: without it every client
     that started together retransmits together, which is the collision it
-    exists to break up.
+    exists to break up. Both directions: a mode that only ever shortens the
+    delay is not the RFC's.
     """
     client = DhcpClient(listen=("127.0.0.1", 0))
 
-    draws = {client._retransmit_interval(0, 4.0) for _ in range(32)}
+    draws = [next(client._retransmit_intervals(4.0, 0)) for _ in range(64)]
 
-    assert len(draws) > 1
+    assert len(set(draws)) > 1
     assert all(3.0 <= draw <= 5.0 for draw in draws), draws
+    assert min(draws) < 4.0 < max(draws), "the jitter is one-sided"
 
 
 def test_retransmission_interval_is_capped_at_the_rfc_maximum():
-    """§4.1: doubling continues "up to a maximum of 64 seconds"."""
+    """§4.1: doubling continues "up to a maximum of 64 seconds", randomized
+    around that maximum -- not clamped one-sidedly below it, which would
+    re-synchronise backed-off clients exactly where they spend their time."""
     client = DhcpClient(listen=("127.0.0.1", 0))
 
-    for attempt in (6, 10, 20):
-        interval = client._retransmit_interval(attempt, 2.0)
-        assert 63.0 <= interval <= client.RETRANSMIT_MAX_INTERVAL
+    late = list(client._retransmit_intervals(2.0, 20))[6:]
+
+    assert late, "the schedule ended early"
+    for interval in late:
+        assert 63.0 <= interval <= 65.0, interval
 
 
 def test_secs_counts_up_across_retransmissions():

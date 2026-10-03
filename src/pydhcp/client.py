@@ -3,11 +3,12 @@ from __future__ import annotations
 import contextlib as _contextlib
 import datetime as _dt
 import queue as _queue
-import random as _random
 import secrets as _secrets
 import threading as _threading
 import time as _time
 import typing as _ty
+
+import netimps as _netimps
 
 from . import constants as _const, network as _net
 from .packet import enums as _enum
@@ -40,12 +41,12 @@ class DhcpClient(DhcpListener):
     RETRANSMIT_MAX_INTERVAL = 64.0
 
     #: RFC 2131 s4.1 randomizes each interval "by the value of a uniform random
-    #: number chosen from the range -1 to +1". That range is written against the
-    #: RFC's own 4-second first delay; `timeout` here is caller-chosen and is
-    #: often a fraction of a second in a test, where +/-1s would be both longer
-    #: than the interval and able to drive it negative. So the amplitude is
-    #: whichever is smaller, this or a quarter of the interval -- identical to
-    #: the RFC once the interval reaches 4s, proportional below it.
+    #: number chosen from the range -1 to +1" -- seconds, both ways. netimps'
+    #: `backoff_delays(jitter_seconds=)` applies it after the cap, as the RFC
+    #: does, so a backed-off client spends its time spread across 63-65 s rather
+    #: than clamped one-sidedly below 64 (which re-synchronises a fleet exactly
+    #: where it spends nearly all its time). The amplitude is capped at the
+    #: current delay, so a sub-second test `timeout` cannot go negative.
     RETRANSMIT_JITTER_SECONDS = 1.0
 
     def __init__(
@@ -211,23 +212,25 @@ class DhcpClient(DhcpListener):
         """
         return msg.xid, bytes(msg.chaddr[: msg.hlen or len(msg.chaddr)])
 
-    def _retransmit_interval(self, attempt: int, initial: float) -> float:
-        """How long to wait for a reply before retransmission `attempt`+1.
+    def _retransmit_intervals(
+        self, timeout: float, retries: int
+    ) -> _ty.Iterator[float]:
+        """How long to wait for a reply after each of ``retries + 1`` sends.
 
         RFC 2131 s4.1: the delay doubles with each retransmission up to 64
-        seconds, randomized each time. The randomization is not decoration -- a
-        fleet of clients that back off in lock-step retransmits in lock-step,
-        which is the collision the jitter exists to break up.
+        seconds, randomized each time by +/-1 s. The randomization is not
+        decoration -- a fleet of clients that back off in lock-step retransmits
+        in lock-step, which is the collision the jitter exists to break up.
+        netimps owns the schedule; `backoff_delays` yields ``attempts - 1``
+        values, one per wait.
         """
-        # `2.0**attempt`, not `2**attempt`: int ** int is typed as returning
-        # Any (a negative exponent gives a float), which silently spreads
-        # through every value derived from it.
-        interval = min(initial * 2.0**attempt, self.RETRANSMIT_MAX_INTERVAL)
-        amplitude = min(self.RETRANSMIT_JITTER_SECONDS, interval / 4)
-        jittered = interval + _random.uniform(-amplitude, amplitude)
-        # Clamped, not just centred: "a maximum of 64 seconds" is the ceiling on
-        # the delay itself, so at the cap the randomization is one-sided.
-        return max(0.0, min(jittered, self.RETRANSMIT_MAX_INTERVAL))
+        return _netimps.backoff_delays(
+            attempts=retries + 2,
+            delay=timeout,
+            multiplier=2.0,
+            max_delay=self.RETRANSMIT_MAX_INTERVAL,
+            jitter_seconds=self.RETRANSMIT_JITTER_SECONDS,
+        )
 
     def _exchange(
         self,
@@ -256,15 +259,11 @@ class DhcpClient(DhcpListener):
             # with no queue to route it to it would land in the shared one and
             # be invisible to the exchange that asked for it.
             with self._waiting_for(key) as waiter:
-                for attempt in range(retries + 1):
+                for interval in self._retransmit_intervals(timeout, retries):
                     elapsed = self._monotonic() - started_at
                     message.secs = _dt.timedelta(seconds=max(0.0, elapsed))
                     self.send(message, destination, port)
-                    reply = self._wait_for(
-                        waiter,
-                        msg_type,
-                        self._retransmit_interval(attempt, timeout),
-                    )
+                    reply = self._wait_for(waiter, msg_type, interval)
                     if reply is not None:
                         return reply
                 return None

@@ -289,9 +289,9 @@ client build helpers below to keep the exchange unicast.
     port=..., **discover_kwargs) -> DhcpMessage | None` — broadcasts
     DHCPDISCOVER (with retries) and returns the first DHCPOFFER, or `None`.
     **`timeout` is the *initial* retransmission interval, not a fixed one**:
-    each retransmission waits roughly twice as long as the last, randomized,
-    capped at `RETRANSMIT_MAX_INTERVAL` (RFC 2131 §4.1). With the defaults the
-    call is bounded at about 2+4+8 s rather than 3×2 s. Each transmission
+    each retransmission waits twice as long as the last, randomized by ±1 s,
+    the doubling capped at `RETRANSMIT_MAX_INTERVAL` (RFC 2131 §4.1). With the
+    defaults the call is bounded at about 2+4+8 s (±1 s each) rather than 3×2 s. Each transmission
     carries a real `secs` — seconds since the exchange began (§2) — which was
     previously hardcoded to 0.
   - `.dora(chaddr, *, timeout=2.0, retries=2, destination=..., port=...,
@@ -319,9 +319,12 @@ client build helpers below to keep the exchange unicast.
     that `start()` + `.on_reply()` works as an observer; past the cap the
     oldest is discarded and counted in `metrics.replies_dropped_overflow`.
   - **`RETRANSMIT_MAX_INTERVAL`** (64.0) and
-    **`RETRANSMIT_JITTER_SECONDS`** (1.0), class vars — RFC 2131 §4.1's ceiling
-    and randomization amplitude. The jitter is the smaller of this and a
-    quarter of the interval, so a sub-second `timeout` in a test cannot be
+    **`RETRANSMIT_JITTER_SECONDS`** (1.0), class vars — RFC 2131 §4.1's cap on
+    the doubling and its randomization amplitude, passed to
+    `netimps.backoff_delays(jitter_seconds=...)`. The jitter is symmetric and
+    applied **after** the cap, as the RFC does, so a backed-off wait falls in
+    63–65 s rather than being clamped one-sidedly under 64. The amplitude is
+    capped at the current delay, so a sub-second `timeout` in a test cannot be
     jittered negative.
 
 **Gotcha**: `.dora()`/`.discover_offer()` require the listener's receive loop
