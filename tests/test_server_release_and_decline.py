@@ -103,6 +103,11 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
             [NetworkInterface("eth0", IFACE_A), NetworkInterface("eth1", IFACE_B)]
         ),
     )
+    monkeypatch.setattr(
+        server_module._netimps,
+        "is_local_address",
+        lambda address: address in {IFACE_A.ip, IFACE_B.ip},
+    )
     client_id = _seed(server, "10.0.0.50")
 
     # The client selected address A; this is B's copy of the same broadcast.
@@ -119,6 +124,13 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
     ), "a second address of this same host deleted the binding"
 
 
+def test_the_identity_check_asks_the_real_host(server) -> None:
+    """Unmocked: loopback is this host and a TEST-NET-3 address (RFC 5737) is
+    not, whatever this machine's adapters hold."""
+    assert server._is_our_server_id(IPv4("127.0.0.1"), IPv4("10.255.0.1")) is True
+    assert server._is_our_server_id(IPv4("203.0.113.77"), IPv4("10.255.0.1")) is False
+
+
 def test_a_genuinely_foreign_server_id_still_reclaims(server, monkeypatch) -> None:
     """The counterpart: choosing another server does give the reservation back.
 
@@ -131,6 +143,11 @@ def test_a_genuinely_foreign_server_id_still_reclaims(server, monkeypatch) -> No
         server_module._net,
         "host_ip_interfaces",
         lambda *a, **k: iter([NetworkInterface("eth0", IFACE_A)]),
+    )
+    monkeypatch.setattr(
+        server_module._netimps,
+        "is_local_address",
+        lambda address: address == IFACE_A.ip,
     )
     client_id = _seed(server, "10.0.0.50")
 

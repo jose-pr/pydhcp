@@ -49,6 +49,12 @@ def host(monkeypatch):
     import pydhcp.server as server_module
 
     monkeypatch.setattr(server_module._net, "host_ip_interfaces", fake)
+    # The identity question ("do we hold this address") is netimps', and it
+    # answers from the same fake host: link-local included, unfiltered.
+    held = {ni.ip for ni in interfaces}
+    monkeypatch.setattr(
+        server_module._netimps, "is_local_address", lambda address: address in held
+    )
     monkeypatch.setattr(server_module, "_SERVABLE_INTERFACES", {})
     return interfaces
 
@@ -96,9 +102,10 @@ def test_no_lease_is_allocated_from_a_link_local_network(host) -> None:
 def test_the_identity_check_still_sees_a_link_local_address(host) -> None:
     """The counterpart: "do we hold this address" is a different question.
 
-    `_is_our_server_id` passes `filter=False` deliberately — a second socket on
-    a link-local address is still this host, and treating it as foreign is what
-    made a multi-address host delete its own bindings.
+    `_is_our_server_id` asks `netimps.is_local_address`, which does not filter
+    link-local — a second socket on a link-local address is still this host,
+    and treating it as foreign is what made a multi-address host delete its own
+    bindings.
     """
     server = DhcpServer(lease_backend=InMemoryLeaseBackend())
 

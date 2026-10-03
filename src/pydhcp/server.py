@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import copy as _copy
 import math as _math
+
+import netimps as _netimps
+
 from .packet.message import DhcpMessage, NoClientIdentity
 from .listener import (
     DhcpListener as _Base,
@@ -272,13 +275,11 @@ class DhcpServer(_Base):
         """
         if server_id == actual_server_id:
             return True
-        # filter=False for the same reason as in `_resolve_interface`: this asks
-        # whether we *hold* an address, not whether it is one worth serving
-        # from, and the default filter hides link-local ones.
-        return any(
-            interface.ip == server_id
-            for interface in _net.host_ip_interfaces(filter=False, family=None)
-        )
+        # "Do we hold this address at all" -- loopback or assigned to a local
+        # adapter, link-local included -- which is exactly netimps'
+        # `is_local_address`. Not `host_ip_interfaces()`: its default filter
+        # hides APIPA, and identity is not selection.
+        return bool(_netimps.is_local_address(server_id))
 
     @staticmethod
     def _has_time_left(lease: DhcpLease) -> bool:
