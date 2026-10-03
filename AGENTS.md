@@ -21,6 +21,7 @@ src/pydhcp/        the package (src layout — an editable install or PYTHONPATH
   packet/          DhcpMessage, enums, structured formats
   options/         DhcpOptions, DhcpOptionCode, type/ payload codecs (incl. ccc.py)
   network/         addresses and host interface discovery
+  listener/        listeners and transports, one module per responsibility
 tests/             pytest suite, including tests/integration (real sockets on loopback)
 examples/          runnable examples; tests/test_examples.py imports each one
 benchmarks/        run.py plus per-suite scripts, JSON output for comparison
@@ -81,6 +82,11 @@ minimum and preserves the octets it was given. Liberal on receive, strict on
 send; keep it that way.
 
 ## Conventions
+
+- **Keep modules small enough to review in one sitting** — a few hundred
+  lines. Split by responsibility into a package rather than letting one file
+  grow, and keep the package's `__init__` re-exporting the names callers
+  already import, so a split never moves a public import path.
 
 - **Option codecs** live in `src/pydhcp/options/type/` and are bound to codes
   in `registry.py`. A codec must match the wire form its RFC defines, and a

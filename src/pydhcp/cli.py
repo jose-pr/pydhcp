@@ -19,7 +19,7 @@ from .capture import (
     DhcpCapture,
     validate_filename_pattern,
 )
-from .listener import _split_host_port
+from .listener.spec import _split_host_port
 from .network import host_ip_interfaces
 from .server import DhcpServer
 from .lease import FileLeaseBackend, LeaseBackend

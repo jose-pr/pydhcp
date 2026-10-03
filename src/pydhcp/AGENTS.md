@@ -31,7 +31,12 @@ of those, so the bare name already says it is a pydhcp type. The test applied
 was whether a reader meeting the name at top level could mistake it for
 something else.
 
-## Listener / transport (`listener.py`)
+## Listener / transport (`listener/`)
+
+A package split by responsibility (`transport`, `spec`, `interfaces`,
+`receive`, `binding`, `sync`, `aio`); import everything below from
+`pydhcp.listener` itself, as before.
+
 
 - **`DhcpListener(listen=None, select_timeout=None, max_packet_size=None,
   per_interface=None)`** — synchronous, thread-based receive loop.

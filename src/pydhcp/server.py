@@ -6,12 +6,8 @@ import math as _math
 import netimps as _netimps
 
 from .packet.message import DhcpMessage, NoClientIdentity
-from .listener import (
-    DhcpListener as _Base,
-    ListenSpec,
-    RequestContext,
-    _register_address_cache,
-)
+from .listener import DhcpListener as _Base, ListenSpec, RequestContext
+from .listener.interfaces import _register_address_cache
 from . import constants as _const, network as _net
 from .packet import enums as _enum
 from .options import DhcpOptionCode, DhcpOptions

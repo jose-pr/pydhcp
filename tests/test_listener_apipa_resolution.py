@@ -45,16 +45,12 @@ def apipa_only(monkeypatch):
     monkeypatch.setattr(net, "host_ip_interfaces", fake)
     import netimps
 
-    import pydhcp.listener as listener_module
-
     # The resolver asks netimps which adapter holds an address, unfiltered.
     adapters = {
         ni.ip: netimps.Interface(ni.name, index=n + 1, ips=[ni.ip_interface])
         for n, ni in enumerate(interfaces)
     }
-    monkeypatch.setattr(
-        listener_module._netimps, "interface_for", lambda address: adapters.get(address)
-    )
+    monkeypatch.setattr(netimps, "interface_for", lambda address: adapters.get(address))
     return interfaces[1]
 
 

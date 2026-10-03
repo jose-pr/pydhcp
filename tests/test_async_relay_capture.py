@@ -145,11 +145,22 @@ _POLICY = {
 }
 
 
+def _listener_code(path: str) -> "set[str]":
+    """A receive-path definition's lines, from whichever `listener/` module
+    holds it -- the package is split by responsibility."""
+    for source in sorted((SRC / "listener").glob("*.py")):
+        tree, lines = _module(str(source.relative_to(SRC)))
+        try:
+            return _code_lines(_node(tree, path), lines)
+        except AssertionError:
+            continue
+    raise AssertionError(f"{path!r} is in no listener module")
+
+
 def _shared_corpus(module: str) -> "set[str]":
-    listener_tree, listener_lines = _module("listener.py")
     corpus: set[str] = set()
     for path in _RECEIVE_PATH:
-        corpus |= _code_lines(_node(listener_tree, path), listener_lines)
+        corpus |= _listener_code(path)
     tree, lines = _module(module)
     for path in _POLICY[module]:
         corpus |= _code_lines(_node(tree, path), lines)

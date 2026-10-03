@@ -27,9 +27,7 @@ def test_parse_wildcard_expands_ipv4_interfaces(monkeypatch) -> None:
         NetworkInterface("eth0", ipaddress.IPv4Interface("192.0.2.10/24")),
         NetworkInterface("eth1", ipaddress.IPv4Interface("198.51.100.10/24")),
     ]
-    monkeypatch.setattr(
-        "pydhcp.listener._net.host_ip_interfaces", lambda: iter(interfaces)
-    )
+    monkeypatch.setattr("pydhcp.network.host_ip_interfaces", lambda: iter(interfaces))
 
     assert _parselisteners("*", (67,)) == [
         SocketAddress("192.0.2.10", 67),
@@ -266,7 +264,9 @@ def test_interface_resolution_is_cached_and_cleared_by_bind() -> None:
     modest flood denied service on its own."""
     import socket
 
-    from pydhcp import listener as listener_module
+    # The module that owns the resolver: `_resolve_interface` looks the
+    # uncached half up there, so that is where the counter has to go.
+    from pydhcp.listener import interfaces as listener_module
     from pydhcp.listener import _clear_interface_cache, _resolve_interface
 
     calls = []
