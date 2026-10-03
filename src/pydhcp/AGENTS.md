@@ -184,7 +184,16 @@ and silently allows it). Any test/deployment that binds to a specific loopback
 IP and needs a broadcast reply path should pass `broadcast=False` through the
 client build helpers below to keep the exchange unicast.
 
-## Server (`server.py`)
+## Server (`server/`)
+
+A package. `DhcpServer` is composed of layers, each subclassing the last and
+each in its own module: `_state` (the constants below and per-instance state),
+`policy` (`acquire_lease`, `lease_seconds`, `release_lease`,
+`quarantine_address`, `get_inform_options`), `reply` (building and delivering
+the reply) and `handlers` (`handle` and the `handle_*` methods). Import from
+`pydhcp.server` and override on your subclass exactly as before; a test patching
+a module global patches it in the layer that reads it (`pydhcp.server.policy`).
+
 
 - **`DhcpServer(listen=None, select_timeout=None, max_packet_size=None,
   lease_backend=None, per_interface=None)`** (`DhcpListener` subclass) —

@@ -19,7 +19,7 @@ from .packet import enums as _enum
 from .options import DhcpOptionCode
 from .options import type as _type
 from .log import LOGGER
-from .server import _is_loopback
+from .server.reply import _is_loopback
 
 ServerAddress = _ty.Union[_net.IPv4, str, tuple[_ty.Union[_net.IPv4, str], int]]
 

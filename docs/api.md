@@ -47,6 +47,10 @@ serve a private or vendor option space instead of the IANA registry above.
 ## DhcpServer
 
 ::: pydhcp.server.DhcpServer
+    options:
+      # The server is composed of layered classes in pydhcp.server; without this
+      # the page would show only __init__.
+      inherited_members: true
 
 ## DhcpClient
 
@@ -67,6 +71,10 @@ serve a private or vendor option space instead of the IANA registry above.
 ## AsyncDhcpServer
 
 ::: pydhcp.server.AsyncDhcpServer
+    options:
+      # The server is composed of layered classes in pydhcp.server; without this
+      # the page would show only __init__.
+      inherited_members: true
 
 ## AsyncDhcpRelay
 
