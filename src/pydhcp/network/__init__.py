@@ -36,21 +36,6 @@ class MACAddress(_netimps.MACAddress):
     def __str__(self) -> str:
         return self.as_str("-", upper=True)
 
-    def hex(
-        self, sep: _ty.Union[str, bytes, None] = None, bytes_per_sep: int = 1
-    ) -> str:
-        """``bytes.hex`` passthrough.
-
-        The base type is a value object exposing ``.packed`` rather than a
-        ``bytes`` subclass, so this method is not inherited -- but callers
-        (and tests) predating that reasonably expect it. ``sep`` and
-        ``bytes_per_sep`` mean what they do on :meth:`bytes.hex`; omitting
-        ``sep`` gives the unseparated form.
-        """
-        if sep is None:
-            return self.packed.hex()
-        return self.packed.hex(sep, bytes_per_sep)
-
 
 #: Pseudo-members for hardware types with no name, cached so identity holds.
 _HTYPE_PSEUDO_MEMBERS: "dict[int, HardwareAddressType]" = {}
@@ -187,7 +172,7 @@ class SocketAddress(_SocketAddress):
         return (str(self.ip), self.port)
 
     def __str__(self) -> str:
-        return f"{self.ip}:{self.port}"
+        return _netimps.join_host(self.ip, self.port)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(ip={self.ip}, port={self.port})"
@@ -242,40 +227,6 @@ class SocketAddress(_SocketAddress):
             connreset=connreset,
             options=tuple(options),
         )
-
-
-class SocketSession(_ty.NamedTuple):
-    socket: _socket.socket
-    client: SocketAddress
-
-    @property
-    def server(self) -> SocketAddress:
-        ip, port = self.socket.getsockname()
-        return SocketAddress(ip, port)
-
-    def respond(
-        self,
-        data: _ty.Union[bytes, bytearray, memoryview],
-        to: _ty.Optional[
-            _ty.Union[SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str]
-        ] = None,
-    ) -> int:
-        if to is None:
-            to_addr: _ty.Union[
-                SocketAddress, tuple[_ty.Union[IPv4, str], int], IPv4, str
-            ] = self.client
-        else:
-            to_addr = to
-
-        if not isinstance(to_addr, (tuple, list)):
-            dest: _ty.Union[IPv4, str] = to_addr
-            port: int = self.client.port
-        else:
-            dest, port = to_addr
-
-        dest_ip = IPv4(dest)
-        dest_str = "255.255.255.255" if dest_ip == WILDCARD_IPv4 else str(dest_ip)
-        return self.socket.sendto(data, (dest_str, int(port)))
 
 
 class NetworkInterface(_ty.NamedTuple):

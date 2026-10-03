@@ -19,6 +19,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `REUSE_ADDRESS=True` now means `allow_address_takeover=True`; the exclusive
   default is netimps' on every platform.
 - `pydhcp.network.SocketOption` is `netimps.SocketOption` (same three fields).
+- `MACAddress.hex()` is inherited from netimps (identical behaviour) rather
+  than overridden, and `str(SocketAddress)` is built with `netimps.join_host`.
+
+### Removed
+
+- **`pydhcp.network.SocketSession`**, which nothing in pydhcp used and which
+  duplicated `UdpTransport`'s rule that a `0.0.0.0` destination means the
+  limited broadcast. Send through a `Transport` instead.
 
 ### Fixed
 

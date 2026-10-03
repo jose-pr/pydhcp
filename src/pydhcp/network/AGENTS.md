@@ -22,10 +22,10 @@ of the installed package).
   uppercase hyphen-separated (`"AA-BB-CC-DD-EE-FF"`), which is the only thing
   this subclass changes.
   - **Not a `bytes` subclass** (the base type is a value object) — use
-    `.packed` for the raw bytes. `.hex(sep=None, bytes_per_sep=1)` is kept as
-    a `bytes.hex` passthrough; omitting `sep` gives the unseparated form.
-  - Inherits `.oui`, `.is_multicast`, `.is_local` and ordering, and compares
-    equal to a base `netimps.MACAddress` with the same bytes.
+    `.packed` for the raw bytes.
+  - Inherits `.hex(sep=None, bytes_per_sep=1)` (exactly `bytes.hex`), `.oui`,
+    `.is_multicast`, `.is_local` and ordering from netimps, and compares equal
+    to a base `netimps.MACAddress` with the same bytes.
   - **A display type.** The wire hardware address (`chaddr`, option 61) is raw
     `bytes` throughout `packet/` and never passes through here — `chaddr`
     permits `hlen` up to 16 for non-Ethernet `htype`, while a MAC is exactly 6.
@@ -64,10 +64,6 @@ of the installed package).
 - **`SocketOption`** — `netimps.SocketOption` (`NamedTuple[level, name,
   value]`), re-exported: one `setsockopt` call, as passed to
   `SocketAddress.listen(options=...)`.
-- **`SocketSession`** (`NamedTuple[socket, client: SocketAddress]`) —
-  `.server` property resolves the bound local `SocketAddress`; `.respond(data,
-  to=None) -> int` sends back to `to` (defaults to `.client`); a wildcard
-  destination (`WILDCARD_IPv4`) resends as a broadcast automatically.
 - **`NetworkInterface`** (`NamedTuple[name: str, ip_interface:
   IPv4Interface | IPv6Interface, mac: MACAddress | None = None]`) — `.ip`
   and `.network` properties delegate to `ip_interface`.
