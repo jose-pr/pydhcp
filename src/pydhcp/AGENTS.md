@@ -108,7 +108,7 @@ something else.
     a no-op. Called for every successfully decoded packet.
 - **`AsyncDhcpListener(listen=None, max_packet_size=None,
   per_interface=None)`** — `asyncio` counterpart, with the same receive path,
-  the same `IP_PKTINFO` wildcard routing and the same `listen` forms as
+  the same packet-info wildcard routing and the same `listen` forms as
   `DhcpListener`. `await .start()` binds and registers each socket with the
   event loop; `.stop()` unregisters and closes them. `.stop()` is **not** a
   coroutine — it is reached through the inherited `DhcpListener` contract,

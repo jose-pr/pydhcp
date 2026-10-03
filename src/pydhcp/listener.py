@@ -607,7 +607,7 @@ def _resolve_interface(
 ) -> _net.NetworkInterface:
     """Find the NetworkInterface a datagram actually arrived on.
 
-    ``pkt_local_ip``/``pkt_ifindex`` come from the ``IP_PKTINFO`` control message
+    ``pkt_local_ip``/``pkt_ifindex`` come from the datagram's packet info
     and are authoritative when present: the pktinfo path only runs on a wildcard
     bind, where ``getsockname()`` reports 0.0.0.0 -- precisely the information
     pktinfo exists to supply. The address picks the adapter and which of its

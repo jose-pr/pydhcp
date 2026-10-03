@@ -258,7 +258,7 @@ class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
     """`DhcpCapture`'s filter/sink/hook policy on the asyncio listener.
 
     Mixed the way `AsyncDhcpServer` is: no receive-path code is repeated here,
-    so the `IP_PKTINFO` wildcard path, the interface resolution and the bind
+    so the packet-info wildcard path, the interface resolution and the bind
     diagnostics are the same ones the sync capture uses.
 
     `accepted_count`, `hook_error` and anything a `sink` keeps are unguarded,

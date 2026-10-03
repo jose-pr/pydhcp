@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Needs the next netimps release.** This uses netimps APIs that are not in
+  any netimps published yet (`AddressInUseError`, `UdpEndpoint.arecv()`,
+  `backoff_delays(jitter_seconds=)`, exclusive-by-default `bind()`), and is
+  developed against netimps' `main`. The `netimps` floor in `pyproject.toml`
+  is raised to that release when both are published together; until then an
+  install that resolves netimps from PyPI does not run this code.
 - **A taken port raises `netimps.AddressInUseError`** from `DhcpListener.bind()`
   and `SocketAddress.listen()` — an `OSError` subclass, so `except OSError`
   still catches it, but never a `PermissionError`. Windows reports a port held

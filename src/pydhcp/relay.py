@@ -180,7 +180,7 @@ class DhcpRelay(_Base):
 
     @staticmethod
     def _routed_transport(transport: _Transport) -> _Transport:
-        """Drop the IP_PKTINFO source pin for a send to a different network.
+        """Drop the packet-info source pin for a send to a different network.
 
         A relay forwards *across* interfaces, which is the one case the pin gets
         wrong. It exists so a server replies out of the interface the request
