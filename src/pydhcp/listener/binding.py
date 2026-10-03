@@ -46,6 +46,39 @@ def _raise_bind_error(error: OSError, address: _net.SocketAddress) -> "_ty.NoRet
     raise OSError(error.errno, hint) from error
 
 
+def _grow_receive_buffer(
+    sock: _socket.socket, address: _net.SocketAddress, wanted: int
+) -> None:
+    """Grow `sock`'s receive buffer to `wanted` octets, and say if it was refused.
+
+    A DHCP server is a burst receiver: a segment powering up sends its DISCOVERs
+    together. The default buffer is small -- 64 KiB on Windows, which holds about
+    220 of a typical 300-octet DHCP datagram -- and measured, a 1000-datagram
+    burst at a wildcard server delivered exactly 220; the kernel dropped the
+    rest before the server could read them, and the clients waited out their
+    retransmission timers.
+
+    The kernel may grant less than asked and does not say so (`setsockopt`
+    succeeds; Linux caps at `net.core.rmem_max` and also doubles what it
+    reports), so the grant is read back through `netimps.set_buffer_size` and a
+    shortfall is logged once per socket rather than assumed away. Failure to
+    grow is not fatal: the socket works at its default size.
+    """
+    try:
+        granted, _send = _netimps.set_buffer_size(sock, receive=wanted)
+    except OSError as error:
+        LOGGER.warning(
+            f"Could not grow the receive buffer on {address} to {wanted} octets: "
+            f"{error}; keeping the OS default."
+        )
+        return
+    if granted < wanted:
+        LOGGER.info(
+            f"Receive buffer on {address}: asked for {wanted} octets, the OS "
+            f"granted {granted} (on Linux, raise net.core.rmem_max to allow more)."
+        )
+
+
 def _bind_sockets(
     listen: "_ty.Sequence[_net.SocketAddress]",
     sockets: "list[_socket.socket]",
@@ -53,6 +86,7 @@ def _bind_sockets(
     pktinfo: bool,
     label: str = "",
     reuse_address: bool = False,
+    receive_buffer: int = 0,
 ) -> None:
     """Bind one socket per listen address, reusing any already bound.
 
@@ -68,6 +102,9 @@ def _bind_sockets(
     the address it was *asked* for, not the one it was given, so re-binding a
     port-0 listener keeps the ephemeral port it already has. See
     `_REQUESTED_ADDRESS`.
+
+    ``receive_buffer`` grows each new socket's receive buffer to that many
+    octets (0 leaves the OS default); see `_grow_receive_buffer`.
 
     Binding is the moment the set of addresses served can change, so it drops
     netimps' interface-enumeration cache rather than leaving the next lookup
@@ -110,6 +147,8 @@ def _bind_sockets(
             )
         except OSError as e:
             _raise_bind_error(e, address)
+        if receive_buffer:
+            _grow_receive_buffer(sock, address, receive_buffer)
         endpoints[sock] = _netimps.UdpEndpoint(
             sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_IPv4
         )

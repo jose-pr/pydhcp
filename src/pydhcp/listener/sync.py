@@ -37,6 +37,13 @@ class DhcpListener:
     #: constructor having to forward it.
     REUSE_ADDRESS: bool = False
 
+    #: Receive buffer to ask the OS for on every listening socket, in octets;
+    #: 0 keeps the OS default. 1 MiB holds about 3500 typical 300-octet DHCP
+    #: datagrams, against about 220 in Windows' 64 KiB default -- a segment
+    #: powering up sends its DISCOVERs together. The kernel may grant less
+    #: (Linux caps at net.core.rmem_max); a shortfall is logged at INFO.
+    RECEIVE_BUFFER_SIZE: int = 1 << 20
+
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -96,6 +103,7 @@ class DhcpListener:
             self._endpoints,
             self._pktinfo,
             reuse_address=self.REUSE_ADDRESS,
+            receive_buffer=self.RECEIVE_BUFFER_SIZE,
         )
 
     def stop(self) -> None:

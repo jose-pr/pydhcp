@@ -168,6 +168,50 @@ def test_reuse_address_is_opt_in_and_reaches_the_socket() -> None:
         reusing.close()
 
 
+def _rcvbuf(sock: socket.socket) -> int:
+    return sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+
+
+def test_the_receive_buffer_is_grown_or_the_shortfall_is_reported(caplog) -> None:
+    """A segment powering up sends its DISCOVERs together. Measured on Windows,
+    whose default buffer is 64 KiB: a 1000-datagram burst at a wildcard server
+    delivered exactly 220 -- about what 64 KiB holds at 300 octets each -- and
+    all 1000 with a 1 MiB buffer. The kernel may grant less than asked (Linux
+    caps at rmem_max and doubles the read-back), so either the grant took or
+    the listener said it did not."""
+    import logging
+
+    class Grown(DhcpListener):
+        RECEIVE_BUFFER_SIZE = 256 * 1024
+
+    listener = Grown(listen=("127.0.0.1", 0))
+    with caplog.at_level(logging.INFO, logger="pydhcp"):
+        listener.bind()
+    try:
+        granted = _rcvbuf(listener._sockets[0])
+    finally:
+        listener.close()
+
+    reported = [r for r in caplog.records if "Receive buffer" in r.getMessage()]
+    assert (
+        granted >= Grown.RECEIVE_BUFFER_SIZE or reported
+    ), f"granted {granted} of {Grown.RECEIVE_BUFFER_SIZE} and said nothing"
+
+
+def test_a_zero_receive_buffer_keeps_the_os_default() -> None:
+    class Default(DhcpListener):
+        RECEIVE_BUFFER_SIZE = 0
+
+    plain = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    listener = Default(listen=("127.0.0.1", 0))
+    listener.bind()
+    try:
+        assert _rcvbuf(listener._sockets[0]) == _rcvbuf(plain)
+    finally:
+        listener.close()
+        plain.close()
+
+
 @pytest.mark.skipif(
     SO_EXCLUSIVEADDRUSE is None, reason="SO_EXCLUSIVEADDRUSE is Windows-only"
 )

@@ -66,6 +66,13 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     (`SO_EXCLUSIVEADDRUSE` on Windows, where a more specific `SO_REUSEADDR`
     bind could otherwise take the traffic). A class attribute, so every
     subclass inherits it and a subclass or instance can opt back in.
+  - **`RECEIVE_BUFFER_SIZE`** (class var, `1 << 20`) — the receive buffer
+    asked of the OS for every listening socket; `0` keeps the OS default.
+    A segment powering up sends its DISCOVERs together: Windows' 64 KiB
+    default holds about 220 typical datagrams, and measured, a 1000-datagram
+    burst delivered 220 at the default and all 1000 at 1 MiB. The kernel may
+    grant less (Linux caps at `net.core.rmem_max`); a shortfall is logged at
+    INFO, and a failure to grow at WARNING, never raised.
   - `.bind() -> None` — open/refresh sockets for `self._listen`; raises
     `PermissionError` for privileged ports (<1024 without rights) and
     **`netimps.AddressInUseError`** (an `OSError`, never a `PermissionError`)

@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A burst of requests overflowed the socket buffer on Windows.** Its 64 KiB
+  default holds about 220 typical DHCP datagrams; measured, a 1000-datagram
+  burst at a wildcard server delivered 220 and the kernel dropped the rest.
+  Listeners now ask for a 1 MiB receive buffer (`RECEIVE_BUFFER_SIZE`, a new
+  class attribute; `0` keeps the OS default) through
+  `netimps.set_buffer_size`, logging any shortfall the OS imposes. The same
+  burst now delivers all 1000.
 - **`DhcpMessage.encode()` refused messages it could encode.** The overload
   field was chosen from how far the options overshot, ignoring whether it was
   free: one octet over meant `sname`, so a reply with a set `sname` moved it
