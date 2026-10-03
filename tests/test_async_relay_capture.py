@@ -397,6 +397,12 @@ def test_async_relay_forwards_a_request_and_its_reply_over_real_sockets() -> Non
             reply = DhcpMessage.decode(reply_data)
             assert reply.op == OpCode.BOOTREPLY
             assert reply.xid == xid
+            # The handler worker counts *after* its send returns, so the reply
+            # can reach this thread first; give the increment a moment.
+            # Measured on CI: read as 1 with the reply already in hand.
+            deadline = time.monotonic() + 2.0
+            while relay.metrics.packets_sent < 2 and time.monotonic() < deadline:
+                await asyncio.sleep(0.01)
             assert relay.metrics.packets_sent == 2
         finally:
             relay.stop()

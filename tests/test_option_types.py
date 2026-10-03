@@ -618,10 +618,15 @@ def test_domainlist_decode_is_linear_in_payload_size():
     from pydhcp.options.type import DomainList
 
     def elapsed(size):
+        # Best of five: one sample is at the mercy of the scheduler, and a
+        # single 50 ms stall on a shared CI runner failed this once.
         payload = bytearray(b"\x01a\x00" * (size // 3))
-        start = time.perf_counter()
-        DomainList._dhcp_read(memoryview(payload))
-        return time.perf_counter() - start
+        best = float("inf")
+        for _ in range(5):
+            start = time.perf_counter()
+            DomainList._dhcp_read(memoryview(payload))
+            best = min(best, time.perf_counter() - start)
+        return best
 
     elapsed(3000)  # warm up, so import/JIT costs do not land in the measurement
     small = elapsed(6000)
