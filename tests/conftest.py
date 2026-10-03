@@ -196,27 +196,35 @@ class FixedLeaseServer(DhcpServer):
         )
 
 
+class _Enumerations:
+    """How many real adapter enumerations happened since the fixture began.
+
+    `len()` of it is the count, read live from `netimps.interface_enumerations()`
+    -- which counts the syscall, never a cached hit.
+    """
+
+    def __init__(self) -> None:
+        import netimps
+
+        self._netimps = netimps
+        self._start = netimps.interface_enumerations()
+
+    def __len__(self) -> int:
+        return int(self._netimps.interface_enumerations() - self._start)
+
+
 @pytest.fixture
-def enumerations(monkeypatch) -> "list[bool]":
+def enumerations() -> "_Enumerations":
     """Count the host-adapter enumerations netimps actually performs.
 
     pydhcp's per-packet lookups go through netimps' enumeration cache, so a
     lookup and an enumeration are no longer the same thing -- the cost that
-    matters, and that a flood multiplies, is the enumeration. netimps exposes no
-    counter, so this wraps its internal enumerator; a rename there fails here at
-    setup, loudly, rather than counting nothing. Starts from an empty cache.
+    matters, and that a flood multiplies, is the enumeration. netimps 0.3.3
+    counts it publicly (`interface_enumerations()`), which replaced wrapping
+    its private enumerator. Starts from an empty cache.
     """
     import netimps
-    import netimps._ifaddrs as ifaddrs
 
-    calls: "list[bool]" = []
-    original = ifaddrs._enumerate_interfaces
-
-    def counting(raw: bool):  # type: ignore[no-untyped-def]
-        calls.append(raw)
-        return original(raw)
-
-    monkeypatch.setattr(ifaddrs, "_enumerate_interfaces", counting)
     netimps.clear_interface_cache()
-    yield calls
+    yield _Enumerations()
     netimps.clear_interface_cache()

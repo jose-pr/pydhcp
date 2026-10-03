@@ -25,7 +25,10 @@ classifiers = [
 ]
 dependencies = [
     "PyYAML>=6.0",
-    "netimps>=0.3.1,<0.4",
+    # 0.3.3, not 0.3.0: pydhcp uses APIs added in that patch -- supports_pktinfo,
+    # the interface cache (cache=, clear_interface_cache), AddressInUseError,
+    # UdpEndpoint.arecv, backoff_delays(jitter_seconds=) and Datagram.truncated.
+    "netimps>=0.3.3,<0.4",
     "duho>=0.6.0,<0.7",
 ]
 
