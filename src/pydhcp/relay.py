@@ -204,7 +204,7 @@ class DhcpRelay(_Base):
             and pending is not None
             and pending.ifindex is not None
         ):
-            out = _PktInfoUdpTransport(transport.socket)
+            out = _PktInfoUdpTransport(transport.socket, transport.endpoint)
             out.ifindex = pending.ifindex
             out.local_ip = pending.local_ip
             return out

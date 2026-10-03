@@ -152,13 +152,17 @@ something else.
     `RELAY_AGENT_INFORMATION` in front of the whole segment. Deciding this
     properly needs a signal from the caller that `Transport.send` does not
     currently carry.
-- **`PktInfoUdpTransport(socket)`** — POSIX `IP_PKTINFO`-aware transport for
-  wildcard sockets. Falls back to `UdpTransport.send` when `ifindex`/
-  `local_ip` aren't set or the platform lacks `sendmsg`/`IP_PKTINFO`. If the
-  pinned `sendmsg` itself **fails** (a stale `ifindex`, a `local_ip` no longer
-  on that adapter) it retries once, unpinned, **to the same destination** — it
-  does not go through `UdpTransport.send`, so a failed unicast is never
-  escalated into a broadcast here; the error propagates instead.
+- **`PktInfoUdpTransport(socket, endpoint=None)`** — a transport that sends
+  from a pinned source for wildcard sockets: `local_ip` is the source address
+  and `ifindex` the interface (0/`None` pins the address alone). Pinning goes
+  through `netimps.UdpEndpoint.send(src=...)` (`endpoint`, or one wrapping
+  `socket`), which builds the control message for Linux, macOS and Windows
+  alike. Falls back to `UdpTransport.send` when `local_ip` isn't set or the
+  endpoint reports no source pinning. If the pinned send itself **fails** (a
+  stale `ifindex`, a `local_ip` no longer on that adapter) it retries once,
+  unpinned, **to the same destination** — it does not go through
+  `UdpTransport.send`, so a failed unicast is never escalated into a broadcast
+  here; the error propagates instead.
 - **`RequestContext`** (`NamedTuple`) — `transport: Transport`, `interface:
   NetworkInterface`, `client: SocketAddress`, `client_mac: bytes`,
   `ifindex: int | None = None`, `local_ip: IPv4 | None = None`. Handlers use

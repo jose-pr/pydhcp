@@ -10,13 +10,12 @@ from __future__ import annotations
 
 import logging
 import socket
-import struct
 import threading
 import time
 
 import pytest
 
-from conftest import build_request
+from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 from pydhcp import listener as listener_module
 import ipaddress
 import types
@@ -364,42 +363,66 @@ def test_a_wildcard_destination_is_still_broadcast() -> None:
     assert sock.sendto_calls == [("255.255.255.255", 68)]
 
 
-def test_the_pktinfo_send_maps_a_wildcard_destination_to_broadcast(
-    monkeypatch,
-) -> None:
+class RecordingEndpoint:
+    """The part of a netimps `UdpEndpoint` the pinned transport uses.
+
+    The pinned send now goes through netimps, which builds the per-platform
+    control message itself, so what matters here is what the transport *asks*
+    for: the destination, and the source it pins.
+    """
+
+    supports_src_pinning = True
+
+    def __init__(self, error=None) -> None:
+        self.sends: list = []
+        self.error = error
+
+    def send(self, data, address, port, src=None):
+        self.sends.append(((address, port), src))
+        if self.error is not None:
+            raise self.error
+        return len(data)
+
+
+def _pinned(sock, endpoint, ifindex=3, local_ip="192.0.2.1"):
+    transport = PktInfoUdpTransport(sock, endpoint)  # type: ignore[arg-type]
+    transport.ifindex = ifindex
+    transport.local_ip = IPv4(local_ip)
+    return transport
+
+
+def test_the_pktinfo_send_maps_a_wildcard_destination_to_broadcast() -> None:
     """`sendmsg` was handed `str(dest)`, so a yiaddr of 0.0.0.0 -- the normal
     case for a client that has no address yet -- addressed the reply to host
     0.0.0.0, the one destination it must never go to."""
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
-    sock = FailingSocket()
-    transport = PktInfoUdpTransport(sock)  # type: ignore[arg-type]
-    transport.ifindex = 3
-    transport.local_ip = IPv4("192.0.2.1")
+    sock, endpoint = FailingSocket(), RecordingEndpoint()
 
-    assert transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6) == 20
+    assert (
+        _pinned(sock, endpoint).send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6) == 20
+    )
 
-    assert sock.sendmsg_calls == [("255.255.255.255", 68)]
+    assert [dest for dest, _src in endpoint.sends] == [("255.255.255.255", 68)]
     assert sock.sendto_calls == []
 
 
-def test_the_pktinfo_send_falls_back_to_plain_udp(monkeypatch) -> None:
+def test_the_pktinfo_send_falls_back_to_plain_udp() -> None:
     """A stale ifindex or a local_ip no longer on that adapter used to lose the
     reply outright: this path had no fallback of any kind."""
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
-    sock = FailingSocket(sendmsg_error=OSError("invalid argument"))
-    transport = PktInfoUdpTransport(sock)  # type: ignore[arg-type]
-    transport.ifindex = 99999
-    transport.local_ip = IPv4("192.0.2.1")
+    sock = FailingSocket()
+    endpoint = RecordingEndpoint(error=OSError("invalid argument"))
 
-    assert transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6) == 20
+    assert (
+        _pinned(sock, endpoint, ifindex=99999).send(
+            b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6
+        )
+        == 20
+    )
 
-    assert sock.sendmsg_calls == [("192.0.2.9", 68)]
+    assert [dest for dest, _src in endpoint.sends] == [("192.0.2.9", 68)]
     assert sock.sendto_calls == [("192.0.2.9", 68)]
 
 
-def test_the_pktinfo_fallback_never_escalates_a_unicast_to_a_broadcast(
-    monkeypatch,
-) -> None:
+def test_the_pktinfo_fallback_never_escalates_a_unicast_to_a_broadcast() -> None:
     """The fallback must not become a way to leak a reply to the segment.
 
     The base `send` answers a failed unicast with a broadcast, which is right
@@ -412,13 +435,8 @@ def test_the_pktinfo_fallback_never_escalates_a_unicast_to_a_broadcast(
     segment. The reply is lost instead, which is what it was before the
     fallback existed.
     """
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
 
     class Dead(FailingSocket):
-        def sendmsg(self, buffers, ancdata, flags, address):
-            self.sendmsg_calls.append(address)
-            raise OSError("invalid argument (stale ifindex)")
-
         def sendto(self, data, address):
             self.sendto_calls.append(address)
             if address[0] == "255.255.255.255":
@@ -426,54 +444,84 @@ def test_the_pktinfo_fallback_never_escalates_a_unicast_to_a_broadcast(
             raise OSError("network is unreachable")
 
     sock = Dead()
-    transport = PktInfoUdpTransport(sock)  # type: ignore[arg-type]
-    transport.ifindex = 99999
-    transport.local_ip = IPv4("192.0.2.1")
+    endpoint = RecordingEndpoint(error=OSError("invalid argument (stale ifindex)"))
 
     with pytest.raises(OSError):
-        transport.send(b"x" * 20, IPv4("192.0.2.50"), 68, b"\x00" * 6)
+        _pinned(sock, endpoint, ifindex=99999).send(
+            b"x" * 20, IPv4("192.0.2.50"), 68, b"\x00" * 6
+        )
 
     assert sock.sendto_calls == [("192.0.2.50", 68)], sock.sendto_calls
     assert ("255.255.255.255", 68) not in sock.sendto_calls
 
 
-def test_the_pktinfo_fallback_still_broadcasts_for_an_unconfigured_client(
-    monkeypatch,
-) -> None:
+def test_the_pktinfo_fallback_still_broadcasts_for_an_unconfigured_client() -> None:
     """The counterpart: broadcast *is* the right delivery when the reply was
     already addressed to the limited broadcast, so the guard must not turn that
     into a lost reply."""
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
-    sock = FailingSocket(sendmsg_error=OSError("invalid argument"))
-    transport = PktInfoUdpTransport(sock)  # type: ignore[arg-type]
-    transport.ifindex = 99999
-    transport.local_ip = IPv4("192.0.2.1")
+    sock = FailingSocket()
+    endpoint = RecordingEndpoint(error=OSError("invalid argument"))
 
-    assert transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6) == 20
+    assert (
+        _pinned(sock, endpoint, ifindex=99999).send(
+            b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6
+        )
+        == 20
+    )
 
-    assert sock.sendmsg_calls == [("255.255.255.255", 68)]
+    assert [dest for dest, _src in endpoint.sends] == [("255.255.255.255", 68)]
     assert sock.sendto_calls == [("255.255.255.255", 68)]
 
 
-def test_the_pktinfo_control_message_is_still_what_it_was(monkeypatch) -> None:
-    """Guard: the mapping and the fallback must not disturb the ancillary data
-    that is the whole reason this transport exists."""
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
-    seen: list = []
+def test_the_pin_names_exactly_the_receiving_address_and_interface() -> None:
+    """The pin is a netimps `Interface` holding just ``local_ip``: an adapter
+    with several IPv4 addresses must answer from the one the client used, and
+    a bare address would make netimps enumerate every adapter per reply."""
+    endpoint = RecordingEndpoint()
+    _pinned(FailingSocket(), endpoint).send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\0" * 6)
 
-    class Recording(FailingSocket):
-        def sendmsg(self, buffers, ancdata, flags, address):
-            seen.append(ancdata)
-            return sum(len(b) for b in buffers)
+    ((_dest, src),) = endpoint.sends
+    assert isinstance(src, netimps.Interface)
+    assert src.index == 3
+    assert [str(ip) for ip in src.ips] == ["192.0.2.1/32"]
 
-    transport = PktInfoUdpTransport(Recording())  # type: ignore[arg-type]
+
+def test_no_local_address_means_no_pin() -> None:
+    """With nothing to pin, the plain transport's rules apply unchanged."""
+    sock, endpoint = FailingSocket(), RecordingEndpoint()
+    transport = PktInfoUdpTransport(sock, endpoint)  # type: ignore[arg-type]
     transport.ifindex = 3
-    transport.local_ip = IPv4("192.0.2.1")
+
     transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6)
 
-    ((level, ctype, data),) = seen[0]
-    assert level == socket.IPPROTO_IP
-    assert ctype == 8
-    ifindex, local, _ = struct.unpack("=I4s4s", data)
-    assert ifindex == 3
-    assert socket.inet_ntoa(local) == "192.0.2.1"
+    assert endpoint.sends == []
+    assert sock.sendto_calls == [("192.0.2.9", 68)]
+
+
+@pytest.mark.skipif(
+    not LOOPBACK_ALIAS_BINDABLE, reason="127.0.0.2 is not usable on this host"
+)
+def test_a_pinned_reply_leaves_from_the_pinned_address() -> None:
+    """On real sockets: the receiver sees the pinned source, not the one the
+    routing table would pick. 127.0.0.2 is used because the default source for
+    a loopback send is 127.0.0.1, so only a working pin can produce it."""
+    loopback = netimps.interface_for("127.0.0.1")
+    assert loopback is not None and loopback.index
+
+    receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    receiver.bind(("127.0.0.1", 0))
+    receiver.settimeout(2.0)
+    sender = netimps.bind("0.0.0.0", 0)
+    try:
+        transport = PktInfoUdpTransport(sender)
+        if not transport.endpoint.supports_src_pinning:
+            pytest.skip("no source pinning on this platform")
+        transport.ifindex = loopback.index
+        transport.local_ip = IPv4("127.0.0.2")
+        transport.send(b"x" * 20, IPv4("127.0.0.1"), receiver.getsockname()[1], b"")
+        _data, (source, _port) = receiver.recvfrom(64)
+    finally:
+        sender.close()
+        receiver.close()
+
+    assert source == "127.0.0.2"

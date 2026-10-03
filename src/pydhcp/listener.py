@@ -7,7 +7,6 @@ import functools as _functools
 import ipaddress as _ipaddress
 import select as _select
 import threading as _thread
-import struct as _struct
 import concurrent.futures as _futures
 import typing as _ty
 import weakref as _weakref
@@ -19,7 +18,6 @@ from .log import LOGGER
 from .metrics import DhcpMetrics
 import logging as _logging
 
-IP_PKTINFO = getattr(_socket, "IP_PKTINFO", None)
 #: Windows-only: "nobody else may bind this address", the opposite of
 #: SO_REUSEADDR. See `_bind_sockets` for why it is the default there.
 SO_EXCLUSIVEADDRUSE = getattr(_socket, "SO_EXCLUSIVEADDRUSE", None)
@@ -117,12 +115,43 @@ class UdpTransport(Transport):
 
 
 class PktInfoUdpTransport(UdpTransport):
-    """POSIX packet-info transport for wildcard routing."""
+    """A transport that sends from a pinned interface and source address.
 
-    def __init__(self, socket: _socket.socket):
+    For a wildcard socket: the reply leaves from the address and interface the
+    request arrived on (``local_ip``, ``ifindex``), which the routing table
+    alone would not choose on a multi-homed host. Pinning goes through
+    `netimps.UdpEndpoint.send(src=...)`, which builds the per-platform control
+    message -- Linux, macOS and Windows lay it out three different ways.
+    """
+
+    def __init__(
+        self,
+        socket: _socket.socket,
+        endpoint: "_netimps.UdpEndpoint | None" = None,
+    ):
         super().__init__(socket)
         self.ifindex: int | None = None
         self.local_ip: _net.IPv4 | None = None
+        self.endpoint = endpoint or _netimps.UdpEndpoint(socket, pktinfo=False)
+
+    def _source(self) -> _netimps.Interface:
+        """The pin, as a netimps `Interface` holding exactly ``local_ip``.
+
+        Not the bare address: netimps resolves an address to its interface by
+        enumerating every adapter, measured at 1.29 ms per send against 0.04 ms
+        for an `Interface` -- per reply, which is the per-packet enumeration
+        cost this module has already removed once from the receive side. And not
+        the receiving adapter's own `Interface`, which may hold several IPv4
+        addresses: netimps would pick one, and the reply must come from the one
+        the client addressed. An index of 0 means "unknown" and pins the address
+        alone.
+        """
+        assert self.local_ip is not None
+        return _netimps.Interface(
+            name=f"ifindex {self.ifindex or 0}",
+            index=self.ifindex or 0,
+            ips=[_ipaddress.IPv4Interface(self.local_ip)],
+        )
 
     def send(
         self,
@@ -132,31 +161,15 @@ class PktInfoUdpTransport(UdpTransport):
         client_mac: bytes,
     ) -> int:
         dest_str = _dest_string(dest)
-        if (
-            hasattr(self.socket, "sendmsg")
-            and self.ifindex is not None
-            and self.local_ip is not None
-            and IP_PKTINFO is not None
-        ):
-            pktinfo = _struct.pack(
-                "=I4s4s",
-                self.ifindex,
-                _socket.inet_aton(str(self.local_ip)),
-                _socket.inet_aton(str(self.local_ip)),
-            )
+        if self.local_ip is not None and self.endpoint.supports_src_pinning:
             try:
+                # `_dest_string`, not `str(dest)`: this path took a yiaddr of
+                # 0.0.0.0 -- the normal case for a client that has no address
+                # yet -- and asked the kernel to send to host 0.0.0.0, which is
+                # the one destination a reply to an unconfigured client must
+                # never be.
                 return int(
-                    self.socket.sendmsg(
-                        [data],
-                        # `_dest_string`, not `str(dest)`: this path took a
-                        # yiaddr of 0.0.0.0 -- the normal case for a client that
-                        # has no address yet -- and asked the kernel to send to
-                        # host 0.0.0.0, which is the one destination a reply to
-                        # an unconfigured client must never be.
-                        [(_socket.IPPROTO_IP, IP_PKTINFO, pktinfo)],
-                        0,
-                        (dest_str, port),
-                    )
+                    self.endpoint.send(bytes(data), dest_str, port, src=self._source())
                 )
             except Exception as e:
                 # This path's own failure modes -- a stale ifindex, a local_ip
@@ -177,8 +190,8 @@ class PktInfoUdpTransport(UdpTransport):
                 # -> 255.255.255.255. Same destination, one attempt, and the
                 # error propagates if it fails.
                 LOGGER.warning(
-                    f"IP_PKTINFO send via ifindex {self.ifindex} failed "
-                    f"({e.__class__.__name__} | {e}); retrying unpinned to "
+                    f"Pinned send from {self.local_ip} (ifindex {self.ifindex}) "
+                    f"failed ({e.__class__.__name__} | {e}); retrying unpinned to "
                     f"{dest_str}."
                 )
                 return self._send_to(data, dest_str, port)
@@ -586,15 +599,17 @@ def _context_for(
     client_mac: bytes,
     ifindex: "int | None" = None,
     local_ip: "_net.IPv4 | None" = None,
+    endpoint: "_netimps.UdpEndpoint | None" = None,
 ) -> RequestContext:
     """Build the context for one received datagram.
 
     Shared by both listeners: duplicating it is what let the async half miss
-    every fix the sync half gained.
+    every fix the sync half gained. ``endpoint`` is the one the datagram was
+    received through, reused for the pinned reply.
     """
     transport: Transport
     if ifindex is not None or local_ip is not None:
-        pkt_transport = PktInfoUdpTransport(sock)
+        pkt_transport = PktInfoUdpTransport(sock, endpoint)
         pkt_transport.ifindex = ifindex
         pkt_transport.local_ip = local_ip
         transport = pkt_transport
@@ -944,7 +959,9 @@ class DhcpListener:
 
         try:
             self.metrics.packets_received += 1
-            context = _context_for(sock, client, msg.chaddr, ifindex, local_ip)
+            context = _context_for(
+                sock, client, msg.chaddr, ifindex, local_ip, self._endpoints.get(sock)
+            )
             msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
             self.handle(msg, context)
         except Exception as e:
@@ -1143,7 +1160,9 @@ class AsyncDhcpListener:
         try:
             self.metrics.packets_received += 1
             msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
-            context = _context_for(sock, client, msg.chaddr, ifindex, local_ip)
+            context = _context_for(
+                sock, client, msg.chaddr, ifindex, local_ip, self._endpoints.get(sock)
+            )
             self.handle(msg, context)
         except Exception as e:
             self.metrics.packets_dropped_error += 1

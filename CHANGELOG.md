@@ -24,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The async listener had no packet info on Windows' default proactor
   loop**, where it fell back to a `DatagramProtocol`. It now receives with
   `UdpEndpoint.arecv()` on every loop type.
+- **Replies were only pinned to the receiving address on Linux 3.12+.**
+  `PktInfoUdpTransport` packed the POSIX control message by hand, behind the
+  same `IP_PKTINFO` feature test. It now sends through
+  `netimps.UdpEndpoint.send(src=...)` on every platform, and takes an optional
+  `endpoint` argument.
 
 ## [0.6.1] - 2026-09-28
 
