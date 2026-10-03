@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import functools as _functools
 import ipaddress as _ipaddress
 import socket as _socket
 import typing as _ty
@@ -40,35 +39,22 @@ class RequestContext(_ty.NamedTuple):
     local_ip: _net.IPv4 | None = None
 
 
-@_functools.lru_cache(maxsize=None)
-def _platform_reports_pktinfo() -> bool:
-    """Whether an IPv4 UDP socket here can report the interface a datagram
-    arrived on, decided by asking one rather than by feature-testing names.
-
-    The feature test is what was wrong: `getattr(socket, "IP_PKTINFO", None)`
-    is None on CPython 3.9-3.11 on every platform (the constant arrived in
-    3.12) and on Windows before that, while the kernel supports it throughout.
-    netimps' `UdpEndpoint` uses the documented per-platform values and decides
-    from the socket's own family, so a throwaway endpoint gives the real answer.
-    """
-    probe = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    try:
-        return bool(_netimps.UdpEndpoint(probe).supports_pktinfo)
-    finally:
-        probe.close()
-
-
 def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool:
     """Whether this listener receives through the packet-info path.
 
     Only a wildcard bind needs it. Without it a wildcard has to be expanded into
     one socket per address -- which on Linux then receives no broadcasts at all,
     so a client's DISCOVER never arrives.
+
+    `netimps.supports_pktinfo` decides by asking a socket, never by testing a
+    constant's name: `getattr(socket, "IP_PKTINFO", None)` is None on CPython
+    3.9-3.11 on every platform while the kernel supports it throughout, which
+    is how this path used to be silently off across half the supported range.
     """
     return (
         per_interface is not True
         and _listen_uses_wildcard(listen)
-        and _platform_reports_pktinfo()
+        and _netimps.supports_pktinfo(_socket.AF_INET)
     )
 
 

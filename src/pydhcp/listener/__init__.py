@@ -33,7 +33,6 @@ from .receive import (
     _arrival,
     _context_for,
     _pktinfo_supported,
-    _platform_reports_pktinfo,
 )
 from .spec import (
     ListenAddress,

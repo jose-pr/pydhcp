@@ -19,12 +19,9 @@ import pytest
 
 from conftest import build_request
 from pydhcp import DhcpServer
-from pydhcp.listener import (
-    AsyncDhcpListener,
-    DhcpListener,
-    _platform_reports_pktinfo,
-    _pktinfo_supported,
-)
+import netimps
+
+from pydhcp.listener import AsyncDhcpListener, DhcpListener, _pktinfo_supported
 from pydhcp.network import IPv4
 from pydhcp.options import DhcpOptionCode
 from pydhcp.packet import DhcpMessage, DhcpMessageType
@@ -35,14 +32,15 @@ from pydhcp.packet import DhcpMessage, DhcpMessageType
 _PKTINFO_PLATFORMS = ("linux", "win32", "darwin")
 
 needs_pktinfo = pytest.mark.skipif(
-    not _platform_reports_pktinfo(), reason="no packet info on this platform"
+    not netimps.supports_pktinfo(socket.AF_INET),
+    reason="no packet info on this platform",
 )
 
 
 def test_packet_info_is_available_where_netimps_supports_it() -> None:
     if not sys.platform.startswith(_PKTINFO_PLATFORMS):
         pytest.skip(f"packet info is not promised on {sys.platform}")
-    assert _platform_reports_pktinfo(), (
+    assert netimps.supports_pktinfo(socket.AF_INET), (
         f"packet info reported unavailable on {sys.platform} "
         f"{sys.version.split()[0]}"
     )
