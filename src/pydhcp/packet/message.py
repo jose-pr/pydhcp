@@ -538,6 +538,111 @@ class DhcpMessage:
             options,
         )
 
+    def _pack_options(
+        self, max_options_field_size: int
+    ) -> "tuple[_ty.Union[bytes, bytearray], _ty.Union[bytes, bytearray], _ty.Union[bytes, bytearray]]":
+        """Lay the options out, overloading `sname`/`file` only as needed.
+
+        Returns ``(options_field, sname_bytes, file_bytes)``. Each overload
+        choice is *tried*, cheapest first, and the first that packs completely
+        wins:
+
+        1. no overload;
+        2. choices that relocate no occupied field -- overloading an empty
+           `sname` or `file` costs only its END octet -- smallest first;
+        3. choices that move an occupied `sname`/`file` into option 66/67, which
+           costs ``2 + len(value)`` octets of the options field, and which a
+           PXE client reads less reliably than the fixed field.
+
+        The overload field used to be picked from the overshoot alone (1-64
+        octets over -> `sname`, 65-128 -> `file`, more -> both), ignoring
+        whether the field was free. Measured: options one octet over the
+        576-octet budget, with a 56-octet `sname` and an empty `file`, chose
+        `sname`, moved it into option 66 (58 octets), overflowed, and raised --
+        while the empty 128-octet `file` would have held everything. Within an
+        equal cost the old preference (`sname`, then `file`, then both) stands,
+        so every message that encoded before encodes the same way.
+
+        Nothing may be left over: silently dropping options produces a reply
+        the client accepts and acts on while missing (possibly) its server
+        identifier or routes.
+        """
+        overload_type = _type.OptionOverload
+        base = self.options.copy()
+        # Whether THIS encode overloads is decided here, so drop any marker the
+        # message is carrying. A decoded packet keeps its sender's OPTION_OVERLOAD,
+        # and re-encoding it (a relay forwarding a PXE reply, say) would otherwise
+        # tell the receiver to parse sname/file as options while they hold the
+        # literal server name and boot file that decode moved out of them.
+        if int(DhcpOptionCode.OPTION_OVERLOAD) in base:
+            del base[int(DhcpOptionCode.OPTION_OVERLOAD)]
+        sname_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.sname)
+        file_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.file)
+        if len(base.encode()) > max_options_field_size + 128 + 64:
+            raise OverflowError("DHCP options exceed maximum packet size")
+
+        def relocations(choice: _type.OptionOverload) -> int:
+            return int(bool(choice & overload_type.FILE and self.file)) + int(
+                bool(choice & overload_type.SNAME and self.sname)
+            )
+
+        # `sorted` is stable, so equal costs keep this order: sname, file, both.
+        candidates = [overload_type.NONE] + sorted(
+            (overload_type.SNAME, overload_type.FILE, overload_type.BOTH),
+            key=relocations,
+        )
+        left_over = 0
+        for choice in candidates:
+            options = base.copy()
+            if choice & overload_type.FILE and self.file:
+                if DhcpOptionCode.BOOTFILE_NAME not in options:
+                    options[DhcpOptionCode.BOOTFILE_NAME] = self.file
+                    options._options.move_to_end(
+                        int(DhcpOptionCode.BOOTFILE_NAME), False
+                    )
+            if choice & overload_type.SNAME and self.sname:
+                if DhcpOptionCode.TFTP_SERVER not in options:
+                    options[DhcpOptionCode.TFTP_SERVER] = self.sname
+                    options._options.move_to_end(int(DhcpOptionCode.TFTP_SERVER), False)
+            if choice is not overload_type.NONE:
+                options._options[int(DhcpOptionCode.OPTION_OVERLOAD)] = bytearray(
+                    [choice.value]
+                )
+                options._options.move_to_end(int(DhcpOptionCode.OPTION_OVERLOAD), False)
+            # DHCP_MESSAGE_TYPE leads the options field whether or not we
+            # overload, ahead of OPTION_OVERLOAD. RFC 2131 s3 walks the protocol
+            # by message type, and receivers read option 53 before parsing the
+            # rest -- it is what tells one whether the packet is even for it.
+            # Measured 2026-09-20 on the version before: code 52 was the first
+            # TLV after the cookie on the overload path.
+            try:
+                options._options.move_to_end(
+                    int(DhcpOptionCode.DHCP_MESSAGE_TYPE), False
+                )
+            except KeyError:
+                pass
+
+            if choice is overload_type.NONE:
+                field = options.encode()
+                if len(field) <= max_options_field_size:
+                    return field, sname_bytes, file_bytes
+                continue
+
+            field, leftover = options.partial_encode(max_options_field_size)
+            packed_file, packed_sname = file_bytes, sname_bytes
+            if choice & overload_type.FILE and leftover is not None:
+                packed_file, leftover = leftover.partial_encode(128)
+            if choice & overload_type.SNAME and leftover is not None:
+                packed_sname, leftover = leftover.partial_encode(64)
+            if leftover is None:
+                return field, packed_sname, packed_file
+            left_over = len(leftover)
+
+        raise OverflowError(
+            "DHCP options exceed maximum packet size: "
+            f"{left_over} option(s) did not fit"
+        )
+
     def encode(
         self, max_packetsize: int = _const.DHCP_MIN_LEGAL_PACKET_SIZE
     ) -> bytearray:
@@ -590,89 +695,9 @@ class DhcpMessage:
                 f"{_MAGIC_COOKIE_END - _FIXED_HEADER_SIZE} of magic cookie and "
                 "1 for the END marker"
             )
-        max_options_field_size = max_packetsize - _ENCODE_FIXED_OVERHEAD
-
-        options = self.options.copy()
-        # Whether THIS encode overloads is decided below, so drop any marker the
-        # message is carrying. A decoded packet keeps its sender's OPTION_OVERLOAD,
-        # and re-encoding it (a relay forwarding a PXE reply, say) would otherwise
-        # tell the receiver to parse sname/file as options while they hold the
-        # literal server name and boot file that decode moved out of them.
-        if int(DhcpOptionCode.OPTION_OVERLOAD) in options:
-            del options[int(DhcpOptionCode.OPTION_OVERLOAD)]
-        sname_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.sname)
-        file_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.file)
-        options_field: _ty.Union[bytes, bytearray] = options.encode()
-        if len(options_field) > max_options_field_size + 128 + 64:
-            raise OverflowError("DHCP options exceed maximum packet size")
-        elif len(options_field) > max_options_field_size + 128:
-            if self.file and DhcpOptionCode.BOOTFILE_NAME not in options:
-                options[DhcpOptionCode.BOOTFILE_NAME] = self.file
-                options._options.move_to_end(int(DhcpOptionCode.BOOTFILE_NAME), False)
-            if self.sname and DhcpOptionCode.TFTP_SERVER not in options:
-                options[DhcpOptionCode.TFTP_SERVER] = self.sname
-                options._options.move_to_end(int(DhcpOptionCode.TFTP_SERVER), False)
-            overload = _type.OptionOverload.BOTH
-        elif len(options_field) > max_options_field_size + 64:
-            if self.file and DhcpOptionCode.BOOTFILE_NAME not in options:
-                options[DhcpOptionCode.BOOTFILE_NAME] = self.file
-                options._options.move_to_end(int(DhcpOptionCode.BOOTFILE_NAME), False)
-            overload = _type.OptionOverload.FILE
-        elif len(options_field) > max_options_field_size:
-            if self.sname and DhcpOptionCode.TFTP_SERVER not in options:
-                options[DhcpOptionCode.TFTP_SERVER] = self.sname
-                options._options.move_to_end(int(DhcpOptionCode.TFTP_SERVER), False)
-            overload = _type.OptionOverload.SNAME
-        else:
-            overload = _type.OptionOverload.NONE
-
-        if overload is not _type.OptionOverload.NONE:
-            options._options[int(DhcpOptionCode.OPTION_OVERLOAD)] = bytearray(
-                [overload.value]
-            )
-            options._options.move_to_end(int(DhcpOptionCode.OPTION_OVERLOAD), False)
-
-        # DHCP_MESSAGE_TYPE leads the options field on BOTH paths. RFC 2131 s3
-        # walks the protocol by message type, and implementations do read option
-        # 53 before parsing the rest -- it is what tells a receiver whether the
-        # packet is even for it. This move was already here, and led on neither
-        # path: the non-overload path kept the `options.encode()` taken above
-        # for sizing, which predates the move, while the overload path then put
-        # OPTION_OVERLOAD in front of it (measured 2026-09-20: code 52 was the
-        # first TLV after the cookie). Hence both the placement after the
-        # overload marker and the re-encode below -- two encodes of the same
-        # message used to disagree on the wire depending on whether it happened
-        # to overload.
-        try:
-            options._options.move_to_end(int(DhcpOptionCode.DHCP_MESSAGE_TYPE), False)
-        except KeyError:
-            pass
-
-        if overload is not _type.OptionOverload.NONE:
-            options_field, leftover = options.partial_encode(max_options_field_size)
-
-            if (
-                bool(overload.value & _type.OptionOverload.FILE.value)
-                and leftover is not None
-            ):
-                file_bytes, leftover = leftover.partial_encode(128)
-            if (
-                bool(overload.value & _type.OptionOverload.SNAME.value)
-                and leftover is not None
-            ):
-                sname_bytes, leftover = leftover.partial_encode(64)
-
-            # Nothing may be left once every field has been packed: silently
-            # dropping options produces a reply the client accepts and acts on
-            # while missing (possibly) its server identifier or routes.
-            if leftover is not None:
-                raise OverflowError(
-                    "DHCP options exceed maximum packet size: "
-                    f"{len(leftover)} option(s) did not fit"
-                )
-        else:
-            # The encode above measured the size; this one carries the order.
-            options_field = options.encode()
+        options_field, sname_bytes, file_bytes = self._pack_options(
+            max_packetsize - _ENCODE_FIXED_OVERHEAD
+        )
 
         # Validate what is actually packed, not what the caller set: encode()
         # legitimately *moves* a long sname/file out into options 66 and 67 when

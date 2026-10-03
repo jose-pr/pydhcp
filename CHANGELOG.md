@@ -43,6 +43,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`DhcpMessage.encode()` refused messages it could encode.** The overload
+  field was chosen from how far the options overshot, ignoring whether it was
+  free: one octet over meant `sname`, so a reply with a set `sname` moved it
+  into option 66, overflowed, and raised `OverflowError` while an empty `file`
+  would have held everything — a PXE-shaped reply, lost. Each overload choice
+  is now tried, cheapest first, and an occupied field is relocated only when
+  nothing cheaper fits. Found by the round-trip property test.
 - **A wildcard listener did not know which interface a datagram arrived on**
   on CPython 3.9–3.11 anywhere (`socket.IP_PKTINFO` only exists from 3.12), on
   macOS (which zero-fills the field the old code read) and on Windows (whose

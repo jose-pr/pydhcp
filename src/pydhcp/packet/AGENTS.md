@@ -58,6 +58,12 @@ top-level package header.
       when overloading are unaffected; the check is on what is packed.
     - **`OverflowError`** if options still don't fit after RFC 3396 overload
       packing into `file`/`sname`.
+    - **Overload choice:** each option is *tried*, cheapest first, and the
+      first that packs completely is used — no overload; then overloading
+      fields that are empty (`sname`, then `file`, then both); then moving an
+      occupied `sname`/`file` into option 66/67. An occupied field is never
+      relocated when an empty one would do, since a PXE client reads the fixed
+      field more reliably than the option.
 
     `DHCP_MESSAGE_TYPE` is always the **first** TLV after the magic cookie,
     overloading or not (and ahead of `OPTION_OVERLOAD`) — RFC 2131 §3 has

@@ -613,6 +613,73 @@ def test_an_overloaded_message_round_trips():
     assert _wire_overload_flag(decoded.encode(576)) == 3
 
 
+def _pxe_shaped_reply(search_payload: int) -> DhcpMessage:
+    """The property test's falsifying message, with ASCII of the same octet
+    lengths: a 56-octet `sname`, an empty `file`, and options totalling
+    ``183 + search_payload`` octets with code/length -- 308 at 125, one over
+    the 576-octet budget once END is counted."""
+    options = DhcpOptions()
+    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DhcpMessageType.DHCPOFFER.value]
+    )
+    options[DhcpOptionCode.SUBNET_MASK] = bytearray(b"\xff\xff\xff\x00")
+    options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = bytearray(b"\x00\x00\x0e\x10")
+    options[DhcpOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\x01" * 16)
+    options[DhcpOptionCode.HOSTNAME] = bytearray(b"h" * 56)
+    options[DhcpOptionCode.DOMAIN_SEARCH] = bytearray(b"\x03abc\x00" * 25)[
+        :search_payload
+    ]
+    options[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = bytearray(b"v" * 40)
+    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message.options = options
+    message.sname = "s" * 56
+    message.file = ""
+    return message
+
+
+def test_an_occupied_sname_is_not_relocated_when_the_empty_file_suffices():
+    """Found by the property round trip and replayed on both platforms.
+
+    The overload field was chosen from the overshoot alone: one octet over meant
+    `sname`, which then had to move its 56-octet value into option 66 (58 octets)
+    -- and overflowed, raising for a message the empty 128-octet `file` would
+    have held. A PXE reply sets `sname` and carries many options, which is
+    exactly this shape.
+    """
+    message = _pxe_shaped_reply(125)
+
+    wire = bytes(message.encode(576))
+    decoded = DhcpMessage.decode(bytearray(wire))
+
+    assert _wire_overload_flag(wire) == 1, "file only"
+    assert wire[44:108] == b"s" * 56 + bytes(8), "sname must stay in its own field"
+    assert DhcpOptionCode.TFTP_SERVER not in decoded.options
+    assert decoded.to_mapping() == message.to_mapping()
+
+
+def test_one_octet_under_the_budget_needs_no_overload_at_all():
+    message = _pxe_shaped_reply(124)
+
+    wire = bytes(message.encode(576))
+
+    assert _wire_overload_flag(wire) is None
+    assert DhcpMessage.decode(bytearray(wire)).to_mapping() == message.to_mapping()
+
+
+def test_an_occupied_field_is_still_relocated_when_nothing_cheaper_fits():
+    """The counterpart: with `file` occupied too, the only way to fit is to move
+    a name into its option -- that must still happen, not raise."""
+    message = _pxe_shaped_reply(125)
+    message.file = "pxelinux.0"
+
+    wire = bytes(message.encode(576))
+    decoded = DhcpMessage.decode(bytearray(wire))
+
+    assert _wire_overload_flag(wire) in (1, 2, 3)
+    assert decoded.sname == "s" * 56
+    assert decoded.file == "pxelinux.0"
+
+
 def test_out_of_range_header_fields_name_the_field():
     """`pack_into` names the struct format character, not the field.
 
