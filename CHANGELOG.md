@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-03
+
 ### Changed
 
 - **Requires netimps 0.3.3** (`netimps>=0.3.3,<0.4`, was `>=0.3.1`): it uses
@@ -475,7 +477,8 @@ convention: a name that still resolves is a name nobody migrates off.
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/jose-pr/pydhcp/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/jose-pr/pydhcp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/jose-pr/pydhcp/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/jose-pr/pydhcp/compare/v0.5.1...v0.5.2
