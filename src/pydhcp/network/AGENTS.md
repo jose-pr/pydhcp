@@ -52,13 +52,18 @@ of the installed package).
   - `.compat() -> tuple[str, int]` — plain `(str, int)` pair for stdlib socket
     calls.
   - `.listen(family=AF_INET, kind=SOCK_DGRAM, proto=0, fileno=None,
-    options=()) -> socket.socket` — create, `setsockopt` each
-    `SocketOption`, bind to `(ip, port)`, and return the socket. Delegates to
-    `netimps.bind()`, which closes the socket before any exception propagates,
-    so a failed bind leaks nothing. `SO_REUSEADDR` is **not** set implicitly —
-    pass it in `options` if wanted. An explicit `fileno` takes the direct path.
-- **`SocketOption`** (`NamedTuple[level: int, name: int, value: int]`) — one
-  `setsockopt` call, as passed to `SocketAddress.listen(options=...)`.
+    options=(), *, broadcast=False, allow_address_takeover=False,
+    connreset=True) -> socket.socket` — create, apply `options`, bind to
+    `(ip, port)`, and return the socket. Delegates to `netimps.bind()`, which
+    closes the socket before any exception propagates (a failed bind leaks
+    nothing) and raises **`netimps.AddressInUseError`** (an `OSError`, never a
+    `PermissionError`) for every "the port is taken" shape. The keyword-only
+    arguments are `netimps.bind()`'s own. The address is **exclusive** unless
+    `allow_address_takeover=True`: `SO_EXCLUSIVEADDRUSE` on Windows, no
+    `SO_REUSEADDR` on POSIX. An explicit `fileno` takes the direct path.
+- **`SocketOption`** — `netimps.SocketOption` (`NamedTuple[level, name,
+  value]`), re-exported: one `setsockopt` call, as passed to
+  `SocketAddress.listen(options=...)`.
 - **`SocketSession`** (`NamedTuple[socket, client: SocketAddress]`) —
   `.server` property resolves the bound local `SocketAddress`; `.respond(data,
   to=None) -> int` sends back to `to` (defaults to `.client`); a wildcard

@@ -216,6 +216,35 @@ def test_arrival_treats_a_zero_local_address_as_absent() -> None:
     assert local_ip is None
 
 
+def test_a_reply_to_a_vanished_client_does_not_cost_the_next_datagram(caplog) -> None:
+    """On Windows an ICMP port-unreachable provoked by an earlier send surfaces
+    as ConnectionResetError on a *later, unrelated* receive. Measured before
+    `bind(connreset=False)`: one client that had gone away logged a full ERROR
+    traceback on the server and counted the next datagram as dropped. POSIX
+    reports such errors only on connected sockets, so there it always passed."""
+    gone = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    gone.bind(("127.0.0.1", 0))
+    closed_port = gone.getsockname()[1]
+    gone.close()
+
+    listener = RecordingListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener.bind()
+    address = listener.bound_addresses[0]
+    # The reply to the vanished client, from the listening socket itself.
+    listener._sockets[0].sendto(b"x" * 20, ("127.0.0.1", closed_port))
+    time.sleep(0.1)
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender.sendto(build_request().encode(), (str(address.ip), address.port))
+    sender.close()
+
+    with caplog.at_level(logging.DEBUG, logger="pydhcp"):
+        _drain(listener)
+
+    assert len(listener.handled) == 1
+    assert listener.metrics.packets_dropped_error == 0
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
 # --- transport-25: three failures, three reports ---
 
 

@@ -53,21 +53,24 @@ something else.
     uses `filter=False`). A link-local address means DHCP did not answer —
     RFC 3927 §1.5 does not assign those by DHCP. Name one explicitly in
     `listen` to bind it anyway.
-  - **`REUSE_ADDRESS`** (class var, `False`) — whether to set `SO_REUSEADDR`.
-    Off, because a second listener binding a port the first already holds then
-    *succeeds silently* and receives nothing while the first gets every
-    datagram (Windows, and Linux for UDP when both sockets set it). On Windows
-    the default bind sets `SO_EXCLUSIVEADDRUSE` instead, without which a later
-    `SO_REUSEADDR` socket can still take the address. A class attribute, so
-    every subclass inherits it and a subclass or instance can opt back in.
+  - **`REUSE_ADDRESS`** (class var, `False`) — whether a listener may share or
+    take over its port (`netimps.bind(allow_address_takeover=True)`, i.e.
+    `SO_REUSEADDR`). Off, because a second listener binding a port the first
+    already holds then *succeeds silently* and receives nothing while the first
+    gets every datagram. With it off the bind is exclusive on every platform
+    (`SO_EXCLUSIVEADDRUSE` on Windows, where a more specific `SO_REUSEADDR`
+    bind could otherwise take the traffic). A class attribute, so every
+    subclass inherits it and a subclass or instance can opt back in.
   - `.bind() -> None` — open/refresh sockets for `self._listen`; raises
     `PermissionError` for privileged ports (<1024 without rights) and
-    `OSError` for `EADDRINUSE`, both with an actionable message. **Idempotent,
-    port 0 included**: an open socket is matched against the address it was
-    *asked* for, so a re-bind keeps the ephemeral port it already has rather
-    than closing that socket and taking a new port. A Windows `WSAEACCES` is
-    reported as in-use, not as a privilege problem — that platform has no
-    privileged ports, and the address is simply held exclusively elsewhere.
+    **`netimps.AddressInUseError`** (an `OSError`, never a `PermissionError`)
+    when the port is taken — including a Windows `WSAEACCES` against an
+    exclusive holder, since that platform has no privileged ports — both with
+    an actionable message. **Idempotent, port 0 included**: an open socket is
+    matched against the address it was *asked* for, so a re-bind keeps the
+    ephemeral port it already has rather than closing that socket and taking a
+    new port. Sockets are bound with `connreset=False`, so on Windows an ICMP
+    error from an earlier reply does not surface on a later receive.
   - `.listen() -> None` — blocking receive loop; decodes each datagram,
     resolves the receiving `NetworkInterface`, builds a `RequestContext`, and
     calls `self.handle(msg, context)`. Receive, decode and `handle()` failures

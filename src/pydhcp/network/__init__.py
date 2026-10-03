@@ -161,10 +161,9 @@ class _SocketAddress(_ty.NamedTuple):
     port: int
 
 
-class SocketOption(_ty.NamedTuple):
-    level: int
-    name: int
-    value: int
+#: One ``setsockopt`` call, ``(level, name, value)``. netimps' own type, so the
+#: options a caller builds here go straight to :func:`netimps.bind`.
+SocketOption = _netimps.SocketOption
 
 
 class SocketAddress(_SocketAddress):
@@ -200,22 +199,33 @@ class SocketAddress(_SocketAddress):
         proto: int = 0,
         fileno: _ty.Optional[int] = None,
         options: _ty.Iterable[SocketOption] = (),
+        *,
+        broadcast: bool = False,
+        allow_address_takeover: bool = False,
+        connreset: bool = True,
     ) -> _socket.socket:
         """Create and bind a socket at this address.
 
-        ``options`` are ``(level, name, value)`` triples applied before the
-        bind. Delegates to :func:`netimps.bind`, which closes the socket before
-        any exception propagates -- so a failed bind leaks nothing.
+        Delegates to :func:`netimps.bind`, which closes the socket before any
+        exception propagates -- so a failed bind leaks nothing -- and raises
+        :class:`netimps.AddressInUseError` for every "the port is taken" shape.
+        ``options`` are extra ``(level, name, value)`` triples applied before
+        the bind; ``broadcast``, ``allow_address_takeover`` and ``connreset``
+        are :func:`netimps.bind`'s own.
 
-        ``reuse_address`` is left off: this has never set ``SO_REUSEADDR``
-        implicitly, and turning it on now would let a socket bind a port still
-        in ``TIME_WAIT``. Callers that want it pass it in ``options``, as
-        ``listener.py`` does.
+        The address is exclusive unless ``allow_address_takeover`` is set:
+        netimps sets ``SO_EXCLUSIVEADDRUSE`` on Windows, where without it a
+        more specific ``SO_REUSEADDR`` bind can take a wildcard holder's
+        traffic, and sets no ``SO_REUSEADDR`` on POSIX, where two UDP sockets
+        holding it can share a port. ``reuse_address`` stays off for the same
+        reason it always was here: this never set ``SO_REUSEADDR`` implicitly.
         """
         if fileno is not None:
             # netimps.bind() creates the socket itself, so an existing fd has
             # to keep the direct path.
             sock = _socket.socket(family, kind, proto, fileno)
+            if broadcast:
+                sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)
             for opt in options:
                 sock.setsockopt(*opt)
             sock.bind((str(self.ip), self.port))
@@ -227,6 +237,9 @@ class SocketAddress(_SocketAddress):
             family=family,
             kind=kind,
             reuse_address=False,
+            allow_address_takeover=allow_address_takeover,
+            broadcast=broadcast,
+            connreset=connreset,
             options=tuple(options),
         )
 

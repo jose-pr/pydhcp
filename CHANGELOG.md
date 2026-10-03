@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **A taken port raises `netimps.AddressInUseError`** from `DhcpListener.bind()`
+  and `SocketAddress.listen()` — an `OSError` subclass, so `except OSError`
+  still catches it, but never a `PermissionError`. Windows reports a port held
+  exclusively elsewhere as WSAEACCES, which Python maps to `PermissionError`
+  on 3.12+ and to a plain `OSError` on 3.9.
+- `SocketAddress.listen()` takes keyword-only `broadcast`,
+  `allow_address_takeover` and `connreset`, forwarded to `netimps.bind()`.
+  `REUSE_ADDRESS=True` now means `allow_address_takeover=True`; the exclusive
+  default is netimps' on every platform.
+- `pydhcp.network.SocketOption` is `netimps.SocketOption` (same three fields).
+
 ### Fixed
 
 - **A wildcard listener did not know which interface a datagram arrived on**
@@ -24,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The async listener had no packet info on Windows' default proactor
   loop**, where it fell back to a `DatagramProtocol`. It now receives with
   `UdpEndpoint.arecv()` on every loop type.
+- **A client that went away cost the server an ERROR on Windows.** An ICMP
+  port-unreachable provoked by a reply surfaced as `ConnectionResetError` on
+  the next, unrelated receive, logged with a traceback and counted as a dropped
+  datagram. Listener sockets are now bound with netimps' `connreset=False`.
 - **Replies were only pinned to the receiving address on Linux 3.12+.**
   `PktInfoUdpTransport` packed the POSIX control message by hand, behind the
   same `IP_PKTINFO` feature test. It now sends through

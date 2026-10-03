@@ -24,11 +24,15 @@ def test_bind_permission_error():
 
 
 def test_bind_address_in_use():
+    """`netimps.bind` raises `AddressInUseError` for every in-use shape, so
+    that is what the mocked `listen` raises; the DHCP suggestion is appended."""
+    import netimps
+
     server = DhcpServer(listen=[("127.0.0.1", 6767)])
     mock_address = MagicMock()
     mock_address.port = 6767
     mock_address.ip = IPv4("127.0.0.1")
-    err = OSError(errno.EADDRINUSE, "Address already in use")
+    err = netimps.AddressInUseError(errno.EADDRINUSE, "Port 6767 is already in use")
     mock_address.listen.side_effect = err
     server._listen = [mock_address]
 
@@ -38,3 +42,5 @@ def test_bind_address_in_use():
     assert "6767" in message
     assert "in use" in message
     assert "7767" in message  # the suggested alternative
+    assert isinstance(exc_info.value, netimps.AddressInUseError)
+    assert not isinstance(exc_info.value, PermissionError)

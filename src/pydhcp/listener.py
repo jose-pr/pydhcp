@@ -18,10 +18,6 @@ from .log import LOGGER
 from .metrics import DhcpMetrics
 import logging as _logging
 
-#: Windows-only: "nobody else may bind this address", the opposite of
-#: SO_REUSEADDR. See `_bind_sockets` for why it is the default there.
-SO_EXCLUSIVEADDRUSE = getattr(_socket, "SO_EXCLUSIVEADDRUSE", None)
-
 #: The all-ones address every DHCP client can be reached at before it has one of
 #: its own (RFC 2131 s4.1).
 BROADCAST_ADDRESS = "255.255.255.255"
@@ -396,56 +392,23 @@ def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool
     )
 
 
-def _bind_options(reuse_address: bool) -> "list[_net.SocketOption]":
-    """The socket options every listener socket is opened with.
-
-    ``SO_REUSEADDR`` used to be set unconditionally, which is a security and a
-    debugging problem rather than a convenience. Measured on Windows: a second
-    listener binding a port the first already held *succeeded silently* and then
-    received nothing, while the first got every datagram -- so a
-    misconfiguration, or another process quietly taking over a DHCP port, looked
-    exactly like a working start-up. (Linux allows the same duplicate bind for
-    UDP when both sockets set it.) A DHCP server has no legitimate reason to
-    share port 67 with anything, so the default is now exclusive and the
-    reuse is opt-in via ``DhcpListener.REUSE_ADDRESS``.
-
-    On Windows "exclusive" needs saying out loud: without ``SO_EXCLUSIVEADDRUSE``
-    a *later* socket that sets ``SO_REUSEADDR`` can still steal the address.
-    POSIX has no such option and needs none -- a plain bind already refuses.
-    """
-    options = [_net.SocketOption(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)]
-    if reuse_address:
-        options.append(_net.SocketOption(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1))
-    elif SO_EXCLUSIVEADDRUSE is not None:
-        options.append(_net.SocketOption(_socket.SOL_SOCKET, SO_EXCLUSIVEADDRUSE, 1))
-    return options
-
-
 def _raise_bind_error(error: OSError, address: _net.SocketAddress) -> "_ty.NoReturn":
-    """Re-raise a failed bind with a diagnosis a reader can act on."""
-    # netimps recognises the POSIX errnos *and* the Windows WinError codes,
-    # which differ; the DHCP-specific suggestion is appended rather than
-    # replacing the generic diagnosis.
-    #
-    # The hint decides which kind of failure this is, not the exception type.
-    # Windows reports an exclusively-held address as WSAEACCES, which Python
-    # maps onto errno 13 -- EACCES, which on POSIX really does mean privilege --
-    # so `isinstance(error, PermissionError)` is True for a port that is merely
-    # taken. netimps >= 0.3.1 tells the two apart by platform and says so in the
-    # hint, so asking the hint first is what keeps a Windows in-use failure out
-    # of the privilege branch.
+    """Re-raise a failed bind with the DHCP-specific next step appended.
+
+    "The port is taken" is decided by netimps, which raises
+    `AddressInUseError` for every shape of it: WSAEADDRINUSE, POSIX
+    EADDRINUSE, and Windows' WSAEACCES against an exclusive holder -- which
+    Python maps onto errno 13 and so used to arrive as a `PermissionError`,
+    for a port that is merely in use (Windows has no privileged ports). That
+    type is kept, so `except PermissionError` never catches an in-use port.
+    """
+    if isinstance(error, _netimps.AddressInUseError):
+        raise _netimps.AddressInUseError(
+            error.errno, f"{error.strerror or error}; try port {address.port + 1000}."
+        ) from error
     hint = _netimps.bind_error_hint(error, address.port)
     if hint is None:
         raise error
-    if "in use" in hint:
-        # Built without the errno positional on purpose: `OSError(13, ...)`
-        # comes back a `PermissionError`, because Python picks the subclass
-        # from the errno -- so the *type* would go on saying "privilege"
-        # however carefully the message is worded. The errno is attached
-        # afterwards instead.
-        failure = OSError(f"{hint}; try port {address.port + 1000}.")
-        failure.errno = error.errno
-        raise failure from error
     if isinstance(error, PermissionError) or "permission" in hint.lower():
         raise PermissionError(f"{hint}. Try 6767 for testing.") from error
     raise OSError(error.errno, hint) from error
@@ -491,11 +454,23 @@ def _bind_sockets(
             continue
         LOGGER.info(f"Listening on{' (' + label + ')' if label else ''}: {address}")
         try:
+            # Exclusive unless REUSE_ADDRESS: a second listener binding a port
+            # the first held used to *succeed silently* and receive nothing --
+            # a misconfiguration, or another process quietly taking over a DHCP
+            # port, that looked exactly like a working start-up. netimps makes
+            # the exclusive bind the default on both platforms.
+            #
+            # connreset=False: on Windows an ICMP port-unreachable provoked by
+            # an earlier reply otherwise surfaces as ConnectionResetError on a
+            # *later, unrelated* receive -- measured, one client that had gone
+            # away logged a full ERROR traceback on the server.
             sock = address.listen(
                 _socket.AF_INET,
                 _socket.SOCK_DGRAM,
                 _socket.IPPROTO_UDP,
-                options=_bind_options(reuse_address),
+                broadcast=True,
+                allow_address_takeover=reuse_address,
+                connreset=False,
             )
         except OSError as e:
             _raise_bind_error(e, address)
@@ -728,7 +703,7 @@ class DhcpListener:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
 
     #: Whether to set ``SO_REUSEADDR`` on every listening socket. Off: see
-    #: `_bind_options` for what sharing a DHCP port actually looks like when it
+    #: `_bind_sockets` for what sharing a DHCP port actually looks like when it
     #: goes wrong. A class attribute rather than a constructor argument so every
     #: subclass (server, client, relay, capture) inherits it without each
     #: constructor having to forward it.
@@ -1027,7 +1002,7 @@ import asyncio as _asyncio
 class AsyncDhcpListener:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
 
-    #: As on `DhcpListener`; see `_bind_options`.
+    #: As on `DhcpListener`; see `_bind_sockets`.
     REUSE_ADDRESS: bool = False
 
     def __init__(
