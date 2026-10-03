@@ -198,7 +198,11 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 - **`OptionOverload`** (`IntFlag`) — `NONE`/`FILE`/`SNAME`/`BOTH`; RFC 3396
   overload selector, single octet.
 
-### Network types (`net.py`)
+### Network types (`addresses.py`, `domains.py`, `fqdn.py`, `servers.py`)
+
+Split by family: addresses and routes, domain-name lists and single names, the
+client FQDN, and server-locator/status codecs. Import every one of them from
+`pydhcp.options.type`.
 
 - **`IPv4Address`** (`ipaddress.IPv4Address` subclass) — single 4-byte IPv4
   address.

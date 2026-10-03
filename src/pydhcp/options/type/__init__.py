@@ -9,7 +9,7 @@ from .base import (
 # carry one: `ccc` lived outside this package and imported `.type` back, so it
 # worked only while it was imported last, and hoisting this block produced an
 # ImportError from a partially initialised module. It is now a sibling that
-# imports `.base`/`.net`/`.scalar` directly, so any order works.
+# imports `.base`/`.addresses`/`.scalar` directly, so any order works.
 from .ccc import (
     CccOption as CccOption,
     CccSubOption as CccSubOption,
@@ -41,17 +41,21 @@ from .mos import (
     MoSIpv4AddressList as MoSIpv4AddressList,
     MoSFqdnList as MoSFqdnList,
 )
-from .net import (
+from .addresses import (
     IPv4Address as IPv4Address,
     ClasslessRoute as ClasslessRoute,
     PolicyFilter as PolicyFilter,
     StaticRoute as StaticRoute,
+)
+from .domains import (
     DomainList as DomainList,
     UncompressedDomainList as UncompressedDomainList,
-    RdnssSelection as RdnssSelection,
-    ClientFqdn as ClientFqdn,
-    SipServers as SipServers,
     DomainName as DomainName,
+)
+from .fqdn import ClientFqdn as ClientFqdn
+from .servers import (
+    RdnssSelection as RdnssSelection,
+    SipServers as SipServers,
     StatusCode as StatusCode,
     PcpServerList as PcpServerList,
 )

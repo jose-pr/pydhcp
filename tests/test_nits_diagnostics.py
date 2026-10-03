@@ -17,7 +17,7 @@ from pydhcp.options import DhcpOptionCode, DhcpOptions
 from pydhcp.options.type import DomainList, OptionOverload
 from pydhcp.options.type.base import DhcpOptionCodes
 from pydhcp.options.type.ccc import CccProvisioningServerAddress
-from pydhcp.options.type.net import IPv4Address
+from pydhcp.options.type.addresses import IPv4Address
 from pydhcp.options.type.scalar import U32
 from pydhcp.packet import DhcpMessageType
 from pydhcp.packet import message as _message

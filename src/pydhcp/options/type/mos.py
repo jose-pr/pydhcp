@@ -7,7 +7,7 @@ if _ty.TYPE_CHECKING:
 
 from .base import DhcpOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
-from .net import IPv4Address
+from .addresses import IPv4Address
 from .scalar import Bytes
 
 
