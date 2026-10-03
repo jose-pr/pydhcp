@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- **A wildcard listener did not know which interface a datagram arrived on**
+  on CPython 3.9–3.11 anywhere (`socket.IP_PKTINFO` only exists from 3.12), on
+  macOS (which zero-fills the field the old code read) and on Windows (whose
+  packet-info layout differs). The server then resolved a synthetic
+  `0.0.0.0/32` interface and, measured, received a DISCOVER and allocated and
+  sent nothing. Receiving now goes through `netimps.UdpEndpoint`, which
+  handles every platform and interpreter; a broadcast is answered from the
+  receiving interface's own address.
+- **`listen="0.0.0.0:67"` and `"*:67"` were not treated as wildcards**: they
+  skipped packet info and bound one socket per address, which on Linux hears
+  no broadcast DISCOVER (measured: 0 of 3, against 3 of 3 for
+  `("0.0.0.0", 67)`). Wildcard-ness is now decided on the parsed host.
+- **The async listener had no packet info on Windows' default proactor
+  loop**, where it fell back to a `DatagramProtocol`. It now receives with
+  `UdpEndpoint.arecv()` on every loop type.
+
 ## [0.6.1] - 2026-09-28
 
 ### Changed

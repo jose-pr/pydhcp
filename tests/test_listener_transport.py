@@ -18,11 +18,16 @@ import pytest
 
 from conftest import build_request
 from pydhcp import listener as listener_module
+import ipaddress
+import types
+
+import netimps
+
 from pydhcp.listener import (
     DhcpListener,
     PktInfoUdpTransport,
     UdpTransport,
-    _recv_with_pktinfo,
+    _arrival,
 )
 from pydhcp.network import IPv4
 
@@ -105,49 +110,111 @@ def test_a_datagram_that_exactly_fills_the_buffer_is_still_accepted() -> None:
     assert len(listener.handled) == 1
 
 
-def test_recv_with_pktinfo_reports_the_msg_trunc_flag(monkeypatch) -> None:
-    """The flags `recvmsg` returns were discarded outright.
+def _datagram(**fields) -> "netimps.Datagram":
+    fields.setdefault("data", b"z" * 40)
+    fields.setdefault("sender", ("192.0.2.5", 68))
+    return netimps.Datagram(**fields)
 
-    Driven through a stub rather than a real POSIX socket so it runs on every
-    platform: `recvmsg` does not exist on Windows, which is precisely how a
-    POSIX-only truncation went unnoticed.
-    """
-    monkeypatch.setattr(listener_module, "CMSG_SPACE", lambda n: n + 16)
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
-    monkeypatch.setattr(listener_module, "MSG_TRUNC", 0x20)
 
-    def fake_recvmsg(sock, bufsize, ancbufsize):
-        return (b"z" * bufsize, [], 0x20, ("192.0.2.5", 68))
+def _interface(*addresses: str):
+    """Just the part of a netimps `Interface` that `_arrival` reads."""
+    return types.SimpleNamespace(ips=[ipaddress.ip_interface(a) for a in addresses])
 
-    monkeypatch.setattr(listener_module, "_RECVMSG", fake_recvmsg)
 
+def test_arrival_reports_the_msg_trunc_flag() -> None:
+    """The flags `recvmsg` returns were discarded outright, so a datagram cut
+    to the buffer was decoded from its leading half."""
     with pytest.raises(listener_module._TruncatedDatagram) as exc_info:
-        _recv_with_pktinfo(object(), 576)  # type: ignore[arg-type]
+        _arrival(_datagram(data=b"z" * 576, truncated=True), 576)
 
     assert "576" in str(exc_info.value)
     assert "192.0.2.5" in str(exc_info.value)
 
 
-def test_recv_with_pktinfo_warns_when_the_control_data_was_cut(
-    monkeypatch, caplog
-) -> None:
+def test_arrival_treats_a_full_extra_octet_as_truncated() -> None:
+    """The path with no MSG_TRUNC to report: a datagram that fills the
+    one-octet-larger buffer was longer than the limit."""
+    with pytest.raises(listener_module._TruncatedDatagram):
+        _arrival(_datagram(data=b"z" * 577), 576)
+
+
+def test_arrival_warns_when_the_control_data_was_cut(caplog) -> None:
     """MSG_CTRUNC leaves the payload intact but the interface unresolved, and
     the interface is what the reply's SERVER_IDENTIFIER comes from."""
-    monkeypatch.setattr(listener_module, "CMSG_SPACE", lambda n: n + 16)
-    monkeypatch.setattr(listener_module, "IP_PKTINFO", 8)
-    monkeypatch.setattr(listener_module, "MSG_CTRUNC", 0x08)
-
-    def fake_recvmsg(sock, bufsize, ancbufsize):
-        return (b"z" * 40, [], 0x08, ("192.0.2.5", 68))
-
-    monkeypatch.setattr(listener_module, "_RECVMSG", fake_recvmsg)
-
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
-        data, client, ifindex, local_ip = _recv_with_pktinfo(object(), 576)  # type: ignore[arg-type]
+        data, client, ifindex, local_ip = _arrival(
+            _datagram(control_truncated=True), 576
+        )
 
     assert len(data) == 40
     assert ifindex is None and local_ip is None
     assert any("control data truncated" in r.getMessage() for r in caplog.records)
+
+
+def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:
+    """`Datagram.local_address` is the *destination*. For a broadcast DISCOVER
+    that is 255.255.255.255, which names no interface and must never become
+    the server identifier; the receiving interface's own address does."""
+    *_, ifindex, local_ip = _arrival(
+        _datagram(
+            local_address=IPv4("255.255.255.255"),
+            interface_index=4,
+            interface=_interface("fe80::1/64", "169.254.7.7/16", "192.0.2.1/24"),
+        ),
+        576,
+    )
+
+    assert ifindex == 4
+    assert local_ip == IPv4("192.0.2.1"), "APIPA or the broadcast was chosen"
+
+
+def test_arrival_keeps_a_unicast_destination_the_interface_holds() -> None:
+    """A NIC with several addresses: the one the client addressed is the one
+    to answer from."""
+    *_, local_ip = _arrival(
+        _datagram(
+            local_address=IPv4("192.0.2.2"),
+            interface_index=4,
+            interface=_interface("192.0.2.1/24", "192.0.2.2/24"),
+        ),
+        576,
+    )
+
+    assert local_ip == IPv4("192.0.2.2")
+
+
+def test_arrival_resolves_an_apipa_only_interface() -> None:
+    """An APIPA-only NIC is the normal state of an isolated DHCP-only segment;
+    resolution must still find it, only selection prefers otherwise."""
+    *_, local_ip = _arrival(
+        _datagram(
+            local_address=IPv4("255.255.255.255"),
+            interface_index=9,
+            interface=_interface("169.254.7.7/16"),
+        ),
+        576,
+    )
+
+    assert local_ip == IPv4("169.254.7.7")
+
+
+def test_arrival_without_an_interface_drops_a_broadcast_destination() -> None:
+    *_, ifindex, local_ip = _arrival(
+        _datagram(local_address=IPv4("255.255.255.255"), interface_index=3), 576
+    )
+
+    assert ifindex == 3
+    assert local_ip is None
+
+
+def test_arrival_treats_a_zero_local_address_as_absent() -> None:
+    """A zero-filled `ipi_spec_dst` decodes to 0.0.0.0; taken literally it
+    resolved a synthetic 0.0.0.0/32 interface and the server served nothing."""
+    *_, local_ip = _arrival(
+        _datagram(local_address=IPv4("0.0.0.0"), interface_index=3), 576
+    )
+
+    assert local_ip is None
 
 
 # --- transport-25: three failures, three reports ---

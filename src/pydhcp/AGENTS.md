@@ -35,16 +35,19 @@ something else.
 
 - **`DhcpListener(listen=None, select_timeout=None, max_packet_size=None,
   per_interface=None)`** — synchronous, thread-based receive loop.
-  `listen`: `None`/`"*"` (wildcard, expands to every host interface unless
-  `IP_PKTINFO` is available), a `"host:port"` string, an `IPv4`, a
+  `listen`: `None`/`"*"` (wildcard), a `"host:port"` string, an `IPv4`, a
   `(host, port_or_ports)` tuple, or a sequence of any of those (comma-joined
-  strings split automatically). `select_timeout` (default 1s) bounds the
-  `select()` poll. `max_packet_size` defaults to `UDP_MAX_PACKET_SIZE`
-  (65535). `per_interface=True` disables `IP_PKTINFO` wildcard routing and
-  binds one socket per interface instead. Every instance owns
-  `self.metrics: DhcpMetrics` — there is no global metrics singleton.
-  - **Wildcard expansion uses the APIPA-filtered address list.** `"*"` without
-    `IP_PKTINFO` becomes one socket per `host_ip_interfaces()` address, which
+  strings split automatically). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
+  `"*:67"`, `"0.0.0.0:67"`, `("0.0.0.0", 67)` — binds one wildcard socket and
+  learns each datagram's arrival interface through `netimps.UdpEndpoint`
+  (packet info), on Linux, macOS and Windows and on every supported CPython.
+  `select_timeout` (default 1s) bounds the `select()` poll. `max_packet_size`
+  defaults to `UDP_MAX_PACKET_SIZE` (65535). `per_interface=True` disables
+  wildcard routing and binds one socket per interface instead. Every instance
+  owns `self.metrics: DhcpMetrics` — there is no global metrics singleton.
+  - **Wildcard expansion uses the APIPA-filtered address list.** A wildcard on
+    a platform without packet info (or with `per_interface=True`) becomes one
+    socket per `host_ip_interfaces()` address, which
     excludes 169.254/16: binding is *selection* (which addresses this process
     answers on), not *resolution* (which interface a datagram arrived on, which
     uses `filter=False`). A link-local address means DHCP did not answer —
@@ -130,9 +133,10 @@ something else.
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
     (there is no blocking loop to enter — use `start()` then `wait()`).
-  - On loops without socket readability (Windows' default proactor loop) it
-    falls back to a `DatagramProtocol` endpoint per socket. That path cannot
-    carry `IP_PKTINFO`, which is absent on those platforms anyway.
+  - Receives with one `netimps.UdpEndpoint.arecv()` task per socket, so packet
+    info works on **every** loop type, Windows' default proactor loop included.
+    `.stop()` cancels those tasks and then closes the sockets; `await .stop()`
+    and `await .wait()` both return only once the sockets are closed.
 - **`Transport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
   bytes) -> int`; base raises `NotImplementedError`.
 - **`UdpTransport(socket)`** — plain UDP send. A destination of `0.0.0.0`

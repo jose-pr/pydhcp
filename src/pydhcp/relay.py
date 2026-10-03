@@ -424,7 +424,7 @@ class AsyncDhcpRelay(_AsyncBase, DhcpRelay):  # type: ignore[misc]
     """`DhcpRelay`'s forwarding policy on the asyncio listener.
 
     Mixed the way `AsyncDhcpServer` is, and for the same reason: every line of
-    the receive path -- `_pktinfo_supported`, `_recv_with_pktinfo`,
+    the receive path -- `_pktinfo_supported`, `_arrival`,
     `_context_for`, `_bind_sockets` -- stays in `listener.py` where both
     listeners reach it. The async half of this project has been written as a
     *copy* once already, and a hardcoded `_pktinfo = False` then left it
