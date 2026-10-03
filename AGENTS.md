@@ -22,6 +22,7 @@ src/pydhcp/        the package (src layout — an editable install or PYTHONPATH
   options/         DhcpOptions, DhcpOptionCode, type/ payload codecs (incl. ccc.py)
   network/         addresses and host interface discovery
   listener/        listeners and transports, one module per responsibility
+  cli/             the `pydhcp` command: App in __init__, one module per subcommand
 tests/             pytest suite, including tests/integration (real sockets on loopback)
 examples/          runnable examples; tests/test_examples.py imports each one
 benchmarks/        run.py plus per-suite scripts, JSON output for comparison

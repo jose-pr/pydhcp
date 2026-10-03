@@ -136,7 +136,9 @@ def test_the_capture_hook_logs_through_the_module_logger(
         stderr = "boom"
         returncode = 3
 
-    monkeypatch.setattr(cli_module.subprocess, "run", lambda *a, **k: Result())
+    monkeypatch.setattr(
+        cli_module.capture_hook.subprocess, "run", lambda *a, **k: Result()
+    )
 
     hook = cli_module._load_capture_hook(str(command), "json", fail_fast=False)
     assert hook is not None

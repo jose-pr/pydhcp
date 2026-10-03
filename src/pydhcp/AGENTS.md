@@ -620,7 +620,15 @@ fails at write time. Anything rendering one must call `display()` first —
   Python <3.11 without `tomli` installed), else JSON. Used by the `server`/
   `relay` CLI subcommands' `--config` flag.
 
-## CLI (`cli.py`)
+## CLI (`cli/`)
+
+A package: `App` and `main()` are in `pydhcp.cli` itself, and each subcommand
+has its own module (`cli.interfaces`, `cli.server`, `cli.relay`, `cli.packet`,
+`cli.capture`, with `cli.capture_hook` for `--hook` loading and `cli._common`
+for the shared base). `from pydhcp.cli import ...` works for every name as
+before; patch a name where the command module looks it up
+(`pydhcp.cli.server.DhcpServer`, not `pydhcp.cli.DhcpServer`).
+
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both
 reach `cli.main()`, and both report themselves as `pydhcp` in usage and error
