@@ -10,39 +10,11 @@ import typing as _ty
 
 from .. import constants as _const, network as _net
 from ..lease import DhcpLease, LeaseBackend
-from ..listener.interfaces import _register_address_cache
 from ..log import LOGGER
 from ..options import DhcpOptionCode, DhcpOptions, type as _type
 from ..packet.message import DhcpMessage
 from math import inf as _inf
 from ._state import _ServerState
-
-#: "Which servable host interface holds this address", memoised.
-#:
-#: The lookup is a full enumeration of every host adapter, and it ran once per
-#: packet on both the allocating path and the DHCPINFORM path. Measured on this
-#: box: 1181 us for the enumeration against 1539 us for the whole of
-#: `handle()` on a DHCPDISCOVER -- 77% of the work of answering a client was
-#: asking the OS a question whose answer had not changed. (The finding recorded
-#: DHCPINFORM enumerating twice; measured, it is once.)
-#:
-#: The question is deliberately *not* answered from `context.interface`, even
-#: though that is already resolved and already cached. `_resolve_interface`
-#: never returns None: when nothing matches it invents an `unknown[<ip>]` host
-#: route with a /32 and no MAC, and the base allocator takes SUBNET_MASK and
-#: BROADCAST_ADDRESS straight off the interface's network. Substituting it
-#: would turn "we could not work out where this arrived" into a lease carrying
-#: a 255.255.255.255 subnet mask. This lookup returns None there, which is what
-#: keeps the server silent instead.
-#:
-#:
-#: Cleared on every bind, through the same hook as
-#: `listener._INTERFACE_CACHE`: an address the host gains or loses without a
-#: re-bind is stale here until it re-binds, exactly as it is there.
-_SERVABLE_INTERFACES: "dict[_net.IPv4, _ty.Optional[_net.NetworkInterface]]" = {}
-
-
-_register_address_cache(_SERVABLE_INTERFACES)
 
 
 def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterface]:
@@ -63,19 +35,21 @@ def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterf
     at all" -- and deliberately does not filter, because identity is not
     selection.
     """
-    try:
-        return _SERVABLE_INTERFACES[server_id]
-    except KeyError:
-        pass
-    found = next(
+    # Asked of every allocating and every DHCPINFORM packet, so through
+    # netimps' enumeration cache: measured before any cache, the enumeration
+    # was 1181 us of a 1539 us `handle()` on a DHCPDISCOVER. Deliberately not
+    # answered from `context.interface`: `_resolve_interface` never returns
+    # None -- it invents an `unknown[<ip>]` /32 -- and the allocator reads
+    # SUBNET_MASK and BROADCAST_ADDRESS off this interface, so substituting it
+    # would hand a client a 255.255.255.255 mask. None keeps the server silent.
+    return next(
         _net.host_ip_interfaces(
             lambda interface: interface.ip == server_id
-            and interface.ip not in _net.APIPA
+            and interface.ip not in _net.APIPA,
+            cache=True,
         ),
         None,
     )
-    _SERVABLE_INTERFACES[server_id] = found
-    return found
 
 
 class _NonExtendingBackend:
@@ -189,7 +163,7 @@ class _LeasePolicy(_ServerState):
         # adapter, link-local included -- which is exactly netimps'
         # `is_local_address`. Not `host_ip_interfaces()`: its default filter
         # hides APIPA, and identity is not selection.
-        return bool(_netimps.is_local_address(server_id))
+        return bool(_netimps.is_local_address(server_id, cache=True))
 
     @staticmethod
     def _has_time_left(lease: DhcpLease) -> bool:

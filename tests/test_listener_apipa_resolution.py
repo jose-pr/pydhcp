@@ -35,7 +35,7 @@ def apipa_only(monkeypatch):
         net.NetworkInterface("Wi-Fi 2", APIPA),
     ]
 
-    def fake(filter=True, family=4):
+    def fake(filter=True, family=4, *, cache=False):
         if filter is True:
             filter = lambda ni: ni.ip not in net.APIPA
         for ni in interfaces:
@@ -50,7 +50,9 @@ def apipa_only(monkeypatch):
         ni.ip: netimps.Interface(ni.name, index=n + 1, ips=[ni.ip_interface])
         for n, ni in enumerate(interfaces)
     }
-    monkeypatch.setattr(netimps, "interface_for", lambda address: adapters.get(address))
+    monkeypatch.setattr(
+        netimps, "interface_for", lambda address, **_kw: adapters.get(address)
+    )
     return interfaces[1]
 
 
@@ -61,9 +63,6 @@ def _wildcard_socket() -> socket.socket:
 
 
 def test_an_apipa_only_interface_resolves_by_address(apipa_only, monkeypatch) -> None:
-    import pydhcp.listener as listener_module
-
-    monkeypatch.setattr(listener_module, "_INTERFACE_CACHE", {})
     sock = _wildcard_socket()
     try:
         resolved = _resolve_interface(sock, net.IPv4("169.254.11.89"), None)

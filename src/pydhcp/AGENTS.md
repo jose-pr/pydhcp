@@ -235,12 +235,14 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
   - `.get_inform_options(server_id, msg) -> DhcpOptions` — override point for
     DHCPINFORM-only option sets (no address allocated). Same default set, and
     the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
-  - **"Which host interface holds `server_id`" is memoised until the next
-    `.bind()`.** Both the allocating path and the DHCPINFORM path need it, and
-    both enumerated every host adapter per packet — 1181 µs of a 1539 µs
-    `handle()` on one measured box, now 148 µs. The consequence to know: an
-    address this host gains or loses **without re-binding** is not noticed,
-    exactly as for the listener's own interface-resolution cache.
+  - **Host-address lookups use netimps' enumeration cache** (`cache=True`, a
+    one-second TTL), and `.bind()` clears it. "Which interface holds
+    `server_id`", "do we hold this address" and the listener's arrival-interface
+    resolution all need it per packet, and an uncached enumeration costs about
+    1 ms (35–42 ms with many adapters) — 1181 µs of a 1539 µs `handle()` on one
+    measured box before any cache. The cost is now at most one enumeration per
+    second whatever the packet rate, and an address the host gains or loses is
+    noticed within a second without a re-bind.
   - `.handle_discover/.handle_request/.handle_decline/.handle_release/
     .handle_inform(msg, context) -> None` — per-message-type handlers called
     from `.handle()`; each is independently overridable.

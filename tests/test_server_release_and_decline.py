@@ -106,7 +106,7 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
     monkeypatch.setattr(
         server_module._netimps,
         "is_local_address",
-        lambda address: address in {IFACE_A.ip, IFACE_B.ip},
+        lambda address, **_kw: address in {IFACE_A.ip, IFACE_B.ip},
     )
     client_id = _seed(server, "10.0.0.50")
 
@@ -147,7 +147,7 @@ def test_a_genuinely_foreign_server_id_still_reclaims(server, monkeypatch) -> No
     monkeypatch.setattr(
         server_module._netimps,
         "is_local_address",
-        lambda address: address == IFACE_A.ip,
+        lambda address, **_kw: address == IFACE_A.ip,
     )
     client_id = _seed(server, "10.0.0.50")
 

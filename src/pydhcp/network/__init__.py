@@ -252,6 +252,8 @@ APIPA = _netimps.APIPA
 def host_ip_interfaces(
     filter: _ty.Union[_ty.Callable[[NetworkInterface], bool], bool] = True,
     family: _ty.Optional[int] = 4,
+    *,
+    cache: _ty.Union[bool, float] = False,
 ) -> _ty.Iterator[NetworkInterface]:
     """Yield one :class:`NetworkInterface` per local address.
 
@@ -269,7 +271,13 @@ def host_ip_interfaces(
     """
     if filter is True:
         filter = lambda ni: ni.ip not in APIPA
-    for iface, address in _netimps.iter_addresses(family=family):
+    # `cache` is netimps' enumeration cache: False (the default) enumerates
+    # now, True reuses one up to `netimps.INTERFACE_CACHE_TTL` old (1 s), and a
+    # number is that TTL in seconds. Per-packet callers pass True.
+    adapters = _netimps.get_interfaces() if cache is False else None
+    if adapters is None:
+        adapters = _netimps.get_interfaces(cache=cache)
+    for iface, address in _netimps.iter_addresses(adapters, family=family):
         ni = NetworkInterface(
             name=iface.name,
             ip_interface=address,

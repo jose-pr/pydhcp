@@ -145,10 +145,12 @@ def test_resolve_interface_without_pktinfo_still_falls_back() -> None:
 def test_resolve_interface_by_index_alone_answers_from_the_adapter() -> None:
     """No address to match -- a zero-filled or missing local address -- so the
     index picks the adapter and its own routable address answers."""
-    from pydhcp.listener import _clear_interface_cache, _resolve_interface
+    import netimps
+
+    from pydhcp.listener import _resolve_interface
 
     index, expected = _a_real_interface()
-    _clear_interface_cache()
+    netimps.clear_interface_cache()
     sock = _wildcard_socket()
     try:
         resolved = _resolve_interface(sock, IPv4("0.0.0.0"), index)
@@ -259,37 +261,25 @@ def test_start_restores_the_previous_sigint_handler_on_close() -> None:
     assert signal.getsignal(signal.SIGINT) is original
 
 
-def test_interface_resolution_is_cached_and_cleared_by_bind() -> None:
+def test_interface_resolution_is_cached_and_cleared_by_bind(enumerations) -> None:
     """Enumerating every host adapter per datagram was expensive enough that a
-    modest flood denied service on its own."""
+    modest flood denied service on its own. Twenty-five datagrams' worth of
+    resolution now costs one enumeration, and a bind forces the next."""
     import socket
 
-    # The module that owns the resolver: `_resolve_interface` looks the
-    # uncached half up there, so that is where the counter has to go.
-    from pydhcp.listener import interfaces as listener_module
-    from pydhcp.listener import _clear_interface_cache, _resolve_interface
+    from pydhcp.listener import DhcpListener, _resolve_interface
 
-    calls = []
-    original = listener_module._resolve_interface_uncached
-
-    def counting(*args, **kwargs):
-        calls.append(1)
-        return original(*args, **kwargs)
-
-    listener_module._resolve_interface_uncached = counting
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))
     try:
-        _clear_interface_cache()
         for _ in range(25):
             _resolve_interface(sock)
-        assert len(calls) == 1, "resolution was not cached"
+        assert len(enumerations) == 1, "resolution was not cached"
 
-        _clear_interface_cache()
+        DhcpListener(listen=("127.0.0.1", 0)).__enter__().close()
         _resolve_interface(sock)
-        assert len(calls) == 2, "clearing the cache did not force a re-resolve"
+        assert len(enumerations) == 2, "a bind did not force a re-enumeration"
     finally:
-        listener_module._resolve_interface_uncached = original
         sock.close()
 
 

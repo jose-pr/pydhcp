@@ -10,7 +10,7 @@ from ..listener import AsyncDhcpListener as _AsyncBase, ListenSpec, RequestConte
 from ..packet import enums as _enum
 from ..packet.message import DhcpMessage
 from .handlers import _Handlers
-from .policy import _NonExtendingBackend, _SERVABLE_INTERFACES, _servable_interface
+from .policy import _NonExtendingBackend, _servable_interface
 from .reply import _is_loopback
 
 # `DhcpLease`, `_net` and `_netimps` are imported only to stay importable from

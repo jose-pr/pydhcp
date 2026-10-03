@@ -109,7 +109,6 @@ _RECEIVE_PATH = (
     "_close_socket",
     "_context_for",
     "_resolve_interface",
-    "_resolve_interface_uncached",
     "_parselisteners",
     "DhcpListener.listen",
     "DhcpListener.bind",

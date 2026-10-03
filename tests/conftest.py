@@ -10,6 +10,8 @@ each -- so a change to any of them had to be made everywhere or not at all.
 from __future__ import annotations
 
 import contextlib
+
+import pytest
 import socket
 import time
 import typing as _ty
@@ -192,3 +194,29 @@ class FixedLeaseServer(DhcpServer):
             datetime.now() + timedelta(seconds=self.LEASE_SECONDS),
             options,
         )
+
+
+@pytest.fixture
+def enumerations(monkeypatch) -> "list[bool]":
+    """Count the host-adapter enumerations netimps actually performs.
+
+    pydhcp's per-packet lookups go through netimps' enumeration cache, so a
+    lookup and an enumeration are no longer the same thing -- the cost that
+    matters, and that a flood multiplies, is the enumeration. netimps exposes no
+    counter, so this wraps its internal enumerator; a rename there fails here at
+    setup, loudly, rather than counting nothing. Starts from an empty cache.
+    """
+    import netimps
+    import netimps._ifaddrs as ifaddrs
+
+    calls: "list[bool]" = []
+    original = ifaddrs._enumerate_interfaces
+
+    def counting(raw: bool):  # type: ignore[no-untyped-def]
+        calls.append(raw)
+        return original(raw)
+
+    monkeypatch.setattr(ifaddrs, "_enumerate_interfaces", counting)
+    netimps.clear_interface_cache()
+    yield calls
+    netimps.clear_interface_cache()

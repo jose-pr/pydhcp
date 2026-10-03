@@ -25,6 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `REUSE_ADDRESS=True` now means `allow_address_takeover=True`; the exclusive
   default is netimps' on every platform.
 - `pydhcp.network.SocketOption` is `netimps.SocketOption` (same three fields).
+- **Host-address lookups use netimps' enumeration cache** (one-second TTL),
+  cleared on every bind, in place of pydhcp's own two per-bind caches. Same
+  cost bound — measured, a 1000-datagram burst cost 2 enumerations — and an
+  address the host gains or loses is now noticed within a second instead of
+  only at the next bind. `host_ip_interfaces()` gains a keyword-only `cache`.
 - `MACAddress.hex()` is inherited from netimps (identical behaviour) rather
   than overridden, and `str(SocketAddress)` is built with `netimps.join_host`.
 - **`DhcpClient`'s retransmission schedule comes from

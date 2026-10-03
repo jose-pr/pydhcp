@@ -1,7 +1,8 @@
-"""Which host interface a datagram arrived on, and the caches that keep that cheap."""
+"""Which host interface a datagram arrived on."""
 
 from __future__ import annotations
 
+import functools as _functools
 import ipaddress as _ipaddress
 import socket as _socket
 import typing as _ty
@@ -10,78 +11,6 @@ import netimps as _netimps
 
 from .. import network as _net
 from ..log import LOGGER
-
-#: Resolved interfaces, keyed by (ifindex, local address). Enumerating every host
-#: adapter costs tens of milliseconds on Windows, and it was paid per datagram --
-#: enough that a modest flood denied service on its own. Cleared by `bind()`, which
-#: is the point at which the set of addresses this listener serves can change.
-_INTERFACE_CACHE: dict[tuple[int, str], _net.NetworkInterface] = {}
-
-
-#: Every cache keyed by "what addresses does this host have", dropped together
-#: whenever a listener binds. Binding is the one moment both listeners pass
-#: through, and the moment that answer can change.
-_ADDRESS_CACHES: "list[_ty.MutableMapping[_ty.Any, _ty.Any]]" = [_INTERFACE_CACHE]
-
-
-def _register_address_cache(cache: "_ty.MutableMapping[_ty.Any, _ty.Any]") -> None:
-    """Have `cache` dropped on every bind, alongside `_INTERFACE_CACHE`.
-
-    So that a second module caching the same kind of answer -- `server.py`
-    memoising which servable interface holds an address -- cannot end up with a
-    different invalidation point from this one.
-    """
-    _ADDRESS_CACHES.append(cache)
-
-
-def _clear_interface_cache() -> None:
-    for cache in _ADDRESS_CACHES:
-        cache.clear()
-
-
-def _resolve_interface(
-    sock: _socket.socket,
-    pkt_local_ip: _ty.Optional[_net.IPv4] = None,
-    pkt_ifindex: _ty.Optional[int] = None,
-) -> _net.NetworkInterface:
-    """Find the NetworkInterface a datagram actually arrived on.
-
-    ``pkt_local_ip``/``pkt_ifindex`` come from the datagram's packet info
-    and are authoritative when present: the pktinfo path only runs on a wildcard
-    bind, where ``getsockname()`` reports 0.0.0.0 -- precisely the information
-    pktinfo exists to supply. The address picks the adapter and which of its
-    addresses (a NIC may hold several, and the reply's SERVER_IDENTIFIER must be
-    the right one); the index is the fallback when the address names none.
-
-    Falls back to a synthetic host-route entry when nothing matches, which keeps
-    callers from having to special-case it. Results are cached per
-    (ifindex, address) and `bind()` clears the cache: the lookup is
-    `netimps.interface_for`, which enumerates every adapter on each call --
-    tens of milliseconds on Windows, paid per datagram before this cache.
-
-    A local address of 0.0.0.0 is no address at all and is treated as absent.
-    It is what a zero-filled `ipi_spec_dst` decodes to, and taking it literally
-    skipped the index lookup (which applies only when the address is None), so
-    the datagram resolved to a synthetic `unknown[0.0.0.0]/32` -- a network with
-    nothing in it to lease. Measured: the server received the DISCOVER and
-    allocated and sent nothing.
-    """
-    if pkt_local_ip is not None and pkt_local_ip.is_unspecified:
-        pkt_local_ip = None
-    if pkt_local_ip is None and pkt_ifindex is None:
-        try:
-            sock_ip, _port = sock.getsockname()
-        except Exception:
-            sock_ip = "127.0.0.1"
-        cache_key = (0, sock_ip)
-    else:
-        cache_key = (pkt_ifindex or 0, str(pkt_local_ip) if pkt_local_ip else "")
-    cached = _INTERFACE_CACHE.get(cache_key)
-    if cached is not None:
-        return cached
-    resolved = _resolve_interface_uncached(sock, pkt_local_ip, pkt_ifindex)
-    _INTERFACE_CACHE[cache_key] = resolved
-    return resolved
 
 
 def _network_interface(
@@ -111,11 +40,54 @@ def _network_interface(
     )
 
 
-def _resolve_interface_uncached(
+@_functools.lru_cache(maxsize=256)
+def _warn_synthetic(local_ip: str) -> None:
+    """Log the synthetic-interface fallback once per address.
+
+    The lookup used to be cached per bind, which incidentally also made this
+    warning fire once. Without that cache it would fire for every datagram from
+    an unresolvable address, and a warning on a path any sender can drive needs
+    a bound or the log becomes the second target. Bounded, so a flood of
+    distinct addresses cannot grow it.
+    """
+    LOGGER.warning(
+        f"Could not resolve interface for IP {local_ip}; using synthetic interface"
+    )
+
+
+def _resolve_interface(
     sock: _socket.socket,
     pkt_local_ip: _ty.Optional[_net.IPv4] = None,
     pkt_ifindex: _ty.Optional[int] = None,
 ) -> _net.NetworkInterface:
+    """Find the NetworkInterface a datagram actually arrived on.
+
+    ``pkt_local_ip``/``pkt_ifindex`` come from the datagram's packet info
+    and are authoritative when present: the pktinfo path only runs on a wildcard
+    bind, where ``getsockname()`` reports 0.0.0.0 -- precisely the information
+    pktinfo exists to supply. The address picks the adapter and which of its
+    addresses (a NIC may hold several, and the reply's SERVER_IDENTIFIER must be
+    the right one); the index is the fallback when the address names none.
+
+    Falls back to a synthetic host-route entry when nothing matches, which keeps
+    callers from having to special-case it.
+
+    The lookups use netimps' enumeration cache (`cache=True`, a one-second
+    TTL), which `bind()` also clears. An uncached enumeration costs about a
+    millisecond with a handful of adapters and 35-42 ms with many; paid per
+    datagram, a flood alone denied service. The TTL bounds it at one
+    enumeration per second whatever the arrival rate, and -- unlike the
+    per-bind cache this replaced -- notices an address the host gains or loses
+    within a second, without a re-bind.
+
+    A local address of 0.0.0.0 is no address at all and is treated as absent.
+    It is what a zero-filled `ipi_spec_dst` decodes to, and taking it literally
+    skipped the index lookup, so the datagram resolved to a synthetic
+    `unknown[0.0.0.0]/32` -- a network with nothing in it to lease. Measured:
+    the server received the DISCOVER and allocated and sent nothing.
+    """
+    if pkt_local_ip is not None and pkt_local_ip.is_unspecified:
+        pkt_local_ip = None
     if pkt_local_ip is not None:
         local_ip = str(pkt_local_ip)
     else:
@@ -132,7 +104,7 @@ def _resolve_interface_uncached(
     # and no MAC -- losing the prefix the server derives its pool from.
     address = _ipaddress.ip_address(local_ip)
     if isinstance(address, _net.IPv4) and not address.is_unspecified:
-        held = _netimps.interface_for(address)
+        held = _netimps.interface_for(address, cache=True)
         if held is not None:
             found = _network_interface(held, address)
             if found is not None:
@@ -141,7 +113,7 @@ def _resolve_interface_uncached(
     # Only the index is known (or the address is no adapter's): the adapter by
     # index, answering from its own address.
     if pkt_ifindex:
-        for interface in _netimps.get_interfaces():
+        for interface in _netimps.get_interfaces(cache=True):
             if interface.index == pkt_ifindex:
                 found = _network_interface(interface)
                 if found is not None:
@@ -152,9 +124,7 @@ def _resolve_interface_uncached(
         ip_addr = _net.IPv4(local_ip)
     except Exception:
         ip_addr = _net.IPv4("127.0.0.1")
-    LOGGER.warning(
-        f"Could not resolve interface for IP {local_ip}; using synthetic interface"
-    )
+    _warn_synthetic(local_ip)
     return _net.NetworkInterface(
         name=f"unknown[{local_ip}]",
         ip_interface=_ipaddress.IPv4Interface((str(ip_addr), 32)),

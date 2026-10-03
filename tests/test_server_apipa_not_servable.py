@@ -39,7 +39,7 @@ def host(monkeypatch):
         NetworkInterface("eth0", ROUTABLE),
     ]
 
-    def fake(filter=True, family=4):
+    def fake(filter=True, family=4, *, cache=False):
         if filter is True:
             filter = lambda ni: ni.ip not in net.APIPA
         for ni in interfaces:
@@ -53,13 +53,10 @@ def host(monkeypatch):
     # answers from the same fake host: link-local included, unfiltered.
     held = {ni.ip for ni in interfaces}
     monkeypatch.setattr(
-        server_module._netimps, "is_local_address", lambda address: address in held
+        server_module._netimps,
+        "is_local_address",
+        lambda address, **_kw: address in held,
     )
-    # Clear the cache where `_servable_interface` reads it (replacing the
-    # package's re-export would leave the real one, and its stale answers, alone).
-    import pydhcp.server.policy as policy_module
-
-    monkeypatch.setattr(policy_module, "_SERVABLE_INTERFACES", {})
     return interfaces
 
 

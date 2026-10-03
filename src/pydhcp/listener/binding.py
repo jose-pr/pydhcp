@@ -10,7 +10,6 @@ import netimps as _netimps
 
 from .. import network as _net
 from ..log import LOGGER
-from .interfaces import _clear_interface_cache
 
 #: The address each socket was *asked* to bind, which is not what it ended up
 #: bound to whenever that request named port 0. `_bind_sockets` matches already
@@ -69,8 +68,12 @@ def _bind_sockets(
     the address it was *asked* for, not the one it was given, so re-binding a
     port-0 listener keeps the ephemeral port it already has. See
     `_REQUESTED_ADDRESS`.
+
+    Binding is the moment the set of addresses served can change, so it drops
+    netimps' interface-enumeration cache rather than leaving the next lookup
+    to wait out the TTL.
     """
-    _clear_interface_cache()
+    _netimps.clear_interface_cache()
     active: "dict[_net.SocketAddress, _socket.socket]" = {}
     for sock in sockets:
         requested = _REQUESTED_ADDRESS.get(sock)

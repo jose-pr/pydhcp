@@ -70,9 +70,12 @@ of the installed package).
 
 ## Interface discovery
 
-- **`host_ip_interfaces(filter=True, family=4) -> Iterator[NetworkInterface]`**
-  — one entry **per address**, not per adapter, backed by
-  `netimps.iter_addresses()`.
+- **`host_ip_interfaces(filter=True, family=4, *, cache=False) ->
+  Iterator[NetworkInterface]`** — one entry **per address**, not per adapter,
+  backed by `netimps.iter_addresses()`. `cache` is netimps' enumeration cache:
+  `False` enumerates now, `True` reuses an enumeration up to
+  `netimps.INTERFACE_CACHE_TTL` (1 s) old, a number is that TTL in seconds.
+  Per-packet callers pass `True`; `DhcpListener.bind()` clears the cache.
   `filter=True` (default) excludes `APIPA` (link-local) addresses;
   `filter=False` (falsy) includes everything; or pass a
   `Callable[[NetworkInterface], bool]` predicate. Used by `DhcpListener`
