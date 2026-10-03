@@ -1,9 +1,10 @@
 """An APIPA-only interface is still an interface (`gap1-posix-pktinfo-12`).
 
-`_resolve_interface` looks up by ifindex, then falls back to matching the
-address against `host_ip_interfaces()`. That call took the default filter, which
-excludes APIPA (169.254/16) -- so an interface holding only a link-local address
-was absent from the list it searched and could never be resolved by address.
+`_resolve_interface` used to match the address against `host_ip_interfaces()`.
+That call took the default filter, which excludes APIPA (169.254/16) -- so an
+interface holding only a link-local address was absent from the list it
+searched and could never be resolved by address. It now asks
+`netimps.interface_for`, which does not filter.
 
 Found by a transient `Wi-Fi 2` adapter appearing on the Windows box mid-sweep
 and failing a listener test on a docs-only commit. The test helper was made
@@ -42,9 +43,18 @@ def apipa_only(monkeypatch):
                 yield ni
 
     monkeypatch.setattr(net, "host_ip_interfaces", fake)
+    import netimps
+
     import pydhcp.listener as listener_module
 
-    monkeypatch.setattr(listener_module._net, "host_ip_interfaces", fake)
+    # The resolver asks netimps which adapter holds an address, unfiltered.
+    adapters = {
+        ni.ip: netimps.Interface(ni.name, index=n + 1, ips=[ni.ip_interface])
+        for n, ni in enumerate(interfaces)
+    }
+    monkeypatch.setattr(
+        listener_module._netimps, "interface_for", lambda address: adapters.get(address)
+    )
     return interfaces[1]
 
 

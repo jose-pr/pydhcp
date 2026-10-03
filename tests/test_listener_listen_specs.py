@@ -92,27 +92,26 @@ def _wildcard_socket():
 
 
 def _a_real_interface():
-    """An interface both of the resolver's two lookups can find.
+    """A non-loopback adapter with an index and a routable IPv4 address.
 
-    Not simply "the first non-loopback one with an index". `_resolve_interface`
-    looks up by index first and falls back to matching the address against
-    `host_ip_interfaces()`, and the two enumerations disagree: link-local
-    (APIPA, 169.254.0.0/16) addresses appear only in the indexed one. This box
-    grows and drops transient `Wi-Fi 2/3/4` adapters holding exactly those, and
-    one appearing at the head of the list made the address-fallback test fail
-    mid-sweep on a docs-only commit. Pick one that is in both.
+    Not simply "the first non-loopback one with an index": this box grows and
+    drops transient `Wi-Fi 2/3/4` adapters holding only link-local (APIPA,
+    169.254.0.0/16) addresses, and one appearing at the head of the list once
+    made a test fail mid-sweep on a docs-only commit. APIPA resolution has its
+    own test with a constructed host.
     """
+    import netimps
     import pytest
 
-    from pydhcp.network import _iter_indexed_interfaces, host_ip_interfaces
+    from pydhcp.network import APIPA
 
-    addressable = {str(i.ip) for i in host_ip_interfaces(family=None)}
-    for index, interface in _iter_indexed_interfaces(family=4):
-        if not index or interface.ip.is_loopback:
+    for adapter in netimps.get_interfaces():
+        if not adapter.index or adapter.loopback:
             continue
-        if str(interface.ip) in addressable:
-            return index, interface
-    pytest.skip("no non-loopback IPv4 interface resolvable by index and address")
+        for entry in adapter.ips:
+            if isinstance(entry, ipaddress.IPv4Interface) and entry.ip not in APIPA:
+                return adapter.index, NetworkInterface(adapter.name, entry)
+    pytest.skip("no non-loopback adapter with a routable IPv4 address")
 
 
 def test_resolve_interface_prefers_pktinfo_over_getsockname() -> None:
@@ -143,6 +142,24 @@ def test_resolve_interface_without_pktinfo_still_falls_back() -> None:
         sock.close()
 
     assert resolved.name == "unknown[0.0.0.0]"
+
+
+def test_resolve_interface_by_index_alone_answers_from_the_adapter() -> None:
+    """No address to match -- a zero-filled or missing local address -- so the
+    index picks the adapter and its own routable address answers."""
+    from pydhcp.listener import _clear_interface_cache, _resolve_interface
+
+    index, expected = _a_real_interface()
+    _clear_interface_cache()
+    sock = _wildcard_socket()
+    try:
+        resolved = _resolve_interface(sock, IPv4("0.0.0.0"), index)
+    finally:
+        sock.close()
+
+    assert resolved.name == expected.name
+    assert not resolved.name.startswith("unknown[")
+    assert resolved.ip not in __import__("pydhcp").network.APIPA
 
 
 def test_resolve_interface_falls_back_to_address_when_index_is_unknown() -> None:

@@ -610,13 +610,15 @@ def _resolve_interface(
     ``pkt_local_ip``/``pkt_ifindex`` come from the ``IP_PKTINFO`` control message
     and are authoritative when present: the pktinfo path only runs on a wildcard
     bind, where ``getsockname()`` reports 0.0.0.0 -- precisely the information
-    pktinfo exists to supply. Use both, in order: the index picks the adapter,
-    the address picks which of its addresses (a NIC may hold several, and the
-    reply's SERVER_IDENTIFIER must be the right one).
+    pktinfo exists to supply. The address picks the adapter and which of its
+    addresses (a NIC may hold several, and the reply's SERVER_IDENTIFIER must be
+    the right one); the index is the fallback when the address names none.
 
     Falls back to a synthetic host-route entry when nothing matches, which keeps
     callers from having to special-case it. Results are cached per
-    (ifindex, address); `bind()` clears the cache.
+    (ifindex, address) and `bind()` clears the cache: the lookup is
+    `netimps.interface_for`, which enumerates every adapter on each call --
+    tens of milliseconds on Windows, paid per datagram before this cache.
 
     A local address of 0.0.0.0 is no address at all and is treated as absent.
     It is what a zero-filled `ipi_spec_dst` decodes to, and taking it literally
@@ -643,23 +645,38 @@ def _resolve_interface(
     return resolved
 
 
+def _network_interface(
+    interface: _netimps.Interface, address: "_net.IPv4 | None" = None
+) -> "_net.NetworkInterface | None":
+    """pydhcp's per-address view of one netimps adapter.
+
+    ``address`` picks which of its addresses -- a NIC may hold several, and the
+    reply's SERVER_IDENTIFIER must be the right one. Without one, the adapter's
+    first IPv4 address stands in, a non-APIPA one first. None if the adapter
+    holds no such address.
+    """
+    candidates = [
+        entry
+        for entry in interface.ips
+        if isinstance(entry, _ipaddress.IPv4Interface)
+        and (address is None or entry.ip == address)
+    ]
+    if address is None:
+        candidates = [e for e in candidates if e.ip not in _net.APIPA] or candidates
+    if not candidates:
+        return None
+    return _net.NetworkInterface(
+        name=interface.name,
+        ip_interface=candidates[0],
+        mac=_net.MACAddress(interface.mac) if interface.mac else None,
+    )
+
+
 def _resolve_interface_uncached(
     sock: _socket.socket,
     pkt_local_ip: _ty.Optional[_net.IPv4] = None,
     pkt_ifindex: _ty.Optional[int] = None,
 ) -> _net.NetworkInterface:
-    if pkt_ifindex:
-        fallback: _ty.Optional[_net.NetworkInterface] = None
-        for index, interface in _net._iter_indexed_interfaces(family=4):
-            if index != pkt_ifindex:
-                continue
-            if pkt_local_ip is not None and interface.ip == pkt_local_ip:
-                return interface
-            if fallback is None:
-                fallback = interface
-        if fallback is not None and pkt_local_ip is None:
-            return fallback
-
     if pkt_local_ip is not None:
         local_ip = str(pkt_local_ip)
     else:
@@ -668,22 +685,29 @@ def _resolve_interface_uncached(
         except Exception:
             local_ip = "127.0.0.1"
 
-    # Matched against pydhcp's own per-address view, since the caller expects a
-    # NetworkInterface. netimps.interface_for() answers the same question but
-    # returns its own Interface type, which is the wrong shape here.
-    # filter=False: the default excludes APIPA (169.254/16), and that default is
-    # about *which addresses are worth serving from* -- a different question
-    # from *which interface did this packet arrive on*. With the filter on, an
-    # interface whose only address is link-local was absent from this list and
-    # could never be resolved, so it degraded to the synthetic `unknown[...]`
-    # below with a /32 and no MAC -- losing the prefix the server derives its
-    # pool from. An APIPA-only NIC is the normal state of an isolated
-    # DHCP-only segment, which is the condition APIPA exists to signal.
-    for i in _net.host_ip_interfaces(filter=False, family=None):
-        if str(i.ip) == local_ip:
-            return i
+    # The adapter holding exactly this address, from netimps -- link-local
+    # included. That matters: "which interface did this arrive on" is not "which
+    # addresses are worth serving from", and an APIPA-only NIC (the normal state
+    # of an isolated DHCP-only segment) used to be filtered out of the list
+    # searched here, degrading to the synthetic `unknown[...]` below with a /32
+    # and no MAC -- losing the prefix the server derives its pool from.
+    address = _ipaddress.ip_address(local_ip)
+    if isinstance(address, _net.IPv4) and not address.is_unspecified:
+        held = _netimps.interface_for(address)
+        if held is not None:
+            found = _network_interface(held, address)
+            if found is not None:
+                return found
 
-    import ipaddress as _ipaddress
+    # Only the index is known (or the address is no adapter's): the adapter by
+    # index, answering from its own address.
+    if pkt_ifindex:
+        for interface in _netimps.get_interfaces():
+            if interface.index == pkt_ifindex:
+                found = _network_interface(interface)
+                if found is not None:
+                    return found
+                break
 
     try:
         ip_addr = _net.IPv4(local_ip)
