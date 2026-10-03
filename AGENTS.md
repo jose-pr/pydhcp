@@ -87,7 +87,11 @@ send; keep it that way.
 - **Keep modules small enough to review in one sitting** — a few hundred
   lines. Split by responsibility into a package rather than letting one file
   grow, and keep the package's `__init__` re-exporting the names callers
-  already import, so a split never moves a public import path.
+  already import, so a split never moves a public import path. One deliberate
+  exception: `options/code.py` is the `DhcpOptionCode` enum, ~830 lines of
+  RFC-documented members, and an `Enum`'s members cannot be split across
+  modules. A class too big for one module becomes layers, each subclassing the
+  last (see `server/` and `packet/_*.py`).
 
 - **Option codecs** live in `src/pydhcp/options/type/` and are bound to codes
   in `registry.py`. A codec must match the wire form its RFC defines, and a
