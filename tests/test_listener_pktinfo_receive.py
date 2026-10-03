@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from conftest import build_request
+from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 from pydhcp import DhcpServer
 import netimps
 
@@ -130,6 +130,10 @@ def _exchange_discover(server_port: int) -> "DhcpMessage | None":
 
 @pytest.mark.parametrize("spec", [("0.0.0.0", 0), "0.0.0.0:0", "*:0"])
 @needs_pktinfo
+@pytest.mark.skipif(
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="the OFFER is unicast to 127.0.0.50; macOS aliases only 127.0.0.1",
+)
 def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     """End to end, on the base allocator. A wrong local address does not raise:
     it resolved a synthetic /32 interface with nothing in it to lease, and the

@@ -530,10 +530,15 @@ def test_no_local_address_means_no_pin() -> None:
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE, reason="127.0.0.2 is not usable on this host"
 )
-def test_a_pinned_reply_leaves_from_the_pinned_address() -> None:
+def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
     """On real sockets: the receiver sees the pinned source, not the one the
     routing table would pick. 127.0.0.2 is used because the default source for
-    a loopback send is 127.0.0.1, so only a working pin can produce it."""
+    a loopback send is 127.0.0.1, so only a working pin can produce it.
+
+    Windows Server (the GitHub runner) refuses that pin with WSAEADDRNOTAVAIL:
+    127.0.0.2 binds there but is not an *assigned* address, while Windows 11
+    accepts it. Production never meets this -- the pin is always the address
+    the request arrived at -- so only that one refusal skips."""
     loopback = netimps.interface_for("127.0.0.1")
     assert loopback is not None and loopback.index
 
@@ -547,10 +552,13 @@ def test_a_pinned_reply_leaves_from_the_pinned_address() -> None:
             pytest.skip("no source pinning on this platform")
         transport.ifindex = loopback.index
         transport.local_ip = IPv4("127.0.0.2")
-        transport.send(b"x" * 20, IPv4("127.0.0.1"), receiver.getsockname()[1], b"")
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            transport.send(b"x" * 20, IPv4("127.0.0.1"), receiver.getsockname()[1], b"")
         _data, (source, _port) = receiver.recvfrom(64)
     finally:
         sender.close()
         receiver.close()
 
+    if any("WinError 10049" in r.getMessage() for r in caplog.records):
+        pytest.skip("this Windows build refuses a pin to an unassigned 127.0.0.2")
     assert source == "127.0.0.2"
