@@ -1,0 +1,131 @@
+"""A DHCP message for people: its client identity, summary text and log lines."""
+
+from __future__ import annotations
+
+import textwrap as _tw
+import typing as _ty
+
+from .. import nvt as _nvt
+from ..log import LOGGER
+from ..options import BaseDhcpOptionCode, DhcpOptionCode, type as _type
+from ._fields import NoClientIdentity
+from ._mapping import _MessageMapping
+
+if _ty.TYPE_CHECKING:
+    # Annotation only: the callback receives the public class, and importing
+    # it at run time would be a cycle (message.py builds on this module).
+    from .message import DhcpMessage
+
+
+class _MessageDisplay(_MessageMapping):
+    """`client_id`, `dumps`, `log_str`, `log` and `in`."""
+
+    def client_id(
+        self, func: _ty.Optional[_ty.Callable[["DhcpMessage"], bytearray]] = None
+    ) -> str:
+        """Stable identity for this client, used to key leases.
+
+        Option 61 when present, else the hardware type and address. Raises
+        `NoClientIdentity` when the message carries neither: `hlen` may legally
+        be 0 (RFC 4390 requires exactly that for IPoIB, which supplies option 61
+        instead), and the old fallback then produced the hardware-type octet
+        alone -- one identifier, `"01"`, shared by every such client. Two of them
+        would take over each other's lease, and a RELEASE from either would free
+        both.
+        """
+        cid = self.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
+        if not cid:
+            if func:
+                # The layers are private and only ever composed into
+                # DhcpMessage, so every instance reaching here is one.
+                cid = func(_ty.cast("DhcpMessage", self))
+            if not cid:
+                if not self.chaddr:
+                    raise NoClientIdentity(
+                        "message has neither a client identifier (option 61) nor "
+                        f"a hardware address (hlen=0, htype={self.htype.label()})"
+                    )
+                cid = bytearray([self.htype.value])
+                cid.extend(self.chaddr)
+        return cid.hex(":").upper()
+
+    def dumps(self, codemap: _ty.Optional[type[BaseDhcpOptionCode]] = None) -> str:
+        lines = []
+        for name, value in [
+            ("OP", self.op.name),
+            ("Time Since Boot", str(self.secs)),
+            ("Hops", str(self.hops)),
+            ("Transaction ID", str(self.xid)),
+            ("Flags", self.flags.name),
+            ("Client Current Address", str(self.ciaddr)),
+            ("Allocated Address", str(self.yiaddr)),
+            ("Gateway Address", str(self.giaddr)),
+            ("Hardware Address", f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
+            ("Next Server (siaddr)", str(self.siaddr)),
+            ("Server Host Name", _nvt.display(self.sname)),
+            ("Bootfile", _nvt.display(self.file)),
+        ]:
+            lines.append(f"{name: <40}: {value}")
+        lines.append("OPTIONS:")
+        _codemap = codemap or self.options._codemap
+        for _code, _raw in self.options._options.items():
+            # Render per option, never as a batch: an unregistered code (93 of 254 are
+            # not enum members) or one malformed payload must not cost the whole dump.
+            # Same fallback `to_mapping` uses.
+            try:
+                code = _codemap.from_code(_code)
+                opt_val: _ty.Any = code.get_type()._dhcp_decode(_raw)
+            except Exception:
+                code = _code  # type: ignore[assignment]
+                opt_val = _type.Bytes(_raw)
+            if isinstance(opt_val, list):
+                decoded_str = "\n".join([repr(i) for i in opt_val])
+            else:
+                decoded_str = repr(opt_val)
+            decoded_lines = decoded_str.splitlines()
+            SPACE = " " * 42
+            if decoded_lines:
+                first = _tw.fill(
+                    decoded_lines[0],
+                    width=100,
+                    initial_indent="",
+                    subsequent_indent=SPACE,
+                )
+            else:
+                first = ""
+            lines.append(f"  {repr(code): <38}: {first}")
+            for line in decoded_lines[1:]:
+                lines.append(
+                    _tw.fill(
+                        line, width=100, initial_indent=SPACE, subsequent_indent=SPACE
+                    )
+                )
+
+        return "\n".join(lines)
+
+    def log_str(self, src: _ty.Any, dst: _ty.Any) -> str:
+        return (
+            f"{self.op.name} XID={self.xid:08X} Src: {src} Dst: {dst}\n"
+            f"{self.dumps()}"
+        )
+
+    def __contains__(self, __key: object) -> bool:
+        return self.options.__contains__(__key)
+
+    def log(self, src: _ty.Any, dst: _ty.Any, level: int) -> None:
+        """Log the packet at `level`.
+
+        Never raises and never does work the level does not call for: callers on the
+        receive and send paths invoke this before handling or sending, so a failure
+        here would silently cost a packet its handler or its reply.
+        """
+        if not LOGGER.isEnabledFor(level):
+            return
+        try:
+            header = (
+                f"{'#' * 10} {self.op.name} XID={self.xid:08X} "
+                f"Src: {src} Dst: {dst} {'#' * 10}"
+            )
+            LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")
+        except Exception:  # pragma: no cover - defensive, dumps() is already tolerant
+            LOGGER.log(level, "Could not format packet for logging", exc_info=True)

@@ -5,6 +5,10 @@ This section provides references for the primary classes in the `pydhcp` package
 ## DhcpMessage
 
 ::: pydhcp.packet.message.DhcpMessage
+    options:
+      # Defined in layers in pydhcp.packet (fields, decode, encode, mapping,
+      # display); without this the page would show nothing inherited.
+      inherited_members: true
 
 ## DhcpOptions
 

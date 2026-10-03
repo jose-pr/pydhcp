@@ -9,6 +9,12 @@ top-level package header.
 
 ## Message (`message.py`)
 
+`DhcpMessage` is defined in layers, each a private module of `pydhcp.packet`
+subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
+`_encode`, `_mapping` and `_display`. Import `DhcpMessage` and
+`NoClientIdentity` from `pydhcp.packet.message` (or `pydhcp.packet`) as before;
+`decode`/`from_mapping` are typed to return the class they are called on.
+
 - **`DhcpMessage`** (dataclass) — the full DHCPv4 wire message. Fields:
   `op: OpCode`, `htype: HardwareAddressType`, `hlen: int`, `hops: int`,
   `xid: int`, `secs: datetime.timedelta`, `flags: Flags`, `ciaddr: IPv4`,
