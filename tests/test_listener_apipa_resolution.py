@@ -4,7 +4,7 @@
 That call took the default filter, which excludes APIPA (169.254/16) -- so an
 interface holding only a link-local address was absent from the list it
 searched and could never be resolved by address. It now asks
-`netimps.interface_for`, which does not filter.
+`netimps.get_interface`, which does not filter.
 
 Found by a transient `Wi-Fi 2` adapter appearing on the Windows box mid-sweep
 and failing a listener test on a docs-only commit. The test helper was made

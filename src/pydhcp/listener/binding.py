@@ -61,8 +61,9 @@ def _grow_receive_buffer(
     The kernel may grant less than asked and does not say so (`setsockopt`
     succeeds; Linux caps at `net.core.rmem_max` and also doubles what it
     reports), so the grant is read back through `netimps.set_buffer_size` and a
-    shortfall is logged once per socket rather than assumed away. Failure to
-    grow is not fatal: the socket works at its default size.
+    shortfall is logged (INFO, naming the address) rather than assumed away;
+    netimps also warns, once per process for each distinct request and grant.
+    Failure to grow is not fatal: the socket works at its default size.
     """
     try:
         granted, _send = _netimps.set_buffer_size(sock, receive=wanted)
@@ -94,7 +95,7 @@ def _bind_sockets(
     packet-info option and the bind-error hints, so the same mistake produced a
     helpful message from one listener and a bare errno from the other.
 
-    Every socket gets a `netimps.UdpEndpoint` in `endpoints`, which is what both
+    Every socket gets a `netimps.UDPEndpoint` in `endpoints`, which is what both
     listeners receive through; a wildcard one asks it for packet info, which it
     enables itself with the right per-platform option.
 
@@ -165,7 +166,7 @@ def _close_socket(
 ) -> None:
     """Close `sock` through its endpoint where it has one.
 
-    `UdpEndpoint.close()` also retires the thread netimps uses to wait on a
+    `UDPEndpoint.close()` also retires the thread netimps uses to wait on a
     Windows proactor loop, which a bare `socket.close()` would strand.
     """
     endpoint = endpoints.pop(sock, None)

@@ -27,10 +27,9 @@ def _split_listen_string(value: str) -> list[str]:
 def _split_host_port(value: str) -> tuple[str, int | None]:
     """Split ``host:port``, defaulting an empty host to the IPv4 wildcard.
 
-    Delegates to :func:`netimps.normalize_host`, which handles the IPv6 forms
-    the previous implementation could not: ``[::1]:67`` now yields
-    ``("::1", 67)`` rather than silently dropping the port, and a bare ``::1``
-    stays an address instead of being read as host ``::`` port ``1``.
+    Delegates to :func:`netimps.split_host`: ``[::1]:67`` is ``("::1", 67)``, a bare
+    ``::1`` stays an address rather than host ``::`` port ``1``, a port is ASCII
+    digits only, and brackets may enclose only an IPv6 literal.
     """
     # ":67" means "wildcard, port 67" here, but is an empty host to a strict
     # parser -- normalize it before delegating rather than losing the form.

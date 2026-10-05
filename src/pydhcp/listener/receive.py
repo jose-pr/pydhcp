@@ -62,8 +62,8 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
 
     ``local_ip`` is **this host's address on the receiving interface** -- what
     the reply's SERVER_IDENTIFIER and source are derived from -- which is not
-    always what netimps reports. `Datagram.local_address` is the datagram's
-    *destination*: for a broadcast DISCOVER that is 255.255.255.255 (or a subnet
+    always what netimps reports. `Datagram.destination` is the address the datagram
+    was sent *to*: for a broadcast DISCOVER that is 255.255.255.255 (or a subnet
     broadcast), which names no interface. The old Linux-only receive path read
     `ipi_spec_dst` instead, the kernel's choice of local address, which macOS
     zero-fills and Windows does not report at all -- so it only ever worked on

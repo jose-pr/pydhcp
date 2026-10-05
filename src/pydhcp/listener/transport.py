@@ -88,7 +88,7 @@ class PktInfoUdpTransport(UdpTransport):
     For a wildcard socket: the reply leaves from the address and interface the
     request arrived on (``local_ip``, ``ifindex``), which the routing table
     alone would not choose on a multi-homed host. Pinning goes through
-    `netimps.UdpEndpoint.send(src=...)`, which builds the per-platform control
+    `netimps.UDPEndpoint.send(src=...)`, which builds the per-platform control
     message -- Linux, macOS and Windows lay it out three different ways.
     """
 

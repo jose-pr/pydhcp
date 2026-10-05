@@ -219,9 +219,8 @@ def enumerations() -> "_Enumerations":
 
     pydhcp's per-packet lookups go through netimps' enumeration cache, so a
     lookup and an enumeration are no longer the same thing -- the cost that
-    matters, and that a flood multiplies, is the enumeration. netimps 0.3.3
-    counts it publicly (`interface_enumerations()`), which replaced wrapping
-    its private enumerator. Starts from an empty cache.
+    matters, and that a flood multiplies, is the enumeration. netimps counts it
+    publicly (`interface_enumerations()`). Starts from an empty cache.
     """
     import netimps
 

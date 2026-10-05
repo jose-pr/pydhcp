@@ -151,9 +151,10 @@ def test_arrival_warns_when_the_control_data_was_cut(caplog) -> None:
 
 
 def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:
-    """`Datagram.local_address` is the *destination*. For a broadcast DISCOVER
-    that is 255.255.255.255, which names no interface and must never become
-    the server identifier; the receiving interface's own address does."""
+    """`Datagram.destination` is the address the datagram was sent *to*. For a
+    broadcast DISCOVER that is 255.255.255.255, which names no interface and
+    must never become the server identifier; the receiving interface's own
+    address does."""
     *_, ifindex, local_ip = _arrival(
         _datagram(
             destination=IPv4("255.255.255.255"),
@@ -393,7 +394,7 @@ def test_a_wildcard_destination_is_still_broadcast() -> None:
 
 
 class RecordingEndpoint:
-    """The part of a netimps `UdpEndpoint` the pinned transport uses.
+    """The part of a netimps `UDPEndpoint` the pinned transport uses.
 
     The pinned send now goes through netimps, which builds the per-platform
     control message itself, so what matters here is what the transport *asks*
