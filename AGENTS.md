@@ -74,7 +74,23 @@ Unit tests validate pydhcp against pydhcp. Several delivery defects were only
 ever caught by a real DHCP client — a server that answered nothing on Linux, a
 relay that forwarded eight requests of which zero arrived, an async listener
 that received no broadcasts at all. If you change the receive or reply path,
-test against ISC dhclient over a veth pair in a network namespace.
+run `tests/interop`: ISC dhclient against the server and through the relay,
+over veth pairs in network namespaces the tests create and remove themselves.
+
+```bash
+sudo python -m pytest -q -rs tests/interop
+```
+
+It needs Linux, root (`sudo`), `ip netns` and the peer programs (`dhclient`; and
+`busybox` for `udhcpc`, `dnsmasq` where a test uses them); every test skips,
+with its reason, when one is missing, so a plain `pytest` run on Windows or
+without root reports them skipped rather than failing. Nothing the lab does
+touches the default namespace, and each test ends by asserting no namespace,
+link, process or change to `/etc/resolv.conf` is left behind. The scenarios
+state what the RFC requires; one that fails because of a known defect is a
+strict `xfail` saying so, so the fix shows up as an unexpected pass.
+`PYDHCP_INTEROP_LOGS=<dir>` keeps each test's process output and the frames
+seen on each segment.
 
 `decode()` is deliberately liberal: it accepts a 241-octet message, an `htype`
 with no IANA name, `hlen = 0` (RFC 4390 requires it for IPoIB) and text that
