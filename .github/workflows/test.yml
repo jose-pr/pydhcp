@@ -177,6 +177,12 @@ jobs:
         run: |
           test -z "$(ip netns list)"
 
+      # The tests run as root and the peers write their own files, some of
+      # them unreadable to the runner's user, which is who uploads.
+      - name: Make the logs readable
+        if: always()
+        run: sudo chmod -R a+rX "${{ runner.temp }}/interop-logs" || true
+
       - name: Upload what each scenario saw
         if: always()
         uses: actions/upload-artifact@v4

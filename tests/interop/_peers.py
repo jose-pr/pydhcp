@@ -133,9 +133,13 @@ def dhclient(
     _write(script, _DHCLIENT_SCRIPT.format(out=out, ip=lab.ip))
     script.chmod(0o755)
     conf = out / "dhclient.conf"
+    # The option list is stated: a distribution's built-in default differs
+    # (Debian's dhclient does not ask for the interface MTU, Fedora's does).
     _write(
         conf,
         f'send host-name "{HOSTNAME}";\n'
+        "request subnet-mask, broadcast-address, routers, domain-name,\n"
+        "    domain-name-servers, host-name, interface-mtu;\n"
         f"timeout {timeout_seconds};\nreboot {reboot_seconds};\n"
         "retry 5;\nselect-timeout 0;\n" + extra_conf,
     )
