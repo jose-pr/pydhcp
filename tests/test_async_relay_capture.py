@@ -243,7 +243,8 @@ def test_the_async_class_is_only_a_constructor_and_a_handle(
 
 
 def test_the_two_constructors_accept_the_same_arguments() -> None:
-    """Minus `select_timeout`, which is the sync receive loop's poll interval.
+    """Minus `select_timeout`, which is the sync receive loop's poll interval,
+    plus `max_queued`, which bounds the async hand-off to the handler thread.
 
     A silently missing keyword is how an async class stops being a drop-in for
     its sync counterpart without anything failing.
@@ -256,7 +257,11 @@ def test_the_two_constructors_accept_the_same_arguments() -> None:
             for name in inspect.signature(sync.__init__).parameters
             if name != "select_timeout"
         ]
-        actual = list(inspect.signature(asyncy.__init__).parameters)
+        actual = [
+            name
+            for name in inspect.signature(asyncy.__init__).parameters
+            if name != "max_queued"
+        ]
         assert actual == expected, f"{asyncy.__name__}: {actual} != {expected}"
 
 

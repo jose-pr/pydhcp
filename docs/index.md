@@ -50,6 +50,8 @@ alive — await your application's own work there instead of the `Event` if you 
 Handlers run on a single worker thread rather than on the event loop, so a blocking
 `handle()` will not stall the rest of your application; they still run one at a time and
 in arrival order.
+At most `max_queued` datagrams (default 1024) wait for the handler; one that arrives
+when the backlog is full is dropped and counted in `metrics.packets_dropped_backlog`.
 
 ### Basic Packet Client
 

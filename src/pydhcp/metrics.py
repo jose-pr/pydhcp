@@ -23,6 +23,7 @@ class DhcpMetrics:
         "packets_dropped_truncated",
         "packets_dropped_error",
         "replies_dropped_overflow",
+        "packets_dropped_backlog",
     )
 
     packets_received: int
@@ -50,6 +51,10 @@ class DhcpMetrics:
     packets_dropped_error: int
     #: Replies discarded because the client's reply queue was full.
     replies_dropped_overflow: int
+    #: Datagrams the async listener's hand-off dropped unhandled: the
+    #: backlog behind the handler was at its bound, or the listener
+    #: was stopping and discarded what was queued.
+    packets_dropped_backlog: int
 
     def __init__(self) -> None:
         self.reset()

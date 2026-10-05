@@ -281,12 +281,14 @@ class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
         hook_fail_fast: bool = False,
         max_packet_size: int | None = None,
         per_interface: bool | None = None,
+        max_queued: int | None = None,
     ) -> None:
         AsyncDhcpListener.__init__(
             self,
             listen=listen,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            max_queued=max_queued,
         )
         self._init_capture_state(
             packet_filter=packet_filter,

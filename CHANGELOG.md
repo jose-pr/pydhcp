@@ -43,6 +43,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The async listener's queue behind its handler is bounded.** Every
+  datagram was queued for the one worker thread with no limit, so a slow
+  handler (a lease-file write) let a flood grow memory by tens of MiB a
+  second. `AsyncDhcpListener`, `AsyncDhcpServer`, `AsyncDhcpRelay` and
+  `AsyncDhcpCapture` take `max_queued` (default 1024 datagrams): the
+  datagram that finds the backlog full is dropped, counted in the new
+  `metrics.packets_dropped_backlog` and reported at WARNING at most once a
+  minute. `stop()` discards what is still queued, counted in the same
+  counter, instead of letting the worker log one ERROR with a traceback
+  for each queued datagram; the handler already running finishes. The
+  per-datagram `getsockname()` for the DEBUG log is skipped when DEBUG is
+  off.
 - **`DhcpListener.start()` raises when the bind fails.** It used to return the
   receive thread, whose bind error reached only `threading.excepthook`, leaving
   the listener "started": `wait()` blocked for ever and a second `start()`

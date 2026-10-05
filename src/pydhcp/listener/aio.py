@@ -6,6 +6,8 @@ import asyncio as _asyncio
 import concurrent.futures as _futures
 import logging as _logging
 import socket as _socket
+import threading as _thread
+import time as _time
 import typing as _ty
 
 import netimps as _netimps
@@ -39,12 +41,40 @@ class AsyncDhcpListener:
     #: (Linux caps at net.core.rmem_max); a shortfall is logged at INFO.
     RECEIVE_BUFFER_SIZE: int = 1 << 20
 
+    #: Datagrams that may wait for, or be in, the handler at once when
+    #: `max_queued` is not given: about 3 MiB of queued 300-octet
+    #: datagrams. The datagram that finds the backlog at the bound is
+    #: dropped.
+    MAX_QUEUED_DATAGRAMS: int = 1024
+
+    #: Seconds between reports of dropped datagrams. A flood reaches the
+    #: bound once per datagram, so logging each hands the sender the log.
+    BACKLOG_LOG_INTERVAL_SECONDS: float = 60.0
+
     def __init__(
         self,
         listen: ListenSpec = None,
         max_packet_size: int | None = None,
         per_interface: bool | None = None,
+        max_queued: int | None = None,
     ) -> None:
+        if max_queued is None:
+            max_queued = self.MAX_QUEUED_DATAGRAMS
+        if isinstance(max_queued, bool) or not isinstance(max_queued, int):
+            raise ValueError(
+                f"max_queued must be a positive integer, not {max_queued!r}"
+            )
+        if max_queued < 1:
+            raise ValueError(
+                f"max_queued must be a positive integer, not {max_queued!r}"
+            )
+        self._max_queued = max_queued
+        #: Datagrams handed to the worker and not yet finished, the one
+        #: running included; guarded, as the worker thread finishes them.
+        self._pending = 0
+        self._pending_lock = _thread.Lock()
+        self._last_backlog_report = float("-inf")
+        self._closing = False
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
@@ -124,18 +154,53 @@ class AsyncDhcpListener:
         Exactly one worker thread, so handlers still run one at a time and in
         arrival order. That matters: the lease backends are not thread-safe, so a
         pool here would trade a blocked event loop for a data race.
+
+        At most `max_queued` datagrams wait for or are in the handler. The one
+        that finds the backlog full is dropped, counted in
+        `metrics.packets_dropped_backlog` and reported at most once per
+        `BACKLOG_LOG_INTERVAL_SECONDS`.
         """
         worker = self._worker
         if worker is None:  # not started through start(); keep working anyway
             self._handle_datagram(data, client, sock, ifindex, local_ip)
             return
-        future = worker.submit(
-            self._handle_datagram, data, client, sock, ifindex, local_ip
-        )
+        with self._pending_lock:
+            full = self._pending >= self._max_queued
+            if not full:
+                self._pending += 1
+        if full:
+            self.metrics.packets_dropped_backlog += 1
+            self._report_backlog()
+            return
+        try:
+            future = worker.submit(
+                self._handle_datagram, data, client, sock, ifindex, local_ip
+            )
+        except RuntimeError:  # the worker was shut down since it was read
+            self._finished()
+            return
         future.add_done_callback(self._report_worker_result)
 
-    @staticmethod
-    def _report_worker_result(future: "_futures.Future[None]") -> None:
+    def _finished(self) -> None:
+        with self._pending_lock:
+            self._pending -= 1
+
+    def _report_backlog(self) -> None:
+        now = _time.monotonic()
+        if now - self._last_backlog_report < self.BACKLOG_LOG_INTERVAL_SECONDS:
+            return
+        self._last_backlog_report = now
+        LOGGER.warning(
+            f"The handler backlog is full ({self._max_queued} datagrams, max_queued): "
+            f"newly arriving datagrams are dropped. "
+            f"{self.metrics.packets_dropped_backlog} dropped so far."
+        )
+
+    def _report_worker_result(self, future: "_futures.Future[None]") -> None:
+        self._finished()
+        if future.cancelled():  # discarded at stop(), still queued
+            self.metrics.packets_dropped_backlog += 1
+            return
         error = future.exception()
         if error is not None:  # pragma: no cover - _handle_datagram catches
             LOGGER.error(
@@ -151,6 +216,9 @@ class AsyncDhcpListener:
         ifindex: "int | None" = None,
         local_ip: "_net.IPv4 | None" = None,
     ) -> None:
+        if self._closing:  # stop() was called after this was queued
+            self.metrics.packets_dropped_backlog += 1
+            return
         # Split for the same reason as `DhcpListener._receive_one`: a packet the
         # peer malformed and a bug in a `handle()` override are different
         # events, and only the second one's traceback is worth keeping.
@@ -165,7 +233,8 @@ class AsyncDhcpListener:
             return
         try:
             self.metrics.packets_received += 1
-            msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
+            if LOGGER.isEnabledFor(_logging.DEBUG):
+                msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
             context = _context_for(
                 sock, client, msg.chaddr, ifindex, local_ip, self._endpoints.get(sock)
             )
@@ -246,6 +315,7 @@ class AsyncDhcpListener:
             )
         loop = _asyncio.get_running_loop()
         self._loop = loop
+        self._closing = False
         self._stopped = _asyncio.Event()
         for sock in self._sockets:
             sock.setblocking(False)
@@ -309,10 +379,20 @@ class AsyncDhcpListener:
             task.cancel()
         worker, self._worker = self._worker, None
         if worker is not None:
-            # Don't wait: stop() is called from the event loop, and a handler in
-            # flight may be doing exactly the blocking work this worker exists to
-            # keep off it.
-            worker.shutdown(wait=False)
+            # Abort, not drain: datagrams still queued are discarded and counted
+            # in `metrics.packets_dropped_backlog`; the handler already running
+            # finishes. Don't wait: stop() is called from the event loop, and a
+            # handler in flight may be doing exactly the blocking work this
+            # worker exists to keep off it.
+            self._closing = True
+            discarded_before = self.metrics.packets_dropped_backlog
+            worker.shutdown(wait=False, cancel_futures=True)
+            discarded = self.metrics.packets_dropped_backlog - discarded_before
+            if discarded:
+                LOGGER.info(
+                    f"Stopped with {discarded} datagrams still queued; "
+                    f"discarded {discarded} unhandled."
+                )
 
         try:
             running = _asyncio.get_running_loop()

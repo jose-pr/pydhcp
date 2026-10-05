@@ -53,12 +53,14 @@ class AsyncDhcpServer(_AsyncBase, DhcpServer):  # type: ignore[misc]
         max_packet_size: int | None = None,
         lease_backend: LeaseBackend | None = None,
         per_interface: bool | None = None,
+        max_queued: int | None = None,
     ) -> None:
         _AsyncBase.__init__(
             self,
             listen=listen,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            max_queued=max_queued,
         )
         self._init_server_state(lease_backend)
 

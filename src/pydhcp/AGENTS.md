@@ -134,7 +134,7 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
   - `.handle(msg, context) -> None` — override point; base implementation is
     a no-op. Called for every successfully decoded packet.
 - **`AsyncDhcpListener(listen=None, max_packet_size=None,
-  per_interface=None)`** — `asyncio` counterpart, with the same receive path,
+  per_interface=None, max_queued=None)`** — `asyncio` counterpart, with the same receive path,
   the same packet-info wildcard routing and the same `listen` forms as
   `DhcpListener`. `await .start()` binds and registers each socket with the
   event loop; `.stop()` unregisters and closes them. `.stop()` is **not** a
@@ -157,6 +157,16 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     at a time and in arrival order — which is also what keeps a caller's
     compound lease operation ("free? then allocate") atomic, since the
     backend's own lock does not span two calls.
+  - **The hand-off to that worker is bounded.** At most `max_queued`
+    datagrams (default `MAX_QUEUED_DATAGRAMS`, 1024: about 3 MiB) wait for
+    or are in the handler; a positive `int`, else `ValueError`. The datagram
+    that finds the backlog full is **dropped**, counted in
+    `metrics.packets_dropped_backlog` and reported at WARNING at most once
+    per `BACKLOG_LOG_INTERVAL_SECONDS` (60), the report carrying the count.
+    **Stopping aborts, it does not drain**: queued datagrams are discarded,
+    counted in the same counter and reported once at INFO; only the handler
+    already running finishes. `AsyncDhcpServer`, `AsyncDhcpRelay` and
+    `AsyncDhcpCapture` take the same `max_queued`.
   - `.bound_addresses`, `.REUSE_ADDRESS`, `.packets_dropped_truncated` and
     `.packets_dropped_error` — as on `DhcpListener`, including the oversized
     -datagram drop.
@@ -286,7 +296,7 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     `.acquire_lease()` override returning a lease whose options it also keeps
     a reference to is therefore safe.
 - **`AsyncDhcpServer(listen=None, max_packet_size=None, lease_backend=None,
-  per_interface=None)`** — same allocation logic as `DhcpServer`, running on
+  per_interface=None, max_queued=None)`** — same allocation logic as `DhcpServer`, running on
   `AsyncDhcpListener`.
 
 ## Client (`client.py`)
@@ -397,7 +407,7 @@ that's never started will always time out waiting for a reply.
 - **`AsyncDhcpRelay(listen=None, server_addresses=(), max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
   trust_client_relay_agent_info=False, max_packet_size=None,
-  per_interface=None)`** — the same forwarding policy running on
+  per_interface=None, max_queued=None)`** — the same forwarding policy running on
   `AsyncDhcpListener`, the way `AsyncDhcpServer` relates to `DhcpServer`.
   `isinstance(x, DhcpRelay)` holds. Identical arguments minus `select_timeout`
   (the sync receive loop's poll interval, which asyncio has no use for), and
@@ -497,7 +507,8 @@ name-collision note at the top) — capture on an
 IPv6-only interface can break at runtime.
 
 - **`AsyncDhcpCapture(listen=None, packet_filter=None, sink=None, hook=None,
-  hook_fail_fast=False, max_packet_size=None, per_interface=None)`** — the same
+  hook_fail_fast=False, max_packet_size=None, per_interface=None,
+  max_queued=None)`** — the same
   filter/sink/hook policy running on `AsyncDhcpListener`.
   `isinstance(x, DhcpCapture)` holds. Identical arguments minus
   `select_timeout`, and both constructors share `_init_capture_state()`. Drive
@@ -587,7 +598,8 @@ IPv6-only interface can break at runtime.
     `leases_renewed`, `leases_released`, `leases_declined`, `releases_ignored`,
     `packets_dropped_hop_limit`, `packets_dropped_untrusted`,
     `packets_dropped_truncated`, `packets_dropped_error`,
-    `replies_dropped_overflow`.
+    `replies_dropped_overflow`, `packets_dropped_backlog` (async hand-off
+    drops and stop-time discards).
   - `leases_declined` counts `DHCPDECLINE`, which used to land in
     `leases_released` though it means the opposite — the client found the
     address already in use. An address-conflict storm read as orderly

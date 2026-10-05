@@ -451,12 +451,14 @@ class AsyncDhcpRelay(_AsyncBase, DhcpRelay):  # type: ignore[misc]
         trust_client_relay_agent_info: bool = False,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        max_queued: _ty.Optional[int] = None,
     ) -> None:
         _AsyncBase.__init__(
             self,
             listen=listen,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            max_queued=max_queued,
         )
         self._init_relay_state(
             server_addresses,
