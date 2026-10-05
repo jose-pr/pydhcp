@@ -59,6 +59,11 @@ class Lease(_ty.NamedTuple):
     fields: _ty.Dict[str, str]
 
 
+def _write(path: pathlib.Path, text: str) -> None:
+    """Write LF text; `Path.write_text(newline=)` exists only from Python 3.10."""
+    path.write_bytes(text.encode("utf-8"))
+
+
 def read_events(path: pathlib.Path) -> _ty.List[Lease]:
     """The leases a client script recorded: blocks of `key=value` lines ending in `--`."""
     if not path.exists():
@@ -125,20 +130,17 @@ def dhclient(
     out = lab.work / f"{name}-out"
     out.mkdir(parents=True, exist_ok=True)
     script = out / "script.sh"
-    script.write_text(
-        _DHCLIENT_SCRIPT.format(out=out, ip=lab.ip), encoding="utf-8", newline="\n"
-    )
+    _write(script, _DHCLIENT_SCRIPT.format(out=out, ip=lab.ip))
     script.chmod(0o755)
     conf = out / "dhclient.conf"
-    conf.write_text(
+    _write(
+        conf,
         f'send host-name "{HOSTNAME}";\n'
         f"timeout {timeout_seconds};\nreboot {reboot_seconds};\n"
         "retry 5;\nselect-timeout 0;\n" + extra_conf,
-        encoding="utf-8",
-        newline="\n",
     )
     lease = out / "dhclient.leases"
-    lease.write_text(lease_file or "", encoding="utf-8", newline="\n")
+    _write(lease, lease_file or "")
     started = time.monotonic()
     proc = lab.spawn(
         ns,
@@ -176,9 +178,7 @@ def udhcpc(
     out = lab.work / f"{name}-out"
     out.mkdir(parents=True, exist_ok=True)
     script = out / "script.sh"
-    script.write_text(
-        _UDHCPC_SCRIPT.format(out=out, ip_tool=lab.ip), encoding="utf-8", newline="\n"
-    )
+    _write(script, _UDHCPC_SCRIPT.format(out=out, ip_tool=lab.ip))
     script.chmod(0o755)
     started = time.monotonic()
     proc = lab.spawn(

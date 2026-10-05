@@ -33,7 +33,7 @@ def lab(
     processes printed and what the taps saw in a subdirectory of that name.
     """
     if _REASON is not None:
-        pytest.skip(_REASON)
+        _cannot(_REASON)
     instance = _lab.Lab(tmp_path / "lab")
     try:
         yield instance
@@ -50,11 +50,23 @@ def lab(
                 )
 
 
+def _cannot(reason: str) -> None:
+    """Skip the test, or fail it where the lab is required to work.
+
+    A job whose purpose is to run these tests sets `PYDHCP_INTEROP_REQUIRE`, so
+    that a missing capability or peer is a failure and not a green run of
+    skipped tests.
+    """
+    if os.environ.get("PYDHCP_INTEROP_REQUIRE"):
+        pytest.fail(reason, pytrace=False)
+    pytest.skip(reason)
+
+
 def need(*programs: str) -> None:
     """Skip the test unless every named program is installed."""
     missing = [name for name in programs if _lab.which(name) is None]
     if missing:
-        pytest.skip("not installed: " + ", ".join(missing))
+        _cannot("not installed: " + ", ".join(missing))
 
 
 def peer_version(program: str, *flags: str) -> str:

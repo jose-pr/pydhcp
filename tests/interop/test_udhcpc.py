@@ -17,7 +17,7 @@ from ._topo import (
     relayed,
     single,
 )
-from .conftest import need, peer_version, record_case
+from .conftest import _cannot, need, peer_version, record_case
 
 
 def _need_udhcpc() -> None:
@@ -30,9 +30,7 @@ def _need_udhcpc() -> None:
         [which("busybox") or "busybox", "--list"], capture_output=True, text=True
     ).stdout.split()
     if "udhcpc" not in listed:
-        import pytest
-
-        pytest.skip("this busybox has no udhcpc applet")
+        _cannot("this busybox has no udhcpc applet")
 
 
 def _version() -> str:
