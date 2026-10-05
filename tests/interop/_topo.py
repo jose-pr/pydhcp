@@ -67,7 +67,9 @@ class Relayed(_ty.NamedTuple):
     server_ip: str
 
 
-def relayed(lab: Lab, with_forger: bool = False) -> Relayed:
+def relayed(
+    lab: Lab, with_forger: bool = False, client_addr: _ty.Optional[str] = None
+) -> Relayed:
     cli, rly, srv = lab.netns("cli"), lab.netns("rly"), lab.netns("srv")
     lab.veth(
         cli,

@@ -2,8 +2,9 @@
 
 Run: python tap.py <interface> <output.jsonl> <ready-file>
 
-Uses only the standard library, so what it reports is the kernel's account and
-not the library's. One JSON object per line, written as the frame arrives.
+Sees what the namespace sends as well as what it receives (an `ETH_P_IP` socket
+would see only the latter). Uses only the standard library, so what it reports
+is the kernel's account and not the library's. One JSON object per line, written as the frame arrives.
 """
 
 from __future__ import annotations
@@ -15,16 +16,16 @@ import struct
 import sys
 
 iface, out_path, ready_path = sys.argv[1], sys.argv[2], sys.argv[3]
-ETH_P_IP = 0x0800
+ETH_P_ALL = 0x0003
 KINDS = {0: "host", 1: "broadcast", 2: "multicast", 3: "otherhost", 4: "outgoing"}
 SO_RCVBUFFORCE = 33
 
-sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_IP))
+sock = socket.socket(socket.AF_PACKET, socket.SOCK_RAW, socket.htons(ETH_P_ALL))
 try:
     sock.setsockopt(socket.SOL_SOCKET, SO_RCVBUFFORCE, 16 * 1024 * 1024)
 except OSError:
     pass
-sock.bind((iface, ETH_P_IP))
+sock.bind((iface, ETH_P_ALL))
 sock.settimeout(0.2)
 out = open(out_path, "w", encoding="utf-8", buffering=1, newline="\n")
 stop = False

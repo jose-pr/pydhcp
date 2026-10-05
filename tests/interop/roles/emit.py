@@ -33,11 +33,14 @@ parser.add_argument("--chaddr", default="020000000099")
 parser.add_argument("--count", type=int, default=1)
 parser.add_argument("--xid", type=lambda s: int(s, 0), default=0x1A2B3C4D)
 parser.add_argument("--subnet-broadcast")
+parser.add_argument("--device", help="send out of this interface regardless of routes")
 args = parser.parse_args()
 
 builder = DhcpClient()
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+if args.device:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, args.device.encode())
 sock.bind((args.src, args.src_port))
 
 
