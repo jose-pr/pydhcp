@@ -609,34 +609,30 @@ def test_domainlist_rejects_compression_pointer_cycles(payload, label):
         DomainList._dhcp_read(memoryview(bytearray(payload)))
 
 
-def test_domainlist_decode_is_linear_in_payload_size():
-    """Decoding must not be quadratic: packets are decoded on the receive path, so
-    O(n^2) here is an unauthenticated CPU-exhaustion vector (max_packet_size
-    defaults to 65535)."""
-    import time
+def test_domainlist_decode_output_is_bounded_by_the_payload():
+    """What a decode produces is counted, not timed.
 
+    packets are decoded on the receive path (max_packet_size defaults to
+    65535), so the names a payload yields must stay proportional to it. The
+    plain payload yields one name per three octets and as many characters as
+    names; the same octets rewritten as chained pointers are refused at the
+    255-octet name limit instead of expanding into names that grow with each
+    resolution (tests/conformance/test_rfc3397_names.py covers the shapes).
+    """
     from pydhcp.options.type import DomainList
 
-    def elapsed(size):
-        # Best of five: one sample is at the mercy of the scheduler, and a
-        # single 50 ms stall on a shared CI runner failed this once.
-        payload = bytearray(b"\x01a\x00" * (size // 3))
-        best = float("inf")
-        for _ in range(5):
-            start = time.perf_counter()
-            DomainList._dhcp_read(memoryview(payload))
-            best = min(best, time.perf_counter() - start)
-        return best
+    plain = DomainList._dhcp_decode(bytearray(b"\x01a\x00" * 2000))
+    assert len(plain) == 2000
+    assert sum(len(name) for name in plain) == 2000
 
-    elapsed(3000)  # warm up, so import/JIT costs do not land in the measurement
-    small = elapsed(6000)
-    large = elapsed(24000)
-
-    # 4x the input must not cost anything like 16x the time. A generous bound:
-    # quadratic would be ~16x, linear ~4x. This machine is noisy, so allow 8x.
-    assert large < max(
-        small * 8, 0.05
-    ), f"decode looks super-linear: {small:.4f}s for 6000B vs {large:.4f}s for 24000B"
+    chained = bytearray(b"\x01a\x00")
+    previous = 0
+    for _ in range(1, 2000):
+        start = len(chained)
+        chained += b"\x01a" + (0xC000 | previous).to_bytes(2, "big")
+        previous = start
+    with pytest.raises(ValueError, match="255 octets"):
+        DomainList._dhcp_decode(chained)
 
 
 def test_domainlist_still_follows_backward_pointers():

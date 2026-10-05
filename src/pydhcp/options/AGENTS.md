@@ -230,6 +230,14 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   iterable of *characters*. Registered for `DOMAIN_SEARCH` (119, RFC 3397)
   and `SIP_UA_CONFIG_SERVICE_DOMAINS` (141, RFC 6011 §4.1), the two options
   that **require** the compressed form.
+  **Decode bounds** (the reader serves options 119, 141, 88 and 146): a
+  decoded name is at most 255 octets (RFC 1035 §2.3.4), a name follows at
+  most 127 compression pointers (`MAX_POINTER_HOPS`), and a pointer must
+  point strictly backwards, at the start of a label or root label of an
+  earlier name. A name, pointer, reserved length prefix or label running past
+  the end is a `ValueError`. A last name that ends between labels, or after
+  half a pointer, without a root label or a whole pointer is **discarded**
+  (RFC 3397 §3) and the names before it are kept.
 - **`UncompressedDomainList`** (`DomainList` subclass) — the same container,
   encoding through the shared `type/domain.py` name encoder so it never
   emits a compression pointer. Registered for `BCMCS_DOMAIN_NAME_LIST` (88)

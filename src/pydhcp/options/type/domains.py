@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import typing as _ty
 from .base import DhcpOptionType
-from .domain import decode_domain_name, encode_domain_name, split_domain_name
+from .domain import (
+    MAX_NAME_OCTETS,
+    decode_domain_name,
+    encode_domain_name,
+    split_domain_name,
+)
 from collections.abc import Iterable
 
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
+
+#: A decoded name has at most 127 labels (255 octets, two per label), so a
+#: name that needs more pointers than that is not one a message needs.
+MAX_POINTER_HOPS = 127
 
 
 class DomainList(DhcpOptionType, list[str]):
@@ -47,16 +56,30 @@ class DomainList(DhcpOptionType, list[str]):
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        """Decode a compressed search list (RFC 1035 s4.1.4, RFC 3397 s3).
+
+        The names are bounded as a message needs them to be: a decoded name is
+        at most `MAX_NAME_OCTETS` (255, RFC 1035 s2.3.4), a name follows at
+        most `MAX_POINTER_HOPS` pointers, and a pointer must point strictly
+        backwards, to the start of a component of a name that begins before the
+        name holding the pointer. A name or a pointer outside those limits is a
+        `ValueError`; so is a reserved length prefix and a label whose length
+        octet declares more than remains. A last name that ends, between
+        labels, without a root label or a whole pointer is discarded (RFC 3397
+        s3), and the names before it are kept.
+        """
         view = memoryview(option)
         self = cls()
         if not option:
             return self, 0
-        # offset -> (kind, value, offset of the next component)
+        # offset -> (kind, value, offset of the next component, start of the
+        # name the component belongs to)
         #   kind "label": value is the decoded text
         #   kind "root" : value is None (a 0x00 terminator)
         #   kind "ptr"  : value is the target offset
-        components: dict[int, tuple[str, _ty.Any, int]] = _ty.OrderedDict()
-        domains: list[int] = [0]
+        components: dict[int, tuple[str, _ty.Any, int, int]] = {}
+        domains: list[int] = []
+        name_start = 0
         id = 0
         size = len(view)
         while id < size:
@@ -64,9 +87,9 @@ class DomainList(DhcpOptionType, list[str]):
             ptr_or_len = view[id]
             id += 1
             if ptr_or_len == 0x00:
-                components[start] = ("root", None, id)
-                if id < size:
-                    domains.append(id)
+                components[start] = ("root", None, id, name_start)
+                domains.append(name_start)
+                name_start = id
                 continue
             is_ptr = ptr_or_len & 0xC0
             if is_ptr:
@@ -76,14 +99,17 @@ class DomainList(DhcpOptionType, list[str]):
                         "reserved label-length prefix; RFC 1035 s4.1.4 defines only "
                         "00 (label) and 11 (compression pointer)"
                     )
+                if id >= size:
+                    break  # half a pointer: the name is partial
                 components[start] = (
                     "ptr",
                     ((0x3F & ptr_or_len) << 8) | view[id],
                     id + 1,
+                    name_start,
                 )
                 id += 1
-                if id < size:
-                    domains.append(id)
+                domains.append(name_start)
+                name_start = id
             else:
                 dc = view[id : ptr_or_len + id]
                 if len(dc) != ptr_or_len:
@@ -100,41 +126,56 @@ class DomainList(DhcpOptionType, list[str]):
                         f"search list has a label containing '.' ({label!r}), "
                         "which cannot be represented unambiguously in dotted form"
                     )
-                components[start] = ("label", label, id + ptr_or_len)
+                components[start] = ("label", label, id + ptr_or_len, name_start)
                 id += ptr_or_len
 
         def get_dn(start: int) -> list[str]:
-            """Resolve one name by walking the component chain.
+            """Resolve one name by walking its component chain.
 
-            Iterative, and every offset is visited at most once per name: a
-            self-referential or mutually-referential compression pointer is a
-            decode error, not a RecursionError, and the work is proportional to
-            the name actually produced. The previous implementation rescanned
-            every component for each name, which made decoding O(n^2) in the
-            payload length and, since packets are decoded on the receive path,
-            an unauthenticated CPU exhaustion vector.
+            Iterative, so a long chain is a decode error and not a
+            `RecursionError`. The walk stops at `MAX_NAME_OCTETS` of decoded
+            name and at `MAX_POINTER_HOPS` pointers, which is what keeps the
+            work for one name, and so for the option, proportional to its
+            length: names that point at names that point at names would
+            otherwise grow with every resolution.
             """
             result: list[str] = []
-            seen: set[int] = set()
+            octets = 1  # the terminating root label
+            hops = 0
             offset = start
             while True:
-                if offset in seen:
-                    raise ValueError(
-                        f"Cyclic domain-name compression pointer at offset {offset}"
-                    )
-                seen.add(offset)
                 component = components.get(offset)
                 if component is None:
-                    break
-                kind, value, nxt = component
+                    raise ValueError(
+                        f"search list pointer to offset {offset} does not point at "
+                        "the start of a label or a root label"
+                    )
+                kind, value, nxt, owner = component
                 if kind == "root":
-                    break
+                    return result
                 if kind == "ptr":
+                    hops += 1
+                    if hops > MAX_POINTER_HOPS:
+                        raise ValueError(
+                            f"search list name follows more than {MAX_POINTER_HOPS} "
+                            "compression pointers"
+                        )
+                    if value >= owner:
+                        raise ValueError(
+                            f"search list pointer to offset {value} does not point "
+                            f"backwards of the name starting at offset {owner} "
+                            "(RFC 1035 s4.1.4: a pointer refers to a prior name)"
+                        )
                     offset = value
                     continue
+                octets += 1 + len(value.encode())
+                if octets > MAX_NAME_OCTETS:
+                    raise ValueError(
+                        f"search list name exceeds {MAX_NAME_OCTETS} octets "
+                        "(RFC 1035 s2.3.4)"
+                    )
                 result.append(value)
                 offset = nxt
-            return result
 
         for domain in domains:
             self.append(".".join(get_dn(domain)))

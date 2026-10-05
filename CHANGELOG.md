@@ -43,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **A domain list can no longer cost a datagram's worth of CPU and memory.**
+  Decoding options 119, 141, 88 and 146 followed compression pointers with no
+  limit, so one 60 KB datagram of chained pointers took 15 s and 112 MB to
+  read. A decoded name is now at most 255 octets (RFC 1035 s2.3.4), a name
+  follows at most 127 pointers, and a pointer must point strictly backwards to
+  the start of a label of an earlier name; otherwise the option raises
+  `ValueError` (the same datagram is now refused in 0.06 s). A last name left
+  unfinished at the end of the option is discarded (RFC 3397 s3) rather than
+  kept, and a final octet that starts a pointer no longer raises `IndexError`.
 - Re-binding a started `AsyncDhcpListener` whose listen list shrank retires the
   dropped socket's receive task cleanly; it used to wait for ever.
 
