@@ -77,6 +77,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed first, from its branch, so the project install below finds
+      # the requirement already met. Remove this step once 0.4.0 is published.
+      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -116,6 +122,12 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed first, from its branch, so the project install below finds
+      # the requirement already met. Remove this step once 0.4.0 is published.
+      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
 
       - name: Install benchmark dependencies
         run: |
