@@ -229,6 +229,7 @@ def dnsmasq(
             "--port=0",
             "--no-resolv",
             "--no-hosts",
+            "--no-ping",
             "--user=root",
             "--group=root",
             "--bind-interfaces",

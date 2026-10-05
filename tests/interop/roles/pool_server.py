@@ -25,7 +25,9 @@ import signal
 import threading
 import time
 
-from pydhcp import AsyncDhcpServer, DhcpServer
+import datetime
+
+from pydhcp import AsyncDhcpServer, DhcpLease, DhcpServer
 from pydhcp.network import IPv4, NetworkInterface, host_ip_interfaces
 from pydhcp.options import DhcpOptionCode, DhcpOptions
 
@@ -37,6 +39,11 @@ parser.add_argument("--gate-file")
 parser.add_argument("--ready-file")
 parser.add_argument("--status")
 parser.add_argument("--lease-seconds", type=int, default=600)
+parser.add_argument(
+    "--private-store",
+    action="store_true",
+    help="keep leases in the server's own dict, not in the lease backend",
+)
 args = parser.parse_args()
 
 relay_network = (
@@ -45,6 +52,36 @@ relay_network = (
 
 
 class Pool:
+    def _options(self, network, router):
+        options = DhcpOptions()
+        options[DhcpOptionCode.SUBNET_MASK] = network.netmask
+        options[DhcpOptionCode.BROADCAST_ADDRESS] = network.broadcast_address
+        options[DhcpOptionCode.ROUTER] = [router]
+        options[DhcpOptionCode.DNS] = [router]
+        options[DhcpOptionCode.DOMAIN_NAME] = "lab.test"
+        options[DhcpOptionCode.INTERFACE_MTU] = 1400
+        return options
+
+    def _private_lease(self, client_id, network, interface, router, commit):
+        """The server's own store: nothing is written to `lease_backend`."""
+        store = self.__dict__.setdefault("_store", {})
+        lease = store.get(client_id)
+        if lease is None:
+            taken = {held.ip for held in store.values()}
+            for host in range(100, 150):
+                candidate = IPv4(str(network.network_address + host))
+                if candidate in taken:
+                    continue
+                if self._address_refusal(candidate, interface, client_id) is not None:
+                    continue
+                expires = datetime.datetime.now() + datetime.timedelta(
+                    seconds=args.lease_seconds
+                )
+                lease = DhcpLease(candidate, expires, self._options(network, router))
+                store[client_id] = lease
+                break
+        return lease
+
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         if msg.giaddr != IPv4("0.0.0.0"):
             if relay_network is None:
@@ -71,6 +108,9 @@ class Pool:
             end = time.monotonic() + 20
             while not pathlib.Path(args.gate_file).exists() and time.monotonic() < end:
                 time.sleep(0.05)
+
+        if args.private_store:
+            return self._private_lease(client_id, network, interface, router, commit)
 
         existing = self.lease_backend.lookup(client_id)
         if existing is not None:

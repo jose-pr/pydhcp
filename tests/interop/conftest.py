@@ -63,7 +63,9 @@ def peer_version(program: str, *flags: str) -> str:
     found = _lab.which(program)
     assert found is not None
     done = subprocess.run([found, *flags], capture_output=True, text=True)
-    return (done.stdout + done.stderr).strip().splitlines()[0]
+    line = (done.stdout + done.stderr).strip().splitlines()[0]
+    # The name and version, without a copyright notice or a build date.
+    return line.split("  Copyright")[0].split(" (")[0]
 
 
 def _private_strings() -> _ty.List[bytes]:
