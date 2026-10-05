@@ -434,6 +434,30 @@ def test_parse_server_address_rejects_a_bare_port():
         _parse_server_address(":6767")
 
 
+@pytest.mark.parametrize(
+    "value, message",
+    [
+        ("192.0.2.1:+67", "invalid port"),
+        ("192.0.2.1: 67", "invalid port"),
+        ("192.0.2.1:6_7", "invalid port"),
+        ("[192.0.2.1]:67", "bracketed but not an IPv6 address"),
+    ],
+)
+def test_parse_server_address_refuses_a_malformed_port_or_bracket(value, message):
+    """The rule is `host:port` with ASCII digits for the port, brackets only
+    round an IPv6 literal; `--server` shares it with `--listen`."""
+    with pytest.raises(ValueError, match=message):
+        _parse_server_address(value)
+
+
+@pytest.mark.parametrize("listen", ["127.0.0.1:+6767", "[127.0.0.1]:6767"])
+def test_relay_listen_flag_refuses_what_the_listener_refuses(listen):
+    """`--listen` goes to the same parser as `DhcpListener(listen=)`: the
+    command fails with a `ValueError` before it announces anything or binds."""
+    with pytest.raises(ValueError):
+        Relay(listen=listen, server=("192.0.2.1",))()
+
+
 @patch("pydhcp.cli.relay.DhcpRelay")
 def test_cmd_relay(mock_dhcp_relay_cls):
     mock_relay = MagicMock()

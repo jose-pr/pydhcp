@@ -1,6 +1,8 @@
 import ipaddress
 
-from pydhcp.listener import _parselisteners
+import pytest
+
+from pydhcp.listener import DhcpListener, _parselisteners
 from pydhcp.network import IPv4, NetworkInterface, SocketAddress
 from pydhcp.server import AsyncDhcpServer, DhcpServer
 
@@ -55,6 +57,43 @@ def test_parse_multi_port_tuple() -> None:
         SocketAddress("127.0.0.1", 6767),
         SocketAddress("127.0.0.1", 6768),
     ]
+
+
+@pytest.mark.parametrize(
+    "listen, message",
+    [
+        ("127.0.0.1:+6767", "invalid port"),
+        ("127.0.0.1: 6767", "invalid port"),
+        ("127.0.0.1:8_0", "invalid port"),
+        ("[127.0.0.1]:6767", "bracketed but not an IPv6 address"),
+        (("127.0.0.1:+6767", 67), "invalid port"),
+    ],
+)
+@pytest.mark.parametrize("per_interface", [False, True])
+def test_a_malformed_port_or_bracket_is_named_as_such(
+    listen, message, per_interface
+) -> None:
+    """A port that is not ASCII digits, and brackets around an IPv4 address,
+    are refused, and the message blames the port or the brackets, not the
+    address -- on the wildcard-detecting path and on the per-interface one."""
+    with pytest.raises(ValueError, match=message):
+        DhcpListener(listen=listen, per_interface=per_interface)
+
+
+@pytest.mark.parametrize("listen", ["localhost:6767", "eth0", ("localhost", 6767)])
+@pytest.mark.parametrize("per_interface", [False, True])
+def test_a_host_name_is_refused_as_not_an_ipv4_address(listen, per_interface) -> None:
+    """`listen` takes addresses; a name is not one, and both paths say so in the
+    same words (`ipaddress`'s), not a wildcard-detection error."""
+    with pytest.raises(ipaddress.AddressValueError, match="Expected 4 octets"):
+        DhcpListener(listen=listen, per_interface=per_interface)
+
+
+@pytest.mark.parametrize(
+    "listen", ["*", "*:6767", ":6767", "0.0.0.0:6767", "127.0.0.1:6767"]
+)
+def test_the_listen_forms_that_stay_valid(listen) -> None:
+    DhcpListener(listen=listen)
 
 
 def test_server_constructors_accept_per_interface_and_multiple_endpoints() -> None:
