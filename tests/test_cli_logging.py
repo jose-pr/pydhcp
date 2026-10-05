@@ -130,6 +130,7 @@ def test_the_capture_hook_logs_through_the_module_logger(
     naming `pydhcp.cli` is what says the re-fetch is gone."""
     command = tmp_path / "hook"
     command.write_text("", encoding="utf-8")
+    command.chmod(0o755)  # a command hook must be executable on POSIX
 
     class Result:
         stdout = "chatter"
