@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .code import DhcpOptionCode
 from ..packet.enums import DhcpMessageType
 from .type import *

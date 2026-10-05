@@ -83,8 +83,8 @@ def _resolve_command(hook: str, has_separator: bool) -> pathlib.Path:
 
 
 def _load_capture_hook(
-    hook: "str | None", packet_format: str, fail_fast: bool
-) -> "_ty.Callable[[CaptureEvent], None] | None":
+    hook: "_ty.Optional[str]", packet_format: str, fail_fast: bool
+) -> "_ty.Optional[_ty.Callable[[CaptureEvent], None]]":
     if not hook:
         return None
     # A module reference is `package.module:function` -- never contains a path

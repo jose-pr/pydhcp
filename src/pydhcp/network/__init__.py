@@ -231,15 +231,15 @@ class SocketAddress(_SocketAddress):
 
 class NetworkInterface(_ty.NamedTuple):
     name: str
-    ip_interface: _ip.IPv4Interface | _ip.IPv6Interface
+    ip_interface: _ty.Union[_ip.IPv4Interface, _ip.IPv6Interface]
     mac: _ty.Optional[MACAddress] = None
 
     @property
-    def ip(self) -> _ip.IPv4Address | _ip.IPv6Address:
+    def ip(self) -> _ty.Union[_ip.IPv4Address, _ip.IPv6Address]:
         return self.ip_interface.ip
 
     @property
-    def network(self) -> _ip.IPv4Network | _ip.IPv6Network:
+    def network(self) -> _ty.Union[_ip.IPv4Network, _ip.IPv6Network]:
         return self.ip_interface.network
 
 

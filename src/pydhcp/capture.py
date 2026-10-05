@@ -144,7 +144,7 @@ def validate_filename_pattern(pattern: str) -> frozenset[str]:
     return frozenset(used)
 
 
-def compile_capture_filter(text: str | None) -> CapturePredicate:
+def compile_capture_filter(text: _ty.Optional[str]) -> CapturePredicate:
     if text is None or not text.strip():
         return lambda event: True
 
@@ -178,13 +178,13 @@ class DhcpCapture(DhcpListener):
     def __init__(
         self,
         listen: ListenSpec = None,
-        packet_filter: str | CapturePredicate | None = None,
-        sink: CaptureSink | None = None,
-        hook: CaptureHook | None = None,
+        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
+        sink: _ty.Optional[CaptureSink] = None,
+        hook: _ty.Optional[CaptureHook] = None,
         hook_fail_fast: bool = False,
-        select_timeout: float | None = None,
-        max_packet_size: int | None = None,
-        per_interface: bool | None = None,
+        select_timeout: _ty.Optional[float] = None,
+        max_packet_size: _ty.Optional[int] = None,
+        per_interface: _ty.Optional[bool] = None,
     ) -> None:
         super().__init__(
             listen=listen,
@@ -201,9 +201,9 @@ class DhcpCapture(DhcpListener):
 
     def _init_capture_state(
         self,
-        packet_filter: str | CapturePredicate | None = None,
-        sink: CaptureSink | None = None,
-        hook: CaptureHook | None = None,
+        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
+        sink: _ty.Optional[CaptureSink] = None,
+        hook: _ty.Optional[CaptureHook] = None,
         hook_fail_fast: bool = False,
     ) -> None:
         """Set up the state every capture variant needs.
@@ -276,13 +276,13 @@ class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
     def __init__(
         self,
         listen: ListenSpec = None,
-        packet_filter: str | CapturePredicate | None = None,
-        sink: CaptureSink | None = None,
-        hook: CaptureHook | None = None,
+        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
+        sink: _ty.Optional[CaptureSink] = None,
+        hook: _ty.Optional[CaptureHook] = None,
         hook_fail_fast: bool = False,
-        max_packet_size: int | None = None,
-        per_interface: bool | None = None,
-        max_queued: int | None = None,
+        max_packet_size: _ty.Optional[int] = None,
+        per_interface: _ty.Optional[bool] = None,
+        max_queued: _ty.Optional[int] = None,
     ) -> None:
         AsyncDhcpListener.__init__(
             self,
@@ -386,7 +386,7 @@ def _filter_ip(key: str, value: str) -> _net.IPv4:
         ) from None
 
 
-def _option_value(message: DhcpMessage, key: str) -> str | None:
+def _option_value(message: DhcpMessage, key: str) -> _ty.Optional[str]:
     raw_code: int | DhcpOptionCode
     if key.isdigit():
         raw_code = int(key)

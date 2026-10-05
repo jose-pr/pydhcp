@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import typing as _ty
 
 INFINITE_LEASE_TIME: _ty.Final = 0xFFFFFFFF

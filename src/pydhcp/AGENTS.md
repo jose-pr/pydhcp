@@ -14,7 +14,8 @@ subpackage names are not importable from `pydhcp`, among them `DhcpMetrics`,
 `HardwareAddressType`, `OpCode`, `host_ip_interfaces` and `WILDCARD_IPv4`.
 `from pydhcp import DhcpMessage` works; `from pydhcp import DhcpMessageType`
 does not. Import from the owning module when a name is not in `__all__`
-(82 names today).
+(83 names today, `__version__` among them: the installed distribution's
+version, read from its metadata).
 
 **Removed from the top level** (breaking, see the changelog):
 **`IPv4Address`**, **`List`**, **`Bytes`**, **`String`** and **`Boolean`** are
@@ -370,7 +371,8 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     is in cleartext in a broadcast DISCOVER, so anyone on the segment can
     read one (same key as `DhcpRelay._pending_key`).
   - `.discover_offer(chaddr, *, timeout=2.0, retries=2, destination=...,
-    port=..., **discover_kwargs) -> DhcpMessage | None` — broadcasts
+    port=..., xid=None, client_identifier=None, parameter_request_list=None,
+    broadcast=True) -> DhcpMessage | None` — broadcasts
     DHCPDISCOVER (with retries) and returns the first DHCPOFFER, or `None`.
     **`timeout` is the *initial* retransmission interval, not a fixed one**:
     each retransmission waits twice as long as the last, randomized by ±1 s,
@@ -380,7 +382,8 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     carries a real `secs` — seconds since the exchange began (§2) — which was
     previously hardcoded to 0.
   - `.dora(chaddr, *, timeout=2.0, retries=2, destination=..., port=...,
-    broadcast=True, **discover_kwargs) -> DhcpMessage | None` — full
+    xid=None, client_identifier=None, parameter_request_list=None,
+    broadcast=True) -> DhcpMessage | None` — full
     DISCOVER→OFFER→REQUEST→ACK exchange; returns the DHCPACK or `None`.
     **`broadcast` forwards to both the DISCOVER and the follow-up REQUEST**,
     as do `client_identifier` and `parameter_request_list` — RFC 2131 §4.2

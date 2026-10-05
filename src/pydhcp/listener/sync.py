@@ -46,9 +46,9 @@ class DhcpListener:
     def __init__(
         self,
         listen: ListenSpec = None,
-        select_timeout: float | None = None,
-        max_packet_size: int | None = _const.UDP_MAX_PACKET_SIZE,
-        per_interface: bool | None = None,
+        select_timeout: _ty.Optional[float] = None,
+        max_packet_size: _ty.Optional[int] = _const.UDP_MAX_PACKET_SIZE,
+        per_interface: _ty.Optional[bool] = None,
     ) -> None:
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
@@ -190,8 +190,8 @@ class DhcpListener:
         self._previous_sigint = None
 
     def start(
-        self, cancellation_token: _thread.Event | None = None
-    ) -> _thread.Thread | None:
+        self, cancellation_token: _ty.Optional[_thread.Event] = None
+    ) -> _ty.Optional[_thread.Thread]:
         """Bind, then receive on a new daemon thread, which is returned.
 
         Binding happens here, on the caller's thread, so an address that cannot

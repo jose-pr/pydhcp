@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .enums import (
     DhcpMessageType as DhcpMessageType,
     OpCode as OpCode,

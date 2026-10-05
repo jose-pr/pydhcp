@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import typing as _ty
+
 import netimps as _netimps
 
 from .. import network as _net
@@ -30,10 +32,10 @@ class DhcpServer(_Handlers):
     def __init__(
         self,
         listen: ListenSpec = None,
-        select_timeout: float | None = None,
-        max_packet_size: int | None = None,
-        lease_backend: LeaseBackend | None = None,
-        per_interface: bool | None = None,
+        select_timeout: _ty.Optional[float] = None,
+        max_packet_size: _ty.Optional[int] = None,
+        lease_backend: _ty.Optional[LeaseBackend] = None,
+        per_interface: _ty.Optional[bool] = None,
     ) -> None:
         super().__init__(
             listen=listen,
@@ -50,10 +52,10 @@ class AsyncDhcpServer(_AsyncBase, DhcpServer):  # type: ignore[misc]
     def __init__(
         self,
         listen: ListenSpec = None,
-        max_packet_size: int | None = None,
-        lease_backend: LeaseBackend | None = None,
-        per_interface: bool | None = None,
-        max_queued: int | None = None,
+        max_packet_size: _ty.Optional[int] = None,
+        lease_backend: _ty.Optional[LeaseBackend] = None,
+        per_interface: _ty.Optional[bool] = None,
+        max_queued: _ty.Optional[int] = None,
     ) -> None:
         _AsyncBase.__init__(
             self,

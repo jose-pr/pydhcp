@@ -95,7 +95,7 @@ class PktInfoUdpTransport(UdpTransport):
     def __init__(
         self,
         socket: _socket.socket,
-        endpoint: "_netimps.UDPEndpoint | None" = None,
+        endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
     ):
         super().__init__(socket)
         self.ifindex: int | None = None

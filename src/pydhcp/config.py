@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json as _json
 import configparser as _configparser
 import typing as _ty

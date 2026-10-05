@@ -29,11 +29,11 @@ class RequestContext(_ty.NamedTuple):
     interface: _net.NetworkInterface
     client: _net.SocketAddress
     client_mac: bytes
-    ifindex: int | None = None
-    local_ip: _net.IPv4 | None = None
+    ifindex: _ty.Optional[int] = None
+    local_ip: _ty.Optional[_net.IPv4] = None
 
 
-def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool:
+def _pktinfo_supported(listen: ListenSpec, per_interface: "_ty.Optional[bool]") -> bool:
     """Whether this listener receives through the packet-info path.
 
     Only a wildcard bind needs it. Without it a wildcard has to be expanded into
@@ -52,7 +52,9 @@ def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool
     )
 
 
-Arrival = _ty.Tuple[bytes, _net.SocketAddress, "int | None", "_net.IPv4 | None"]
+Arrival = _ty.Tuple[
+    bytes, _net.SocketAddress, _ty.Optional[int], _ty.Optional[_net.IPv4]
+]
 
 
 def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
@@ -121,9 +123,9 @@ def _context_for(
     sock: _socket.socket,
     client: _net.SocketAddress,
     client_mac: bytes,
-    ifindex: "int | None" = None,
-    local_ip: "_net.IPv4 | None" = None,
-    endpoint: "_netimps.UDPEndpoint | None" = None,
+    ifindex: "_ty.Optional[int]" = None,
+    local_ip: "_ty.Optional[_net.IPv4]" = None,
+    endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
 ) -> RequestContext:
     """Build the context for one received datagram.
 

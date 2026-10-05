@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from importlib.metadata import version as _version
+
 from .exceptions import (
     DHCPError as DHCPError,
     DHCPDecodeError as DHCPDecodeError,
@@ -93,7 +97,10 @@ from .lease import (
     FileLeaseBackend as FileLeaseBackend,
 )
 
+__version__ = _version("pydhcp")
+
 __all__ = [
+    "__version__",
     "DHCPError",
     "DHCPDecodeError",
     "DHCPValueError",

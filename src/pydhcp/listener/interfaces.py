@@ -14,8 +14,8 @@ from ..log import LOGGER
 
 
 def _network_interface(
-    interface: _netimps.Interface, address: "_net.IPv4 | None" = None
-) -> "_net.NetworkInterface | None":
+    interface: _netimps.Interface, address: "_ty.Optional[_net.IPv4]" = None
+) -> "_ty.Optional[_net.NetworkInterface]":
     """pydhcp's per-address view of one netimps adapter.
 
     ``address`` picks which of its addresses -- a NIC may hold several, and the

@@ -19,7 +19,8 @@ from .capture_hook import _load_capture_hook, _serialize_capture_event
 
 
 def _infer_capture_format(
-    output: "pathlib.Path | str | None", packet_format: "str | None"
+    output: "_ty.Optional[_ty.Union[pathlib.Path, str]]",
+    packet_format: "_ty.Optional[str]",
 ) -> str:
     if packet_format:
         return packet_format
@@ -37,7 +38,8 @@ def _infer_capture_format(
 
 
 def _infer_output_mode(
-    output: "pathlib.Path | str | None", output_mode: "str | None"
+    output: "_ty.Optional[_ty.Union[pathlib.Path, str]]",
+    output_mode: "_ty.Optional[str]",
 ) -> str:
     if output_mode:
         return output_mode
@@ -97,7 +99,7 @@ def _per_capture_budget(state: "dict[str, _ty.Any]", path: pathlib.Path) -> bool
 def _write_capture_record(
     event: CaptureEvent,
     *,
-    output: "pathlib.Path | str | None",
+    output: "_ty.Optional[_ty.Union[pathlib.Path, str]]",
     output_mode: str,
     packet_format: str,
     state: "dict[str, _ty.Any]",

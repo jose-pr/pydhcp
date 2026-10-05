@@ -93,6 +93,7 @@ EXPECTED_ROOT = [
     "ViVendorClassRecord",
     "ViVendorSpecificInformation",
     "ViVendorSpecificInformationRecord",
+    "__version__",
     "compile_capture_filter",
 ]
 

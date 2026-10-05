@@ -236,7 +236,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     @_ty.overload  # type: ignore[override]
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _builtins.type[T]
-    ) -> T | None: ...
+    ) -> _ty.Optional[T]: ...
 
     @_ty.overload
     def get(
@@ -245,20 +245,22 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         default: _ty.Any = None,
         *,
         decode: _ty.Callable[[bytearray], _R],
-    ) -> _R | None: ...
+    ) -> _ty.Optional[_R]: ...
 
     @_ty.overload
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _ty.Literal[True]
-    ) -> DhcpOptionType | None: ...
+    ) -> _ty.Optional[DhcpOptionType]: ...
 
     @_ty.overload
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _ty.Literal[False]
-    ) -> bytearray | None: ...
+    ) -> _ty.Optional[bytearray]: ...
 
     @_ty.overload
-    def get(self, __key: int, default: _ty.Any = None) -> DhcpOptionType | None: ...
+    def get(
+        self, __key: int, default: _ty.Any = None
+    ) -> _ty.Optional[DhcpOptionType]: ...
 
     def get(
         self,

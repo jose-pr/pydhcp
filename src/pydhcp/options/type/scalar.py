@@ -6,18 +6,19 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import nvt as _nvt
 from ...network import HardwareAddressType as _HardwareAddressType
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
 
 from .base import DhcpOptionType
+
+_BytesT = _ty.TypeVar("_BytesT", bound="Bytes")
 
 
 class Bytes(DhcpOptionType, bytes):
     """Opaque byte payload."""
 
     def __new__(
-        cls, src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None
-    ) -> Self:
+        cls: type[_BytesT],
+        src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None,
+    ) -> _BytesT:
         if isinstance(src, str):
             return cls.fromhex(src)
         if src is None:
@@ -31,7 +32,7 @@ class Bytes(DhcpOptionType, bytes):
         return self.hex().upper()
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(cls: type[_BytesT], option: memoryview) -> tuple[_BytesT, int]:
         return cls(option), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -40,6 +41,9 @@ class Bytes(DhcpOptionType, bytes):
 
     def __json__(self) -> str:
         return self.hex()
+
+
+_UriListT = _ty.TypeVar("_UriListT", bound="UriList")
 
 
 class UriList(DhcpOptionType, list[str]):
@@ -65,7 +69,7 @@ class UriList(DhcpOptionType, list[str]):
         list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(cls: type[_UriListT], option: memoryview) -> tuple[_UriListT, int]:
         self = cls()
         idx = 0
         size = len(option)
@@ -102,6 +106,9 @@ class UriList(DhcpOptionType, list[str]):
         return list(self)
 
 
+_StringT = _ty.TypeVar("_StringT", bound="String")
+
+
 class String(DhcpOptionType, str):
     """RFC 2132 NVT-ASCII string with null termination on the wire.
 
@@ -111,7 +118,7 @@ class String(DhcpOptionType, str):
     """
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(cls: type[_StringT], option: memoryview) -> tuple[_StringT, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
         return cls(_nvt.decode(text, "Option string")), len(option)
 
@@ -122,6 +129,9 @@ class String(DhcpOptionType, str):
 
     def __json__(self) -> str:
         return _nvt.display(self)
+
+
+_OctetStringT = _ty.TypeVar("_OctetStringT", bound="OctetString")
 
 
 class OctetString(String):
@@ -135,14 +145,19 @@ class OctetString(String):
     """
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_OctetStringT], option: memoryview
+    ) -> tuple[_OctetStringT, int]:
         return cls(_nvt.decode(option.tobytes(), "Option octet string")), len(option)
+
+
+_BooleanT = _ty.TypeVar("_BooleanT", bound="Boolean")
 
 
 class Boolean(DhcpOptionType, int):
     """Boolean option encoded as a single octet."""
 
-    def __new__(cls, val: _ty.Any) -> Self:
+    def __new__(cls: type[_BooleanT], val: _ty.Any) -> _BooleanT:
         if val:
             val = 1
         else:
@@ -150,7 +165,7 @@ class Boolean(DhcpOptionType, int):
         return super().__new__(cls, val)
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(cls: type[_BooleanT], option: memoryview) -> tuple[_BooleanT, int]:
         return cls(option[0]), 1
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -158,7 +173,7 @@ class Boolean(DhcpOptionType, int):
         return 1
 
     @classmethod
-    def _dhcp_len_hint(cls) -> int | None:
+    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return 1
 
     def __repr__(self) -> str:
@@ -166,6 +181,9 @@ class Boolean(DhcpOptionType, int):
 
     def __json__(self) -> bool:
         return self.__bool__()
+
+
+_FlagT = _ty.TypeVar("_FlagT", bound="Flag")
 
 
 class Flag(DhcpOptionType):
@@ -188,14 +206,14 @@ class Flag(DhcpOptionType):
             )
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(cls: type[_FlagT], option: memoryview) -> tuple[_FlagT, int]:
         return cls(), 0
 
     def _dhcp_write(self, data: bytearray) -> int:
         return 0
 
     @classmethod
-    def _dhcp_len_hint(cls) -> int | None:
+    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return 0
 
     def __bool__(self) -> bool:
@@ -214,12 +232,19 @@ class Flag(DhcpOptionType):
         return "Flag()"
 
 
+_BaseFixedLengthIntegerT = _ty.TypeVar(
+    "_BaseFixedLengthIntegerT", bound="BaseFixedLengthInteger"
+)
+
+
 class BaseFixedLengthInteger(DhcpOptionType, int):
     NUMBER_OF_BYTES: int
     SIGNED: bool = False
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_BaseFixedLengthIntegerT], option: memoryview
+    ) -> tuple[_BaseFixedLengthIntegerT, int]:
         option_part = option[: cls.NUMBER_OF_BYTES]
         if len(option_part) != cls.NUMBER_OF_BYTES:
             raise DHCPDecodeError(
@@ -237,7 +262,7 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
         return self.NUMBER_OF_BYTES
 
     @classmethod
-    def _dhcp_len_hint(cls) -> int | None:
+    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return cls.NUMBER_OF_BYTES
 
     def _validate(self) -> None:
@@ -261,8 +286,11 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
         return int(self)
 
 
+_FixedLengthIntegerT = _ty.TypeVar("_FixedLengthIntegerT", bound="FixedLengthInteger")
+
+
 class FixedLengthInteger(BaseFixedLengthInteger):
-    def __new__(cls, val: _ty.Any) -> Self:
+    def __new__(cls: type[_FixedLengthIntegerT], val: _ty.Any) -> _FixedLengthIntegerT:
         val_obj = int.__new__(cls, val)
         val_obj._validate()
         return val_obj
@@ -296,11 +324,16 @@ class I32(FixedLengthInteger):
     SIGNED = True
 
 
+_ClientIdentifierT = _ty.TypeVar("_ClientIdentifierT", bound="ClientIdentifier")
+
+
 class ClientIdentifier(Bytes):
     """RFC 2132 client identifier."""
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_ClientIdentifierT], option: memoryview
+    ) -> tuple[_ClientIdentifierT, int]:
         if len(option) < 2:
             raise DHCPDecodeError(
                 f"{cls.__name__} option is truncated: needs a type octet and an identifier"
@@ -323,6 +356,9 @@ class ClientIdentifier(Bytes):
         return self.hex(":").upper()
 
 
+_OptionOverloadT = _ty.TypeVar("_OptionOverloadT", bound="OptionOverload")
+
+
 class OptionOverload(DhcpOptionType, _enum.IntFlag):
     """RFC 2132 option-overload selector."""
 
@@ -332,7 +368,9 @@ class OptionOverload(DhcpOptionType, _enum.IntFlag):
     BOTH = FILE | SNAME
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_OptionOverloadT], option: memoryview
+    ) -> tuple[_OptionOverloadT, int]:
         option_part = option[:1]
         if len(option_part) != 1:
             raise DHCPDecodeError(
@@ -345,5 +383,5 @@ class OptionOverload(DhcpOptionType, _enum.IntFlag):
         return 1
 
     @classmethod
-    def _dhcp_len_hint(cls) -> int | None:
+    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return 1

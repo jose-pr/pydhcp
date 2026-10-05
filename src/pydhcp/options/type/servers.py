@@ -10,10 +10,10 @@ from .base import DhcpOptionType
 from .domain import decode_domain_name, encode_domain_name
 from collections.abc import Iterable
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
 
 from .domains import UncompressedDomainList
+
+_RdnssSelectionT = _ty.TypeVar("_RdnssSelectionT", bound="RdnssSelection")
 
 
 class RdnssSelection(DhcpOptionType):
@@ -42,7 +42,9 @@ class RdnssSelection(DhcpOptionType):
         return normalized
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_RdnssSelectionT], option: memoryview
+    ) -> tuple[_RdnssSelectionT, int]:
         if len(option) < 9:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         flags = option[0]
@@ -90,6 +92,9 @@ class RdnssSelection(DhcpOptionType):
             str(self.secondary),
             self.domains.__json__(),
         ]
+
+
+_SipServersT = _ty.TypeVar("_SipServersT", bound="SipServers")
 
 
 class SipServers(DhcpOptionType):
@@ -144,7 +149,9 @@ class SipServers(DhcpOptionType):
         self.values = items
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_SipServersT], option: memoryview
+    ) -> tuple[_SipServersT, int]:
         if len(option) < 1:
             raise DHCPDecodeError(
                 "SipServers option is truncated: missing encoding octet"
@@ -203,6 +210,9 @@ class SipServers(DhcpOptionType):
         }
 
 
+_StatusCodeT = _ty.TypeVar("_StatusCodeT", bound="StatusCode")
+
+
 class StatusCode(DhcpOptionType):
     """RFC 6926 s6.2.2 status: one code octet, then an optional UTF-8 message.
 
@@ -229,7 +239,9 @@ class StatusCode(DhcpOptionType):
         self.message = str(message or "")
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_StatusCodeT], option: memoryview
+    ) -> tuple[_StatusCodeT, int]:
         if len(option) < 1:
             raise DHCPDecodeError("StatusCode option is truncated: missing code octet")
         message = _nvt.decode(option[1:].tobytes(), "StatusCode message")
@@ -254,6 +266,9 @@ class StatusCode(DhcpOptionType):
 
     def __json__(self) -> dict[str, _ty.Any]:
         return {"code": self.code, "message": _nvt.display(self.message)}
+
+
+_PcpServerListT = _ty.TypeVar("_PcpServerListT", bound="PcpServerList")
 
 
 class PcpServerList(DhcpOptionType, list[list[str]]):
@@ -294,7 +309,9 @@ class PcpServerList(DhcpOptionType, list[list[str]]):
         list.extend(self, [self._normalize(entry) for entry in __iterable])
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_PcpServerListT], option: memoryview
+    ) -> tuple[_PcpServerListT, int]:
         self = cls()
         idx = 0
         while idx < len(option):

@@ -2,12 +2,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DhcpOptionType, RecordList, hashable_payload
 from .scalar import Bytes
+
+_LengthPrefixedOpaqueListT = _ty.TypeVar(
+    "_LengthPrefixedOpaqueListT", bound="_LengthPrefixedOpaqueList"
+)
 
 
 class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
@@ -38,7 +40,9 @@ class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
         list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_LengthPrefixedOpaqueListT], option: memoryview
+    ) -> tuple[_LengthPrefixedOpaqueListT, int]:
         self = cls()
         idx = 0
         size = len(option)
@@ -103,6 +107,11 @@ class TlvOption(DhcpOptionType):
         return len(self.value) + 2
 
 
+_EncapsulatedOptionsT = _ty.TypeVar(
+    "_EncapsulatedOptionsT", bound="EncapsulatedOptions"
+)
+
+
 class EncapsulatedOptions(RecordList[TlvOption]):
     """TLV container used to build vendor-specific sub-option payloads."""
 
@@ -110,7 +119,9 @@ class EncapsulatedOptions(RecordList[TlvOption]):
     # honours the PAD (0) and END (255) markers that appear inside an
     # encapsulated options field, so it cannot share `List._dhcp_read`.
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_EncapsulatedOptionsT], option: memoryview
+    ) -> tuple[_EncapsulatedOptionsT, int]:
         self = cls()
         idx = 0
         size = len(option)
@@ -140,6 +151,11 @@ class VendorSpecificInformation(Bytes):
 
 class RelayAgentInformation(EncapsulatedOptions):
     """RFC 3046 relay-agent sub-options."""
+
+
+_ViVendorSpecificInformationRecordT = _ty.TypeVar(
+    "_ViVendorSpecificInformationRecordT", bound="ViVendorSpecificInformationRecord"
+)
 
 
 class ViVendorSpecificInformationRecord(DhcpOptionType):
@@ -172,7 +188,9 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
         return [self.enterprise_number, self.value.__json__()]
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_ViVendorSpecificInformationRecordT], option: memoryview
+    ) -> tuple[_ViVendorSpecificInformationRecordT, int]:
         if len(option) < 5:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         enterprise_number = int.from_bytes(option[:4], "big")
@@ -196,6 +214,11 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
 
 class ViVendorSpecificInformation(RecordList[ViVendorSpecificInformationRecord]):
     """RFC 3925 vendor-identifying vendor-specific information records."""
+
+
+_ViVendorClassRecordT = _ty.TypeVar(
+    "_ViVendorClassRecordT", bound="ViVendorClassRecord"
+)
 
 
 class ViVendorClassRecord(DhcpOptionType):
@@ -227,7 +250,9 @@ class ViVendorClassRecord(DhcpOptionType):
         return [self.enterprise_number, self.value.__json__()]
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_ViVendorClassRecordT], option: memoryview
+    ) -> tuple[_ViVendorClassRecordT, int]:
         if len(option) < 5:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         enterprise_number = int.from_bytes(option[:4], "big")

@@ -7,8 +7,7 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DhcpOptionType
 from .domain import decode_domain_name, encode_domain_name
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
+_ClientFqdnT = _ty.TypeVar("_ClientFqdnT", bound="ClientFqdn")
 
 
 class ClientFqdn(DhcpOptionType):
@@ -96,7 +95,9 @@ class ClientFqdn(DhcpOptionType):
         return bool(self.flags & self.FLAG_E)
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_ClientFqdnT], option: memoryview
+    ) -> tuple[_ClientFqdnT, int]:
         if len(option) < 3:
             raise DHCPDecodeError(
                 "ClientFqdn option is truncated: needs at least 3 octets"

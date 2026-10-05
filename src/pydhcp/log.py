@@ -6,6 +6,8 @@ library up or down through `logging.getLogger("pydhcp")` and still silence one
 noisy module by name.
 """
 
+from __future__ import annotations
+
 import logging as _logging
 
 #: The package logger. Every module logger is a child of it, so setting its

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .base import (
     DhcpOptionType as DhcpOptionType,
     List as List,

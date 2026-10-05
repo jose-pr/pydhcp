@@ -13,9 +13,6 @@ from ..options.type import DhcpOptionType
 # every `ClientIdentifier.__repr__`.
 from ..network import HardwareAddressType as HardwareAddressType
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
-
 __all__ = [
     "DhcpMessageType",
     "OpCode",
@@ -25,11 +22,16 @@ __all__ = [
 ]
 
 
+_DhcpMessageTypeT = _ty.TypeVar("_DhcpMessageTypeT", bound="DhcpMessageType")
+
+
 class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     """DHCP message types"""
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_DhcpMessageTypeT], option: memoryview
+    ) -> tuple[_DhcpMessageTypeT, int]:
         option_part = option[:1]
         if len(option_part) != 1:
             raise DHCPDecodeError(
@@ -45,7 +47,7 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
         return 1
 
     @classmethod
-    def _dhcp_len_hint(cls) -> int | None:
+    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return 1
 
     def __repr__(self) -> str:

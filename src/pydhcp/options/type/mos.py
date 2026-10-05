@@ -2,14 +2,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DhcpOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
 from .addresses import IPv4Address
 from .scalar import Bytes
+
+_MoSLabelListT = _ty.TypeVar("_MoSLabelListT", bound="_MoSLabelList")
 
 
 class _MoSLabelList(DhcpOptionType, list[str]):
@@ -45,7 +45,9 @@ class _MoSLabelList(DhcpOptionType, list[str]):
         list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_MoSLabelListT], option: memoryview
+    ) -> tuple[_MoSLabelListT, int]:
         self = cls()
         idx = 0
         size = len(option)
@@ -65,6 +67,9 @@ class _MoSLabelList(DhcpOptionType, list[str]):
 
     def __json__(self) -> list[str]:
         return list(self)
+
+
+_MoSSubOptionT = _ty.TypeVar("_MoSSubOptionT", bound="_MoSSubOption")
 
 
 class _MoSSubOption(DhcpOptionType):
@@ -100,7 +105,9 @@ class _MoSSubOption(DhcpOptionType):
         return len(payload_bytes)
 
     @classmethod
-    def _from_payload(cls: type[Self], code: int, payload: memoryview) -> Self:
+    def _from_payload(
+        cls: type[_MoSSubOptionT], code: int, payload: memoryview
+    ) -> _MoSSubOptionT:
         return cls(code, cls._read_payload(payload))
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -114,7 +121,9 @@ class _MoSSubOption(DhcpOptionType):
         return payload_len + 2
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_MoSSubOptionT], option: memoryview
+    ) -> tuple[_MoSSubOptionT, int]:
         if len(option) < 2:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         code = option[0]
@@ -128,6 +137,11 @@ class _MoSSubOption(DhcpOptionType):
         if isinstance(value, DhcpOptionType):
             value = value.__json__()
         return [self.code, value]
+
+
+_MoSIpv4AddressSubOptionT = _ty.TypeVar(
+    "_MoSIpv4AddressSubOptionT", bound="_MoSIpv4AddressSubOption"
+)
 
 
 class _MoSIpv4AddressSubOption(_MoSSubOption):
@@ -150,7 +164,9 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
         )
 
     @classmethod
-    def _from_payload(cls: type[Self], code: int, payload: memoryview) -> Self:
+    def _from_payload(
+        cls: type[_MoSIpv4AddressSubOptionT], code: int, payload: memoryview
+    ) -> _MoSIpv4AddressSubOptionT:
         if code not in cls._KNOWN_CODES:
             return cls(code, Bytes(payload))
         return cls(code, cls._read_payload(payload))
@@ -160,6 +176,9 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
             return Bytes(self.value)._dhcp_write(data)
         payload = _ty.cast(DhcpOptionType, self.value)
         return payload._dhcp_write(data)
+
+
+_MoSFqdnSubOptionT = _ty.TypeVar("_MoSFqdnSubOptionT", bound="_MoSFqdnSubOption")
 
 
 class _MoSFqdnSubOption(_MoSSubOption):
@@ -178,7 +197,9 @@ class _MoSFqdnSubOption(_MoSSubOption):
         return _MoSLabelList._dhcp_read(payload)[0]
 
     @classmethod
-    def _from_payload(cls: type[Self], code: int, payload: memoryview) -> Self:
+    def _from_payload(
+        cls: type[_MoSFqdnSubOptionT], code: int, payload: memoryview
+    ) -> _MoSFqdnSubOptionT:
         if code not in cls._KNOWN_CODES:
             return cls(code, Bytes(payload))
         return cls(code, cls._read_payload(payload))

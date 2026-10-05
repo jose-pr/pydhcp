@@ -24,7 +24,7 @@ def _split_listen_string(value: str) -> list[str]:
     return [part.strip() for part in value.split(",") if part.strip()]
 
 
-def _split_host_port(value: str) -> tuple[str, int | None]:
+def _split_host_port(value: str) -> tuple[str, _ty.Optional[int]]:
     """Split ``host:port``, defaulting an empty host to the IPv4 wildcard.
 
     Delegates to :func:`netimps.split_host`: ``[::1]:67`` is ``("::1", 67)``, a bare

@@ -54,9 +54,9 @@ class AsyncDhcpListener:
     def __init__(
         self,
         listen: ListenSpec = None,
-        max_packet_size: int | None = None,
-        per_interface: bool | None = None,
-        max_queued: int | None = None,
+        max_packet_size: _ty.Optional[int] = None,
+        per_interface: _ty.Optional[bool] = None,
+        max_queued: _ty.Optional[int] = None,
     ) -> None:
         if max_queued is None:
             max_queued = self.MAX_QUEUED_DATAGRAMS
@@ -146,8 +146,8 @@ class AsyncDhcpListener:
         data: bytes,
         client: _net.SocketAddress,
         sock: _socket.socket,
-        ifindex: "int | None" = None,
-        local_ip: "_net.IPv4 | None" = None,
+        ifindex: "_ty.Optional[int]" = None,
+        local_ip: "_ty.Optional[_net.IPv4]" = None,
     ) -> None:
         """Run one datagram's handling off the event loop.
 
@@ -213,8 +213,8 @@ class AsyncDhcpListener:
         data: bytes,
         client: _net.SocketAddress,
         sock: _socket.socket,
-        ifindex: "int | None" = None,
-        local_ip: "_net.IPv4 | None" = None,
+        ifindex: "_ty.Optional[int]" = None,
+        local_ip: "_ty.Optional[_net.IPv4]" = None,
     ) -> None:
         if self._closing:  # stop() was called after this was queued
             self.metrics.packets_dropped_backlog += 1
@@ -413,7 +413,7 @@ class AsyncDhcpListener:
 
         return running.create_task(finish())
 
-    def _close_sockets(self, stopped: "_asyncio.Event | None" = None) -> None:
+    def _close_sockets(self, stopped: "_ty.Optional[_asyncio.Event]" = None) -> None:
         for sock in self._sockets:
             _close_socket(sock, self._endpoints)
         self._sockets.clear()

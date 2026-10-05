@@ -17,12 +17,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ipaddress.AddressValueError`, for a bad UTF-8 label a
   `UnicodeDecodeError`, for a destination with host bits set an `ipaddress`
   `ValueError`). `except ValueError` keeps working.
+- **`pydhcp.__version__`**, read from the installed distribution's metadata.
 
 ### Changed
 
 - **Breaking: `NoClientIdentity` is now `pydhcp.NoClientIdentityError`**
   (`pydhcp.exceptions`), no longer importable from `pydhcp.packet.message`.
   No alias is kept. It is a `ValueError` as before.
+- **`DhcpClient.discover_offer()` and `.dora()` name the keywords they
+  forward** (`xid`, `client_identifier`, `parameter_request_list` and, for
+  `discover_offer`, `broadcast`) instead of taking `**discover_kwargs`. The same
+  calls work; an unknown keyword is now a `TypeError` at the call.
 - **Breaking: `acquire_lease` takes a keyword `commit` and runs on the server
   itself.** The signature is `acquire_lease(client_id, server_id, msg, *, commit=True)`:
   an override must accept `commit` (one that does not raises `TypeError` for every
@@ -68,6 +73,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Every public annotation resolves with `typing.get_type_hints` on Python
+  3.9.** `X | Y` in a signature, a `typing_extensions.Self` imported only
+  under `TYPE_CHECKING` and names a function could not see failed there with a
+  `TypeError` or `NameError` (28 of 242 public callables). Signatures use
+  `Optional` and `Union`, `Self` is a bound `TypeVar` per class, and every
+  module has `from __future__ import annotations`; `typing_extensions` is no
+  longer imported.
 - **`pydhcp capture --hook ./name` runs the file it names.** The command was started by
   the name with its `./` dropped, which POSIX looks up on `PATH` only: the hook was not
   found (a traceback per packet) or a program of the same name on `PATH` ran instead.

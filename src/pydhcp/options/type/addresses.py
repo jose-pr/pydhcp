@@ -8,15 +8,16 @@ from ...network import IPv4 as _IP, IPv4Network as _Network
 from .base import DhcpOptionType
 from collections.abc import Iterable
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
+_IPv4AddressT = _ty.TypeVar("_IPv4AddressT", bound="IPv4Address")
 
 
 class IPv4Address(DhcpOptionType, _IP):
     """A single IPv4 address carried in network byte order."""
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_IPv4AddressT], option: memoryview
+    ) -> tuple[_IPv4AddressT, int]:
         if len(option) < 4:
             raise DHCPDecodeError(
                 f"{cls.__name__} option is truncated: needs 4 octets, got {len(option)}"
@@ -28,7 +29,7 @@ class IPv4Address(DhcpOptionType, _IP):
         return 4
 
     @classmethod
-    def _dhcp_len_hint(cls) -> int | None:
+    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return 4
 
     def __repr__(self) -> str:
@@ -36,6 +37,9 @@ class IPv4Address(DhcpOptionType, _IP):
 
     def __json__(self) -> str:
         return str(self)
+
+
+_ClasslessRouteT = _ty.TypeVar("_ClasslessRouteT", bound="ClasslessRoute")
 
 
 class ClasslessRoute(DhcpOptionType):
@@ -70,7 +74,9 @@ class ClasslessRoute(DhcpOptionType):
         self.network = _Network(net)
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_ClasslessRouteT], option: memoryview
+    ) -> tuple[_ClasslessRouteT, int]:
         if len(option) < 1:
             raise DHCPDecodeError(
                 "ClasslessRoute option is truncated: missing prefix length"
@@ -115,6 +121,9 @@ class ClasslessRoute(DhcpOptionType):
         return [str(self.gateway), str(self.network)]
 
 
+_IPv4PairListT = _ty.TypeVar("_IPv4PairListT", bound="_IPv4PairList")
+
+
 class _IPv4PairList(DhcpOptionType, list[tuple[_IP, _IP]]):
     _SECOND_LABEL: str = "second"
 
@@ -131,7 +140,9 @@ class _IPv4PairList(DhcpOptionType, list[tuple[_IP, _IP]]):
         return _IP(left), _IP(right)
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_IPv4PairListT], option: memoryview
+    ) -> tuple[_IPv4PairListT, int]:
         if len(option) % 8:
             raise DHCPDecodeError(
                 f"{cls.__name__} option is truncated: expected 8-byte records"

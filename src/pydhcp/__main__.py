@@ -7,6 +7,8 @@ are present and the choice has to be explicit -- which is exactly when someone
 is debugging and least wants a second problem.
 """
 
+from __future__ import annotations
+
 from .cli import main
 
 if __name__ == "__main__":

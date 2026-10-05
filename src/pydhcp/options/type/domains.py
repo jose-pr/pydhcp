@@ -13,12 +13,12 @@ from .domain import (
 )
 from collections.abc import Iterable
 
-if _ty.TYPE_CHECKING:
-    from typing_extensions import Self
-
 #: A decoded name has at most 127 labels (255 octets, two per label), so a
 #: name that needs more pointers than that is not one a message needs.
 MAX_POINTER_HOPS = 127
+
+
+_DomainListT = _ty.TypeVar("_DomainListT", bound="DomainList")
 
 
 class DomainList(DhcpOptionType, list[str]):
@@ -56,7 +56,9 @@ class DomainList(DhcpOptionType, list[str]):
         list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_DomainListT], option: memoryview
+    ) -> tuple[_DomainListT, int]:
         """Decode a compressed search list (RFC 1035 s4.1.4, RFC 3397 s3).
 
         The names are bounded as a message needs them to be: a decoded name is
@@ -280,6 +282,9 @@ class UncompressedDomainList(DomainList):
         return written
 
 
+_DomainNameT = _ty.TypeVar("_DomainNameT", bound="DomainName")
+
+
 class DomainName(DhcpOptionType, str):
     """A single uncompressed RFC 1035 name, as an option payload.
 
@@ -290,7 +295,9 @@ class DomainName(DhcpOptionType, str):
     """
 
     @classmethod
-    def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+    def _dhcp_read(
+        cls: type[_DomainNameT], option: memoryview
+    ) -> tuple[_DomainNameT, int]:
         name, read = decode_domain_name(option, 0, cls.__name__)
         return cls(name), read
 

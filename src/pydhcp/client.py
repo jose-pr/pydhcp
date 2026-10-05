@@ -52,9 +52,9 @@ class DhcpClient(DhcpListener):
     def __init__(
         self,
         listen: ListenSpec = None,
-        select_timeout: float | None = None,
-        max_packet_size: int | None = None,
-        per_interface: bool | None = None,
+        select_timeout: _ty.Optional[float] = None,
+        max_packet_size: _ty.Optional[int] = None,
+        per_interface: _ty.Optional[bool] = None,
     ) -> None:
         super().__init__(
             listen=listen,
@@ -79,9 +79,9 @@ class DhcpClient(DhcpListener):
         self,
         chaddr: bytes,
         *,
-        xid: int | None = None,
-        client_identifier: bytes | bytearray | None = None,
-        parameter_request_list: _ty.Iterable[DhcpOptionCode] | None = None,
+        xid: _ty.Optional[int] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        parameter_request_list: _ty.Optional[_ty.Iterable[DhcpOptionCode]] = None,
         broadcast: bool = True,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=broadcast)
@@ -95,12 +95,12 @@ class DhcpClient(DhcpListener):
         self,
         chaddr: bytes,
         *,
-        xid: int | None = None,
-        requested_ip: _net.IPv4 | str | None = None,
-        server_identifier: _net.IPv4 | str | None = None,
-        ciaddr: _net.IPv4 | str | None = None,
-        client_identifier: bytes | bytearray | None = None,
-        parameter_request_list: _ty.Iterable[DhcpOptionCode] | None = None,
+        xid: _ty.Optional[int] = None,
+        requested_ip: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        server_identifier: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        ciaddr: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        parameter_request_list: _ty.Optional[_ty.Iterable[DhcpOptionCode]] = None,
         broadcast: bool = True,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=broadcast)
@@ -120,10 +120,10 @@ class DhcpClient(DhcpListener):
         self,
         chaddr: bytes,
         *,
-        ciaddr: _net.IPv4 | str,
-        xid: int | None = None,
-        client_identifier: bytes | bytearray | None = None,
-        parameter_request_list: _ty.Iterable[DhcpOptionCode] | None = None,
+        ciaddr: _ty.Union[_net.IPv4, str],
+        xid: _ty.Optional[int] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        parameter_request_list: _ty.Optional[_ty.Iterable[DhcpOptionCode]] = None,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
         msg.ciaddr = _net.IPv4(ciaddr)
@@ -135,10 +135,10 @@ class DhcpClient(DhcpListener):
         self,
         chaddr: bytes,
         *,
-        ciaddr: _net.IPv4 | str,
-        server_identifier: _net.IPv4 | str | None = None,
-        xid: int | None = None,
-        client_identifier: bytes | bytearray | None = None,
+        ciaddr: _ty.Union[_net.IPv4, str],
+        server_identifier: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        xid: _ty.Optional[int] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
         msg.ciaddr = _net.IPv4(ciaddr)
@@ -154,10 +154,10 @@ class DhcpClient(DhcpListener):
         self,
         chaddr: bytes,
         *,
-        requested_ip: _net.IPv4 | str,
-        server_identifier: _net.IPv4 | str | None = None,
-        xid: int | None = None,
-        client_identifier: bytes | bytearray | None = None,
+        requested_ip: _ty.Union[_net.IPv4, str],
+        server_identifier: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        xid: _ty.Optional[int] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
     ) -> DhcpMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=True)
         msg.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = (
@@ -172,7 +172,7 @@ class DhcpClient(DhcpListener):
     def send(
         self,
         message: DhcpMessage,
-        destination: _net.IPv4 | str = _net.IPv4("255.255.255.255"),
+        destination: _ty.Union[_net.IPv4, str] = _net.IPv4("255.255.255.255"),
         port: int = int(_enum.DhcpPort.SERVER),
     ) -> int:
         if not self._sockets:
@@ -238,12 +238,12 @@ class DhcpClient(DhcpListener):
         message: DhcpMessage,
         msg_type: _enum.DhcpMessageType,
         *,
-        destination: _net.IPv4 | str,
+        destination: _ty.Union[_net.IPv4, str],
         port: int,
         timeout: float,
         retries: int,
         started_at: float,
-    ) -> DhcpMessage | None:
+    ) -> _ty.Optional[DhcpMessage]:
         """Send `message`, retransmitting on RFC 2131 s4.1 backoff, until `msg_type`.
 
         `started_at` is when *acquisition* began, not when this message was
@@ -308,7 +308,7 @@ class DhcpClient(DhcpListener):
         waiter: _queue.Queue[tuple[DhcpMessage, RequestContext]],
         msg_type: _enum.DhcpMessageType,
         timeout: float,
-    ) -> DhcpMessage | None:
+    ) -> _ty.Optional[DhcpMessage]:
         """Take the first reply of `msg_type` from one exchange's own queue."""
         deadline = self._monotonic() + timeout
         while True:
@@ -329,10 +329,13 @@ class DhcpClient(DhcpListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _net.IPv4 | str = _net.IPv4("255.255.255.255"),
+        destination: _ty.Union[_net.IPv4, str] = _net.IPv4("255.255.255.255"),
         port: int = int(_enum.DhcpPort.SERVER),
-        **discover_kwargs: _ty.Any,
-    ) -> DhcpMessage | None:
+        xid: _ty.Optional[int] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        parameter_request_list: _ty.Optional[_ty.Iterable[DhcpOptionCode]] = None,
+        broadcast: bool = True,
+    ) -> _ty.Optional[DhcpMessage]:
         """Broadcast DHCPDISCOVER and return the first DHCPOFFER, or None.
 
         `timeout` is the *initial* retransmission interval, not a fixed one:
@@ -340,7 +343,13 @@ class DhcpClient(DhcpListener):
         to `RETRANSMIT_MAX_INTERVAL` (RFC 2131 s4.1). With the defaults the
         whole call is bounded at roughly 2+4+8 seconds rather than 3x2.
         """
-        discover = self.build_discover(chaddr, **discover_kwargs)
+        discover = self.build_discover(
+            chaddr,
+            xid=xid,
+            client_identifier=client_identifier,
+            parameter_request_list=parameter_request_list,
+            broadcast=broadcast,
+        )
         return self._exchange(
             discover,
             _enum.DhcpMessageType.DHCPOFFER,
@@ -357,11 +366,13 @@ class DhcpClient(DhcpListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _net.IPv4 | str = _net.IPv4("255.255.255.255"),
+        destination: _ty.Union[_net.IPv4, str] = _net.IPv4("255.255.255.255"),
         port: int = int(_enum.DhcpPort.SERVER),
+        xid: _ty.Optional[int] = None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        parameter_request_list: _ty.Optional[_ty.Iterable[DhcpOptionCode]] = None,
         broadcast: bool = True,
-        **discover_kwargs: _ty.Any,
-    ) -> DhcpMessage | None:
+    ) -> _ty.Optional[DhcpMessage]:
         """Run a full DISCOVER/OFFER/REQUEST/ACK exchange and return the DHCPACK, or None.
 
         `timeout` is the initial retransmission interval for each half of the
@@ -376,8 +387,10 @@ class DhcpClient(DhcpListener):
             retries=retries,
             destination=destination,
             port=port,
+            xid=xid,
+            client_identifier=client_identifier,
+            parameter_request_list=parameter_request_list,
             broadcast=broadcast,
-            **discover_kwargs,
         )
         if offer is None:
             return None
@@ -405,8 +418,8 @@ class DhcpClient(DhcpListener):
             # list in any subsequent REQUEST. Omitting the identifier keyed the
             # REQUEST under htype+chaddr while the OFFER was allocated under the
             # supplied one, so the server saw two different clients.
-            client_identifier=discover_kwargs.get("client_identifier"),
-            parameter_request_list=discover_kwargs.get("parameter_request_list"),
+            client_identifier=client_identifier,
+            parameter_request_list=parameter_request_list,
         )
         return self._exchange(
             request,
@@ -460,8 +473,8 @@ class DhcpClient(DhcpListener):
         """Hook called after a BOOTREPLY is accepted and queued."""
 
     def next_reply(
-        self, timeout: float | None = None
-    ) -> tuple[DhcpMessage, RequestContext] | None:
+        self, timeout: _ty.Optional[float] = None
+    ) -> _ty.Optional[tuple[DhcpMessage, RequestContext]]:
         try:
             return self._replies.get(timeout=timeout)
         except _queue.Empty:
@@ -479,7 +492,7 @@ class DhcpClient(DhcpListener):
         self,
         chaddr: bytes,
         *,
-        xid: int | None,
+        xid: _ty.Optional[int],
         broadcast: bool,
     ) -> DhcpMessage:
         return DhcpMessage(
@@ -505,8 +518,8 @@ class DhcpClient(DhcpListener):
     def _add_client_options(
         self,
         msg: DhcpMessage,
-        client_identifier: bytes | bytearray | None,
-        parameter_request_list: _ty.Iterable[DhcpOptionCode] | None,
+        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]],
+        parameter_request_list: _ty.Optional[_ty.Iterable[DhcpOptionCode]],
     ) -> None:
         if client_identifier is not None:
             msg.options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(client_identifier)
