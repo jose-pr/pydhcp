@@ -100,12 +100,12 @@ def test_binding_forces_a_fresh_enumeration(enumerations) -> None:
     might have: the next lookup must not be answered from before the bind."""
     import netimps
 
-    netimps.interface_for(net.IPv4("127.0.0.1"), cache=True)
-    netimps.interface_for(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
     assert len(enumerations) == 1, "the cache did not hold"
 
     DhcpListener(listen=("127.0.0.1", 0)).__enter__().close()
-    netimps.interface_for(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
 
     assert len(enumerations) == 2, "bind() left the old enumeration in place"
 
@@ -115,11 +115,11 @@ def test_an_async_bind_forces_it_too(enumerations) -> None:
     invalidation hung off `DhcpServer.bind` would never have run for it."""
     import netimps
 
-    netimps.interface_for(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
     listener = AsyncDhcpListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
-        netimps.interface_for(net.IPv4("127.0.0.1"), cache=True)
+        netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
         assert len(enumerations) == 2
     finally:
         listener._close_sockets()

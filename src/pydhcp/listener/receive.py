@@ -46,7 +46,7 @@ def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool
     one socket per address -- which on Linux then receives no broadcasts at all,
     so a client's DISCOVER never arrives.
 
-    `netimps.supports_pktinfo` decides by asking a socket, never by testing a
+    `netimps.has_pktinfo` decides by asking a socket, never by testing a
     constant's name: `getattr(socket, "IP_PKTINFO", None)` is None on CPython
     3.9-3.11 on every platform while the kernel supports it throughout, which
     is how this path used to be silently off across half the supported range.
@@ -54,7 +54,7 @@ def _pktinfo_supported(listen: ListenSpec, per_interface: "bool | None") -> bool
     return (
         per_interface is not True
         and _listen_uses_wildcard(listen)
-        and _netimps.supports_pktinfo(_socket.AF_INET)
+        and _netimps.has_pktinfo(_socket.AF_INET)
     )
 
 
@@ -103,7 +103,7 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
         )
     ifindex = datagram.interface_index or None
     local: "_net.IPv4 | None" = None
-    destination = datagram.local_address
+    destination = datagram.destination
     if destination is not None:
         unmapped = _netimps.unmap(destination)
         if isinstance(unmapped, _net.IPv4) and not unmapped.is_unspecified:
@@ -116,7 +116,7 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
             if isinstance(address, _ipaddress.IPv4Interface)
         ]
         if local not in own:
-            preferred = [ip for ip in own if ip not in _net.APIPA] or own
+            preferred = [ip for ip in own if ip not in _net.LINK_LOCAL_V4] or own
             local = preferred[0] if preferred else None
     elif local is not None and (local.is_multicast or str(local) == BROADCAST_ADDRESS):
         local = None
@@ -129,7 +129,7 @@ def _context_for(
     client_mac: bytes,
     ifindex: "int | None" = None,
     local_ip: "_net.IPv4 | None" = None,
-    endpoint: "_netimps.UdpEndpoint | None" = None,
+    endpoint: "_netimps.UDPEndpoint | None" = None,
 ) -> RequestContext:
     """Build the context for one received datagram.
 

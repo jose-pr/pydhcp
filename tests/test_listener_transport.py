@@ -156,7 +156,7 @@ def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:
     the server identifier; the receiving interface's own address does."""
     *_, ifindex, local_ip = _arrival(
         _datagram(
-            local_address=IPv4("255.255.255.255"),
+            destination=IPv4("255.255.255.255"),
             interface_index=4,
             interface=_interface("fe80::1/64", "169.254.7.7/16", "192.0.2.1/24"),
         ),
@@ -172,7 +172,7 @@ def test_arrival_keeps_a_unicast_destination_the_interface_holds() -> None:
     to answer from."""
     *_, local_ip = _arrival(
         _datagram(
-            local_address=IPv4("192.0.2.2"),
+            destination=IPv4("192.0.2.2"),
             interface_index=4,
             interface=_interface("192.0.2.1/24", "192.0.2.2/24"),
         ),
@@ -187,7 +187,7 @@ def test_arrival_resolves_an_apipa_only_interface() -> None:
     resolution must still find it, only selection prefers otherwise."""
     *_, local_ip = _arrival(
         _datagram(
-            local_address=IPv4("255.255.255.255"),
+            destination=IPv4("255.255.255.255"),
             interface_index=9,
             interface=_interface("169.254.7.7/16"),
         ),
@@ -199,7 +199,7 @@ def test_arrival_resolves_an_apipa_only_interface() -> None:
 
 def test_arrival_without_an_interface_drops_a_broadcast_destination() -> None:
     *_, ifindex, local_ip = _arrival(
-        _datagram(local_address=IPv4("255.255.255.255"), interface_index=3), 576
+        _datagram(destination=IPv4("255.255.255.255"), interface_index=3), 576
     )
 
     assert ifindex == 3
@@ -210,7 +210,7 @@ def test_arrival_treats_a_zero_local_address_as_absent() -> None:
     """A zero-filled `ipi_spec_dst` decodes to 0.0.0.0; taken literally it
     resolved a synthetic 0.0.0.0/32 interface and the server served nothing."""
     *_, local_ip = _arrival(
-        _datagram(local_address=IPv4("0.0.0.0"), interface_index=3), 576
+        _datagram(destination=IPv4("0.0.0.0"), interface_index=3), 576
     )
 
     assert local_ip is None
@@ -400,7 +400,7 @@ class RecordingEndpoint:
     for: the destination, and the source it pins.
     """
 
-    supports_src_pinning = True
+    has_src_pinning = True
 
     def __init__(self, error=None) -> None:
         self.sends: list = []
@@ -539,7 +539,7 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
     127.0.0.2 binds there but is not an *assigned* address, while Windows 11
     accepts it. Production never meets this -- the pin is always the address
     the request arrived at -- so only that one refusal skips."""
-    loopback = netimps.interface_for("127.0.0.1")
+    loopback = netimps.get_interface("127.0.0.1")
     assert loopback is not None and loopback.index
 
     receiver = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -548,7 +548,7 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
     sender = netimps.bind("0.0.0.0", 0)
     try:
         transport = PktInfoUdpTransport(sender)
-        if not transport.endpoint.supports_src_pinning:
+        if not transport.endpoint.has_src_pinning:
             pytest.skip("no source pinning on this platform")
         transport.ifindex = loopback.index
         transport.local_ip = IPv4("127.0.0.2")

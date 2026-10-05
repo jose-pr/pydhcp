@@ -95,12 +95,12 @@ class PktInfoUdpTransport(UdpTransport):
     def __init__(
         self,
         socket: _socket.socket,
-        endpoint: "_netimps.UdpEndpoint | None" = None,
+        endpoint: "_netimps.UDPEndpoint | None" = None,
     ):
         super().__init__(socket)
         self.ifindex: int | None = None
         self.local_ip: _net.IPv4 | None = None
-        self.endpoint = endpoint or _netimps.UdpEndpoint(socket, pktinfo=False)
+        self.endpoint = endpoint or _netimps.UDPEndpoint(socket, pktinfo=False)
 
     def _source(self) -> _netimps.Interface:
         """The pin, as a netimps `Interface` holding exactly ``local_ip``.
@@ -129,7 +129,7 @@ class PktInfoUdpTransport(UdpTransport):
         client_mac: bytes,
     ) -> int:
         dest_str = _dest_string(dest)
-        if self.local_ip is not None and self.endpoint.supports_src_pinning:
+        if self.local_ip is not None and self.endpoint.has_src_pinning:
             try:
                 # `_dest_string`, not `str(dest)`: this path took a yiaddr of
                 # 0.0.0.0 -- the normal case for a client that has no address

@@ -30,7 +30,9 @@ def _network_interface(
         and (address is None or entry.ip == address)
     ]
     if address is None:
-        candidates = [e for e in candidates if e.ip not in _net.APIPA] or candidates
+        candidates = [
+            e for e in candidates if e.ip not in _net.LINK_LOCAL_V4
+        ] or candidates
     if not candidates:
         return None
     return _net.NetworkInterface(
@@ -104,7 +106,7 @@ def _resolve_interface(
     # and no MAC -- losing the prefix the server derives its pool from.
     address = _ipaddress.ip_address(local_ip)
     if isinstance(address, _net.IPv4) and not address.is_unspecified:
-        held = _netimps.interface_for(address, cache=True)
+        held = _netimps.get_interface(address, cache=True)
         if held is not None:
             found = _network_interface(held, address)
             if found is not None:

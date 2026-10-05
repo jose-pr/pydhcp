@@ -82,7 +82,7 @@ def _grow_receive_buffer(
 def _bind_sockets(
     listen: "_ty.Sequence[_net.SocketAddress]",
     sockets: "list[_socket.socket]",
-    endpoints: "dict[_socket.socket, _netimps.UdpEndpoint]",
+    endpoints: "dict[_socket.socket, _netimps.UDPEndpoint]",
     pktinfo: bool,
     label: str = "",
     reuse_address: bool = False,
@@ -149,7 +149,7 @@ def _bind_sockets(
             _raise_bind_error(e, address)
         if receive_buffer:
             _grow_receive_buffer(sock, address, receive_buffer)
-        endpoints[sock] = _netimps.UdpEndpoint(
+        endpoints[sock] = _netimps.UDPEndpoint(
             sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_IPv4
         )
         _REQUESTED_ADDRESS[sock] = address
@@ -161,7 +161,7 @@ def _bind_sockets(
 
 
 def _close_socket(
-    sock: _socket.socket, endpoints: "dict[_socket.socket, _netimps.UdpEndpoint]"
+    sock: _socket.socket, endpoints: "dict[_socket.socket, _netimps.UDPEndpoint]"
 ) -> None:
     """Close `sock` through its endpoint where it has one.
 

@@ -34,7 +34,7 @@ class MACAddress(_netimps.MACAddress):
     """
 
     def __str__(self) -> str:
-        return self.as_str("-", upper=True)
+        return self.format("-", upper=True)
 
 
 #: Pseudo-members for hardware types with no name, cached so identity holds.
@@ -246,7 +246,7 @@ class NetworkInterface(_ty.NamedTuple):
 #: RFC 3927 link-local. A host assigns itself one of these when DHCP fails, so
 #: their presence usually means "no lease" -- which is why they are filtered by
 #: default. Re-exported from netimps so the definition lives in one place.
-APIPA = _netimps.APIPA
+LINK_LOCAL_V4 = _netimps.LINK_LOCAL_V4
 
 
 def host_ip_interfaces(
@@ -270,7 +270,7 @@ def host_ip_interfaces(
     prefix lengths and human-readable adapter names on every platform.
     """
     if filter is True:
-        filter = lambda ni: ni.ip not in APIPA
+        filter = lambda ni: ni.ip not in LINK_LOCAL_V4
     # `cache` is netimps' enumeration cache: False (the default) enumerates
     # now, True reuses one up to `netimps.INTERFACE_CACHE_TTL` old (1 s), and a
     # number is that TTL in seconds. Per-packet callers pass True.

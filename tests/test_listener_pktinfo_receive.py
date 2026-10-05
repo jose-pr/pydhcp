@@ -32,7 +32,7 @@ from pydhcp.packet import DhcpMessage, DhcpMessageType
 _PKTINFO_PLATFORMS = ("linux", "win32", "darwin")
 
 needs_pktinfo = pytest.mark.skipif(
-    not netimps.supports_pktinfo(socket.AF_INET),
+    not netimps.has_pktinfo(socket.AF_INET),
     reason="no packet info on this platform",
 )
 
@@ -40,7 +40,7 @@ needs_pktinfo = pytest.mark.skipif(
 def test_packet_info_is_available_where_netimps_supports_it() -> None:
     if not sys.platform.startswith(_PKTINFO_PLATFORMS):
         pytest.skip(f"packet info is not promised on {sys.platform}")
-    assert netimps.supports_pktinfo(socket.AF_INET), (
+    assert netimps.has_pktinfo(socket.AF_INET), (
         f"packet info reported unavailable on {sys.platform} "
         f"{sys.version.split()[0]}"
     )

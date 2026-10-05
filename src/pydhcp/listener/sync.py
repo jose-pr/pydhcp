@@ -61,7 +61,7 @@ class DhcpListener:
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         #: The netimps endpoint each socket is received through.
-        self._endpoints: dict[_socket.socket, _netimps.UdpEndpoint] = {}
+        self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
         self._sigint_handler: _ty.Optional[_ty.Any] = None
         self._previous_sigint: _ty.Optional[_ty.Any] = None
         self._select_timeout = select_timeout or 1
@@ -228,7 +228,7 @@ class DhcpListener:
             # WSAEMSGSIZE, which lands in the OSError branch below.
             endpoint = self._endpoints.get(sock)
             if endpoint is None:  # pragma: no cover - not bound through bind()
-                endpoint = self._endpoints[sock] = _netimps.UdpEndpoint(
+                endpoint = self._endpoints[sock] = _netimps.UDPEndpoint(
                     sock, pktinfo=False
                 )
             data, client, ifindex, local_ip = _arrival(

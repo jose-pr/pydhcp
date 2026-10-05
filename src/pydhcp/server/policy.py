@@ -45,7 +45,7 @@ def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterf
     return next(
         _net.host_ip_interfaces(
             lambda interface: interface.ip == server_id
-            and interface.ip not in _net.APIPA,
+            and interface.ip not in _net.LINK_LOCAL_V4,
             cache=True,
         ),
         None,

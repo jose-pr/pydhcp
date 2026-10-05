@@ -14,18 +14,24 @@ of the installed package).
   **`IPv6Network`** / **`IPNetwork`** — `ipaddress` network types.
   **`IPv4Interface`** — alias for `ipaddress.IPv4Interface`.
 - **`WILDCARD_IPv4`** — `IPv4("0.0.0.0")` constant.
-- **`APIPA`** — `169.254.0.0/16`, re-exported from `netimps`; the default
-  `host_ip_interfaces()` filter excludes addresses in this range.
+- **`LINK_LOCAL_V4`** — `169.254.0.0/16` as an `IPv4Network`, re-exported from
+  `netimps` under the same name; the default `host_ip_interfaces()` filter
+  excludes addresses in this range.
 - **`MACAddress(src=None)`** — a `netimps.MACAddress` subclass. Accepts colon,
   hyphen, dot/Cisco or bare hex text, a 48-bit `int`, 6 raw bytes, or another
   MAC; raises `ValueError` if the result isn't exactly 6 bytes. `str()` renders
   uppercase hyphen-separated (`"AA-BB-CC-DD-EE-FF"`), which is the only thing
-  this subclass changes.
+  this subclass changes. `f"{mac}"` and `"%s" % mac` agree with `str()`;
+  `format(mac, spec)` with a non-empty spec is netimps' (`MACAddress.format`).
   - **Not a `bytes` subclass** (the base type is a value object) — use
     `.packed` for the raw bytes.
-  - Inherits `.hex(sep=None, bytes_per_sep=1)` (exactly `bytes.hex`), `.oui`,
-    `.is_multicast`, `.is_local` and ordering from netimps, and compares equal
-    to a base `netimps.MACAddress` with the same bytes.
+  - Inherits `.hex(sep=None, bytes_per_sep=1)` (exactly `bytes.hex`),
+    `.format(sep=":", *, upper=False)`, `.oui`, `.is_multicast`, `.is_local`,
+    `parse`/`try_parse`/`is_valid` and ordering from netimps, and compares
+    equal to a base `netimps.MACAddress` with the same bytes. Instances are
+    read-only, `copy`/`pickle` keep the subclass, a bad value raises
+    `netimps.NetimpsValueError` (a `ValueError`), and `try_parse` raises
+    `TypeError` for a non-`str`. `as_str()` is gone: use `.format()`.
   - **A display type.** The wire hardware address (`chaddr`, option 61) is raw
     `bytes` throughout `packet/` and never passes through here — `chaddr`
     permits `hlen` up to 16 for non-Ethernet `htype`, while a MAC is exactly 6.
@@ -76,7 +82,7 @@ of the installed package).
   `False` enumerates now, `True` reuses an enumeration up to
   `netimps.INTERFACE_CACHE_TTL` (1 s) old, a number is that TTL in seconds.
   Per-packet callers pass `True`; `DhcpListener.bind()` clears the cache.
-  `filter=True` (default) excludes `APIPA` (link-local) addresses;
+  `filter=True` (default) excludes `LINK_LOCAL_V4` (APIPA) addresses;
   `filter=False` (falsy) includes everything; or pass a
   `Callable[[NetworkInterface], bool]` predicate. Used by `DhcpListener`
   wildcard binding, the `pydhcp interfaces` CLI subcommand, and

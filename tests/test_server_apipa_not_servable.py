@@ -41,7 +41,7 @@ def host(monkeypatch):
 
     def fake(filter=True, family=4, *, cache=False):
         if filter is True:
-            filter = lambda ni: ni.ip not in net.APIPA
+            filter = lambda ni: ni.ip not in net.LINK_LOCAL_V4
         for ni in interfaces:
             if not filter or filter(ni):
                 yield ni

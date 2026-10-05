@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Breaking: `pydhcp.network.APIPA` is now `pydhcp.network.LINK_LOCAL_V4`**,
+  following the name netimps gave the same network (`169.254.0.0/16`). No alias
+  is kept: replace `APIPA` with `LINK_LOCAL_V4`. Its type is `IPv4Network`
+  rather than the v4/v6 union. `host_ip_interfaces()`'s default filter is
+  unchanged.
+- **Breaking: `pydhcp.network.MACAddress.as_str()` is gone**, with the netimps
+  method it came from; use `.format(sep=":", *, upper=False)`. `str(mac)` is
+  still `00-11-22-33-44-55`, and `f"{mac}"` and `"%s" % mac` agree with it.
+  Instances are now read-only, `copy` and `pickle` keep the subclass, a bad
+  value raises `netimps.NetimpsValueError` (still a `ValueError`) and
+  `MACAddress.try_parse()` raises `TypeError` for a non-`str`.
+
 ## [0.7.0] - 2026-10-03
 
 ### Changed

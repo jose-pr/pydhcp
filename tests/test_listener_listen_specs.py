@@ -101,13 +101,16 @@ def _a_real_interface():
     import netimps
     import pytest
 
-    from pydhcp.network import APIPA
+    from pydhcp.network import LINK_LOCAL_V4
 
     for adapter in netimps.get_interfaces():
-        if not adapter.index or adapter.loopback:
+        if not adapter.index or adapter.is_loopback:
             continue
         for entry in adapter.ips:
-            if isinstance(entry, ipaddress.IPv4Interface) and entry.ip not in APIPA:
+            if (
+                isinstance(entry, ipaddress.IPv4Interface)
+                and entry.ip not in LINK_LOCAL_V4
+            ):
                 return adapter.index, NetworkInterface(adapter.name, entry)
     pytest.skip("no non-loopback adapter with a routable IPv4 address")
 
@@ -159,7 +162,7 @@ def test_resolve_interface_by_index_alone_answers_from_the_adapter() -> None:
 
     assert resolved.name == expected.name
     assert not resolved.name.startswith("unknown[")
-    assert resolved.ip not in __import__("pydhcp").network.APIPA
+    assert resolved.ip not in __import__("pydhcp").network.LINK_LOCAL_V4
 
 
 def test_resolve_interface_falls_back_to_address_when_index_is_unknown() -> None:

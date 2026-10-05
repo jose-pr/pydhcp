@@ -37,7 +37,7 @@ def _split_host_port(value: str) -> tuple[str, int | None]:
     if value.startswith(":") and not value.startswith("::"):
         value = "0.0.0.0" + value
 
-    host, port = _netimps.normalize_host(value)
+    host, port = _netimps.split_host(value)
     return host or "0.0.0.0", port
 
 

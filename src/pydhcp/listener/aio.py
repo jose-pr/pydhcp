@@ -56,7 +56,7 @@ class AsyncDhcpListener:
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
         #: As on `DhcpListener`.
-        self._endpoints: dict[_socket.socket, _netimps.UdpEndpoint] = {}
+        self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
         #: One receive task per socket; see `_receive`.
         self._tasks: "list[_asyncio.Task[None]]" = []
         self._loop: _ty.Optional[_asyncio.AbstractEventLoop] = None
@@ -68,7 +68,7 @@ class AsyncDhcpListener:
         self.packets_dropped_error = 0
 
     async def _receive(
-        self, sock: _socket.socket, endpoint: _netimps.UdpEndpoint
+        self, sock: _socket.socket, endpoint: _netimps.UDPEndpoint
     ) -> None:
         """Receive from one socket until cancelled, on the event loop.
 

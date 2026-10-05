@@ -779,10 +779,10 @@ def _servable_interface():
     the predicate -- the same trap that put this check in `_servable_interface`
     on the server side.
     """
-    from pydhcp.network import APIPA, host_ip_interfaces
+    from pydhcp.network import LINK_LOCAL_V4, host_ip_interfaces
 
     for interface in host_ip_interfaces(
-        lambda i: not i.ip.is_loopback and i.ip not in APIPA
+        lambda i: not i.ip.is_loopback and i.ip not in LINK_LOCAL_V4
     ):
         if interface.network.prefixlen <= 29:
             return interface

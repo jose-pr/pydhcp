@@ -11,6 +11,20 @@ def test_mac_address():
         MACAddress("00-11-22")
 
 
+def test_mac_address_renders_the_same_through_every_formatting_path():
+    mac = MACAddress("00:11:22:aa:bb:cc")
+    assert str(mac) == f"{mac}" == "%s" % mac == "00-11-22-AA-BB-CC"
+    assert isinstance(MACAddress.try_parse("00:11:22:aa:bb:cc"), MACAddress)
+
+
+def test_link_local_network_is_the_rfc_3927_range():
+    from pydhcp.network import LINK_LOCAL_V4
+
+    assert str(LINK_LOCAL_V4) == "169.254.0.0/16"
+    assert IPv4("169.254.1.1") in LINK_LOCAL_V4
+    assert IPv4("192.0.2.1") not in LINK_LOCAL_V4
+
+
 def test_socket_address():
     addr = SocketAddress("127.0.0.1", 8080)
     assert addr.ip == IPv4("127.0.0.1")

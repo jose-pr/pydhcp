@@ -37,7 +37,7 @@ def apipa_only(monkeypatch):
 
     def fake(filter=True, family=4, *, cache=False):
         if filter is True:
-            filter = lambda ni: ni.ip not in net.APIPA
+            filter = lambda ni: ni.ip not in net.LINK_LOCAL_V4
         for ni in interfaces:
             if not filter or filter(ni):
                 yield ni
@@ -51,7 +51,7 @@ def apipa_only(monkeypatch):
         for n, ni in enumerate(interfaces)
     }
     monkeypatch.setattr(
-        netimps, "interface_for", lambda address, **_kw: adapters.get(address)
+        netimps, "get_interface", lambda address, **_kw: adapters.get(address)
     )
     return interfaces[1]
 
