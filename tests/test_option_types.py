@@ -689,8 +689,10 @@ def test_client_fqdn_rejects_malformed_input():
 
     with _pytest.raises(ValueError):
         ClientFqdn._dhcp_decode(bytearray([0x00, 0x00]))  # shorter than 3
+    # Reserved bits are ignored on receive (RFC 4702 s2.1), and refused on send.
+    assert ClientFqdn._dhcp_decode(bytearray([0xF0, 0x00, 0x00])).flags == 0
     with _pytest.raises(ValueError):
-        ClientFqdn._dhcp_decode(bytearray([0xF0, 0x00, 0x00]))  # reserved bits set
+        ClientFqdn("", flags=0xF0)
     with _pytest.raises(ValueError):
         # E bit set, but a compression pointer, which RFC 4702 s3.1 forbids
         ClientFqdn._dhcp_decode(bytearray([0x04, 0x00, 0x00, 0xC0, 0x00]))

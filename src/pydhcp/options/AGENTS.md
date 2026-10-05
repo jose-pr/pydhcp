@@ -251,11 +251,18 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   gets it. Assigning an explicit `DomainList(...)` instance to option 88
   bypasses the registry (any `DhcpOptionType` is written as given) and
   compresses — pass a plain list, or `UncompressedDomainList`.
-- **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0)`** — RFC 4702 client FQDN
-  (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/`FLAG_O`/`FLAG_E`/
-  `FLAG_N` are the defined bits; the name is RFC 1035 wire format when `FLAG_E`
-  is set and ASCII otherwise, and `.encoded` reports which. Reserved flag bits
-  and compression pointers are rejected on decode.
+- **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0, partial=False)`** — RFC 4702
+  client FQDN (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/
+  `FLAG_O`/`FLAG_E`/`FLAG_N` are the defined bits; the name is RFC 1035 wire
+  format when `FLAG_E` is set and ASCII otherwise, and `.encoded` reports
+  which. With the E bit the field is a qualified name (with the terminating
+  label), a **partial** name (without it) or empty (RFC 4702 §2.3):
+  `.partial` is true for a partial name and for an empty field, false for a
+  qualified name and for the root (a lone terminator), and encode writes
+  exactly what was decoded. `partial=True` needs the E bit. The reserved
+  flag bits (`0xF0`) are ignored on decode and `flags` holds only the low
+  four; constructing with one set raises `ValueError`. A compression
+  pointer, a label cut short or data after the terminator is a `ValueError`.
 - **`SipServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
   120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
   IPv4 addresses, written as a leading encoding octet. A plain list infers its

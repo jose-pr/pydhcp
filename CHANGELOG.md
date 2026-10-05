@@ -43,6 +43,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **The Client FQDN option (81) reads every form RFC 4702 defines.** A partial
+  name (no terminating label) and an empty Domain Name field used to raise
+  `ValueError`, and so did a flags octet with a reserved bit set, which the RFC
+  says receivers MUST ignore; `options.get(81)` now returns the value, with the
+  reserved bits dropped from `flags`. `ClientFqdn` gains `partial` (a keyword
+  argument and an attribute, also in its mapping form) so a partial name is
+  encoded without the terminator it was received without, and an empty field is
+  encoded as empty. Constructing with a reserved flag bit set now raises
+  `ValueError`, as the RFC requires senders to clear them.
 - **A domain list can no longer cost a datagram's worth of CPU and memory.**
   Decoding options 119, 141, 88 and 146 followed compression pointers with no
   limit, so one 60 KB datagram of chained pointers took 15 s and 112 MB to

@@ -13,6 +13,14 @@ if _ty.TYPE_CHECKING:
 class ClientFqdn(DhcpOptionType):
     """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
 
+    With the E bit the name is a fully qualified name (RFC 1035 labels and the
+    terminating zero-length label), a **partial** name (the labels without the
+    terminator) or empty (RFC 4702 s2.3). `partial` says which: it is true for
+    a partial name and for an empty field, false for a qualified name and for
+    the root (a lone terminator), so what is decoded is encoded to the octets
+    it came from. The four reserved flag bits are ignored on receive and may
+    not be set on send (s2.1).
+
     Registering this as a plain `String` lost data silently rather than loudly:
     `String` splits at the first NUL, so the form every Windows client sends
     (`00 00 00` then the name) decoded to the empty string, and a server reading
@@ -29,9 +37,13 @@ class ClientFqdn(DhcpOptionType):
     #: The server should not perform any DNS update.
     FLAG_N = 0x08
 
+    #: The flag bits RFC 4702 s2.1 defines; the other four must be zero.
+    FLAGS_MASK = 0x0F
+
     # Declared so the instance-accepting constructor can read `other.name`
     # without mypy hitting a circular inference.
     name: str
+    partial: bool
     flags: int
     rcode1: int
     rcode2: int
@@ -42,13 +54,15 @@ class ClientFqdn(DhcpOptionType):
         flags: int = 0,
         rcode1: int = 0,
         rcode2: int = 0,
+        partial: bool = False,
     ) -> None:
         if isinstance(name, ClientFqdn):
-            name, flags, rcode1, rcode2 = (
+            name, flags, rcode1, rcode2, partial = (
                 name.name,
                 name.flags,
                 name.rcode1,
                 name.rcode2,
+                name.partial,
             )
         elif isinstance(name, _ty.Mapping):
             mapping = name
@@ -56,13 +70,24 @@ class ClientFqdn(DhcpOptionType):
             flags = int(mapping.get("flags", 0))
             rcode1 = int(mapping.get("rcode1", 0))
             rcode2 = int(mapping.get("rcode2", 0))
+            partial = bool(mapping.get("partial", False))
         for label, value in (("flags", flags), ("rcode1", rcode1), ("rcode2", rcode2)):
             if not 0 <= int(value) <= 0xFF:
                 raise ValueError(f"ClientFqdn {label} must fit in one octet")
+        if int(flags) & ~self.FLAGS_MASK:
+            raise ValueError(
+                f"ClientFqdn flags {int(flags):#04x} set reserved bits; "
+                "RFC 4702 s2.1 requires the senders to clear them"
+            )
+        if partial and not int(flags) & self.FLAG_E:
+            raise ValueError(
+                "ClientFqdn partial applies to the DNS wire format: set the E bit"
+            )
         self.name = str(name)
         self.flags = int(flags)
         self.rcode1 = int(rcode1)
         self.rcode2 = int(rcode2)
+        self.partial = bool(partial)
 
     @property
     def encoded(self) -> bool:
@@ -73,17 +98,36 @@ class ClientFqdn(DhcpOptionType):
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 3:
             raise ValueError("ClientFqdn option is truncated: needs at least 3 octets")
-        flags, rcode1, rcode2 = option[0], option[1], option[2]
-        if flags & 0xF0:
-            raise ValueError(f"ClientFqdn reserved flag bits set: {flags:#04x}")
+        # RFC 4702 s2.1: the reserved bits MUST be ignored.
+        flags, rcode1, rcode2 = option[0] & cls.FLAGS_MASK, option[1], option[2]
         rest = option[3:]
+        partial = False
         if flags & cls.FLAG_E:
-            name, read = decode_domain_name(rest, 0, "ClientFqdn name")
-            if read != len(rest):
-                raise ValueError("ClientFqdn has trailing data after the name")
+            name, partial = cls._read_wire_name(rest)
         else:
             name = rest.tobytes().split(b"\x00", 1)[0].decode("utf-8")
-        return cls(name, flags, rcode1, rcode2), len(option)
+        return cls(name, flags, rcode1, rcode2, partial), len(option)
+
+    @staticmethod
+    def _read_wire_name(field: memoryview) -> tuple[str, bool]:
+        """The name of an E-bit field and whether it is partial (RFC 4702 s2.3)."""
+        if not field:
+            return "", True
+        try:
+            name, read = decode_domain_name(field, 0, "ClientFqdn name")
+        except ValueError:
+            # Ran out before a terminating label: a partial name if what was
+            # read is whole labels, an error if a label is cut short. Reading
+            # the labels followed by a terminator tells the two apart.
+            name, read = decode_domain_name(
+                memoryview(field.tobytes() + b"\x00"), 0, "ClientFqdn name"
+            )
+            if read != len(field) + 1:
+                raise ValueError("ClientFqdn name is truncated") from None
+            return name, True
+        if read != len(field):
+            raise ValueError("ClientFqdn has trailing data after the name")
+        return name, False
 
     def _dhcp_write(self, data: bytearray) -> int:
         start = len(data)
@@ -91,9 +135,10 @@ class ClientFqdn(DhcpOptionType):
         data.append(self.rcode1)
         data.append(self.rcode2)
         if self.encoded:
-            data.extend(
-                encode_domain_name(self.name, "ClientFqdn name", allow_root=True)
-            )
+            wire = encode_domain_name(self.name, "ClientFqdn name", allow_root=True)
+            # A partial name has no terminating label; with no name at all the
+            # field is empty (RFC 4702 s2.3).
+            data.extend(wire[:-1] if self.partial else wire)
         else:
             data.extend(self.name.encode("utf-8"))
         return len(data) - start
@@ -101,20 +146,22 @@ class ClientFqdn(DhcpOptionType):
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, ClientFqdn):
             return NotImplemented
-        return (self.name, self.flags, self.rcode1, self.rcode2) == (
+        return (self.name, self.flags, self.rcode1, self.rcode2, self.partial) == (
             other.name,
             other.flags,
             other.rcode1,
             other.rcode2,
+            other.partial,
         )
 
     def __hash__(self) -> int:
-        return hash((self.name, self.flags, self.rcode1, self.rcode2))
+        return hash((self.name, self.flags, self.rcode1, self.rcode2, self.partial))
 
     def __repr__(self) -> str:
         return (
             f"ClientFqdn(name={self.name!r}, flags={self.flags:#04x}, "
-            f"rcode1={self.rcode1}, rcode2={self.rcode2})"
+            f"rcode1={self.rcode1}, rcode2={self.rcode2}"
+            + (", partial=True)" if self.partial else ")")
         )
 
     def __json__(self) -> dict[str, _ty.Any]:
@@ -123,4 +170,5 @@ class ClientFqdn(DhcpOptionType):
             "flags": self.flags,
             "rcode1": self.rcode1,
             "rcode2": self.rcode2,
+            "partial": self.partial,
         }
