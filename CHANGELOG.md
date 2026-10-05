@@ -20,6 +20,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   Instances are now read-only, `copy` and `pickle` keep the subclass, a bad
   value raises `netimps.NetimpsValueError` (still a `ValueError`) and
   `MACAddress.try_parse()` raises `TypeError` for a non-`str`.
+- **`host:port` text is read strictly.** In `listen=`, `--listen` and each
+  `pydhcp relay --server`, the port is ASCII digits only and square brackets
+  may enclose only an IPv6 literal. `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`,
+  `"127.0.0.1:8_0"` and `"[127.0.0.1]:6767"` were read as a port or an address
+  before; they now raise `ValueError` (netimps' `NetimpsValueError`), and the
+  message names the port or the brackets.
+- `host_ip_interfaces(family=)` accepts `socket.AF_INET` and `socket.AF_INET6`
+  as well as `4` and `6`.
+- A socket-buffer shortfall is now reported twice: by pydhcp at INFO, naming the
+  address, and by netimps at WARNING, once per process for each distinct
+  request and grant.
+- **On Windows a disconnected adapter no longer lists a 169.254 address**
+  (netimps leaves out an address Windows marks tentative or duplicate), so
+  `host_ip_interfaces(filter=False)` can return fewer entries there.
+- **Deployments: `NETIMPS_NO_SOCKET_PATCH` is now an error.** With it set,
+  `import pydhcp` raises `ValueError` at import; use `NETIMPS_SOCKET_PATCH=0`
+  to disable the `socket` patch.
+
+### Fixed
+
+- Re-binding a started `AsyncDhcpListener` whose listen list shrank retires the
+  dropped socket's receive task cleanly; it used to wait for ever.
 
 ## [0.7.0] - 2026-10-03
 

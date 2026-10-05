@@ -44,12 +44,20 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
   `(host, port_or_ports)` tuple, or a sequence of any of those (comma-joined
   strings split automatically). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
   `"*:67"`, `"0.0.0.0:67"`, `("0.0.0.0", 67)` — binds one wildcard socket and
-  learns each datagram's arrival interface through `netimps.UdpEndpoint`
+  learns each datagram's arrival interface through `netimps.UDPEndpoint`
   (packet info), on Linux, macOS and Windows and on every supported CPython.
   `select_timeout` (default 1s) bounds the `select()` poll. `max_packet_size`
   defaults to `UDP_MAX_PACKET_SIZE` (65535). `per_interface=True` disables
   wildcard routing and binds one socket per interface instead. Every instance
   owns `self.metrics: DhcpMetrics` — there is no global metrics singleton.
+  - **`host:port` text is read strictly** (netimps' `split_host`): the port is
+    ASCII digits only, and square brackets may enclose only an IPv6 literal.
+    `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`, `"127.0.0.1:8_0"` and
+    `"[127.0.0.1]:6767"` raise `ValueError` (netimps' `NetimpsValueError`),
+    the message naming the port or the brackets. The same rule applies to
+    each `--listen` and `--server` value. A host name is not an address:
+    `listen` takes IPv4 addresses, and a name raises
+    `ipaddress.AddressValueError`.
   - **Wildcard expansion uses the APIPA-filtered address list.** A wildcard on
     a platform without packet info (or with `per_interface=True`) becomes one
     socket per `host_ip_interfaces()` address, which
@@ -72,7 +80,9 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     default holds about 220 typical datagrams, and measured, a 1000-datagram
     burst delivered 220 at the default and all 1000 at 1 MiB. The kernel may
     grant less (Linux caps at `net.core.rmem_max`); a shortfall is logged at
-    INFO, and a failure to grow at WARNING, never raised.
+    INFO by pydhcp, naming the address, and by netimps at WARNING (once per
+    process for each distinct request and grant). A failure to grow is logged at
+    WARNING, never raised.
   - `.bind() -> None` — open/refresh sockets for `self._listen`; raises
     `PermissionError` for privileged ports (<1024 without rights) and
     **`netimps.AddressInUseError`** (an `OSError`, never a `PermissionError`)
@@ -148,8 +158,10 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
     (there is no blocking loop to enter — use `start()` then `wait()`).
-  - Receives with one `netimps.UdpEndpoint.arecv()` task per socket, so packet
+  - Receives with one `netimps.UDPEndpoint.arecv()` task per socket, so packet
     info works on **every** loop type, Windows' default proactor loop included.
+    A socket retired by a re-`bind()` whose listen list shrank ends its task
+    without an error.
     `.stop()` cancels those tasks and then closes the sockets; `await .stop()`
     and `await .wait()` both return only once the sockets are closed.
 - **`Transport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
@@ -170,7 +182,7 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
 - **`PktInfoUdpTransport(socket, endpoint=None)`** — a transport that sends
   from a pinned source for wildcard sockets: `local_ip` is the source address
   and `ifindex` the interface (0/`None` pins the address alone). Pinning goes
-  through `netimps.UdpEndpoint.send(src=...)` (`endpoint`, or one wrapping
+  through `netimps.UDPEndpoint.send(src=...)` (`endpoint`, or one wrapping
   `socket`), which builds the control message for Linux, macOS and Windows
   alike. Falls back to `UdpTransport.send` when `local_ip` isn't set or the
   endpoint reports no source pinning. If the pinned send itself **fails** (a
@@ -313,7 +325,8 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     DHCPDISCOVER (with retries) and returns the first DHCPOFFER, or `None`.
     **`timeout` is the *initial* retransmission interval, not a fixed one**:
     each retransmission waits twice as long as the last, randomized by ±1 s,
-    the doubling capped at `RETRANSMIT_MAX_INTERVAL` (RFC 2131 §4.1). With the
+    the doubling capped at `RETRANSMIT_MAX_INTERVAL` (RFC 2131 §4.1); a
+    `timeout` above the cap starts at the cap. With the
     defaults the call is bounded at about 2+4+8 s (±1 s each) rather than 3×2 s. Each transmission
     carries a real `secs` — seconds since the exchange began (§2) — which was
     previously hardcoded to 0.

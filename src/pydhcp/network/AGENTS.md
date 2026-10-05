@@ -87,6 +87,8 @@ of the installed package).
   `Callable[[NetworkInterface], bool]` predicate. Used by `DhcpListener`
   wildcard binding, the `pydhcp interfaces` CLI subcommand, and
   `DhcpServer`'s subnet lookup in `acquire_lease`/`get_inform_options`.
+  - `family` is `4` or `AF_INET`, `6` or `AF_INET6`, or `None`; anything else
+    raises `ValueError`.
   - **`family=4` by default.** This is a DHCPv4 implementation and the previous
     enumerator was IPv4-only, so yielding IPv6 would silently change what
     existing callers iterate over. Pass `family=None` for both families.
