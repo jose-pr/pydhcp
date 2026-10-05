@@ -66,7 +66,9 @@ pydhcp capture --format json --output "output/{client_id}/{timestamp}_{msg_type}
 ```
 
 Hooks are trusted local code. A Python hook uses `module:function`; a command hook path is
-executed once per accepted packet with the structured packet on stdin.
+executed once per accepted packet with the structured packet on stdin. `./hook` is the file
+in the working directory when the capture starts; a bare `hook` is looked up on `PATH`, and
+a file that is not executable is refused at start-up.
 
 ## Wildcard listening behaves differently on Windows and Linux
 

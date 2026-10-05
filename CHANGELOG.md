@@ -54,6 +54,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`pydhcp capture --hook ./name` runs the file it names.** The command was started by
+  the name with its `./` dropped, which POSIX looks up on `PATH` only: the hook was not
+  found (a traceback per packet) or a program of the same name on `PATH` ran instead.
+  The hook is now resolved to an absolute path when the capture starts, so `./name` is the
+  file in the working directory on every platform and survives a later change of
+  directory, and a bare `name` is looked up on `PATH` (a bare name that is only a file in
+  the working directory is refused, naming `./name`). A command hook that is not
+  executable is refused at start-up on POSIX. The help text says which is which.
 - **Address-bound listening is documented as it behaves, and warns.** A socket bound to
   an address (`per_interface=True`, or a `listen` that names one) hears no broadcast on
   Linux (measured: 0 of 3 limited and 0 of 3 subnet broadcasts, against 3 of 3 for the

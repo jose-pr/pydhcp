@@ -200,8 +200,11 @@ Write one file per accepted packet:
 pydhcp capture --listen 127.0.0.1:6767 --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --output-mode per-capture
 ```
 
-Hooks can be trusted Python callables or command paths. Command hooks receive the serialized
-packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables.
+Hooks can be trusted Python callables or commands. Command hooks receive the serialized
+packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables. A command with a
+directory in its name (`./on-dhcp-capture`, `/opt/hooks/export`) is that file, found relative
+to the working directory when the capture starts; a bare name (`export`) is looked up on
+`PATH`. A file in the working directory is therefore written `./name`.
 
 ```bash
 pydhcp capture --hook myhooks:on_capture

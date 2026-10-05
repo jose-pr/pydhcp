@@ -242,29 +242,135 @@ def test_load_capture_hook_python_function(tmp_path, monkeypatch) -> None:
     assert sys.modules["hooks"].seen == ["DHCPDISCOVER"]
 
 
+def _write_hook(directory, name: str, label: str):
+    """A real program that records its stdin and a marker in `directory`.
+
+    A script is the program on POSIX and a `.cmd` file on Windows; either is
+    started the way the command hook starts it, by path, with no mock.
+    """
+    if os.name == "nt":
+        program = directory / (name + ".cmd")
+        text = (
+            "@echo off\r\n"
+            'findstr "^" > "%~dp0' + label + '.stdin"\r\n'
+            'echo %PYDHCP_CAPTURE_MSG_TYPE%> "%~dp0' + label + '.type"\r\n'
+        )
+    else:
+        program = directory / name
+        text = (
+            "#!/bin/sh\n"
+            'cat > "$(dirname "$0")/' + label + '.stdin"\n'
+            'echo "$PYDHCP_CAPTURE_MSG_TYPE" > "$(dirname "$0")/' + label + '.type"\n'
+        )
+    program.write_bytes(text.encode("utf-8"))
+    if os.name != "nt":
+        program.chmod(0o755)
+    return program
+
+
+def _suffix() -> str:
+    return ".cmd" if os.name == "nt" else ""
+
+
 def test_load_capture_hook_command_gets_stdin_and_env(tmp_path, monkeypatch) -> None:
-    command = tmp_path / "hook-command"
-    command.write_text("", encoding="utf-8")
-    calls = []
+    _write_hook(tmp_path, "hook-command", "ran")
+    monkeypatch.chdir(tmp_path)
 
-    def fake_run(args, input, text, capture_output, env, timeout=None):
-        calls.append((args, input, text, capture_output, env, timeout))
-        return argparse.Namespace(returncode=0, stderr="", stdout="")
-
-    monkeypatch.setattr("pydhcp.cli.capture_hook.subprocess.run", fake_run)
-
-    hook = _load_capture_hook(str(command), "json", False)
+    hook = _load_capture_hook("./hook-command" + _suffix(), "json", False)
     assert hook is not None
     hook(_capture_event())
 
-    args, payload, text, capture_output, env, timeout = calls[0]
-    assert args == [str(command)]
-    # the hook runs on the receive thread, so it must not be able to hang it
-    assert timeout is not None and timeout > 0
-    assert json.loads(payload)["xid"] == 0x12345678
-    assert text is True
-    assert capture_output is True
-    assert env["PYDHCP_CAPTURE_MSG_TYPE"] == "DHCPDISCOVER"
+    assert json.loads((tmp_path / "ran.stdin").read_text())["xid"] == 0x12345678
+    assert (tmp_path / "ran.type").read_text().strip() == "DHCPDISCOVER"
+
+
+def test_a_relative_hook_path_is_fixed_when_the_hook_is_loaded(
+    tmp_path, monkeypatch
+) -> None:
+    """`./name` names the file in the working directory when it is loaded, and a
+    later change of directory does not move it."""
+    here = tmp_path / "here"
+    elsewhere = tmp_path / "elsewhere"
+    here.mkdir()
+    elsewhere.mkdir()
+    _write_hook(here, "hook", "ran")
+    monkeypatch.chdir(here)
+    hook = _load_capture_hook("./hook" + _suffix(), "json", False)
+    assert hook is not None
+
+    monkeypatch.chdir(elsewhere)
+    hook(_capture_event())
+
+    assert (here / "ran.type").read_text().strip() == "DHCPDISCOVER"
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="a bare name is searched in the working directory on Windows",
+)
+def test_a_relative_hook_path_does_not_start_the_program_of_that_name_on_path(
+    tmp_path, monkeypatch
+) -> None:
+    """`str(Path("./logger"))` is `logger`, and a name with no directory is looked
+    up on PATH on POSIX: `--hook ./logger` started /usr/bin/logger."""
+    on_path = tmp_path / "bin"
+    cwd = tmp_path / "cwd"
+    on_path.mkdir()
+    cwd.mkdir()
+    _write_hook(on_path, "hook", "from-path")
+    _write_hook(cwd, "hook", "from-cwd")
+    monkeypatch.setenv("PATH", str(on_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.chdir(cwd)
+
+    hook = _load_capture_hook("./hook", "json", False)
+    assert hook is not None
+    hook(_capture_event())
+
+    assert (cwd / "from-cwd.type").exists()
+    assert not (on_path / "from-path.type").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="PATH lookup of a script needs PATHEXT")
+def test_a_bare_hook_name_is_looked_up_on_path(tmp_path, monkeypatch) -> None:
+    on_path = tmp_path / "bin"
+    cwd = tmp_path / "cwd"
+    on_path.mkdir()
+    cwd.mkdir()
+    _write_hook(on_path, "pydhcp-test-hook", "from-path")
+    monkeypatch.setenv("PATH", str(on_path) + os.pathsep + os.environ["PATH"])
+    monkeypatch.chdir(cwd)
+
+    hook = _load_capture_hook("pydhcp-test-hook", "json", False)
+    assert hook is not None
+    hook(_capture_event())
+
+    assert (on_path / "from-path.type").exists()
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="a bare name is searched in the working directory on Windows",
+)
+def test_a_bare_name_that_is_only_in_the_working_directory_says_to_use_a_path(
+    tmp_path, monkeypatch
+) -> None:
+    _write_hook(tmp_path, "pydhcp-test-local-hook", "ran")
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValueError, match=r"\./pydhcp-test-local-hook"):
+        _load_capture_hook("pydhcp-test-local-hook", "json", False)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="Windows has no executable bit")
+def test_a_hook_that_is_not_executable_is_refused_at_start(
+    tmp_path, monkeypatch
+) -> None:
+    program = _write_hook(tmp_path, "hook", "ran")
+    program.chmod(0o644)
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(ValueError, match="not executable"):
+        _load_capture_hook("./hook", "json", False)
 
 
 def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:

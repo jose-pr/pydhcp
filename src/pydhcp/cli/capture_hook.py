@@ -7,6 +7,7 @@ import importlib
 import json as _json
 import pathlib
 import os
+import shutil
 import subprocess
 import sys
 import typing as _ty
@@ -53,19 +54,46 @@ def _cwd_on_sys_path() -> "_ty.Iterator[None]":
                 pass
 
 
+def _resolve_command(hook: str, has_separator: bool) -> pathlib.Path:
+    """The absolute path of a command hook, found once, when it is loaded.
+
+    A name with a directory part (`./hook`, `/usr/bin/hook`, `sub/hook`) is that
+    file, taken relative to the working directory *now*; a name with none (`hook`)
+    is looked up on PATH, as a shell would. Running the absolute path means
+    `./hook` is never handed to the process as the bare `hook`, which POSIX
+    searches on PATH alone, and survives a later change of working directory.
+    """
+    if has_separator:
+        path = pathlib.Path(os.path.abspath(hook))
+        if not path.exists():
+            raise ValueError(f"Capture hook command does not exist: {hook}")
+    else:
+        found = shutil.which(hook)
+        if found is None:
+            raise ValueError(
+                f"Capture hook command {hook!r} is not on PATH; a file in the "
+                f"working directory is named with a path, e.g. ./{hook}"
+            )
+        path = pathlib.Path(os.path.abspath(found))
+    if not path.is_file():
+        raise ValueError(f"Capture hook command is not a file: {hook}")
+    if os.name == "posix" and not os.access(path, os.X_OK):
+        raise ValueError(f"Capture hook command is not executable: {hook}")
+    return path
+
+
 def _load_capture_hook(
     hook: "str | None", packet_format: str, fail_fast: bool
 ) -> "_ty.Callable[[CaptureEvent], None] | None":
     if not hook:
         return None
-    hook_path = pathlib.Path(hook)
     # A module reference is `package.module:function` -- never contains a path
     # separator. Deciding on the separator rather than on ':' alone keeps
     # "C:\hooks\export.exe" a path on every platform: it has exactly one ':', so
     # it used to be read as module "C" and reported as "No module named 'C'",
     # and splitdrive alone would only have fixed that on Windows.
-    looks_like_path = "/" in hook or "\\" in hook or hook_path.exists()
-    if not looks_like_path and hook.count(":") == 1:
+    has_separator = "/" in hook or "\\" in hook
+    if not has_separator and hook.count(":") == 1:
         module_name, function_name = hook.split(":", 1)
         with _cwd_on_sys_path():
             module = importlib.import_module(module_name)
@@ -73,10 +101,7 @@ def _load_capture_hook(
         if not callable(function):
             raise ValueError(f"Capture hook {hook!r} does not resolve to a callable")
         return _ty.cast(_ty.Callable[[CaptureEvent], None], function)
-    if not hook_path.exists():
-        raise ValueError(f"Capture hook command does not exist: {hook}")
-    if not hook_path.is_file():
-        raise ValueError(f"Capture hook command is not a file: {hook}")
+    hook_path = _resolve_command(hook, has_separator)
 
     def command_hook(event: CaptureEvent) -> None:
         payload = _serialize_capture_event(event, packet_format)

@@ -169,7 +169,7 @@ class Capture(_Command):
     ("--count", "-c")
 
     hook: _ty.Optional[str] = None
-    "Python hook module:function or external command path"
+    "Python hook module:function, or an external command: a name with a directory (./hook, /opt/hook) is that file, found relative to the working directory at start-up; a bare name (hook) is looked up on PATH"
     ("--hook",)
 
     hook_fail_fast: bool = False

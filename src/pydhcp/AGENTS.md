@@ -724,7 +724,9 @@ stayed at the root level and the library's output never appeared.
   json|yaml|toml|ini|summary`), `capture` (`--listen`, `--filter`,
   `--format`, `--output` file/pattern/`-`, `--output-mode
   stream|single|per-capture`, `--count`, `--hook` `module:function` or an
-  executable path, `--hook-fail-fast`, `--per-interface`). Also gets
+  executable (a name with a directory is that file, resolved against the working
+  directory when the capture starts and run by its absolute path; a bare name is
+  looked up on `PATH`; a non-executable file is refused at start-up), `--hook-fail-fast`, `--per-interface`). Also gets
   `--version` (via `App._version_ = duho.AUTO`, resolved from installed
   package metadata) for free. Not designed to be imported and called with
   custom `argv` — it parses `sys.argv` directly.
