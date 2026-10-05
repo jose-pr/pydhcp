@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging as _logging
 import typing as _ty
 import builtins as _builtins
 from .base import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as DhcpOption
@@ -7,9 +8,10 @@ from .type import DhcpOptionType as DhcpOptionType
 from .type import *  # noqa: F403
 from .code import DhcpOptionCode as DhcpOptionCode
 from .. import constants as _const
-from ..log import LOGGER
 from .._utils import MISSING as _MISSING
 from math import inf as _inf
+
+LOGGER = _logging.getLogger(__name__)
 
 T = _ty.TypeVar("T", bound=DhcpOptionType)
 C = _ty.TypeVar("C", bound=BaseDhcpOptionCode)

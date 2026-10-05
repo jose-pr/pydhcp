@@ -20,7 +20,10 @@ it through `display` first.
 
 from __future__ import annotations
 
-from .log import LOGGER
+import logging as _logging
+
+LOGGER = _logging.getLogger(__name__)
+
 
 _ERRORS = "surrogateescape"
 

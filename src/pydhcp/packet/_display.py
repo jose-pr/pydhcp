@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import textwrap as _tw
 import typing as _ty
 
 from .. import nvt as _nvt
 from ..exceptions import NoClientIdentityError
-from ..log import LOGGER
 from ..options import BaseDhcpOptionCode, DhcpOptionCode, type as _type
 from ._mapping import _MessageMapping
 
@@ -15,6 +15,8 @@ if _ty.TYPE_CHECKING:
     # Annotation only: the callback receives the public class, and importing
     # it at run time would be a cycle (message.py builds on this module).
     from .message import DhcpMessage
+
+LOGGER = _logging.getLogger(__name__)
 
 
 class _MessageDisplay(_MessageMapping):

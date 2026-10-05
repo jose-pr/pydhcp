@@ -154,5 +154,71 @@ def test_the_capture_hook_logs_through_the_module_logger(
 
     by_message = {r.getMessage().split(":")[0]: r for r in caplog.records}
     failure = by_message["Capture hook command failed (3)"]
-    assert failure.name == "pydhcp.cli"
-    assert by_message["Capture hook command output"].name == "pydhcp.cli"
+    assert failure.name == "pydhcp.cli.capture_hook"
+    assert by_message["Capture hook command output"].name == "pydhcp.cli.capture_hook"
+
+
+def _pydhcp_modules() -> "list[str]":
+    import pkgutil
+
+    import pydhcp
+
+    return sorted(
+        info.name
+        for info in pkgutil.walk_packages(pydhcp.__path__, "pydhcp.")
+        if not info.name.endswith("__main__")
+    )
+
+
+def test_every_module_that_logs_does_so_on_its_own_logger() -> None:
+    """A record names the module that emitted it, and a level set on
+    `pydhcp.<module>` silences that module and nothing else."""
+    import importlib
+
+    wrong = {}
+    seen = 0
+    for name in _pydhcp_modules():
+        module = importlib.import_module(name)
+        logger = module.__dict__.get("LOGGER")
+        if not isinstance(logger, logging.Logger) or name == "pydhcp.log":
+            continue
+        seen += 1
+        if logger.name != name:
+            wrong[name] = logger.name
+    assert wrong == {}, wrong
+    assert seen >= 15
+
+
+def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
+    """A server warning and a listener warning, one logger apart."""
+    from pydhcp import DhcpServer
+    from pydhcp.listener import interfaces
+    from pydhcp.packet import OpCode
+
+    reply = build_request(DhcpMessageType.DHCPOFFER)
+    reply.op = OpCode.BOOTREPLY
+    server = DhcpServer(listen=("127.0.0.1", 0))
+
+    def emit() -> None:
+        server.handle(reply, _event().context)
+        interfaces._warn_synthetic.cache_clear()
+        interfaces._warn_synthetic("192.0.2.77")
+
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        emit()
+    loud = {record.name for record in caplog.records}
+    assert "pydhcp.server.handlers" in loud
+    assert "pydhcp.listener.interfaces" in loud
+
+    caplog.clear()
+    quiet = logging.getLogger("pydhcp.server")
+    previous = quiet.level
+    quiet.setLevel(logging.CRITICAL)
+    try:
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            emit()
+    finally:
+        quiet.setLevel(previous)
+    names = {record.name for record in caplog.records}
+    assert "pydhcp.server.handlers" not in names
+    assert "pydhcp.listener.interfaces" in names

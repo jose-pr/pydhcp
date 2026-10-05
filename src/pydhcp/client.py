@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging as _logging
 import contextlib as _contextlib
 import datetime as _dt
 import queue as _queue
@@ -16,7 +17,8 @@ from .listener import DhcpListener, ListenSpec, RequestContext, UdpTransport
 from .packet.message import DhcpMessage
 from .options import DhcpOptionCode, DhcpOptions
 from .options import type as _type
-from .log import LOGGER
+
+LOGGER = _logging.getLogger(__name__)
 
 
 class DhcpClient(DhcpListener):

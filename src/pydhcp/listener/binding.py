@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import socket as _socket
 import sys as _sys
 import typing as _ty
@@ -10,7 +11,8 @@ import weakref as _weakref
 import netimps as _netimps
 
 from .. import network as _net
-from ..log import LOGGER
+
+LOGGER = _logging.getLogger(__name__)
 
 #: The address each socket was *asked* to bind, which is not what it ended up
 #: bound to whenever that request named port 0. `_bind_sockets` matches already

@@ -7,13 +7,14 @@ Every name the single-module CLI had is re-exported, so imports are unchanged.
 
 from __future__ import annotations
 
+import logging as _logging
 import os
 import sys
 
 import duho
 from duho import AUTO, Cli, DefaultsFormatter
 
-from ._common import LOGGER, PACKET_FORMATS, CAPTURE_FORMATS, _Command
+from ._common import PACKET_FORMATS, CAPTURE_FORMATS, _Command
 from .interfaces import Interfaces
 from .server import Server
 from .relay import _parse_server_address, Relay
@@ -33,6 +34,10 @@ from .capture import (
     _write_capture_record,
     Capture,
 )
+
+#: The command line's logger, a child of the package logger `pydhcp`: the
+#: `-v` and `--loglevel pydhcp:DEBUG` options configure the parent.
+LOGGER = _logging.getLogger(__name__)
 
 
 class App(Cli):

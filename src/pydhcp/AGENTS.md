@@ -728,8 +728,8 @@ CLI fields plus a `__call__(self)` entrypoint — registered on the root
 for logging (`-v`/`-q`/`--loglevel`, `self._logger_`); there is no
 per-subcommand `--log-level` flag anymore (superseded by duho's verbosity
 scheme). Every subcommand derives from an internal `_Command` base that sets
-`_logger_name_ = "pydhcp"`, so `self._logger_` resolves the same `pydhcp`
-logger the library itself writes to via `pydhcp.log.LOGGER`, and `-v`/`-q`
+`_logger_name_ = "pydhcp"`, so `self._logger_` resolves the package logger
+every module logger is a child of (`pydhcp.log.LOGGER`), and `-v`/`-q`
 change that logger's level. The attribute has to live on the subcommand: duho
 resolves the logger on the *parsed* instance, so setting it only on `App` left
 `-v` raising the level of a logger named after the subcommand while `pydhcp`

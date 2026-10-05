@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import pathlib
 import sys
 import typing as _ty
@@ -14,8 +15,10 @@ from ..capture import (
     DhcpCapture,
     validate_filename_pattern,
 )
-from ._common import LOGGER, CAPTURE_FORMATS, _Command
+from ._common import CAPTURE_FORMATS, _Command
 from .capture_hook import _load_capture_hook, _serialize_capture_event
+
+LOGGER = _logging.getLogger(__name__)
 
 
 def _infer_capture_format(

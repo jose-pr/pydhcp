@@ -1,4 +1,5 @@
 from __future__ import annotations
+import logging as _logging
 import datetime as _dt
 import json as _json
 import os as _os
@@ -10,7 +11,8 @@ from math import inf as _inf
 
 from .network import IPv4
 from .options import DhcpOptions
-from .log import LOGGER
+
+LOGGER = _logging.getLogger(__name__)
 
 
 class DhcpLease(_ty.NamedTuple):

@@ -15,12 +15,9 @@ import logging as _logging
 #: reaches all of them.
 LOGGER = _logging.getLogger("pydhcp")
 
-# A library must not decide where its records go. With no handler anywhere on
-# the chain, `logging.lastResort` prints WARNING and above straight to stderr,
-# so a warning from deep in the receive path landed on the console of an
-# embedding application that had never configured logging. A `NullHandler` is
-# the stdlib's answer to exactly this ("Configuring Logging for a Library"),
-# and it is a deliberate behaviour change: an embedder relying on that
-# `lastResort` output now sees nothing until it configures a handler. The CLI
-# is unaffected -- duho installs a real one.
+# With no handler anywhere on the chain, `logging.lastResort` prints WARNING and
+# above to stderr, onto the console of an embedding application that never
+# configured logging. A `NullHandler` stops that (the standard library's
+# "Configuring Logging for a Library"); an application sees records once it
+# configures a handler, and the command line installs one.
 LOGGER.addHandler(_logging.NullHandler())

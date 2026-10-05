@@ -80,6 +80,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Optional` and `Union`, `Self` is a bound `TypeVar` per class, and every
   module has `from __future__ import annotations`; `typing_extensions` is no
   longer imported.
+- **Each module logs on its own logger.** Records from the listener, server, relay,
+  client, lease store and the rest were emitted on `pydhcp` itself, so a level set
+  on `pydhcp.server` silenced nothing. A record is now named for its module
+  (`pydhcp.server.handlers`, `pydhcp.listener.receive`, `pydhcp.cli.capture_hook`);
+  a handler or level on `pydhcp` still sees all of them, since children propagate.
 - **`pydhcp capture --hook ./name` runs the file it names.** The command was started by
   the name with its `./` dropped, which POSIX looks up on `PATH` only: the hook was not
   found (a traceback per packet) or a program of the same name on `PATH` ran instead.

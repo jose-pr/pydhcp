@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import ipaddress as _ipaddress
 import socket as _socket
 import typing as _ty
@@ -9,7 +10,8 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import network as _net
-from ..log import LOGGER
+
+LOGGER = _logging.getLogger(__name__)
 
 #: The all-ones address every DHCP client can be reached at before it has one of
 #: its own (RFC 2131 s4.1).

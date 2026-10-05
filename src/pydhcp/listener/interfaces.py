@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import functools as _functools
 import ipaddress as _ipaddress
 import socket as _socket
@@ -10,7 +11,8 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import network as _net
-from ..log import LOGGER
+
+LOGGER = _logging.getLogger(__name__)
 
 
 def _network_interface(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import datetime as _dt
 import netimps as _netimps
 import time as _time
@@ -9,11 +10,12 @@ import typing as _ty
 
 from .. import constants as _const, network as _net
 from ..lease import DhcpLease, LeaseBackend
-from ..log import LOGGER
 from ..options import DhcpOptionCode, DhcpOptions, type as _type
 from ..packet.message import DhcpMessage
 from math import inf as _inf
 from ._state import _ServerState
+
+LOGGER = _logging.getLogger(__name__)
 
 
 def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterface]:

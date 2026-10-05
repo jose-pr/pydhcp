@@ -2,18 +2,20 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import typing as _ty
 
 from .. import network as _net
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
 from ..lease import DhcpLease
 from ..listener import RequestContext
-from ..log import LOGGER
 from ..options import DhcpOptionCode, type as _type
 from ..packet import enums as _enum
 from ..packet.message import DhcpMessage
 from math import inf as _inf
 from .reply import _Replies
+
+LOGGER = _logging.getLogger(__name__)
 
 
 class _Handlers(_Replies):

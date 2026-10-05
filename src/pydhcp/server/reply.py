@@ -10,12 +10,13 @@ import typing as _ty
 from .. import constants as _const, network as _net
 from ..lease import DhcpLease
 from ..listener import RequestContext
-from ..log import LOGGER
 from ..options import DhcpOptionCode, type as _type
 from ..packet import enums as _enum
 from ..packet.message import DhcpMessage
 from math import inf as _inf
 from .policy import _LeasePolicy
+
+LOGGER = _logging.getLogger(__name__)
 
 
 def _is_loopback(context: RequestContext) -> bool:

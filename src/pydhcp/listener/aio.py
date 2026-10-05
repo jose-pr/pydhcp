@@ -13,7 +13,6 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import constants as _const, network as _net
-from ..log import LOGGER
 from ..metrics import DhcpMetrics
 from ..packet import enums as _enum
 from ..packet.message import DhcpMessage
@@ -26,6 +25,8 @@ from .receive import (
     _pktinfo_supported,
 )
 from .spec import ListenSpec, _parselisteners
+
+LOGGER = _logging.getLogger(__name__)
 
 
 class AsyncDhcpListener:

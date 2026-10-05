@@ -1,17 +1,10 @@
-"""What every subcommand shares: the logger, the format lists and the base class."""
+"""What every subcommand shares: the format lists and the base class."""
 
 from __future__ import annotations
 
-import logging as _logging
 import duho
 
 from duho import Cmd, LoggingArgs
-
-#: This module's logger, a child of the package logger `pydhcp` -- which is
-#: what `-v`/`--loglevel pydhcp:DEBUG` configure, and what the imports above
-#: have already set up with its `NullHandler`.
-LOGGER = _logging.getLogger("pydhcp.cli")
-
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 

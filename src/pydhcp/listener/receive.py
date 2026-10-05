@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging as _logging
 import ipaddress as _ipaddress
 import socket as _socket
 import typing as _ty
@@ -9,10 +10,11 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import network as _net
-from ..log import LOGGER
 from .interfaces import _resolve_interface
 from .spec import ListenSpec, _listen_uses_wildcard
 from .transport import BROADCAST_ADDRESS, PktInfoUdpTransport, Transport, UdpTransport
+
+LOGGER = _logging.getLogger(__name__)
 
 
 class _TruncatedDatagram(Exception):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import importlib
 import json as _json
+import logging as _logging
 import pathlib
 import os
 import shutil
@@ -14,7 +15,8 @@ import typing as _ty
 
 from ..capture import CaptureEvent
 from ..packet.structured import dump_message
-from ._common import LOGGER
+
+LOGGER = _logging.getLogger(__name__)
 
 
 def _serialize_capture_event(event: CaptureEvent, packet_format: str) -> str:
