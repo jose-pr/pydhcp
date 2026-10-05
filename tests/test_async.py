@@ -302,3 +302,34 @@ def test_async_wait_and_listen_do_not_raise_attributeerror():
         await asyncio.wait_for(waiter, timeout=20)
 
     asyncio.run(main())
+
+
+@pytest.mark.parametrize("already_waiting", [False, True])
+def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
+    already_waiting: bool,
+) -> None:
+    """Re-binding a started listener whose listen list shrank closes the sockets
+    no longer wanted. Their receive tasks are waiting in `arecv`, which a close
+    wakes with `RuntimeError`; that is the endpoint saying it is closed, and must
+    not reach the loop as a task exception nobody retrieved."""
+
+    async def run_test() -> "list[dict[str, object]]":
+        reports: "list[dict[str, object]]" = []
+        loop = asyncio.get_running_loop()
+        loop.set_exception_handler(lambda _loop, context: reports.append(context))
+        server = MockAsyncDhcpServer(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
+        await server.start()
+        try:
+            keep, drop = server._tasks
+            if already_waiting:
+                await asyncio.sleep(0.1)  # let both reach their `arecv`
+            server._listen = server._listen[:1]
+            server.bind()
+            await asyncio.wait_for(drop, timeout=10.0)
+            assert drop.exception() is None
+            assert not keep.done()
+        finally:
+            await server.stop()
+        return reports
+
+    assert asyncio.run(run_test()) == []

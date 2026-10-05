@@ -89,6 +89,12 @@ class AsyncDhcpListener:
                 )
             except (BlockingIOError, InterruptedError):  # spurious readability
                 continue
+            except RuntimeError:
+                # netimps ends a wait on a closed endpoint this way. Closing is
+                # how a socket that is no longer listened on is retired.
+                if sock.fileno() == -1:
+                    return
+                raise
             except _TruncatedDatagram as e:
                 self.metrics.packets_dropped_truncated += 1
                 LOGGER.warning(f"Dropping a truncated datagram: {e}")
