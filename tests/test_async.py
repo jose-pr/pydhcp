@@ -5,7 +5,7 @@ from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions
 from pydhcp.packet import DhcpMessageType, OpCode
 from pydhcp.options import DhcpOptionCode
 from pydhcp.network import SocketAddress, IPv4
-from conftest import build_request
+from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 
 
 class MockAsyncDhcpServer(AsyncDhcpServer):
@@ -304,6 +304,10 @@ def test_async_wait_and_listen_do_not_raise_attributeerror():
     asyncio.run(main())
 
 
+@pytest.mark.skipif(
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="needs a second loopback address; macOS aliases only 127.0.0.1",
+)
 @pytest.mark.parametrize("already_waiting", [False, True])
 def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
     already_waiting: bool,
