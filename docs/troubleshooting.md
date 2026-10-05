@@ -71,8 +71,17 @@ executed once per accepted packet with the structured packet on stdin.
 ## Wildcard listening behaves differently on Windows and Linux
 
 - Packet-info routing is opportunistic and only used on platforms that expose the needed socket APIs.
-- `per_interface=True` is the portable deterministic path when you need one socket per interface.
-- Explicit endpoint lists avoid interface-enumeration surprises while debugging.
+- **A socket bound to an address hears no broadcast on Linux.** `per_interface=True`, and any
+  `listen` that names an address, bind one socket per address, and on Linux such a socket
+  receives none of the limited (`255.255.255.255`) or subnet broadcasts that a client without
+  an address sends. Only the wildcard (`listen="*"`, the default) serves those clients there.
+  This was measured on Linux; macOS and the BSDs follow the same rule (unmeasured here).
+  Windows delivers a broadcast to an address-bound socket. pydhcp logs a WARNING once per
+  process when it binds such an address.
+- Listening on one interface only is not available on Linux today: the wildcard serves every
+  interface and an address hears no broadcast.
+- Explicit endpoint lists avoid interface-enumeration surprises while debugging, and are right
+  for a unicast peer (a relay's server address, a test on loopback).
 
 ```bash
 pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768 -v

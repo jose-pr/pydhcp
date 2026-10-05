@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import socket as _socket
+import sys as _sys
 import typing as _ty
 import weakref as _weakref
 
@@ -22,6 +23,45 @@ from ..log import LOGGER
 _REQUESTED_ADDRESS: "_ty.MutableMapping[_socket.socket, _net.SocketAddress]" = (
     _weakref.WeakKeyDictionary()
 )
+
+
+_ADDRESS_BOUND_WARNED = False
+
+
+def _address_bound_hears_no_broadcast() -> bool:
+    """Whether a socket bound to one address receives no broadcast here.
+
+    Measured on Linux: a socket bound to a host address received none of three
+    limited and none of three subnet broadcasts, where the wildcard received
+    all of them. The BSDs and macOS deliver a broadcast only to a socket bound
+    to the wildcard in the same way (unmeasured here). Windows delivers a
+    broadcast to an address-bound socket, so it is the one platform without the
+    behaviour, which is why this is a test of `sys.platform` and not a probe.
+    """
+    return _sys.platform != "win32"
+
+
+def _warn_if_address_bound_hears_no_broadcast(address: _net.SocketAddress) -> None:
+    """Warn, once per process, that `address` will not hear a broadcast.
+
+    A client that has no address yet reaches a server only by broadcast, so a
+    listener bound to one address serves nobody that is still unconfigured.
+    The wildcard and loopback addresses are not what this is about: the first
+    hears everything, and the second hears no segment at all. Once per process
+    and not per socket, because the listener binds one socket per address.
+    """
+    global _ADDRESS_BOUND_WARNED
+    if _ADDRESS_BOUND_WARNED or not _address_bound_hears_no_broadcast():
+        return
+    if address.ip == _net.WILDCARD_IPv4 or address.ip.is_loopback:
+        return
+    _ADDRESS_BOUND_WARNED = True
+    LOGGER.warning(
+        f"Listening on the address {address}: on this platform a socket bound to "
+        "an address receives no broadcast, so a client without an address yet "
+        'will not reach it. Listen on the wildcard (listen="*") to serve '
+        "unconfigured clients."
+    )
 
 
 def _raise_bind_error(error: OSError, address: _net.SocketAddress) -> "_ty.NoReturn":
@@ -165,6 +205,7 @@ def _bind_sockets(
             _release(opened, sockets, endpoints)
             raise
         _REQUESTED_ADDRESS[sock] = address
+        _warn_if_address_bound_hears_no_broadcast(address)
     for address, sock in active.items():
         if address not in wanted:
             sockets.remove(sock)

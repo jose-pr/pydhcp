@@ -54,6 +54,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Address-bound listening is documented as it behaves, and warns.** A socket bound to
+  an address (`per_interface=True`, or a `listen` that names one) hears no broadcast on
+  Linux (measured: 0 of 3 limited and 0 of 3 subnet broadcasts, against 3 of 3 for the
+  wildcard; macOS and the BSDs are expected to match, unmeasured), so an unconfigured
+  client is served only through the wildcard there. The documentation called
+  `per_interface=True` the portable deterministic path and `examples/listener.py` used
+  it; both now say this and `examples/listener.py` listens on the wildcard. Binding a
+  non-wildcard, non-loopback address on a platform other than Windows logs one WARNING
+  per process.
 - **The async listener's queue behind its handler is bounded.** Every
   datagram was queued for the one worker thread with no limit, so a slow
   handler (a lease-file write) let a flood grow memory by tens of MiB a

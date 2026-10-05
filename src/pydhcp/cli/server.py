@@ -24,7 +24,7 @@ class Server(_Command):
     ("--listen", "-l")
 
     per_interface: bool = False
-    "Bind each interface separately instead of using wildcard packet-info routing"
+    "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
     ("--per-interface",)
 
     lease_file: _ty.Optional[str] = None

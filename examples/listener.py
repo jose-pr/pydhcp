@@ -14,6 +14,8 @@ log.LOGGER.setLevel(logging.DEBUG)
 
 
 if __name__ == "__main__":
-    listener = DhcpListener(listen="*", per_interface=True)
+    # The wildcard hears the broadcasts of every segment; per_interface=True
+    # would bind addresses, which hear none on Linux.
+    listener = DhcpListener(listen="*")
     listener.start()
     listener.wait()

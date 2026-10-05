@@ -48,7 +48,14 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
   (packet info), on Linux, macOS and Windows and on every supported CPython.
   `select_timeout` (default 1s) bounds the `select()` poll. `max_packet_size`
   defaults to `UDP_MAX_PACKET_SIZE` (65535). `per_interface=True` disables
-  wildcard routing and binds one socket per interface instead. Every instance
+  wildcard routing and binds one socket per interface address instead.
+  **A socket bound to an address hears no broadcast on Linux** (measured: 0 of
+  3 limited and 0 of 3 subnet broadcasts, against 3 of 3 for the wildcard;
+  macOS and the BSDs are expected to match, unmeasured; Windows delivers it),
+  so `per_interface=True` and any `listen` naming a non-loopback address serve
+  only unicast there, and an unconfigured client is served through the
+  wildcard alone. `.bind()` logs a WARNING once per process when it binds such
+  an address. Every instance
   owns `self.metrics: DhcpMetrics` — there is no global metrics singleton.
   - **`host:port` text is read strictly** (netimps' `split_host`): the port is
     ASCII digits only, and square brackets may enclose only an IPv6 literal.

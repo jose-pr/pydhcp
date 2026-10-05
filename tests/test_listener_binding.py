@@ -7,6 +7,8 @@ bound port in silence and then received nothing).
 
 from __future__ import annotations
 
+import ipaddress
+import logging
 import socket
 
 import pytest
@@ -313,3 +315,103 @@ def test_with_a_listener_that_cannot_bind_holds_no_port() -> None:
         assert listener.bound_addresses == ()
     finally:
         holder.close()
+
+
+# --- an address-bound socket hears no broadcast where the platform says so ---
+
+
+@pytest.fixture
+def fresh_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The warning is once per process: let each test see it again."""
+    import pydhcp.listener.binding as binding
+
+    monkeypatch.setattr(binding, "_ADDRESS_BOUND_WARNED", False)
+
+
+def _platform(monkeypatch: pytest.MonkeyPatch, hears_no_broadcast: bool) -> None:
+    """Say what the platform does, without changing `sys.platform` under netimps."""
+    import pydhcp.listener.binding as binding
+
+    monkeypatch.setattr(
+        binding, "_address_bound_hears_no_broadcast", lambda: hears_no_broadcast
+    )
+
+
+def _warnings(caplog: pytest.LogCaptureFixture) -> "list[str]":
+    return [
+        record.getMessage()
+        for record in caplog.records
+        if record.levelno == logging.WARNING and "broadcast" in record.getMessage()
+    ]
+
+
+def _a_routable_host_address() -> str:
+    import netimps
+
+    from pydhcp.network import LINK_LOCAL_V4
+
+    for adapter in netimps.get_interfaces():
+        if adapter.is_loopback:
+            continue
+        for entry in adapter.ips:
+            if isinstance(entry, ipaddress.IPv4Interface) and (
+                entry.ip not in LINK_LOCAL_V4
+            ):
+                return str(entry.ip)
+    pytest.skip("no non-loopback adapter with a routable IPv4 address")
+
+
+def test_two_address_bound_sockets_are_warned_about_once(
+    fresh_warning: None,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _platform(monkeypatch, True)
+    address = _a_routable_host_address()
+    listeners = [DhcpListener(listen=(address, 0)), DhcpListener(listen=(address, 0))]
+    try:
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            for listener in listeners:
+                listener.bind()
+    finally:
+        for listener in listeners:
+            listener.close()
+    reports = _warnings(caplog)
+    assert len(reports) == 1, reports
+    assert address in reports[0] and "wildcard" in reports[0]
+
+
+def test_windows_hears_broadcast_on_an_address_so_it_is_not_warned_about(
+    fresh_warning: None,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _platform(monkeypatch, False)
+    address = _a_routable_host_address()
+    listener = DhcpListener(listen=(address, 0))
+    try:
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            listener.bind()
+    finally:
+        listener.close()
+    assert _warnings(caplog) == []
+
+
+def test_the_wildcard_and_loopback_are_not_warned_about(
+    fresh_warning: None,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _platform(monkeypatch, True)
+    listeners = [
+        DhcpListener(listen=("127.0.0.1", 0)),
+        DhcpListener(listen=("0.0.0.0", 0)),
+    ]
+    try:
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            for listener in listeners:
+                listener.bind()
+    finally:
+        for listener in listeners:
+            listener.close()
+    assert _warnings(caplog) == []

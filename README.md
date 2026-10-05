@@ -42,7 +42,9 @@ The built-in server intentionally keeps allocation policy small. It renews exist
 and responds to client-requested addresses, while applications can subclass `DhcpServer`
 or provide a custom lease backend for pools, reservations, and site-specific options.
 
-You can also bind explicit endpoints or multiple ports when you do not want wildcard behavior:
+You can also bind explicit endpoints or multiple ports when you do not want wildcard behavior.
+A socket bound to an address hears no broadcast on Linux, so this serves unicast peers and
+tests, not clients that have no address yet:
 
 ```python
 server = DhcpServer(listen=[("127.0.0.1", [6767, 6768])], per_interface=True)

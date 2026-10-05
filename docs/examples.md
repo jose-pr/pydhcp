@@ -71,15 +71,22 @@ configuration options without allocating an address.
 
 ## Listening on all interfaces
 
-If you want the server to bind every local IPv4 interface, pass `'*'` or `0.0.0.0`.
-You can also force the portable per-interface path with `per_interface=True`.
+To serve every local IPv4 interface, listen on the wildcard: `'*'` or `0.0.0.0` (the
+default). One socket receives broadcasts from every segment and learns which interface each
+datagram arrived on.
 
 ```python
 from pydhcp.server import DhcpServer
 
-server = DhcpServer(listen="*", per_interface=True)
+server = DhcpServer(listen="*")
 server.listen()
 ```
+
+`per_interface=True`, like naming an address in `listen`, binds one socket per address
+instead. **On Linux such a socket hears no broadcast**, so a client that has no address yet is
+not served through it (macOS and the BSDs are expected to behave the same, unmeasured;
+Windows delivers the broadcast). Use it for unicast traffic and for tests, not to serve
+unconfigured clients; pydhcp warns once per process when it binds an address.
 
 For deterministic local testing or tools that need several explicit sockets, pass a list of
 endpoints or a tuple with multiple ports.
