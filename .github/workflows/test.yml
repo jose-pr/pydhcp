@@ -107,6 +107,84 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: python -m mkdocs build --strict
 
+  # The delivery path -- which interface a reply leaves by, what a stock client
+  # does with it -- can only be judged against real peers on real links, so this
+  # job runs ISC dhclient, BusyBox udhcpc and dnsmasq against the server, relay
+  # and client over veth pairs in network namespaces. Everything happens in
+  # namespaces the tests create and remove; the runner's own interfaces are not
+  # touched. PYDHCP_INTEROP_REQUIRE makes a missing peer, or a runner that
+  # refuses `ip netns` under sudo, a failure rather than a green run of skips.
+  interop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed first, from its branch, so the project install below finds
+      # the requirement already met. Remove this step once 0.4.0 is published.
+      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev,toml]
+
+      # dnsmasq-base is the daemon without its system service, which would
+      # otherwise start on the runner and bind ports 53 and 67.
+      - name: Install the peers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y isc-dhcp-client dnsmasq-base busybox
+
+      # Ubuntu confines dhclient and dnsmasq with AppArmor profiles written for
+      # the system services, which do not allow the temporary directory the
+      # tests give them for lease, pid and log files.
+      - name: Unload the peers' AppArmor profiles
+        run: |
+          for profile in sbin.dhclient usr.sbin.dnsmasq; do
+            if [ -e "/etc/apparmor.d/$profile" ]; then
+              sudo apparmor_parser -R "/etc/apparmor.d/$profile" || true
+            fi
+          done
+
+      - name: Check the runner can run the lab
+        run: |
+          command -v dhclient dnsmasq busybox
+          busybox --list | grep -x udhcpc
+          sudo ip netns add pydhcp-probe
+          sudo ip netns exec pydhcp-probe ip link set lo up
+          sudo ip netns del pydhcp-probe
+          ip netns list
+
+      - name: Run the interoperability tests
+        env:
+          PYDHCP_INTEROP_REQUIRE: "1"
+          PYDHCP_INTEROP_LOGS: ${{ runner.temp }}/interop-logs
+        run: sudo --preserve-env "$(command -v python)" -m pytest tests/interop -q -rsx -p no:cacheprovider
+
+      - name: No namespace left behind
+        if: always()
+        run: |
+          test -z "$(ip netns list)"
+
+      - name: Upload what each scenario saw
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: interop-logs
+          path: ${{ runner.temp }}/interop-logs
+          if-no-files-found: warn
+
   benchmark:
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.run_benchmarks) ||
