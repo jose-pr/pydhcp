@@ -222,11 +222,12 @@ class DhcpClient(DhcpListener):
         decoration -- a fleet of clients that back off in lock-step retransmits
         in lock-step, which is the collision the jitter exists to break up.
         netimps owns the schedule; `backoff_delays` yields ``attempts - 1``
-        values, one per wait.
+        values, one per wait. A `timeout` above the cap starts at the cap:
+        `backoff_delays` refuses a ceiling below its first delay.
         """
         return _netimps.backoff_delays(
             attempts=retries + 2,
-            delay=timeout,
+            delay=min(timeout, self.RETRANSMIT_MAX_INTERVAL),
             multiplier=2.0,
             max_delay=self.RETRANSMIT_MAX_INTERVAL,
             jitter_seconds=self.RETRANSMIT_JITTER_SECONDS,

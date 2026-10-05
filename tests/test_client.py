@@ -488,6 +488,30 @@ def test_retransmission_interval_is_capped_at_the_rfc_maximum():
         assert 63.0 <= interval <= 65.0, interval
 
 
+def test_a_first_interval_above_the_cap_is_held_at_the_cap():
+    """`timeout` is the initial interval, and a caller may give more than 64 s.
+
+    The schedule is capped, so the first wait is the cap (randomized around it)
+    rather than an error raised before anything is sent.
+    """
+    client = DhcpClient(listen=("127.0.0.1", 0))
+
+    for timeout, retries in ((65.0, 1), (120.0, 0), (1000.0, 2)):
+        waits = list(client._retransmit_intervals(timeout, retries))
+
+        assert len(waits) == retries + 1
+        assert all(63.0 <= wait <= 65.0 for wait in waits), (timeout, waits)
+
+
+def test_a_subclass_cap_below_the_timeout_is_honoured():
+    class Impatient(DhcpClient):
+        RETRANSMIT_MAX_INTERVAL = 10.0
+
+    waits = list(Impatient(listen=("127.0.0.1", 0))._retransmit_intervals(30.0, 1))
+
+    assert all(9.0 <= wait <= 11.0 for wait in waits), waits
+
+
 def test_secs_counts_up_across_retransmissions():
     """RFC 2131 §2: seconds since the client began acquisition, not always 0.
 
