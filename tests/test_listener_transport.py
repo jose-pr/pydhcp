@@ -71,8 +71,8 @@ def test_an_oversized_datagram_is_dropped_rather_than_half_decoded() -> None:
     result was decoded unconditionally. Measured on Linux with
     `max_packet_size=576`: a 1102-octet datagram was silently delivered as 576
     octets and handed to the decoder, whose option stream then stops
-    mid-option. Windows fails the same call with WSAEMSGSIZE; both land in the
-    same counter now."""
+    mid-option. Windows reports the same cut as `truncated`; both land in the
+    same counter."""
     listener = RecordingListener(listen=("127.0.0.1", 0), max_packet_size=576)
     listener.bind()
     address = listener.bound_addresses[0]

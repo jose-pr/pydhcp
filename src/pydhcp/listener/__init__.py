@@ -21,7 +21,6 @@ from .receive import (
     Arrival,
     RequestContext,
     _TruncatedDatagram,
-    _WSAEMSGSIZE,
     _arrival,
     _context_for,
     _pktinfo_supported,

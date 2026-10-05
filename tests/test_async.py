@@ -333,3 +333,38 @@ def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
         return reports
 
     assert asyncio.run(run_test()) == []
+
+
+def test_async_oversized_datagram_is_dropped_rather_than_half_decoded() -> None:
+    """The cut is reported by netimps as `truncated` on every platform, so the
+    async receive loop counts it without a platform-specific error branch."""
+
+    async def run_test() -> "tuple[int, int, int]":
+        handled: "list[DhcpMessage]" = []
+
+        class Recording(MockAsyncDhcpServer):
+            def handle(self, msg, context) -> None:
+                handled.append(msg)
+
+        server = Recording(listen=[("127.0.0.1", 0)], max_packet_size=576)
+        await server.start()
+        try:
+            port = server.bound_addresses[0].port
+            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sender.sendto(
+                build_request().encode() + b"\x00" * 1102, ("127.0.0.1", port)
+            )
+            sender.close()
+            for _ in range(100):
+                if server.metrics.packets_dropped_truncated:
+                    break
+                await asyncio.sleep(0.05)
+        finally:
+            await server.stop()
+        return (
+            len(handled),
+            server.metrics.packets_dropped_truncated,
+            server.metrics.packets_received,
+        )
+
+    assert asyncio.run(run_test()) == (0, 1, 0)

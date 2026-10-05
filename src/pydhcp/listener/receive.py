@@ -14,12 +14,6 @@ from .interfaces import _resolve_interface
 from .spec import ListenSpec, _listen_uses_wildcard
 from .transport import BROADCAST_ADDRESS, PktInfoUdpTransport, Transport, UdpTransport
 
-#: WSAEMSGSIZE. Where Linux truncates an oversized datagram and reports it in
-#: the recv flags, Windows fails the call outright with this. Same event, two
-#: shapes; both become `_TruncatedDatagram` so the log and the counter do not
-#: depend on the platform.
-_WSAEMSGSIZE = 10040
-
 
 class _TruncatedDatagram(Exception):
     """A datagram longer than `max_packet_size` arrived and was cut short.

@@ -19,7 +19,6 @@ from .binding import _bind_sockets, _close_socket
 from .receive import (
     RequestContext,
     _TruncatedDatagram,
-    _WSAEMSGSIZE,
     _arrival,
     _context_for,
     _pktinfo_supported,
@@ -223,9 +222,8 @@ class DhcpListener:
         """
         try:
             # One octet over the limit, so a datagram that does not fit can be
-            # told apart from one that exactly fills it. Linux truncates
-            # silently and reports MSG_TRUNC; Windows fails the call with
-            # WSAEMSGSIZE, which lands in the OSError branch below.
+            # told apart from one that exactly fills it. netimps reports the
+            # cut on every platform, Windows included, as `truncated`.
             endpoint = self._endpoints.get(sock)
             if endpoint is None:  # pragma: no cover - not bound through bind()
                 endpoint = self._endpoints[sock] = _netimps.UDPEndpoint(
@@ -240,14 +238,6 @@ class DhcpListener:
             LOGGER.warning(f"Dropping a truncated datagram: {e}")
             return
         except OSError as e:
-            if getattr(e, "winerror", None) == _WSAEMSGSIZE:
-                self.metrics.packets_dropped_truncated += 1
-                LOGGER.warning(
-                    f"Dropping a truncated datagram on {self._describe(sock)}: "
-                    f"it exceeded max_packet_size={self._max_packet_size} "
-                    f"(WSAEMSGSIZE)"
-                )
-                return
             self.metrics.packets_dropped_error += 1
             LOGGER.error(
                 f"Receive failed on {self._describe(sock)}: "

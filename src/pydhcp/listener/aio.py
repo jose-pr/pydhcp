@@ -19,7 +19,6 @@ from .binding import _bind_sockets, _close_socket
 from .receive import (
     RequestContext,
     _TruncatedDatagram,
-    _WSAEMSGSIZE,
     _arrival,
     _context_for,
     _pktinfo_supported,
@@ -102,15 +101,6 @@ class AsyncDhcpListener:
             except OSError as e:
                 if sock.fileno() == -1:
                     return  # closed underneath us; nothing more will arrive
-                if getattr(e, "winerror", None) == _WSAEMSGSIZE:
-                    # As in `DhcpListener._receive_one`: Windows reports an
-                    # oversized datagram as a failed call, not a short read.
-                    self.metrics.packets_dropped_truncated += 1
-                    LOGGER.warning(
-                        f"Dropping a truncated datagram: it exceeded "
-                        f"max_packet_size={self._max_packet_size} (WSAEMSGSIZE)"
-                    )
-                    continue
                 self.metrics.packets_dropped_error += 1
                 LOGGER.error(
                     f"Encounter error reading async datagram: "
