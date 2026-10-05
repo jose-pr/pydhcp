@@ -50,7 +50,7 @@ class _FixedLeaseServer(DhcpServer):
         super().__init__(lease_backend=InMemoryLeaseBackend())
         self._expires = expires
 
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         return DhcpLease(IPv4("10.0.0.50"), self._expires, DhcpOptions())
 
 

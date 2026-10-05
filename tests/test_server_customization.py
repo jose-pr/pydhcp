@@ -42,7 +42,7 @@ def _lan_context(transport: Mock) -> RequestContext:
 
 def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
     class FixedLeaseServer(DhcpServer):
-        def acquire_lease(self, client_id, server_id, msg):
+        def acquire_lease(self, client_id, server_id, msg, *, commit=True):
             options = DhcpOptions()
             options[DhcpOptionCode.ROUTER] = [IPv4("127.0.0.1")]
             options[DhcpOptionCode.DNS] = [IPv4("1.1.1.1")]
@@ -95,7 +95,7 @@ class _BackendServer(DhcpServer):
     without any interface enumeration.
     """
 
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         return self.lease_backend.lookup(client_id)
 
 
@@ -184,7 +184,7 @@ def test_inform_does_not_strip_lease_time_from_the_stored_lease() -> None:
 class _NakServer(DhcpServer):
     """Refuses every request, so _filter_and_send takes the NAK path."""
 
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         return DhcpLease(
             IPv4("10.0.0.10"), datetime.now() + timedelta(seconds=3600), DhcpOptions()
         )
@@ -259,7 +259,7 @@ def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() ->
     it -- so relays that validate the echo dropped every reply."""
 
     class LeaseServer(DhcpServer):
-        def acquire_lease(self, client_id, server_id, msg):
+        def acquire_lease(self, client_id, server_id, msg, *, commit=True):
             return DhcpLease(
                 IPv4("10.0.0.10"),
                 datetime.now() + timedelta(seconds=3600),
@@ -387,7 +387,7 @@ def test_inform_does_not_create_a_lease() -> None:
     class AllocatingServer(DhcpServer):
         """Allocates through the backend, as the stock acquire_lease does."""
 
-        def acquire_lease(self, client_id, server_id, msg):
+        def acquire_lease(self, client_id, server_id, msg, *, commit=True):
             return self.lease_backend.allocate(client_id, IPv4("10.0.0.10"), 3600)
 
     server = AllocatingServer()
@@ -441,7 +441,7 @@ class _LoopbackServer(DhcpServer):
 
     NETWORK = ipaddress.IPv4Interface("10.0.0.1/24")
 
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         interface = NetworkInterface("test0", self.NETWORK)
         requested = msg.options.get(DhcpOptionCode.REQUESTED_IP)
         ip = IPv4(str(requested)) if requested is not None else msg.ciaddr

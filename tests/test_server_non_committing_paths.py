@@ -59,7 +59,7 @@ class _ServedServer(DhcpServer):
     def __init__(self, backend: InMemoryLeaseBackend) -> None:
         super().__init__(lease_backend=backend)
 
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         import pydhcp.server as server_module
 
         real = server_module._net.host_ip_interfaces
@@ -67,7 +67,7 @@ class _ServedServer(DhcpServer):
             [NetworkInterface("eth0", SERVED)]
         )
         try:
-            return super().acquire_lease(client_id, server_id, msg)
+            return super().acquire_lease(client_id, server_id, msg, commit=commit)
         finally:
             server_module._net.host_ip_interfaces = real
 

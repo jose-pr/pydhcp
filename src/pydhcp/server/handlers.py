@@ -108,7 +108,7 @@ class _Handlers(_Replies):
         )
         # A DISCOVER is a probe, so it may look and reserve but must not extend
         # an existing binding -- see `_NonExtendingBackend`.
-        lease = self._probe_lease(client_id, actual_server_id, msg)
+        lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
         if not lease or not self._has_time_left(lease):
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -149,7 +149,7 @@ class _Handlers(_Replies):
         # Decide first, on a view that cannot extend the binding: a REQUEST for
         # the wrong address is about to be NAKed, and renewing the address it is
         # being refused was exactly backwards.
-        lease = self._probe_lease(client_id, actual_server_id, msg)
+        lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
         if not lease:
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -164,7 +164,9 @@ class _Handlers(_Replies):
             resp_ty = _enum.DhcpMessageType.DHCPACK
             # Only now is anything agreed, so this is where the lease time the
             # ACK advertises is actually committed.
-            committed = self.acquire_lease(client_id, actual_server_id, msg)
+            committed = self.acquire_lease(
+                client_id, actual_server_id, msg, commit=True
+            )
             if committed is not None:
                 lease = committed
         else:

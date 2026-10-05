@@ -12,7 +12,7 @@ from conftest import build_request
 
 
 class MockAsyncServerForConcurrency(AsyncDhcpServer):
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=IPv4Address)
         ip = requested_ip if requested_ip else IPv4("127.0.0.1")
         options = DhcpOptions()

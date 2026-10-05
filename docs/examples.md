@@ -50,7 +50,7 @@ from pydhcp.server import DhcpServer
 
 
 class FixedLeaseServer(DhcpServer):
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit):
         options = DhcpOptions()
         options[DhcpOptionCode.DNS] = [IPv4("1.1.1.1")]
         return DhcpLease(
@@ -59,6 +59,12 @@ class FixedLeaseServer(DhcpServer):
             options,
         )
 ```
+
+`acquire_lease()` runs on the server itself, so an attribute it keeps (a counter for the
+next free host, say) is the server's own. `commit` says what kind of call it is: a
+DHCPDISCOVER makes one call with `commit=False`, and a DHCPREQUEST makes two, `commit=False`
+to decide and `commit=True` to commit the ACK. An override that writes to a store of its
+own, or that extends a binding, does that only when `commit` is true.
 
 For DHCPINFORM-only customization, override `get_inform_options()` so clients can receive
 configuration options without allocating an address.

@@ -9,7 +9,7 @@ from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 
 
 class MockAsyncDhcpServer(AsyncDhcpServer):
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         from datetime import datetime, timedelta
 
         options = DhcpOptions()

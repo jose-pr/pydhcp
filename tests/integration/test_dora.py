@@ -158,7 +158,7 @@ def test_relay_agent_information_echoed_in_reply():
 class MockDhcpServerWithBackend(DhcpServer):
     DEFAULT_PORTS = (6767,)
 
-    def acquire_lease(self, client_id, server_id, msg):
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         from pydhcp.options.type import IPv4Address, U32
 
         existing = self.lease_backend.lookup(client_id)

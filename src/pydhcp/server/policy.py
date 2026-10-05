@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy as _copy
 import datetime as _dt
 import netimps as _netimps
 import time as _time
@@ -72,12 +71,9 @@ class _NonExtendingBackend:
     not actually hand over, turning today's honest silence into an offer
     followed by silence.
 
-    The view is swapped in rather than `acquire_lease` being split, because
-    `acquire_lease` is the documented extension point for pools and
-    reservations: an override must still get to decide what to offer, and must
-    still not extend anything while deciding. `__getattr__` forwards
-    `lookup_by_ip` and any backend-specific helper so a custom backend keeps
-    working.
+    `acquire_lease` reads the store through this view when its `commit`
+    argument is false. `__getattr__` forwards `lookup_by_ip` and any
+    backend-specific helper so a custom backend keeps working.
     """
 
     def __init__(self, inner: LeaseBackend) -> None:
@@ -186,42 +182,49 @@ class _LeasePolicy(_ServerState):
             return True
         return (expires - _dt.datetime.now()).total_seconds() > 0
 
-    def _probe_lease(
-        self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
-    ) -> _ty.Optional[DhcpLease]:
-        """`acquire_lease` on a path that has not agreed anything yet.
-
-        A shallow copy of the server carries the non-extending backend view, so
-        an overridden `acquire_lease` -- which reaches the store through
-        `self.lease_backend` -- is bound by it too, and nothing is mutated on
-        the real server. A copy rather than swapping the attribute in place and
-        restoring it: the attribute swap is visible to any other thread handling
-        a packet, and the base backend is explicitly documented as shareable
-        between several running servers.
-        """
-        probe = _copy.copy(self)
-        probe.lease_backend = _ty.cast(
-            LeaseBackend, _NonExtendingBackend(self.lease_backend)
-        )
-        return probe.acquire_lease(client_id, server_id, msg)
-
     def acquire_lease(
-        self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
+        self,
+        client_id: str,
+        server_id: _net.IPv4,
+        msg: DhcpMessage,
+        *,
+        commit: bool = True,
     ) -> _ty.Optional[DhcpLease]:
         """Return a lease for a client message.
 
-        The base implementation is intentionally small: it renews existing leases and
-        allocates only when the client supplies `REQUESTED_IP` or `ciaddr`. Override
-        this method to implement address pools, reservations, policy checks, or custom
-        response options.
+        This is the extension point for address pools, reservations, policy
+        checks and custom response options. It is an ordinary method of this
+        server, called on the server itself from the handler thread (the one
+        worker thread on the async server), so an attribute it keeps -- the
+        next free host, a cache -- is the server's own.
+
+        `commit` says what kind of call this is. False: the server is deciding
+        what to offer or whether to ACK (RFC 2131 s4.3.1 makes DHCPDISCOVER a
+        probe), so the call must not extend an existing binding or add state
+        that a client declining the offer would leave behind. True: the answer
+        is being committed. A DHCPDISCOVER makes one call with `commit=False`; a
+        DHCPREQUEST makes two, `commit=False` to decide and then `commit=True`
+        if it is ACKed. An override honours `commit` itself, including in what
+        it does to `self.lease_backend`, which is the real backend on both
+        calls: only this base implementation reads through a view that does not
+        extend a binding when `commit` is false.
+
+        The base implementation is intentionally small: it renews existing
+        leases and allocates only when the client supplies `REQUESTED_IP` or
+        `ciaddr`.
         """
         _server = _servable_interface(server_id)
         if _server is None:
             return None
 
-        existing = self.lease_backend.lookup(client_id)
+        backend = (
+            self.lease_backend
+            if commit
+            else _ty.cast(LeaseBackend, _NonExtendingBackend(self.lease_backend))
+        )
+        existing = backend.lookup(client_id)
         if existing:
-            renewed = self.lease_backend.renew(client_id, self.lease_seconds(msg))
+            renewed = backend.renew(client_id, self.lease_seconds(msg))
             if renewed:
                 # `_NonExtendingBackend.renew` hands back the object `lookup`
                 # returned, so identity is what separates a real renewal from a
@@ -266,7 +269,7 @@ class _LeasePolicy(_ServerState):
         # Override `acquire_lease` to supply the real ones.
 
         LOGGER.debug(f"[XID={msg.xid:08x}] Allocating {ip} for {client_id}")
-        lease = self.lease_backend.allocate(client_id, ip, ttl, options)
+        lease = backend.allocate(client_id, ip, ttl, options)
         if lease is not None:
             self.metrics.leases_allocated += 1
         return lease

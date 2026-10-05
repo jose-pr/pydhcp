@@ -232,8 +232,18 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
 - **`DhcpServer(listen=None, select_timeout=None, max_packet_size=None,
   lease_backend=None, per_interface=None)`** (`DhcpListener` subclass) —
   `lease_backend` defaults to a fresh `InMemoryLeaseBackend()`.
-  - `.acquire_lease(client_id, server_id, msg) -> DhcpLease | None` —
-    override point. Base impl renews an existing lease, else allocates when
+  - `.acquire_lease(client_id, server_id, msg, *, commit=True) -> DhcpLease | None` —
+    override point. **Runs on the server itself** (not a copy), on the handler
+    thread (the one worker thread on the async server), so an attribute an
+    override keeps — a counter for the next free host — is the server's own.
+    **`commit` says what kind of call it is**: a DHCPDISCOVER makes one call
+    with `commit=False`; a DHCPREQUEST makes **two**, `commit=False` to decide
+    what to ACK and then `commit=True` if it is ACKed. An override must accept
+    the keyword (one that does not raises `TypeError` on every DISCOVER), and
+    one that writes to a store of its own, or extends a binding, does so only
+    when `commit` is true: `self.lease_backend` is the real backend on both
+    calls, and only the base implementation reads through a view that does not
+    extend a binding when `commit` is false. Base impl renews an existing lease, else allocates when
     the client supplies `REQUESTED_IP` or a non-wildcard `ciaddr`; returns
     `None` when nothing can be allocated (silently drops the message), which
     includes any address outside the served network — so a relayed client on

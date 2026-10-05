@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: `acquire_lease` takes a keyword `commit` and runs on the server
+  itself.** The signature is `acquire_lease(client_id, server_id, msg, *, commit=True)`:
+  an override must accept `commit` (one that does not raises `TypeError` for every
+  DISCOVER). DHCPDISCOVER makes one call with `commit=False`, DHCPREQUEST makes two,
+  `commit=False` to decide and `commit=True` to commit the ACK, and the override must do
+  nothing that extends or creates a binding when `commit` is false. The call used to run
+  on a throwaway copy of the server for the first of those, so an address pool that kept
+  its next free host in an attribute (`self.next_host += 1`) gave every client the same
+  address; the attribute is now the server's own. `self.lease_backend` inside an
+  override is the real backend on both calls; only the base implementation reads through
+  a view that does not extend a binding when `commit` is false.
 - **Requires netimps 0.4.0** (`netimps>=0.4.0,<0.5`, was `>=0.3.3,<0.4`).
   netimps renamed its public names without an alias, so no range covers both
   series.

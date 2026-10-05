@@ -27,8 +27,10 @@ class ExampleDhcpServer(DhcpServer):
         client_id: str,
         server_id: network.IPv4,
         msg: DhcpMessage,
+        *,
+        commit: bool = True,
     ) -> DhcpLease | None:
-        lease = super().acquire_lease(client_id, server_id, msg)
+        lease = super().acquire_lease(client_id, server_id, msg, commit=commit)
         if lease is not None:
             return lease
 

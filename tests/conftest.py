@@ -185,7 +185,12 @@ class FixedLeaseServer(DhcpServer):
     LEASE_SECONDS = 60
 
     def acquire_lease(
-        self, client_id: _ty.Any, server_id: _ty.Any, msg: DhcpMessage
+        self,
+        client_id: _ty.Any,
+        server_id: _ty.Any,
+        msg: DhcpMessage,
+        *,
+        commit: bool = True,
     ) -> DhcpLease:
         options = DhcpOptions()
         options[DhcpOptionCode.ROUTER] = IPv4("127.0.0.1")
