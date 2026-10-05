@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Requires netimps 0.4.0** (`netimps>=0.4.0,<0.5`, was `>=0.3.3,<0.4`).
+  netimps renamed its public names without an alias, so no range covers both
+  series.
 - **Breaking: `pydhcp.network.APIPA` is now `pydhcp.network.LINK_LOCAL_V4`**,
   following the name netimps gave the same network (`169.254.0.0/16`). No alias
   is kept: replace `APIPA` with `LINK_LOCAL_V4`. Its type is `IPv4Network`
