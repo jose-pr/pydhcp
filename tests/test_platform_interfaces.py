@@ -31,3 +31,20 @@ def test_graceful_degradation() -> None:
         # Should not raise even if mac is None
         _ = iface.mac
         assert str(iface)
+
+
+def test_family_is_given_as_a_number_or_a_socket_constant() -> None:
+    import socket
+
+    def addresses(family):
+        return sorted(
+            str(i.ip) for i in host_ip_interfaces(filter=False, family=family)
+        )
+
+    assert addresses(socket.AF_INET) == addresses(4)
+    assert addresses(socket.AF_INET6) == addresses(6)
+    assert all(isinstance(i.ip, IPv4Address) for i in host_ip_interfaces(family=2))
+    assert all(
+        isinstance(i.ip, IPv6Address)
+        for i in host_ip_interfaces(filter=False, family=socket.AF_INET6)
+    )
