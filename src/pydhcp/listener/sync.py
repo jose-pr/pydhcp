@@ -192,7 +192,14 @@ class DhcpListener:
     def start(
         self, cancellation_token: _thread.Event | None = None
     ) -> _thread.Thread | None:
+        """Bind, then receive on a new daemon thread, which is returned.
+
+        Binding happens here, on the caller's thread, so an address that cannot
+        be bound raises what `bind()` raised and leaves the listener unstarted
+        and nothing bound. Returns `None` when it is already started.
+        """
         if not self._cancellation_token:
+            self.bind()
             # Daemon: a non-daemon receive thread keeps the interpreter alive
             # after `main` returns, and nothing in the loop ends on its own.
             # Measured: a process that started a listener and fell off the end
@@ -205,7 +212,14 @@ class DhcpListener:
             )
             self._cancellation_token = cancellation_token or _thread.Event()
             self._install_sigint_handler()
-            thread.start()
+            try:
+                thread.start()
+            except BaseException:
+                # A thread that cannot start leaves nothing bound and the
+                # listener unstarted, as a bind that fails does.
+                self._cancellation_token = None
+                self.close()
+                raise
             return thread
         return None
 
@@ -286,12 +300,12 @@ class DhcpListener:
             return "a closed socket"
 
     def listen(self) -> None:
-        self.bind()
         rlist: list[_socket.socket]
         if self._cancellation_token is None:
             self._cancellation_token = _thread.Event()
         token = self._cancellation_token
         try:
+            self.bind()
             while not token.is_set():
                 rlist, _, _ = _select.select(
                     list(self._sockets), [], [], self._select_timeout

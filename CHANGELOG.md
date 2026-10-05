@@ -43,6 +43,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`DhcpListener.start()` raises when the bind fails.** It used to return the
+  receive thread, whose bind error reached only `threading.excepthook`, leaving
+  the listener "started": `wait()` blocked for ever and a second `start()`
+  returned `None`. `start()` now binds on the caller's thread and raises what
+  `bind()` raised (`AddressInUseError`, `PermissionError`), with nothing bound
+  and the listener startable again; `listen()` clears its token when its own
+  bind fails.
+- **A `bind()` that fails partway no longer keeps the sockets it had opened**
+  (`DhcpListener(listen=[good, bad]).bind()`, `with` on such a listener): they
+  are closed before the error is raised, so the ports are not held.
 - **The Client FQDN option (81) reads every form RFC 4702 defines.** A partial
   name (no terminating label) and an empty Domain Name field used to raise
   `ValueError`, and so did a flags octet with a reserved bit set, which the RFC

@@ -257,3 +257,59 @@ def test_binding_over_an_exclusive_holder_is_reported_as_in_use() -> None:
         assert "not privileged" in message, message
     finally:
         holder.close()
+
+
+# --- a bind that fails partway leaves the listener as it found it ---
+
+
+def _held_port() -> "tuple[socket.socket, int]":
+    holder = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    holder.bind(("127.0.0.1", 0))
+    return holder, holder.getsockname()[1]
+
+
+def test_a_bind_that_fails_partway_closes_what_it_opened() -> None:
+    """The first address binds and the second is held: nothing stays bound."""
+    holder, port = _held_port()
+    listener = DhcpListener(listen=[("127.0.0.1", 0), ("127.0.0.1", port)])
+    try:
+        with pytest.raises(OSError):
+            listener.bind()
+        assert listener.bound_addresses == ()
+        assert listener._sockets == []
+        assert listener._endpoints == {}
+    finally:
+        holder.close()
+        listener.close()
+
+
+def test_a_failed_bind_keeps_the_sockets_an_earlier_bind_opened() -> None:
+    """Only what the failing call opened is closed; the listener is as it was."""
+    holder, port = _held_port()
+    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener.bind()
+    try:
+        before = listener.bound_addresses
+        socket_before = listener._sockets[0]
+        listener._listen = list(listener._listen) + [
+            type(listener._listen[0])("127.0.0.1", port)
+        ]
+        with pytest.raises(OSError):
+            listener.bind()
+        assert listener.bound_addresses == before
+        assert socket_before.fileno() != -1
+    finally:
+        holder.close()
+        listener.close()
+
+
+def test_with_a_listener_that_cannot_bind_holds_no_port() -> None:
+    holder, port = _held_port()
+    listener = DhcpListener(listen=[("127.0.0.1", 0), ("127.0.0.1", port)])
+    try:
+        with pytest.raises(OSError):
+            with listener:
+                pass  # pragma: no cover - __enter__ raises
+        assert listener.bound_addresses == ()
+    finally:
+        holder.close()

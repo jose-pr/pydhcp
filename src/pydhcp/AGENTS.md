@@ -103,11 +103,16 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     so a handler that calls `.stop()` is not called again for the rest of the
     ready set. **`.listen()` closes the sockets on its way out**, so `.stop()`
     plus joining the thread actually releases the ports.
-  - `.start(cancellation_token=None) -> Thread | None` — runs `.listen()` on a
+  - `.start(cancellation_token=None) -> Thread | None` — **binds on the
+    caller's thread**, then runs `.listen()` on a
     **daemon** thread named `pydhcp-listener` (nothing in the loop ends by
     itself, so a non-daemon one meant a process that forgot to stop never
     exited) and installs a `SIGINT` handler that calls `.stop()`; returns
-    `None` if already started. That handler is given back by `.close()` **on
+    `None` if already started. An address that cannot be bound raises what
+    `.bind()` raised (`AddressInUseError`, `PermissionError`, ...) out of
+    `.start()`, with nothing bound and the listener unstarted, so it can be
+    started again. `.bind()` itself, when it fails partway, closes the
+    sockets that call opened and keeps the ones an earlier call bound. That handler is given back by `.close()` **on
     the main thread only** — `signal.signal` raises anywhere else, so the
     receive thread's own teardown deliberately leaves it installed for a later
     `.close()` to restore.

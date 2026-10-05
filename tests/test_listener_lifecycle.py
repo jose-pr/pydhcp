@@ -224,3 +224,58 @@ def test_wait_survives_the_token_being_nulled_underneath_it() -> None:
     listener.wait()  # must return, not raise
 
     assert type(listener)._reads >= 2, "the second read never happened"
+
+
+# --- a start-up failure reaches the caller ---
+
+
+def _held_port() -> "tuple[socket.socket, int]":
+    holder = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    holder.bind(("127.0.0.1", 0))
+    return holder, holder.getsockname()[1]
+
+
+def test_start_raises_the_bind_error_on_the_callers_thread() -> None:
+    """`start()` returned a thread that died with the error and left `wait()`
+    blocking for ever. The error must come out of `start()` itself, with
+    nothing bound and the listener startable again once the port is free."""
+    from netimps import AddressInUseError
+
+    holder, port = _held_port()
+    listener = DhcpListener(
+        listen=[("127.0.0.1", 0), ("127.0.0.1", port)], select_timeout=0.05
+    )
+    caught: "list[BaseException]" = []
+    previous_hook = threading.excepthook
+    threading.excepthook = lambda args: caught.append(args.exc_value)
+    try:
+        with pytest.raises(AddressInUseError):
+            listener.start()
+        assert listener.bound_addresses == ()
+        assert listener._cancellation_token is None
+        waiter = threading.Thread(target=listener.wait, daemon=True)
+        waiter.start()
+        waiter.join(2.0)
+        assert not waiter.is_alive(), "wait() blocks after a failed start()"
+        assert caught == [], "the error was raised on the receive thread"
+
+        holder.close()
+        thread = listener.start()
+        assert thread is not None, "a failed start() left the listener 'started'"
+    finally:
+        threading.excepthook = previous_hook
+        holder.close()
+        listener.stop()
+        listener.close()
+
+
+def test_listen_clears_its_token_when_the_bind_fails() -> None:
+    """`listen()` run on the caller's thread: the failure ends it cleanly."""
+    holder, port = _held_port()
+    listener = DhcpListener(listen=("127.0.0.1", port), select_timeout=0.05)
+    try:
+        with pytest.raises(OSError):
+            listener.listen()
+        assert listener._cancellation_token is None
+    finally:
+        holder.close()

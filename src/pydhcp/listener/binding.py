@@ -110,6 +110,9 @@ def _bind_sockets(
     Binding is the moment the set of addresses served can change, so it drops
     netimps' interface-enumeration cache rather than leaving the next lookup
     to wait out the TTL.
+
+    A failure leaves the listener as it found it: the sockets this call opened
+    are closed before the error is raised, and the ones already bound stay.
     """
     _netimps.clear_interface_cache()
     active: "dict[_net.SocketAddress, _socket.socket]" = {}
@@ -122,6 +125,7 @@ def _bind_sockets(
                 continue
         active[requested] = sock
     wanted = []
+    opened: "list[_socket.socket]" = []
     for address in listen:
         wanted.append(address)
         if address in active:
@@ -147,18 +151,37 @@ def _bind_sockets(
                 connreset=False,
             )
         except OSError as e:
+            _release(opened, sockets, endpoints)
             _raise_bind_error(e, address)
-        if receive_buffer:
-            _grow_receive_buffer(sock, address, receive_buffer)
-        endpoints[sock] = _netimps.UDPEndpoint(
-            sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_IPv4
-        )
-        _REQUESTED_ADDRESS[sock] = address
+        opened.append(sock)
         sockets.append(sock)
+        try:
+            if receive_buffer:
+                _grow_receive_buffer(sock, address, receive_buffer)
+            endpoints[sock] = _netimps.UDPEndpoint(
+                sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_IPv4
+            )
+        except BaseException:
+            _release(opened, sockets, endpoints)
+            raise
+        _REQUESTED_ADDRESS[sock] = address
     for address, sock in active.items():
         if address not in wanted:
             sockets.remove(sock)
             _close_socket(sock, endpoints)
+
+
+def _release(
+    opened: "list[_socket.socket]",
+    sockets: "list[_socket.socket]",
+    endpoints: "dict[_socket.socket, _netimps.UDPEndpoint]",
+) -> None:
+    """Close the sockets one failed `_bind_sockets` call opened, and unlist them."""
+    for sock in opened:
+        if sock in sockets:
+            sockets.remove(sock)
+        _close_socket(sock, endpoints)
+    opened.clear()
 
 
 def _close_socket(
