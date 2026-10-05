@@ -115,12 +115,11 @@ def _resolve_interface(
     # Only the index is known (or the address is no adapter's): the adapter by
     # index, answering from its own address.
     if pkt_ifindex:
-        for interface in _netimps.get_interfaces(cache=True):
-            if interface.index == pkt_ifindex:
-                found = _network_interface(interface)
-                if found is not None:
-                    return found
-                break
+        by_index = _netimps.get_interface(index=pkt_ifindex, cache=True)
+        if by_index is not None:
+            found = _network_interface(by_index)
+            if found is not None:
+                return found
 
     try:
         ip_addr = _net.IPv4(local_ip)
