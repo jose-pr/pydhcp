@@ -5,6 +5,7 @@ import typing as _ty
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DhcpOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
 from .addresses import IPv4Address
@@ -106,7 +107,7 @@ class _MoSSubOption(DhcpOptionType):
         payload = bytearray()
         payload_len = self._write_payload(payload)
         if payload_len > 255:
-            raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+            raise DHCPValueError(f"{type(self).__name__} entry exceeds 255 bytes")
         data.append(self.code)
         data.append(payload_len)
         data.extend(payload)
@@ -115,11 +116,11 @@ class _MoSSubOption(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 2:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         code = option[0]
         length = option[1]
         if len(option) < 2 + length:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return cls._from_payload(code, option[2 : 2 + length]), 2 + length
 
     def __json__(self) -> list[_ty.Any]:
@@ -143,7 +144,7 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
         if len(payload) % 4:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return List[IPv4Address](
             [payload[i : i + 4].tobytes() for i in range(0, len(payload), 4)]
         )

@@ -1,14 +1,12 @@
 """The DHCP wire message.
 
 `DhcpMessage` is defined in layers -- fields, decode, encode, mapping, display --
-each in a private module of `pydhcp.packet`; import it, and `NoClientIdentity`,
-from here.
+each in a private module of `pydhcp.packet`; import it from here.
 """
 
 from __future__ import annotations
 
 from ._display import _MessageDisplay
-from ._fields import NoClientIdentity as NoClientIdentity
 
 
 class DhcpMessage(_MessageDisplay):
@@ -21,4 +19,4 @@ class DhcpMessage(_MessageDisplay):
     """
 
 
-__all__ = ["DhcpMessage", "NoClientIdentity"]
+__all__ = ["DhcpMessage"]

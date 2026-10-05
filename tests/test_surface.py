@@ -42,6 +42,9 @@ EXPECTED_ROOT = [
     "CccTicketGrantingServerUtilizationSubOption",
     "ClasslessRoute",
     "ClientIdentifier",
+    "DHCPDecodeError",
+    "DHCPError",
+    "DHCPValueError",
     "DhcpCapture",
     "DhcpClient",
     "DhcpLease",
@@ -67,6 +70,7 @@ EXPECTED_ROOT = [
     "MoSIpv4AddressList",
     "MoSIpv4AddressRecord",
     "NetworkInterface",
+    "NoClientIdentityError",
     "OptionOverload",
     "PktInfoUdpTransport",
     "PolicyFilter",
@@ -105,6 +109,13 @@ EXPECTED_CLI = [
     "Relay",
     "Server",
     "main",
+]
+
+EXPECTED_EXCEPTIONS = [
+    "DHCPDecodeError",
+    "DHCPError",
+    "DHCPValueError",
+    "NoClientIdentityError",
 ]
 
 EXPECTED_LISTENER = [
@@ -213,7 +224,6 @@ EXPECTED_PACKET_ENUMS = [
 
 EXPECTED_PACKET_MESSAGE = [
     "DhcpMessage",
-    "NoClientIdentity",
 ]
 
 EXPECTED_SERVER = [
@@ -224,6 +234,7 @@ EXPECTED_SERVER = [
 SURFACE = {
     "pydhcp": EXPECTED_ROOT,
     "pydhcp.cli": EXPECTED_CLI,
+    "pydhcp.exceptions": EXPECTED_EXCEPTIONS,
     "pydhcp.listener": EXPECTED_LISTENER,
     "pydhcp.options.type": EXPECTED_OPTIONS_TYPE,
     "pydhcp.packet": EXPECTED_PACKET,

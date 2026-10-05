@@ -11,7 +11,8 @@ import typing as _ty
 from . import network as _net
 from .listener import AsyncDhcpListener, DhcpListener, ListenSpec, RequestContext
 from .options import DhcpOptionCode
-from .packet.message import DhcpMessage, NoClientIdentity
+from .exceptions import NoClientIdentityError
+from .packet.message import DhcpMessage
 from .options import DhcpOptionType
 
 #: This module's logger, a child of the package logger `pydhcp` (which
@@ -76,7 +77,7 @@ class CaptureEvent:
     def client_id(self) -> str:
         try:
             return self.message.client_id()
-        except NoClientIdentity:
+        except NoClientIdentityError:
             # A capture reports what arrived; a client with no identity is
             # exactly the sort of packet someone runs a capture to look at.
             return "UNKNOWN"

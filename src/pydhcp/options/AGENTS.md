@@ -191,7 +191,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 - **`BaseFixedLengthInteger`** / **`FixedLengthInteger`** — abstract fixed-
   width big-endian integer base; subclasses set `NUMBER_OF_BYTES`/`SIGNED`.
   **`U8`**/**`U16`**/**`U32`** (unsigned, 1/2/4 bytes), **`I32`** (signed,
-  4 bytes) are the concrete codecs; encode raises `ValueError` on overflow
+  4 bytes) are the concrete codecs; encode raises `DHCPValueError` on overflow
   or (for unsigned types) a negative value.
 - **`ClientIdentifier`** (`Bytes` subclass) — RFC 2132 client identifier
   (leading type octet + address bytes); requires ≥2 bytes on decode.
@@ -235,7 +235,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   most 127 compression pointers (`MAX_POINTER_HOPS`), and a pointer must
   point strictly backwards, at the start of a label or root label of an
   earlier name. A name, pointer, reserved length prefix or label running past
-  the end is a `ValueError`. A last name that ends between labels, or after
+  the end is a `DHCPDecodeError`. A last name that ends between labels, or after
   half a pointer, without a root label or a whole pointer is **discarded**
   (RFC 3397 §3) and the names before it are kept.
 - **`UncompressedDomainList`** (`DomainList` subclass) — the same container,
@@ -261,8 +261,8 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   qualified name and for the root (a lone terminator), and encode writes
   exactly what was decoded. `partial=True` needs the E bit. The reserved
   flag bits (`0xF0`) are ignored on decode and `flags` holds only the low
-  four; constructing with one set raises `ValueError`. A compression
-  pointer, a label cut short or data after the terminator is a `ValueError`.
+  four; constructing with one set raises `DHCPValueError`. A compression
+  pointer, a label cut short or data after the terminator is a `DHCPDecodeError`.
 - **`SipServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
   120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
   IPv4 addresses, written as a leading encoding octet. A plain list infers its

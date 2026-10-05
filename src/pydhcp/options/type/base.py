@@ -1,6 +1,7 @@
 from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _utils
 
 if _ty.TYPE_CHECKING:
@@ -45,12 +46,16 @@ class DhcpOptionType:
         # any payload), and `if hint:` silently skipped it.
         if hint is not None:
             if todecode != hint:
-                raise ValueError(
+                raise DHCPDecodeError(
                     f"{cls.__name__} payload must be exactly {hint} octets, got {todecode}"
                 )
-        decoded, read = cls._dhcp_read(option)
+        try:
+            decoded, read = cls._dhcp_read(option)
+        except DHCPValueError as exc:
+            # A constructor refusing the octets it was built from.
+            raise DHCPDecodeError(str(exc)) from exc
         if read != todecode:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"{cls.__name__} decoded only {read} of {todecode} octets; "
                 "the payload carries trailing data the codec does not account for"
             )
@@ -175,7 +180,7 @@ class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
             ...
         item_int = int(item)
         if item_int > 255:
-            raise ValueError(
+            raise DHCPValueError(
                 f"DHCP option code {item_int} does not fit in one octet (0-255)"
             )
         return item_int

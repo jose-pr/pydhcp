@@ -5,12 +5,13 @@ from __future__ import annotations
 import typing as _ty
 
 from .. import network as _net
+from ..exceptions import DHCPDecodeError, NoClientIdentityError
 from ..lease import DhcpLease
 from ..listener import RequestContext
 from ..log import LOGGER
 from ..options import DhcpOptionCode, type as _type
 from ..packet import enums as _enum
-from ..packet.message import DhcpMessage, NoClientIdentity
+from ..packet.message import DhcpMessage
 from math import inf as _inf
 from .reply import _Replies
 
@@ -30,7 +31,7 @@ class _Handlers(_Replies):
             return
         try:
             client_id = msg.client_id()
-        except NoClientIdentity as e:
+        except NoClientIdentityError as e:
             # Nothing to key a lease on, and RFC 2131 s4.2 requires the client to
             # supply one. Serving it would hand out an address under an identity
             # every other such client shares.
@@ -43,7 +44,7 @@ class _Handlers(_Replies):
         # want to identify produced the one message that cannot identify it.
         try:
             msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        except ValueError as e:
+        except DHCPDecodeError as e:
             raw = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE, decode=False)
             LOGGER.warning(
                 f"[XID={msg.xid:08x}] Dropping a message from "

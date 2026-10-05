@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing as _ty
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from ...network import IPv4 as _IP, IPv4Network as _Network
 from .base import DhcpOptionType
 from collections.abc import Iterable
@@ -16,6 +17,10 @@ class IPv4Address(DhcpOptionType, _IP):
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
+        if len(option) < 4:
+            raise DHCPDecodeError(
+                f"{cls.__name__} option is truncated: needs 4 octets, got {len(option)}"
+            )
         return cls(option[:4].tobytes()), 4
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -67,19 +72,22 @@ class ClasslessRoute(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 1:
-            raise ValueError(
+            raise DHCPDecodeError(
                 "ClasslessRoute option is truncated: missing prefix length"
             )
         cidr = option[0]
         if cidr > 32:
-            raise ValueError(f"ClasslessRoute prefix length {cidr} exceeds 32")
+            raise DHCPDecodeError(f"ClasslessRoute prefix length {cidr} exceeds 32")
         last = 1 + (cidr + 7) // 8
         if len(option) < last + 4:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"ClasslessRoute option is truncated: needs {last + 4} bytes, got {len(option)}"
             )
         net_bytes = option[1:last].tobytes() + b"\x00\x00\x00\x00"
-        network = _Network((net_bytes[:4], cidr))
+        try:
+            network = _Network((net_bytes[:4], cidr))
+        except ValueError as exc:
+            raise DHCPDecodeError(f"ClasslessRoute destination: {exc}") from exc
         gateway = _IP(option[last : last + 4].tobytes())
         return cls(gateway, network), last + 4
 
@@ -125,7 +133,7 @@ class _IPv4PairList(DhcpOptionType, list[tuple[_IP, _IP]]):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) % 8:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"{cls.__name__} option is truncated: expected 8-byte records"
             )
         self = cls()
@@ -162,5 +170,7 @@ class StaticRoute(_IPv4PairList):
     def _normalize(cls, item: _ty.Any) -> tuple[_IP, _IP]:
         left, right = super()._normalize(item)
         if left == _IP("0.0.0.0"):
-            raise ValueError("StaticRoute does not allow a default-route destination")
+            raise DHCPValueError(
+                "StaticRoute does not allow a default-route destination"
+            )
         return left, right

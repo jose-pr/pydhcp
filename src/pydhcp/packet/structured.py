@@ -5,6 +5,7 @@ import json as _json
 from io import StringIO as _StringIO
 import typing as _ty
 
+from ..exceptions import DHCPDecodeError
 from .message import DhcpMessage
 
 # `..config` imports nothing from `pydhcp`, so the dependency is one-way and
@@ -32,7 +33,7 @@ def _normalize_format(format: str) -> str:
 
 def _ensure_mapping(data: _ty.Any) -> dict[str, _ty.Any]:
     if not isinstance(data, dict):
-        raise ValueError("Structured packet data must be a mapping")
+        raise DHCPDecodeError("Structured packet data must be a mapping")
     return data
 
 
@@ -58,7 +59,7 @@ def load_mapping(text: str, format: str) -> dict[str, _ty.Any]:
     parser.optionxform = str  # type: ignore[method-assign,assignment]
     parser.read_string(text)
     if not parser.has_section("message"):
-        raise ValueError("INI packet data must include a [message] section")
+        raise DHCPDecodeError("INI packet data must include a [message] section")
     data: dict[str, _ty.Any] = {
         key: _json_or_text(value) for key, value in parser.items("message")
     }

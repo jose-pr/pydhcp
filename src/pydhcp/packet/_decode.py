@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as _dt
 import typing as _ty
 
+from ..exceptions import DHCPDecodeError
 from . import enums as _enum
 from .. import network as _net
 from ..options import DhcpOptionCode, DhcpOptions, type as _type
@@ -41,17 +42,18 @@ class _MessageDecode(_MessageFields):
         options 67/66. Constructs `cls`, so a subclass decodes to itself.
 
         Raises:
-            ValueError: shorter than the fixed header or magic cookie, a wrong
-                magic cookie, `hlen > 16`, or no END marker.
+            DHCPDecodeError: shorter than the fixed header or magic cookie, a
+                wrong magic cookie, `op` that is neither request nor reply,
+                `hlen > 16`, or no END marker. A `ValueError` too.
         """
         if not isinstance(data, memoryview):
             data = memoryview(data)
         if len(data) < _FIXED_HEADER_SIZE:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"Packet is too short for DHCP fixed header: got {len(data)} bytes, need at least {_FIXED_HEADER_SIZE}"
             )
         if len(data) < _MAGIC_COOKIE_END:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"Packet is too short for DHCP magic cookie at offset 236: got {len(data)} bytes, need at least {_MAGIC_COOKIE_END}"
             )
         (
@@ -68,8 +70,13 @@ class _MessageDecode(_MessageFields):
             giaddr,
         ) = _HEADER_STRUCT.unpack_from(data, 0)
         if hlen > 16:
-            raise ValueError(f"Hardware address length {hlen} exceeds maximum of 16")
-        op = _enum.OpCode(op)
+            raise DHCPDecodeError(
+                f"Hardware address length {hlen} exceeds maximum of 16"
+            )
+        try:
+            op = _enum.OpCode(op)
+        except ValueError as exc:
+            raise DHCPDecodeError(str(exc)) from exc
         # Never rewritten: an unnamed type keeps its octet, so a relay forwards
         # the htype it received. The warning went too -- it fired once per
         # packet, which let one client flood the log.
@@ -85,14 +92,14 @@ class _MessageDecode(_MessageFields):
         file_data = data[108:236]
 
         if cls.MAGIC_COOKIE != data[236:240]:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"Invalid magic cookie at offset 236: expected {cls.MAGIC_COOKIE.hex()}, got {data[236:240].hex()}"
             )
 
         options = DhcpOptions()
         remaining_opts = options.decode(data[240:], base_offset=240)
         if remaining_opts and remaining_opts[0] != 255:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"Bad options terminator: expected 255 (END), got {remaining_opts[0]}"
             )
 

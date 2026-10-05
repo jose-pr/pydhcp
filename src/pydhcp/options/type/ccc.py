@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import typing as _ty
 
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import network as _net
 from .base import DhcpOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
@@ -72,7 +73,7 @@ class CccProvisioningServerAddress(DhcpOptionType):
                 return "ipv4", IPv4Address(payload)
             if kind_name in {"fqdn", "domain"}:
                 return "fqdn", CccProvisioningServerFqdn(payload)
-            raise ValueError(
+            raise DHCPValueError(
                 "CCC provisioning server address kind must be ipv4 or fqdn"
             )
         if isinstance(value, _net.IPv4):
@@ -95,18 +96,24 @@ class CccProvisioningServerAddress(DhcpOptionType):
     @classmethod
     def _read_payload(cls, payload: memoryview) -> "CccProvisioningServerAddress":
         if len(payload) < 1:
-            raise ValueError("CCC provisioning server address is truncated")
+            raise DHCPDecodeError("CCC provisioning server address is truncated")
         kind = payload[0]
         if kind == 1:
             if len(payload) != 5:
-                raise ValueError("CCC provisioning server IPv4 payload must be 5 bytes")
+                raise DHCPDecodeError(
+                    "CCC provisioning server IPv4 payload must be 5 bytes"
+                )
             return cls(("ipv4", IPv4Address(payload[1:5].tobytes())))
         if kind == 0:
             text, read = _decode_no_compression_domain(payload, 1)
             if 1 + read != len(payload):
-                raise ValueError("CCC provisioning server FQDN payload is truncated")
+                raise DHCPDecodeError(
+                    "CCC provisioning server FQDN payload is truncated"
+                )
             return cls(("fqdn", CccProvisioningServerFqdn(text)))
-        raise ValueError(f"CCC provisioning server address kind {kind} is unsupported")
+        raise DHCPDecodeError(
+            f"CCC provisioning server address kind {kind} is unsupported"
+        )
 
     @classmethod
     def _dhcp_read(
@@ -171,7 +178,7 @@ class CccAsReqAsRepBackoffRetry(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) != 12:
-            raise ValueError(f"{cls.__name__} option must contain 12 bytes")
+            raise DHCPDecodeError(f"{cls.__name__} option must contain 12 bytes")
         return (
             cls(
                 int.from_bytes(option[0:4], "big"),
@@ -237,14 +244,16 @@ class CccSecurityTicketControl(DhcpOptionType, int):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) != 2:
-            raise ValueError(f"{cls.__name__} option must contain 2 bytes")
+            raise DHCPDecodeError(f"{cls.__name__} option must contain 2 bytes")
         return cls(int.from_bytes(option, "big")), 2
 
     def _dhcp_write(self, data: bytearray) -> int:
         if self < 0 or self > 0xFFFF:
-            raise ValueError(f"{type(self).__name__} mask must fit in 16 bits")
+            raise DHCPValueError(f"{type(self).__name__} mask must fit in 16 bits")
         if int(self) & ~0x0003:
-            raise ValueError(f"{type(self).__name__} reserved bits 2-15 must be zero")
+            raise DHCPValueError(
+                f"{type(self).__name__} reserved bits 2-15 must be zero"
+            )
         data.extend(int(self).to_bytes(2, "big"))
         return 2
 
@@ -294,7 +303,7 @@ class CccSubOption(DhcpOptionType):
         payload = bytearray()
         payload_len = self._write_payload(payload)
         if payload_len > 255:
-            raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+            raise DHCPValueError(f"{type(self).__name__} entry exceeds 255 bytes")
         data.append(self.code)
         data.append(payload_len)
         data.extend(payload)
@@ -421,11 +430,11 @@ class CccOption(RecordList[CccSubOption]):
     @classmethod
     def _read_record(cls, option: memoryview) -> tuple[CccSubOption, int]:
         if len(option) < 2:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         code = option[0]
         length = option[1]
         if len(option) < 2 + length:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         payload = option[2 : 2 + length]
         record_type = _CCC_SUBOPTION_TYPES.get(code, CccSubOption)
         return record_type._from_payload(code, payload), 2 + length

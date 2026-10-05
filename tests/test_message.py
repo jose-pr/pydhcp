@@ -291,7 +291,7 @@ def test_unidentifiable_client_does_not_collide_with_every_other_one():
     client got "01": two of them would take over each other's lease, and a
     RELEASE from either would free both.
     """
-    from pydhcp.packet.message import NoClientIdentity
+    from pydhcp.exceptions import NoClientIdentityError
 
     message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytearray(message.encode())
@@ -299,7 +299,7 @@ def test_unidentifiable_client_does_not_collide_with_every_other_one():
 
     decoded = DhcpMessage.decode(bytearray(wire))
     assert decoded.chaddr == b""
-    with pytest.raises(NoClientIdentity):
+    with pytest.raises(NoClientIdentityError):
         decoded.client_id()
 
     # The legal IPoIB shape -- hlen 0, htype 32, option 61 present -- still works.

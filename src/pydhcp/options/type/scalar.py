@@ -2,6 +2,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
 import enum as _enum
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import nvt as _nvt
 from ...network import HardwareAddressType as _HardwareAddressType
 
@@ -70,16 +71,16 @@ class UriList(DhcpOptionType, list[str]):
         size = len(option)
         while idx < size:
             if idx + 2 > size:
-                raise ValueError(f"{cls.__name__} option is truncated")
+                raise DHCPDecodeError(f"{cls.__name__} option is truncated")
             length = int.from_bytes(option[idx : idx + 2], "big")
             idx += 2
             if idx + length > size:
-                raise ValueError(f"{cls.__name__} option is truncated")
+                raise DHCPDecodeError(f"{cls.__name__} option is truncated")
             payload = option[idx : idx + length].tobytes()
             try:
                 decoded = payload.decode("utf-8")
             except UnicodeDecodeError as exc:
-                raise ValueError(
+                raise DHCPDecodeError(
                     f"{cls.__name__} option contains invalid UTF-8"
                 ) from exc
             self.append(decoded)
@@ -91,7 +92,7 @@ class UriList(DhcpOptionType, list[str]):
         for item in self:
             encoded = item.encode("utf-8")
             if len(encoded) > 0xFFFF:
-                raise ValueError(f"{type(self).__name__} entry exceeds 65535 bytes")
+                raise DHCPValueError(f"{type(self).__name__} entry exceeds 65535 bytes")
             data.extend(len(encoded).to_bytes(2, "big"))
             data.extend(encoded)
             written += len(encoded) + 2
@@ -181,7 +182,7 @@ class Flag(DhcpOptionType):
         # false to encode. Rejecting a falsy value keeps `opts[code] = False`
         # from reading as "off" while actually setting the flag.
         if not value:
-            raise ValueError(
+            raise DHCPValueError(
                 f"{type(self).__name__} is a presence-only option; delete the "
                 "option to express absence instead of assigning a false value"
             )
@@ -221,7 +222,7 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         option_part = option[: cls.NUMBER_OF_BYTES]
         if len(option_part) != cls.NUMBER_OF_BYTES:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"{cls.__name__} needs {cls.NUMBER_OF_BYTES} octets, "
                 f"got {len(option_part)}"
             )
@@ -241,9 +242,9 @@ class BaseFixedLengthInteger(DhcpOptionType, int):
 
     def _validate(self) -> None:
         if self.bit_length() > self.NUMBER_OF_BYTES * 8:
-            raise ValueError("Number is too big")
+            raise DHCPValueError("Number is too big")
         if not self.SIGNED and self < 0:
-            raise ValueError("Value must not be signed")
+            raise DHCPValueError("Value must not be signed")
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({int(self)!r})"
@@ -301,7 +302,9 @@ class ClientIdentifier(Bytes):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 2:
-            raise ValueError(option)
+            raise DHCPDecodeError(
+                f"{cls.__name__} option is truncated: needs a type octet and an identifier"
+            )
         return super()._dhcp_read(option)
 
     def __repr__(self) -> str:
@@ -332,7 +335,9 @@ class OptionOverload(DhcpOptionType, _enum.IntFlag):
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         option_part = option[:1]
         if len(option_part) != 1:
-            raise ValueError("OPTION_OVERLOAD needs 1 octet, got 0 (RFC 2132 s9.3)")
+            raise DHCPDecodeError(
+                "OPTION_OVERLOAD needs 1 octet, got 0 (RFC 2132 s9.3)"
+            )
         return cls(option_part[0]), 1
 
     def _dhcp_write(self, data: bytearray) -> int:

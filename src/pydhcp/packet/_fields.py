@@ -7,20 +7,12 @@ import datetime as _dt
 import struct as _struct
 import typing as _ty
 
+from ..exceptions import DHCPValueError
 from . import enums as _enum
 from .. import constants as _const, network as _net, nvt as _nvt
 from ..options import DhcpOptions
 
 _NULL = 0x00.to_bytes(1, "big")
-
-
-class NoClientIdentity(ValueError):
-    """Raised when a message carries nothing that identifies its client.
-
-    A `ValueError` subclass so existing `except ValueError` handlers keep
-    working, but distinguishable for callers that want to drop the message
-    rather than fail.
-    """
 
 
 _FIXED_HEADER_SIZE = 236
@@ -73,7 +65,7 @@ def _check_header_int(field: str, value: _ty.Any, maximum: int) -> int:
     """
     if isinstance(value, int) and 0 <= value <= maximum:
         return int(value)
-    raise ValueError(
+    raise DHCPValueError(
         f"{field}={value!r} does not fit its header field: "
         f"it must be an integer in 0..{maximum}"
     )
@@ -93,7 +85,7 @@ def _check_bootp_field(field: str, value: _ty.Sized, width: int) -> None:
     branches), which is what makes doing neither here indefensible.
     """
     if len(value) > width:
-        raise ValueError(
+        raise DHCPValueError(
             f"{field} is {len(value)} octets and does not fit its "
             f"{width}-octet BOOTP field"
         )

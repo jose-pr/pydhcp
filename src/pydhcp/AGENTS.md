@@ -31,6 +31,23 @@ of those, so the bare name already says it is a pydhcp type. The test applied
 was whether a reader meeting the name at top level could mistake it for
 something else.
 
+## Exceptions (`pydhcp.exceptions`, also at the root)
+
+- **`DHCPError(Exception)`** — the base of everything pydhcp raises on its
+  own account.
+- **`DHCPDecodeError(DHCPError, ValueError)`** — octets that are not the
+  message or option they were read as. Every decoder (`DhcpMessage.decode`,
+  each option codec, `DhcpOptions.get`) raises it, and nothing else, for
+  malformed input.
+- **`DHCPValueError(DHCPError, ValueError)`** — a value a codec or message
+  field cannot represent (an entry past 255 octets, a header field out of
+  range).
+- **`NoClientIdentityError(DHCPError, ValueError)`** — `DhcpMessage.client_id()`
+  on a message with neither option 61 nor a hardware address.
+
+A caller's own mistake (a wrong argument type, a bad option code, a bad
+`max_packetsize`) stays a plain `TypeError` or `ValueError`.
+
 ## Listener / transport (`listener/`)
 
 A package split by responsibility (`transport`, `spec`, `interfaces`,

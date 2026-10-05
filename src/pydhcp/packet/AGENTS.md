@@ -11,8 +11,8 @@ top-level package header.
 
 `DhcpMessage` is defined in layers, each a private module of `pydhcp.packet`
 subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
-`_encode`, `_mapping` and `_display`. Import `DhcpMessage` and
-`NoClientIdentity` from `pydhcp.packet.message` (or `pydhcp.packet`) as before;
+`_encode`, `_mapping` and `_display`. Import `DhcpMessage` from
+`pydhcp.packet.message` (or `pydhcp.packet`) as before;
 `decode`/`from_mapping` are typed to return the class they are called on.
 
 - **`DhcpMessage`** (dataclass) — the full DHCPv4 wire message. Fields:
@@ -28,9 +28,10 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   prepared to receive". It is a floor on *capability*, not on any packet, so
   nothing enforces it — see `.decode()` below.
   - **`DhcpMessage.decode(data: bytes | bytearray | memoryview) ->
-    DhcpMessage`** — parses a wire packet. Raises `ValueError` for a
+    DhcpMessage`** — parses a wire packet. Raises `DHCPDecodeError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
-    a missing `0xFF` (END) options terminator. An `htype` with no IANA name
+    a missing `0xFF` (END) options terminator, or an `op` that is neither
+    request nor reply. An `htype` with no IANA name
     is **preserved** as an unnamed `HardwareAddressType` member rather than
     raising or being rewritten, so a relay forwards the type it received.
     `hlen = 0` is accepted: RFC 4390 requires it for IPoIB. There is **no
@@ -51,13 +52,13 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       §9.10's minimum constrains the client's option 57, which `DhcpServer`
       clamps on receipt, and `encode(280)` is a legitimate call. Carrying
       any option at all needs 272.
-    - **`ValueError`** naming the field if `hops` (0–255), `hlen` (0–**16**,
+    - **`DHCPValueError`** naming the field if `hops` (0–255), `hlen` (0–**16**,
       matching `.decode()`, since `chaddr` is a 16-octet field) or `xid`
       (0–2³²−1) is out of range — previously a bare `struct.error`, which
       names the format character rather than the field and is neither
       `ValueError` nor `TypeError`. `secs` is **clamped** to 0–65535 rather
       than rejected: it is elapsed time the client reports.
-    - **`ValueError`** naming the field if `sname` (>64 octets encoded),
+    - **`DHCPValueError`** naming the field if `sname` (>64 octets encoded),
       `file` (>128) or `chaddr` (>16) does not fit — these were **silently
       truncated**, and a truncated `file` is a PXE boot filename that points
       nowhere. Values the encoder legitimately *moves* into options 66/67
@@ -95,7 +96,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   - **`.client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
     `htype.value + chaddr`; returned as uppercase colon-hex. Raises
-    **`NoClientIdentity`** (a `ValueError` subclass) when the message has
+    **`NoClientIdentityError`** (`pydhcp.exceptions`; a `ValueError`) when the message has
     none of those — `chaddr` is empty and there is no option 61 — rather
     than returning the hardware-type octet alone, which every such client
     would share. `DhcpServer` drops such a message; `CaptureEvent.client_id`

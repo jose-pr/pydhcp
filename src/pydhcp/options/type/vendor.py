@@ -5,6 +5,7 @@ import typing as _ty
 if _ty.TYPE_CHECKING:
     from typing_extensions import Self
 
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DhcpOptionType, RecordList, hashable_payload
 from .scalar import Bytes
 
@@ -21,13 +22,13 @@ class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
     def _normalize(cls, item: _ty.Any) -> Bytes:
         if isinstance(item, Bytes):
             if not item:
-                raise ValueError(f"{cls.__name__} entries must be non-empty")
+                raise DHCPValueError(f"{cls.__name__} entries must be non-empty")
             return item
         if isinstance(item, str):
             raise TypeError(f"{cls.__name__} entries must be opaque bytes")
         item_bytes: Bytes = Bytes(item)
         if not item_bytes:
-            raise ValueError(f"{cls.__name__} entries must be non-empty")
+            raise DHCPValueError(f"{cls.__name__} entries must be non-empty")
         return item_bytes
 
     def append(self, item: _ty.Any) -> None:
@@ -45,9 +46,11 @@ class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
             length = option[idx]
             idx += 1
             if length == 0:
-                raise ValueError(f"{cls.__name__} option contains a zero-length entry")
+                raise DHCPDecodeError(
+                    f"{cls.__name__} option contains a zero-length entry"
+                )
             if idx + length > size:
-                raise ValueError(f"{cls.__name__} option is truncated")
+                raise DHCPDecodeError(f"{cls.__name__} option is truncated")
             self.append(Bytes(option[idx : idx + length]))
             idx += length
         return self, size
@@ -56,9 +59,9 @@ class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
         written = 0
         for item in self:
             if not len(item):
-                raise ValueError(f"{type(self).__name__} entries must be non-empty")
+                raise DHCPValueError(f"{type(self).__name__} entries must be non-empty")
             if len(item) > 255:
-                raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+                raise DHCPValueError(f"{type(self).__name__} entry exceeds 255 bytes")
             data.append(len(item))
             data.extend(item)
             written += len(item) + 1
@@ -119,11 +122,13 @@ class EncapsulatedOptions(RecordList[TlvOption]):
             if code == 255:
                 break
             if idx >= size:
-                raise ValueError(f"{cls.__name__} option is truncated: missing length")
+                raise DHCPDecodeError(
+                    f"{cls.__name__} option is truncated: missing length"
+                )
             length = option[idx]
             idx += 1
             if idx + length > size:
-                raise ValueError(f"{cls.__name__} option is truncated")
+                raise DHCPDecodeError(f"{cls.__name__} option is truncated")
             self.append(TlvOption(code, option[idx : idx + length]))
             idx += length
         return self, idx
@@ -169,20 +174,20 @@ class ViVendorSpecificInformationRecord(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 5:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         enterprise_number = int.from_bytes(option[:4], "big")
         length = option[4]
         if len(option) < 5 + length:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return cls(enterprise_number, option[5 : 5 + length]), 5 + length
 
     def _dhcp_write(self, data: bytearray) -> int:
         if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
-            raise ValueError(
+            raise DHCPValueError(
                 f"{type(self).__name__} enterprise_number must fit in 32 bits"
             )
         if len(self.value) > 255:
-            raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+            raise DHCPValueError(f"{type(self).__name__} entry exceeds 255 bytes")
         data.extend(self.enterprise_number.to_bytes(4, "big"))
         data.append(len(self.value))
         data.extend(self.value)
@@ -224,25 +229,25 @@ class ViVendorClassRecord(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 5:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         enterprise_number = int.from_bytes(option[:4], "big")
         length = option[4]
         if len(option) < 5 + length:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         payload, read = UserClass._dhcp_read(option[5 : 5 + length])
         if read != length:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return cls(enterprise_number, payload), 5 + length
 
     def _dhcp_write(self, data: bytearray) -> int:
         if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
-            raise ValueError(
+            raise DHCPValueError(
                 f"{type(self).__name__} enterprise_number must fit in 32 bits"
             )
         payload = bytearray()
         payload_len = self.value._dhcp_write(payload)
         if payload_len > 255:
-            raise ValueError(f"{type(self).__name__} entry exceeds 255 bytes")
+            raise DHCPValueError(f"{type(self).__name__} entry exceeds 255 bytes")
         data.extend(self.enterprise_number.to_bytes(4, "big"))
         data.append(payload_len)
         data.extend(payload)

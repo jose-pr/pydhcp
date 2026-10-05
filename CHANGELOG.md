@@ -7,8 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **`pydhcp.exceptions`**, re-exported at the root: `DHCPError` (the base),
+  `DHCPDecodeError` and `DHCPValueError` (each also a `ValueError`) and
+  `NoClientIdentityError`. Every decoder raises `DHCPDecodeError` and nothing
+  else for malformed octets: `DhcpMessage.decode` and each option codec used
+  to raise a bare `ValueError` (or, for a short address, an
+  `ipaddress.AddressValueError`, for a bad UTF-8 label a
+  `UnicodeDecodeError`, for a destination with host bits set an `ipaddress`
+  `ValueError`). `except ValueError` keeps working.
+
 ### Changed
 
+- **Breaking: `NoClientIdentity` is now `pydhcp.NoClientIdentityError`**
+  (`pydhcp.exceptions`), no longer importable from `pydhcp.packet.message`.
+  No alias is kept. It is a `ValueError` as before.
 - **Breaking: `acquire_lease` takes a keyword `commit` and runs on the server
   itself.** The signature is `acquire_lease(client_id, server_id, msg, *, commit=True)`:
   an override must accept `commit` (one that does not raises `TypeError` for every

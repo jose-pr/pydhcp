@@ -1,3 +1,9 @@
+from .exceptions import (
+    DHCPError as DHCPError,
+    DHCPDecodeError as DHCPDecodeError,
+    DHCPValueError as DHCPValueError,
+    NoClientIdentityError as NoClientIdentityError,
+)
 from .listener import (
     DhcpListener as DhcpListener,
     AsyncDhcpListener as AsyncDhcpListener,
@@ -88,6 +94,10 @@ from .lease import (
 )
 
 __all__ = [
+    "DHCPError",
+    "DHCPDecodeError",
+    "DHCPValueError",
+    "NoClientIdentityError",
     "DhcpListener",
     "AsyncDhcpListener",
     "Transport",

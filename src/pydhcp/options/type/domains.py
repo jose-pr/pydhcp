@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing as _ty
+from ...exceptions import DHCPDecodeError
 from .base import DhcpOptionType
 from .domain import (
     MAX_NAME_OCTETS,
@@ -94,7 +95,7 @@ class DomainList(DhcpOptionType, list[str]):
             is_ptr = ptr_or_len & 0xC0
             if is_ptr:
                 if is_ptr != 0xC0:
-                    raise ValueError(
+                    raise DHCPDecodeError(
                         f"search list octet {ptr_or_len:#04x} at offset {start} sets a "
                         "reserved label-length prefix; RFC 1035 s4.1.4 defines only "
                         "00 (label) and 11 (compression pointer)"
@@ -113,16 +114,21 @@ class DomainList(DhcpOptionType, list[str]):
             else:
                 dc = view[id : ptr_or_len + id]
                 if len(dc) != ptr_or_len:
-                    raise ValueError(
+                    raise DHCPDecodeError(
                         f"search list is truncated: a label declares {ptr_or_len} "
                         f"octets but only {len(dc)} remain"
                     )
-                label = dc.tobytes().decode()
+                try:
+                    label = dc.tobytes().decode()
+                except UnicodeDecodeError as exc:
+                    raise DHCPDecodeError(
+                        "search list has a label that is not valid UTF-8"
+                    ) from exc
                 if "." in label:
                     # Same reason as `domain.decode_domain_name`: these names
                     # are joined with ".", so a label already containing one
                     # re-encodes as a different number of labels than arrived.
-                    raise ValueError(
+                    raise DHCPDecodeError(
                         f"search list has a label containing '.' ({label!r}), "
                         "which cannot be represented unambiguously in dotted form"
                     )
@@ -146,7 +152,7 @@ class DomainList(DhcpOptionType, list[str]):
             while True:
                 component = components.get(offset)
                 if component is None:
-                    raise ValueError(
+                    raise DHCPDecodeError(
                         f"search list pointer to offset {offset} does not point at "
                         "the start of a label or a root label"
                     )
@@ -156,12 +162,12 @@ class DomainList(DhcpOptionType, list[str]):
                 if kind == "ptr":
                     hops += 1
                     if hops > MAX_POINTER_HOPS:
-                        raise ValueError(
+                        raise DHCPDecodeError(
                             f"search list name follows more than {MAX_POINTER_HOPS} "
                             "compression pointers"
                         )
                     if value >= owner:
-                        raise ValueError(
+                        raise DHCPDecodeError(
                             f"search list pointer to offset {value} does not point "
                             f"backwards of the name starting at offset {owner} "
                             "(RFC 1035 s4.1.4: a pointer refers to a prior name)"
@@ -170,7 +176,7 @@ class DomainList(DhcpOptionType, list[str]):
                     continue
                 octets += 1 + len(value.encode())
                 if octets > MAX_NAME_OCTETS:
-                    raise ValueError(
+                    raise DHCPDecodeError(
                         f"search list name exceeds {MAX_NAME_OCTETS} octets "
                         "(RFC 1035 s2.3.4)"
                     )

@@ -16,6 +16,7 @@ imports its siblings directly -- and keeping this a leaf keeps it from coming ba
 """
 
 from __future__ import annotations
+from ...exceptions import DHCPDecodeError, DHCPValueError
 
 #: RFC 1035 §2.3.4: 63 octets per label, 255 per name.
 MAX_LABEL_OCTETS = 63
@@ -47,22 +48,22 @@ def split_domain_name(
     parts = name.rstrip(".").split(".") if name else []
     labels = [label for label in parts if label != ""]
     if not labels and not allow_root:
-        raise ValueError(f"{what} must not be empty")
+        raise DHCPValueError(f"{what} must not be empty")
     if any(label == "" for label in parts):
-        raise ValueError(f"{what} must not contain empty labels")
+        raise DHCPValueError(f"{what} must not contain empty labels")
 
     octets = 1  # the terminating root label
     for label in labels:
         encoded = len(label.encode("utf-8"))
         if encoded > MAX_LABEL_OCTETS:
-            raise ValueError(
+            raise DHCPValueError(
                 f"{what} label exceeds {MAX_LABEL_OCTETS} octets: {label!r}"
             )
         octets += 1 + encoded
     if octets > MAX_NAME_OCTETS:
         # Measured on the uncompressed form, per RFC 1035: how many octets a
         # given encoder saves with pointers is not the name's business.
-        raise ValueError(f"{what} exceeds {MAX_NAME_OCTETS} octets")
+        raise DHCPValueError(f"{what} exceeds {MAX_NAME_OCTETS} octets")
     return labels
 
 
@@ -97,18 +98,23 @@ def decode_domain_name(
     size = len(option)
     while True:
         if idx >= size:
-            raise ValueError(f"{what} is truncated")
+            raise DHCPDecodeError(f"{what} is truncated")
         length = option[idx]
         idx += 1
         if length == 0:
             return ".".join(labels), idx - start
         if length & _POINTER_MASK:
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"{what} must not use compression pointers (found {length:#04x})"
             )
         if idx + length > size:
-            raise ValueError(f"{what} is truncated")
-        label = option[idx : idx + length].tobytes().decode("utf-8")
+            raise DHCPDecodeError(f"{what} is truncated")
+        try:
+            label = option[idx : idx + length].tobytes().decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise DHCPDecodeError(
+                f"{what} has a label that is not valid UTF-8"
+            ) from exc
         if "." in label:
             # The names here are joined with "." to make a string, so a label
             # that already contains one is indistinguishable from a boundary and
@@ -118,7 +124,7 @@ def decode_domain_name(
             # so a dot inside a label is legal on the wire and merely
             # unrepresentable in this form -- refusing it says so, where
             # accepting it silently rewrites the name.
-            raise ValueError(
+            raise DHCPDecodeError(
                 f"{what} has a label containing '.' ({label!r}), which cannot "
                 "be represented unambiguously in dotted form"
             )

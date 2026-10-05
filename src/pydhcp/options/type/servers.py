@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import typing as _ty
+from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import nvt as _nvt
 from ...network import IPv4 as _IP
 from .base import DhcpOptionType
@@ -43,7 +44,7 @@ class RdnssSelection(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 9:
-            raise ValueError(f"{cls.__name__} option is truncated")
+            raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         flags = option[0]
         primary = _IP(option[1:5].tobytes())
         secondary = _IP(option[5:9].tobytes())
@@ -136,7 +137,7 @@ class SipServers(DhcpOptionType):
                     encoding = self.ENCODING_DOMAIN
                     break
         if encoding not in (self.ENCODING_DOMAIN, self.ENCODING_ADDRESS):
-            raise ValueError(f"SipServers encoding must be 0 or 1, got {encoding}")
+            raise DHCPValueError(f"SipServers encoding must be 0 or 1, got {encoding}")
         if encoding == self.ENCODING_ADDRESS:
             items = [str(_IP(item)) for item in items]
         self.encoding = int(encoding)
@@ -145,12 +146,14 @@ class SipServers(DhcpOptionType):
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 1:
-            raise ValueError("SipServers option is truncated: missing encoding octet")
+            raise DHCPDecodeError(
+                "SipServers option is truncated: missing encoding octet"
+            )
         encoding = option[0]
         body = option[1:]
         if encoding == cls.ENCODING_ADDRESS:
             if len(body) % 4:
-                raise ValueError(
+                raise DHCPDecodeError(
                     "SipServers address list length must be a multiple of 4 plus one"
                 )
             values = [
@@ -165,7 +168,7 @@ class SipServers(DhcpOptionType):
                 values.append(name)
                 idx += read
         else:
-            raise ValueError(f"SipServers encoding must be 0 or 1, got {encoding}")
+            raise DHCPDecodeError(f"SipServers encoding must be 0 or 1, got {encoding}")
         return cls(values, encoding), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -221,14 +224,14 @@ class StatusCode(DhcpOptionType):
             code, message = code
         value = int(code)
         if not 0 <= value <= 255:
-            raise ValueError(f"StatusCode code must fit one octet, got {value}")
+            raise DHCPValueError(f"StatusCode code must fit one octet, got {value}")
         self.code = value
         self.message = str(message or "")
 
     @classmethod
     def _dhcp_read(cls, option: memoryview) -> tuple[Self, int]:
         if len(option) < 1:
-            raise ValueError("StatusCode option is truncated: missing code octet")
+            raise DHCPDecodeError("StatusCode option is truncated: missing code octet")
         message = _nvt.decode(option[1:].tobytes(), "StatusCode message")
         return cls(option[0], message), len(option)
 
@@ -281,7 +284,7 @@ class PcpServerList(DhcpOptionType, list[list[str]]):
             entry = [entry]
         addresses = [str(_IP(address)) for address in entry]
         if not addresses:
-            raise ValueError("PcpServerList entry must hold at least one address")
+            raise DHCPValueError("PcpServerList entry must hold at least one address")
         return addresses
 
     def append(self, entry: _ty.Any) -> None:
@@ -298,12 +301,12 @@ class PcpServerList(DhcpOptionType, list[list[str]]):
             length = option[idx]
             idx += 1
             if length == 0 or length % 4:
-                raise ValueError(
+                raise DHCPDecodeError(
                     "PcpServerList entry length must be a non-zero multiple of 4, "
                     f"got {length}"
                 )
             if idx + length > len(option):
-                raise ValueError("PcpServerList option is truncated")
+                raise DHCPDecodeError("PcpServerList option is truncated")
             self.append(
                 [
                     str(_IP(option[pos : pos + 4].tobytes()))
@@ -312,7 +315,7 @@ class PcpServerList(DhcpOptionType, list[list[str]]):
             )
             idx += length
         if not self:
-            raise ValueError("PcpServerList option is empty")
+            raise DHCPDecodeError("PcpServerList option is empty")
         return self, len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:

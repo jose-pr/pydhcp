@@ -6,9 +6,9 @@ import textwrap as _tw
 import typing as _ty
 
 from .. import nvt as _nvt
+from ..exceptions import NoClientIdentityError
 from ..log import LOGGER
 from ..options import BaseDhcpOptionCode, DhcpOptionCode, type as _type
-from ._fields import NoClientIdentity
 from ._mapping import _MessageMapping
 
 if _ty.TYPE_CHECKING:
@@ -26,7 +26,7 @@ class _MessageDisplay(_MessageMapping):
         """Stable identity for this client, used to key leases.
 
         Option 61 when present, else the hardware type and address. Raises
-        `NoClientIdentity` when the message carries neither: `hlen` may legally
+        `NoClientIdentityError` when the message carries neither: `hlen` may legally
         be 0 (RFC 4390 requires exactly that for IPoIB, which supplies option 61
         instead), and the old fallback then produced the hardware-type octet
         alone -- one identifier, `"01"`, shared by every such client. Two of them
@@ -41,7 +41,7 @@ class _MessageDisplay(_MessageMapping):
                 cid = func(_ty.cast("DhcpMessage", self))
             if not cid:
                 if not self.chaddr:
-                    raise NoClientIdentity(
+                    raise NoClientIdentityError(
                         "message has neither a client identifier (option 61) nor "
                         f"a hardware address (hlen=0, htype={self.htype.label()})"
                     )
