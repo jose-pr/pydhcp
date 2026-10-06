@@ -36,6 +36,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking: the `listen` argument has one grammar, and some forms mean
+  something else.** `("127.0.0.1", "6767")` bound ports 6 and 7 and
+  `("127.0.0.1", True)` bound port 1; both, and any bare number or `bool` as an
+  address or a port, are now refused (`TypeError`) before anything is bound. A
+  pair may be a list, so the `["127.0.0.1", 6767]` a JSON, YAML or TOML file
+  delivers is one binding (it was two, the second `0.0.26.111`), and its port
+  may be digit text. A pair is read by `netimps.split_host`: a port outside
+  0-65535 and a port written twice that disagrees (`("*:67", 68)` bound 68) are
+  refused. `listen=""`, `" , "`, `[]` and a pair with no port are refused with
+  `ValueError` where they bound no socket and left `serve_forever()` to fail or
+  spin; `pydhcp server|relay|capture --listen ""` is an error and no longer the
+  wildcard. `None` as a host is the wildcard everywhere: `(None, 6767)` was
+  `127.0.0.1:6767` and is now `0.0.0.0:6767`, as is `("", 6767)`.
 - **A line a sender can provoke is rate-limited at every site.** A flood of junk
   datagrams, forged requests, a failing handler or a failing pin used to write
   one WARNING or ERROR per datagram (300 forged packets gave 300 records at each

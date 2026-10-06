@@ -15,6 +15,10 @@ server:
 pydhcp server --config server.yaml
 ```
 
+`listen` is text (`"127.0.0.1:6767,127.0.0.2:6768"`), an `[address, port]` pair
+(`listen: [127.0.0.1, 6767]`) or a list of either. `None`/`null` as the address is the
+wildcard; an empty value, a boolean or a bare number is an error.
+
 TOML support requires Python 3.11+ (stdlib `tomllib`) or the optional `tomli` package on older versions.
 
 ## Custom lease backend

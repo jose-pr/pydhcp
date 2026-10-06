@@ -64,9 +64,25 @@ everything below from `pydhcp.listener` itself.
   every listener and role; the rest are keywords. **A constructor performs no
   I/O**: no socket is opened, no adapter listed and no file read until
   `.bind()` (the packet-info probe and the wildcard expansion included).
-  `listen`: `None`/`"*"` (wildcard), a `"host:port"` string, an `IPv4`, a
-  `(host, port_or_ports)` tuple, or a sequence of any of those (comma-joined
-  strings split automatically). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
+  `listen` is **a binding or a sequence of bindings**, read by one parser
+  (the constructors, `pydhcp server|relay|capture --listen` and the `listen`
+  key of a configuration file). `None` is the wildcard on the default ports. A
+  binding is: text — `"host"`, `"host:port"`, `"*"`, `"*:port"`, `":port"`, several
+  joined by commas; an `IPv4Address`, or `None` (the wildcard); or a **pair
+  `(host, ports)` as a tuple or a list** (a JSON, YAML or TOML file only has
+  lists, so `["127.0.0.1", 6767]` is one binding). In a pair the host is
+  `None`, blank text, `"*"`, text or an `IPv4Address`, and the ports are an
+  `int`, digit text, `None` (the default ports) or a sequence of those
+  (`("127.0.0.1", [6767, 6768])`); the pair is read by
+  `netimps.split_host`, so a type, a range (0-65535) and a port written twice
+  that disagrees (`("*:67", 68)`) are checked. A sequence of two items is a pair
+  when the second is port-like (`None`, an `int`, digit text, a list of those),
+  else two bindings (`["127.0.0.1", "127.0.0.2"]`). **`None` as a host is the
+  wildcard everywhere**, `(None, 6767)` included. Refused at construction with
+  nothing bound: a `bool` or a bare number (`True`, `6767`) as an address or
+  a port (`TypeError`), an empty result (`""`, `" , "`, `[]`, a pair with no port;
+  `ValueError`), a bad or out-of-range port, and a host that is not an IPv4
+  address (`ipaddress.AddressValueError`). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
   `"*:67"`, `"0.0.0.0:67"`, `("0.0.0.0", 67)` — binds one wildcard socket and
   learns each datagram's arrival interface through `netimps.UDPEndpoint`
   (packet info), on Linux, macOS and Windows and on every supported CPython.
@@ -280,8 +296,9 @@ everything below from `pydhcp.listener` itself.
   `None` for both and the hooks use the driver's clock instead. Handlers use
   `context.transport`/`context.interface` to reply out the same interface a
   request arrived on.
-- **`ListenLike`** — type alias for the `listen` argument accepted above (`None`, an
-  address, an address and its ports, or a sequence of those).
+- **`ListenLike`** — type alias for the `listen` argument accepted above: `None`, one
+  binding (text, an `IPv4Address`, or a `(host, ports)` pair as tuple or list), or a
+  sequence of bindings.
 
 **Gotcha**: a socket bound to a specific loopback address (`127.0.0.1`, not
 `0.0.0.0`) cannot originate a UDP broadcast send on POSIX (Windows is lenient
