@@ -10,21 +10,21 @@ from __future__ import annotations
 import pytest
 
 from pydhcp.options import DHCPOptions
-from pydhcp.options.type import ClientFqdn
+from pydhcp.options.type import ClientFQDN
 
-E = ClientFqdn.FLAG_E
-S = ClientFqdn.FLAG_S
+E = ClientFQDN.FLAG_E
+S = ClientFQDN.FLAG_S
 
 #: Encoded (E bit) names, as RFC 1035 s3.1 puts them on the wire.
 HOST_EXAMPLE = b"\x04host\x07example"
 QUALIFIED = HOST_EXAMPLE + b"\x00"
 
 
-def _decode(wire: bytes) -> ClientFqdn:
-    return ClientFqdn._dhcp_decode(bytearray(wire))
+def _decode(wire: bytes) -> ClientFQDN:
+    return ClientFQDN._dhcp_decode(bytearray(wire))
 
 
-def _encode(value: ClientFqdn) -> bytes:
+def _encode(value: ClientFQDN) -> bytes:
     return bytes(value._dhcp_encode())
 
 
@@ -76,25 +76,25 @@ def test_reserved_flag_bits_are_ignored_on_receive(flags: int) -> None:
 def test_a_sender_clears_the_reserved_bits_by_refusing_to_set_them() -> None:
     """RFC 4702 s2.1: senders MUST clear the MBZ bits."""
     with pytest.raises(ValueError, match="reserved"):
-        ClientFqdn("host", flags=0x45)
+        ClientFQDN("host", flags=0x45)
 
 
 def test_a_partial_name_is_spelled_by_the_partial_argument() -> None:
-    value = ClientFqdn("host", flags=E, partial=True)
+    value = ClientFQDN("host", flags=E, partial=True)
     assert _encode(value) == bytes([E, 0, 0]) + b"\x04host"
-    assert _encode(ClientFqdn("host", flags=E)) == bytes([E, 0, 0]) + b"\x04host\x00"
-    assert value != ClientFqdn("host", flags=E)
-    assert ClientFqdn(value) == value
+    assert _encode(ClientFQDN("host", flags=E)) == bytes([E, 0, 0]) + b"\x04host\x00"
+    assert value != ClientFQDN("host", flags=E)
+    assert ClientFQDN(value) == value
 
 
 def test_the_ascii_form_has_no_partial_name() -> None:
     with pytest.raises(ValueError, match="E bit"):
-        ClientFqdn("host", flags=0, partial=True)
+        ClientFQDN("host", flags=0, partial=True)
 
 
 def test_the_json_form_round_trips_a_partial_name() -> None:
-    value = ClientFqdn("host", flags=E, partial=True)
-    assert ClientFqdn(value.__json__()) == value
+    value = ClientFQDN("host", flags=E, partial=True)
+    assert ClientFQDN(value.__json__()) == value
 
 
 def test_a_message_option_with_a_partial_name_decodes() -> None:

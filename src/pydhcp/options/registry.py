@@ -14,7 +14,7 @@ DHCPOptionCode.BOOTFILE_NAME.register_type(String)
 DHCPOptionCode.BOOT_FILE_SIZE.register_type(U16)
 # RFC 4702 s2.1: Flags, RCODE1, RCODE2, then the name -- not a bare string,
 # which silently dropped the name every Windows client sends.
-DHCPOptionCode.CLIENT_FQDN.register_type(ClientFqdn)
+DHCPOptionCode.CLIENT_FQDN.register_type(ClientFQDN)
 # RFC 3442: the option carries one or more destination/router pairs, and a
 # server sending it SHOULD include the default route -- so real options
 # nearly always hold more than one.
@@ -61,7 +61,7 @@ DHCPOptionCode.VI_VENDOR_CLASS.register_type(ViVendorClass)
 DHCPOptionCode.CAPWAP_AC_V4.register_type(List[IPv4AddressOption])
 DHCPOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.register_type(DomainList)
 DHCPOptionCode.IPV4_ADDRESS_ANDSF.register_type(List[IPv4AddressOption])
-DHCPOptionCode.V4_SZTP_REDIRECT.register_type(UriList)
+DHCPOptionCode.V4_SZTP_REDIRECT.register_type(URIList)
 # RFC 8973 s5.2: an uncompressed RFC 1035 label sequence, not dotted text.
 DHCPOptionCode.V4_DOTS_RI.register_type(DomainName)
 DHCPOptionCode.V4_DOTS_ADDRESS.register_type(List[IPv4AddressOption])
@@ -75,7 +75,7 @@ DHCPOptionCode.DHCP_STATE.register_type(U8)
 DHCPOptionCode.DATA_SOURCE.register_type(U8)
 # RFC 7291 s4: one or more (List-Length, addresses) entries. A flat list read
 # the length octet as address data.
-DHCPOptionCode.V4_PCP_SERVER.register_type(PcpServerList)
+DHCPOptionCode.V4_PCP_SERVER.register_type(PCPServerList)
 DHCPOptionCode.CONFIGURATION_FILE.register_type(String)
 DHCPOptionCode.PATH_PREFIX.register_type(String)
 DHCPOptionCode.REBOOT_TIME.register_type(U32)
@@ -131,7 +131,7 @@ DHCPOptionCode.IRC_SERVER.register_type(List[IPv4AddressOption])
 DHCPOptionCode.STREETTALK_SERVER.register_type(List[IPv4AddressOption])
 DHCPOptionCode.STDA_SERVER.register_type(List[IPv4AddressOption])
 # RFC 3361 s3.1: a leading encoding octet selects names (0) or addresses (1).
-DHCPOptionCode.SIP_SERVERS.register_type(SipServers)
+DHCPOptionCode.SIP_SERVERS.register_type(SIPServers)
 DHCPOptionCode.ARP_TIMEOUT.register_type(U32)
 DHCPOptionCode.IPV4_ADDRESS_MOS.register_type(MoSIpv4AddressList)
 DHCPOptionCode.IPV4_FQDN_MOS.register_type(MoSFqdnList)
@@ -151,7 +151,7 @@ DHCPOptionCode.RAPID_COMMIT.register_type(Flag)
 # two-algorithm payload undecodable, and False wrote the undefined 0.
 DHCPOptionCode.FORCERENEW_NONCE_CAPABLE.register_type(List[U8])
 # RFC 6731 s4.3 defers to RFC 3315 s8: a domain name list in DHCP 'MUST NOT
-# be stored in compressed form'. RdnssSelection holds an UncompressedDomainList.
-DHCPOptionCode.RDNSS_SELECTION.register_type(RdnssSelection)
+# be stored in compressed form'. RDNSSSelection holds an UncompressedDomainList.
+DHCPOptionCode.RDNSS_SELECTION.register_type(RDNSSSelection)
 # RFC 6926 s6.2.2: a status octet plus an optional UTF-8 message.
 DHCPOptionCode.STATUS_CODE.register_type(StatusCode)

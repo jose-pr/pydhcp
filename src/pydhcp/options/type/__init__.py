@@ -54,16 +54,16 @@ from .domains import (
     UncompressedDomainList as UncompressedDomainList,
     DomainName as DomainName,
 )
-from .fqdn import ClientFqdn as ClientFqdn
+from .fqdn import ClientFQDN as ClientFQDN
 from .servers import (
-    RdnssSelection as RdnssSelection,
-    SipServers as SipServers,
+    RDNSSSelection as RDNSSSelection,
+    SIPServers as SIPServers,
     StatusCode as StatusCode,
-    PcpServerList as PcpServerList,
+    PCPServerList as PCPServerList,
 )
 from .scalar import (
     Bytes as Bytes,
-    UriList as UriList,
+    URIList as URIList,
     String as String,
     OctetString as OctetString,
     Boolean as Boolean,
@@ -79,7 +79,7 @@ from .scalar import (
 )
 from .vendor import (
     UserClass as UserClass,
-    TlvOption as TlvOption,
+    TLVOption as TLVOption,
     EncapsulatedOptions as EncapsulatedOptions,
     VendorSpecificInformation as VendorSpecificInformation,
     RelayAgentInformation as RelayAgentInformation,
@@ -100,14 +100,14 @@ __all__ = [
     "StaticRoute",
     "DomainList",
     "UncompressedDomainList",
-    "RdnssSelection",
-    "ClientFqdn",
-    "SipServers",
+    "RDNSSSelection",
+    "ClientFQDN",
+    "SIPServers",
     "DomainName",
     "StatusCode",
-    "PcpServerList",
+    "PCPServerList",
     "Bytes",
-    "UriList",
+    "URIList",
     "String",
     "OctetString",
     "Boolean",
@@ -121,7 +121,7 @@ __all__ = [
     "ClientIdentifier",
     "OptionOverload",
     "UserClass",
-    "TlvOption",
+    "TLVOption",
     "EncapsulatedOptions",
     "VendorSpecificInformation",
     "RelayAgentInformation",

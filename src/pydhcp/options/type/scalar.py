@@ -43,10 +43,10 @@ class Bytes(DHCPOptionType, bytes):
         return self.hex()
 
 
-_UriListT = _ty.TypeVar("_UriListT", bound="UriList")
+_URIListT = _ty.TypeVar("_URIListT", bound="URIList")
 
 
-class UriList(DHCPOptionType, list[str]):
+class URIList(DHCPOptionType, list[str]):
     """List of UTF-8 URIs encoded as repeated U16-length-prefixed entries."""
 
     def __init__(self, *items: _ty.Any):
@@ -69,7 +69,7 @@ class UriList(DHCPOptionType, list[str]):
         list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
-    def _dhcp_read(cls: type[_UriListT], option: memoryview) -> tuple[_UriListT, int]:
+    def _dhcp_read(cls: type[_URIListT], option: memoryview) -> tuple[_URIListT, int]:
         self = cls()
         idx = 0
         size = len(option)

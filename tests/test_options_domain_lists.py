@@ -14,7 +14,7 @@ import pytest
 
 from pydhcp.options import DHCPOptions
 from pydhcp.options.code import DHCPOptionCode
-from pydhcp.options.type import DomainList, RdnssSelection, UncompressedDomainList
+from pydhcp.options.type import DomainList, RDNSSSelection, UncompressedDomainList
 
 #: A list whose second name is a suffix-match for the first, so a compressing
 #: encoder has something to point at and the difference is visible in bytes.
@@ -70,7 +70,7 @@ def test_rdnss_selection_domains_are_written_uncompressed() -> None:
     in section 4.1.4 of RFC 1035".
     """
     options = DHCPOptions()
-    options[DHCPOptionCode.RDNSS_SELECTION] = RdnssSelection(
+    options[DHCPOptionCode.RDNSS_SELECTION] = RDNSSSelection(
         0, "10.0.0.1", "10.0.0.2", SHARED_SUFFIX
     )
 
@@ -80,7 +80,7 @@ def test_rdnss_selection_domains_are_written_uncompressed() -> None:
     assert payload[9:] == UNCOMPRESSED
 
     decoded = options.get(146)
-    assert isinstance(decoded, RdnssSelection)
+    assert isinstance(decoded, RDNSSSelection)
     assert list(decoded.domains) == SHARED_SUFFIX
 
 
@@ -167,11 +167,11 @@ def test_assigning_a_bare_string_to_the_search_list() -> None:
 
 
 def test_rdnss_selection_normalizes_a_bare_string_too() -> None:
-    """`RdnssSelection(..., "a.com").domains` was `["a", ".", "c", "o", "m"]`.
+    """`RDNSSSelection(..., "a.com").domains` was `["a", ".", "c", "o", "m"]`.
 
     Which is not merely wrong, it is unencodable: "." is an empty label.
     """
-    assert list(RdnssSelection(0, "10.0.0.1", "10.0.0.2", "a.com").domains) == ["a.com"]
+    assert list(RDNSSSelection(0, "10.0.0.1", "10.0.0.2", "a.com").domains) == ["a.com"]
 
 
 def test_entries_must_be_strings() -> None:

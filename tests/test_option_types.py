@@ -14,15 +14,15 @@ from pydhcp.options.type import (
     PolicyFilter,
     StaticRoute,
     UserClass,
-    TlvOption,
+    TLVOption,
     VendorSpecificInformation,
     RelayAgentInformation,
     ViVendorSpecificInformationRecord,
     ViVendorSpecificInformation,
     ViVendorClassRecord,
     ViVendorClass,
-    RdnssSelection,
-    UriList,
+    RDNSSSelection,
+    URIList,
     I32,
     MoSIpv4AddressRecord,
     MoSFqdnRecord,
@@ -270,7 +270,7 @@ def test_vendor_specific_information_preserves_opaque_bytes():
     assert decoded == value
     assert length == len(payload)
 
-    relay = RelayAgentInformation([TlvOption(1, b"abc")])
+    relay = RelayAgentInformation([TLVOption(1, b"abc")])
     buf = bytearray()
     assert relay._dhcp_write(buf) == 5
     decoded, length = RelayAgentInformation._dhcp_read(memoryview(buf))
@@ -333,16 +333,16 @@ def test_vi_vendor_class_uses_enterprise_records_with_opaque_items():
 
 
 def test_rdnss_selection_round_trip():
-    value = RdnssSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
+    value = RDNSSSelection(1, "192.0.2.1", "192.0.2.2", ["example.com"])
     buf = bytearray()
     wrote = value._dhcp_write(buf)
     assert wrote == len(buf)
-    decoded, length = RdnssSelection._dhcp_read(memoryview(buf))
+    decoded, length = RDNSSSelection._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == len(buf)
 
     with pytest.raises(ValueError, match="truncated"):
-        RdnssSelection._dhcp_read(memoryview(b"\x01\x02"))
+        RDNSSSelection._dhcp_read(memoryview(b"\x01\x02"))
 
 
 def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
@@ -469,12 +469,12 @@ def test_domain_list_survives_domain_after_pointer_terminated_domain():
 
 
 def test_uri_list_option_round_trip_and_truncation():
-    value = UriList(["https://bootstrap.example/one", "https://bootstrap.example/two"])
+    value = URIList(["https://bootstrap.example/one", "https://bootstrap.example/two"])
     buf = bytearray()
     wrote = value._dhcp_write(buf)
     assert wrote == len(buf)
 
-    decoded, length = UriList._dhcp_read(memoryview(buf))
+    decoded, length = URIList._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == len(buf)
 
@@ -484,12 +484,12 @@ def test_uri_list_option_round_trip_and_truncation():
         + len(b"https://bootstrap.example/two").to_bytes(2, "big")
         + b"https://bootstrap.example/two"
     )
-    decoded_joined, joined_length = UriList._dhcp_read(memoryview(joined))
+    decoded_joined, joined_length = URIList._dhcp_read(memoryview(joined))
     assert decoded_joined == value
     assert joined_length == len(joined)
 
     with pytest.raises(ValueError, match="truncated"):
-        UriList._dhcp_read(memoryview(b"\x00\x10short"))
+        URIList._dhcp_read(memoryview(b"\x00\x10short"))
 
 
 def test_client_identifier_option():
@@ -664,10 +664,10 @@ def test_client_fqdn_decodes_the_form_windows_clients_send():
     splits at the first NUL -- so a server reading option 81 for DDNS saw no
     name at all, with no error to notice.
     """
-    from pydhcp.options.type import ClientFqdn
+    from pydhcp.options.type import ClientFQDN
 
     wire = bytes([0x00, 0x00, 0x00]) + b"DESKTOP-K7N2A91"
-    decoded = ClientFqdn._dhcp_decode(bytearray(wire))
+    decoded = ClientFQDN._dhcp_decode(bytearray(wire))
 
     assert decoded.name == "DESKTOP-K7N2A91"
     assert decoded.flags == 0 and not decoded.encoded
@@ -676,10 +676,10 @@ def test_client_fqdn_decodes_the_form_windows_clients_send():
 
 def test_client_fqdn_round_trips_the_canonical_encoded_form():
     """E bit set means RFC 1035 wire format (RFC 4702 s2.1)."""
-    from pydhcp.options.type import ClientFqdn
+    from pydhcp.options.type import ClientFQDN
 
-    value = ClientFqdn(
-        "pc-lab7.example.com", flags=ClientFqdn.FLAG_E | ClientFqdn.FLAG_S
+    value = ClientFQDN(
+        "pc-lab7.example.com", flags=ClientFQDN.FLAG_E | ClientFQDN.FLAG_S
     )
     wire = bytes(value._dhcp_encode())
 
@@ -687,36 +687,36 @@ def test_client_fqdn_round_trips_the_canonical_encoded_form():
     assert wire[3:] == bytes([7]) + b"pc-lab7" + bytes([7]) + b"example" + bytes(
         [3]
     ) + b"com" + bytes([0])
-    assert ClientFqdn._dhcp_decode(bytearray(wire)) == value
+    assert ClientFQDN._dhcp_decode(bytearray(wire)) == value
 
 
 def test_client_fqdn_rejects_malformed_input():
-    from pydhcp.options.type import ClientFqdn
+    from pydhcp.options.type import ClientFQDN
     import pytest as _pytest
 
     with _pytest.raises(ValueError):
-        ClientFqdn._dhcp_decode(bytearray([0x00, 0x00]))  # shorter than 3
+        ClientFQDN._dhcp_decode(bytearray([0x00, 0x00]))  # shorter than 3
     # Reserved bits are ignored on receive (RFC 4702 s2.1), and refused on send.
-    assert ClientFqdn._dhcp_decode(bytearray([0xF0, 0x00, 0x00])).flags == 0
+    assert ClientFQDN._dhcp_decode(bytearray([0xF0, 0x00, 0x00])).flags == 0
     with _pytest.raises(ValueError):
-        ClientFqdn("", flags=0xF0)
+        ClientFQDN("", flags=0xF0)
     with _pytest.raises(ValueError):
         # E bit set, but a compression pointer, which RFC 4702 s3.1 forbids
-        ClientFqdn._dhcp_decode(bytearray([0x04, 0x00, 0x00, 0xC0, 0x00]))
+        ClientFQDN._dhcp_decode(bytearray([0x04, 0x00, 0x00, 0xC0, 0x00]))
 
 
 def test_sip_servers_carries_the_encoding_octet():
     """RFC 3361 s3.1: enc 1 is an address list, and its length must be a
     multiple of 4 plus one. Without the octet, a phone reads the first address
     byte as the encoding and rejects the option."""
-    from pydhcp.options.type import SipServers
+    from pydhcp.options.type import SIPServers
 
-    value = SipServers(["192.0.2.1", "192.0.2.2"])
+    value = SIPServers(["192.0.2.1", "192.0.2.2"])
     wire = bytes(value._dhcp_encode())
 
-    assert wire[0] == SipServers.ENCODING_ADDRESS
+    assert wire[0] == SIPServers.ENCODING_ADDRESS
     assert len(wire) % 4 == 1
-    assert SipServers._dhcp_decode(bytearray(wire)) == value
+    assert SIPServers._dhcp_decode(bytearray(wire)) == value
     assert value.__json__() == {
         "encoding": "address",
         "values": ["192.0.2.1", "192.0.2.2"],
@@ -724,27 +724,27 @@ def test_sip_servers_carries_the_encoding_octet():
 
 
 def test_sip_servers_domain_encoding():
-    from pydhcp.options.type import SipServers
+    from pydhcp.options.type import SIPServers
 
-    value = SipServers(["sip.example.com"], SipServers.ENCODING_DOMAIN)
+    value = SIPServers(["sip.example.com"], SIPServers.ENCODING_DOMAIN)
     wire = bytes(value._dhcp_encode())
 
-    assert wire[0] == SipServers.ENCODING_DOMAIN
-    assert SipServers._dhcp_decode(bytearray(wire)) == value
+    assert wire[0] == SIPServers.ENCODING_DOMAIN
+    assert SIPServers._dhcp_decode(bytearray(wire)) == value
     # Inference picks domain encoding for something that is not an address.
-    assert SipServers(["sip.example.com"]).encoding == SipServers.ENCODING_DOMAIN
+    assert SIPServers(["sip.example.com"]).encoding == SIPServers.ENCODING_DOMAIN
 
 
 def test_sip_servers_rejects_bad_encodings_and_lengths():
-    from pydhcp.options.type import SipServers
+    from pydhcp.options.type import SIPServers
     import pytest as _pytest
 
     with _pytest.raises(ValueError):
-        SipServers._dhcp_decode(bytearray())  # no encoding octet
+        SIPServers._dhcp_decode(bytearray())  # no encoding octet
     with _pytest.raises(ValueError):
-        SipServers._dhcp_decode(bytearray([0x0A, 0x01, 0x02]))  # reserved encoding
+        SIPServers._dhcp_decode(bytearray([0x0A, 0x01, 0x02]))  # reserved encoding
     with _pytest.raises(ValueError):
-        SipServers._dhcp_decode(
+        SIPServers._dhcp_decode(
             bytearray([0x01, 0xC0, 0x00, 0x02])
         )  # not a multiple of 4
 

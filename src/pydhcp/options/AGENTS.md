@@ -125,7 +125,7 @@ zero-length wire markers, not payload-bearing codecs. They are also not
 storable: `options[0]` / `options[255]` raise, see `DHCPOptions` above.
 
 **Gotcha**: option 43 (`VENDOR_SPECIFIC_INFORMATION`) is registered as
-opaque `Bytes` by default — TLV parsing is opt-in via `TlvOption`, not
+opaque `Bytes` by default — TLV parsing is opt-in via `TLVOption`, not
 automatic. Option 125 is enterprise-number records, not generic TLVs. The
 local `DHCPOptionCode.GRD` alias is IANA option 212 (`OPTION_6RD`).
 
@@ -142,7 +142,7 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 `__eq__`, so decoded values can go into a `set` or be used as dict keys. The
 **list** codecs (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList` and
 `UncompressedDomainList`,
-`PcpServerList`, `UriList`, `CccOption`, the `Vi*`/`MoS*` containers) are
+`PCPServerList`, `URIList`, `CccOption`, the `Vi*`/`MoS*` containers) are
 mutable `list` subclasses and so are deliberately **not** hashable — build a
 `tuple` from one if you need a key.
 
@@ -181,7 +181,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   string of n octets", so `String`'s partition at the first NUL threw away a
   binary vendor class identifier. Registered for `VENDOR_CLASS_IDENTIFIER`
   (60).
-- **`UriList`** — list of UTF-8 URI strings, each U16-length-prefixed on the
+- **`URIList`** — list of UTF-8 URI strings, each U16-length-prefixed on the
   wire.
 - **`Boolean(val)`** — single-octet boolean (`bool()` truthiness of `val`).
 - **`Flag()`** — zero-length presence option: the option's meaning is that it
@@ -241,7 +241,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
 - **`UncompressedDomainList`** (`DomainList` subclass) — the same container,
   encoding through the shared `type/domain.py` name encoder so it never
   emits a compression pointer. Registered for `BCMCS_DOMAIN_NAME_LIST` (88)
-  and used for `RdnssSelection.domains` (146), whose RFCs forbid
+  and used for `RDNSSSelection.domains` (146), whose RFCs forbid
   compression: RFC 4280 §4.6 ("DNS name compression MUST NOT be used") and
   RFC 6731 §4.3 via RFC 3315 §8 ("MUST NOT be stored in compressed form").
   **Encode-only** — decoding is `DomainList`'s and still resolves a pointer
@@ -251,7 +251,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   gets it. Assigning an explicit `DomainList(...)` instance to option 88
   bypasses the registry (any `DHCPOptionType` is written as given) and
   compresses — pass a plain list, or `UncompressedDomainList`.
-- **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0, partial=False)`** — RFC 4702
+- **`ClientFQDN(name="", flags=0, rcode1=0, rcode2=0, partial=False)`** — RFC 4702
   client FQDN (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/
   `FLAG_O`/`FLAG_E`/`FLAG_N` are the defined bits; the name is RFC 1035 wire
   format when `FLAG_E` is set and ASCII otherwise, and `.encoded` reports
@@ -263,13 +263,13 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   flag bits (`0xF0`) are ignored on decode and `flags` holds only the low
   four; constructing with one set raises `DHCPValueError`. A compression
   pointer, a label cut short or data after the terminator is a `DHCPDecodeError`.
-- **`SipServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
+- **`SIPServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
   120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
   IPv4 addresses, written as a leading encoding octet. A plain list infers its
   encoding. `.values` is a list of strings either way.
-- **`RdnssSelection(flags, primary, secondary, domains=None)`** — RFC 6731
+- **`RDNSSSelection(flags, primary, secondary, domains=None)`** — RFC 6731
   RDNSS selection record. `.domains` is an `UncompressedDomainList` and
-  normalizes like one, so `RdnssSelection(..., "a.com").domains` is
+  normalizes like one, so `RDNSSSelection(..., "a.com").domains` is
   `["a.com"]` rather than one entry per character.
 - **`DomainName`** — a single **uncompressed** RFC 1035 name as the whole
   payload, through the shared name helpers (so the 63/255-octet limits apply
@@ -280,9 +280,9 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   code then an optional UTF-8 message. `.code` / `.message`; accepts a
   `(code, message)` pair or a mapping. Registered for `STATUS_CODE` (151),
   where a bare `U8` made any reply carrying the message undecodable.
-- **`PcpServerList`** — RFC 7291 §4 PCP servers: a list of **entries**, each a
+- **`PCPServerList`** — RFC 7291 §4 PCP servers: a list of **entries**, each a
   list of IPv4 addresses written with a leading List-Length octet. A flat
-  address list read that octet as address data. `PcpServerList(["192.0.2.1"])`
+  address list read that octet as address data. `PCPServerList(["192.0.2.1"])`
   is accepted as one entry.
 
 ### Vendor / TLV containers (`vendor.py`)
@@ -293,12 +293,12 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   send the option unframed and the strict codec rejects those packets. Ask for
   the structured form with `options.get(77, decode=UserClass)` — the same
   arrangement option 43 uses.
-- **`TlvOption(code, value)`** — one generic `(code: int, value: Bytes)`
+- **`TLVOption(code, value)`** — one generic `(code: int, value: Bytes)`
   TLV record.
 - **`EncapsulatedOptions`** — TLV container used to build vendor-specific
   sub-option payloads.
 - **`VendorSpecificInformation`** — option 43 payload (opaque `Bytes` by
-  default; wrap with `TlvOption`/`EncapsulatedOptions` for structured TLV
+  default; wrap with `TLVOption`/`EncapsulatedOptions` for structured TLV
   access).
 - **`RelayAgentInformation`** — option 82 payload; constructed from a list
   of `(sub-code: int, value: bytes)` tuples (see `DHCPRelay`'s

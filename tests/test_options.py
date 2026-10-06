@@ -4,8 +4,8 @@ from pydhcp.options import DHCPOptions
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options.type import (
     IPv4AddressOption,
-    SipServers,
-    ClientFqdn,
+    SIPServers,
+    ClientFQDN,
     String,
     Boolean,
     Flag,
@@ -22,12 +22,12 @@ from pydhcp.options.type import (
     ViVendorSpecificInformation,
     ViVendorClassRecord,
     ViVendorClass,
-    RdnssSelection,
+    RDNSSSelection,
     MoSIpv4AddressList,
     MoSFqdnList,
     MoSIpv4AddressRecord,
     MoSFqdnRecord,
-    UriList,
+    URIList,
     CccOption,
     CccPrimaryDhcpServerAddressSubOption,
     CccSecondaryDhcpServerAddressSubOption,
@@ -167,7 +167,7 @@ def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.LOG_SERVER.get_type()._args_[0] is IPv4AddressOption
     # RFC 3361 s3.1: an encoding octet selects names (0) or addresses (1),
     # so this is not a bare address list.
-    assert DHCPOptionCode.SIP_SERVERS.get_type() is SipServers
+    assert DHCPOptionCode.SIP_SERVERS.get_type() is SIPServers
     # RFC 4280 s4.6: "DNS name compression MUST NOT be used" -- so option 88 is
     # NOT the compressed `DomainList` that RFC 3397's option 119 is. Details and
     # the measured payloads: tests/test_options_domain_lists.py.
@@ -194,7 +194,7 @@ def test_typed_registrations_and_aliases():
         DHCPOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.get_type().__name__ == "DomainList"
     )
     assert DHCPOptionCode.IPV4_ADDRESS_ANDSF.get_type()._args_[0] is IPv4AddressOption
-    assert DHCPOptionCode.V4_SZTP_REDIRECT.get_type() is UriList
+    assert DHCPOptionCode.V4_SZTP_REDIRECT.get_type() is URIList
     assert DHCPOptionCode.V4_DOTS_RI.get_type().__name__ == "DomainName"
     assert DHCPOptionCode.V4_DOTS_ADDRESS.get_type()._args_[0] is IPv4AddressOption
     assert DHCPOptionCode.TFTP_SERVER_ADDRESS.get_type()._args_[0] is IPv4AddressOption
@@ -204,7 +204,7 @@ def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.QUERY_END_TIME.get_type().__name__ == "U32"
     assert DHCPOptionCode.DHCP_STATE.get_type().__name__ == "U8"
     assert DHCPOptionCode.DATA_SOURCE.get_type().__name__ == "U8"
-    assert DHCPOptionCode.V4_PCP_SERVER.get_type().__name__ == "PcpServerList"
+    assert DHCPOptionCode.V4_PCP_SERVER.get_type().__name__ == "PCPServerList"
     assert DHCPOptionCode.MUD_URL_V4.get_type() is String
     assert DHCPOptionCode.CONFIGURATION_FILE.get_type() is String
     assert DHCPOptionCode.PATH_PREFIX.get_type() is String
@@ -235,7 +235,7 @@ def test_typed_registrations_and_aliases():
     # RFC 2937 s3: 16-bit name service option codes, not domain names.
     assert DHCPOptionCode.NAME_SERVICE_SEARCH.get_type()._args_[0].__name__ == "U16"
     assert DHCPOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4AddressOption
-    assert DHCPOptionCode.RDNSS_SELECTION.get_type() is RdnssSelection
+    assert DHCPOptionCode.RDNSS_SELECTION.get_type() is RDNSSSelection
     assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
     assert DHCPOptionCode.IPV4_FQDN_MOS.get_type() is MoSFqdnList
 
@@ -304,7 +304,7 @@ def test_typed_registrations_and_aliases():
     _assert_addresses(opts, DHCPOptionCode.IEN116_NAMESERVER, ["10.0.0.5"])
     assert opts.get(DHCPOptionCode.SWAP_SERVER) == IPv4AddressOption("10.0.0.6")
     sip = opts.get(DHCPOptionCode.SIP_SERVERS)
-    assert sip == SipServers(["10.0.0.3"], SipServers.ENCODING_ADDRESS)
+    assert sip == SIPServers(["10.0.0.3"], SIPServers.ENCODING_ADDRESS)
     assert opts.get(DHCPOptionCode.ASSOCIATED_IP) == [
         IPv4AddressOption("192.0.2.20"),
         IPv4AddressOption("192.0.2.21"),
@@ -329,7 +329,7 @@ def test_typed_registrations_and_aliases():
     _assert_addresses(
         opts, DHCPOptionCode.IPV4_ADDRESS_ANDSF, ["192.0.2.40", "192.0.2.41"]
     )
-    assert opts.get(DHCPOptionCode.V4_SZTP_REDIRECT) == UriList(
+    assert opts.get(DHCPOptionCode.V4_SZTP_REDIRECT) == URIList(
         [
             "https://bootstrap.example/one",
             "https://bootstrap.example/two",
@@ -393,7 +393,7 @@ def test_typed_registrations_and_aliases():
     )
     opts[DHCPOptionCode.NAME_SERVICE_SEARCH] = [6, 44]  # DNS, then NetBIOS name server
     opts[DHCPOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
-    opts[DHCPOptionCode.RDNSS_SELECTION] = RdnssSelection(
+    opts[DHCPOptionCode.RDNSS_SELECTION] = RDNSSSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     opts[DHCPOptionCode.IPV4_ADDRESS_MOS] = [
@@ -425,7 +425,7 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DHCPOptionCode.SUBNET_SELECTION_OPTION) == IPv4AddressOption(
         "192.0.2.64"
     )
-    assert opts.get(DHCPOptionCode.RDNSS_SELECTION) == RdnssSelection(
+    assert opts.get(DHCPOptionCode.RDNSS_SELECTION) == RDNSSSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     assert opts.get(DHCPOptionCode.V4_PCP_SERVER) == [["192.0.2.70", "192.0.2.71"]]
@@ -507,7 +507,7 @@ def test_registered_option_code_round_trips():
     )
     opts[DHCPOptionCode.NAME_SERVICE_SEARCH] = [6, 44]  # DNS, then NetBIOS name server
     opts[DHCPOptionCode.SUBNET_SELECTION_OPTION] = "192.0.2.64"
-    opts[DHCPOptionCode.RDNSS_SELECTION] = RdnssSelection(
+    opts[DHCPOptionCode.RDNSS_SELECTION] = RDNSSSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     opts[DHCPOptionCode.IPV4_ADDRESS_MOS] = [
@@ -569,7 +569,7 @@ def test_registered_option_code_round_trips():
     _assert_addresses(
         decoded, DHCPOptionCode.IPV4_ADDRESS_ANDSF, ["192.0.2.40", "192.0.2.41"]
     )
-    assert decoded.get(DHCPOptionCode.V4_SZTP_REDIRECT) == UriList(
+    assert decoded.get(DHCPOptionCode.V4_SZTP_REDIRECT) == URIList(
         [
             "https://bootstrap.example/one",
             "https://bootstrap.example/two",
@@ -626,7 +626,7 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DHCPOptionCode.SUBNET_SELECTION_OPTION) == IPv4AddressOption(
         "192.0.2.64"
     )
-    assert decoded.get(DHCPOptionCode.RDNSS_SELECTION) == RdnssSelection(
+    assert decoded.get(DHCPOptionCode.RDNSS_SELECTION) == RDNSSSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     assert decoded.get(DHCPOptionCode.V4_PCP_SERVER) == [["192.0.2.70", "192.0.2.71"]]
@@ -736,7 +736,7 @@ def test_raw_wire_decoding_for_v4_sztp_redirect_registration():
     decoded = DHCPOptions()
     decoded.decode(memoryview(encoded))
 
-    assert decoded.get(DHCPOptionCode.V4_SZTP_REDIRECT) == UriList(
+    assert decoded.get(DHCPOptionCode.V4_SZTP_REDIRECT) == URIList(
         [
             "https://bootstrap.example/one",
             "https://bootstrap.example/two",

@@ -123,7 +123,7 @@ def test_routing_rfc2131():
 
 def test_relay_agent_information_echoed_in_reply():
     from pydhcp.packet.message import DHCPMessage as _DHCPMessage
-    from pydhcp.options.type import RelayAgentInformation, TlvOption
+    from pydhcp.options.type import RelayAgentInformation, TLVOption
 
     server = MockDHCPServer()
     transport_mock = Mock()
@@ -139,7 +139,7 @@ def test_relay_agent_information_echoed_in_reply():
 
     opts = DHCPOptions()
     opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
-    relay_info = RelayAgentInformation([TlvOption(1, b"circuit-id")])
+    relay_info = RelayAgentInformation([TLVOption(1, b"circuit-id")])
     opts[DHCPOptionCode.RELAY_AGENT_INFORMATION] = relay_info
     msg = build_request(options=opts, giaddr=IPv4("192.168.1.1"), chaddr=CHADDR)
 

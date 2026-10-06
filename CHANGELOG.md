@@ -106,6 +106,12 @@ importable. Replace each name in the left column with the one beside it.
 | `PktInfoUdpTransport` | `PktInfoUDPTransport` |
 | `Transport` | `DHCPTransport` |
 | `pydhcp.options.type.IPv4Address` (the option codec) | `IPv4AddressOption`; `IPv4Address` is only the address type |
+| `TlvOption` | `TLVOption` |
+| `UriList` | `URIList` |
+| `RdnssSelection` | `RDNSSSelection` |
+| `ClientFqdn` | `ClientFQDN` |
+| `SipServers` | `SIPServers` |
+| `PcpServerList` | `PCPServerList` |
 
 ### Fixed
 
@@ -164,7 +170,7 @@ importable. Replace each name in the left column with the one beside it.
   name (no terminating label) and an empty Domain Name field used to raise
   `ValueError`, and so did a flags octet with a reserved bit set, which the RFC
   says receivers MUST ignore; `options.get(81)` now returns the value, with the
-  reserved bits dropped from `flags`. `ClientFqdn` gains `partial` (a keyword
+  reserved bits dropped from `flags`. `ClientFQDN` gains `partial` (a keyword
   argument and an attribute, also in its mapping form) so a partial name is
   encoded without the terminator it was received without, and an empty field is
   encoded as empty. Constructing with a reserved flag bit set now raises

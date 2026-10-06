@@ -12,14 +12,14 @@ import pytest
 
 from pydhcp.options import DHCPOptions
 from pydhcp.options.code import DHCPOptionCode
-from pydhcp.options.type import DomainList, RdnssSelection, UncompressedDomainList
+from pydhcp.options.type import DomainList, RDNSSSelection, UncompressedDomainList
 from pydhcp.options.type.domains import MAX_POINTER_HOPS
 
 # (codec, octets that precede the name list inside the option's payload)
 CODECS = [
     pytest.param(DomainList, b"", id="DomainList"),
     pytest.param(UncompressedDomainList, b"", id="UncompressedDomainList"),
-    pytest.param(RdnssSelection, bytes(9), id="RdnssSelection"),
+    pytest.param(RDNSSSelection, bytes(9), id="RDNSSSelection"),
 ]
 
 #: The option codes whose codec reads a name list: 119, 141, 88, 146.
@@ -36,7 +36,7 @@ def _label(text: str) -> bytes:
 
 
 def _names(decoded):
-    return decoded.domains if isinstance(decoded, RdnssSelection) else decoded
+    return decoded.domains if isinstance(decoded, RDNSSSelection) else decoded
 
 
 def _chain(names: int, label_octets: int = 63) -> bytes:

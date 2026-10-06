@@ -14,7 +14,7 @@ from pydhcp import (
 )
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
-from pydhcp.options.type import RelayAgentInformation, TlvOption
+from pydhcp.options.type import RelayAgentInformation, TLVOption
 from pydhcp.network import IPv4, SocketAddress
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
@@ -69,7 +69,7 @@ def _discover(
     opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     if with_relay_info:
         opts[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
-            [TlvOption(1, b"existing")]
+            [TLVOption(1, b"existing")]
         )
     return DHCPMessage(
         op=DHCPOpcode.BOOTREQUEST,
@@ -236,7 +236,7 @@ def test_relay_agent_info_inserted_when_enabled(relay_class):
         DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
     )
     assert relay_info == RelayAgentInformation(
-        [TlvOption(1, b"circuit-1"), TlvOption(2, b"remote-1")]
+        [TLVOption(1, b"circuit-1"), TLVOption(2, b"remote-1")]
     )
 
 
@@ -293,7 +293,7 @@ def test_relay_agent_info_passthrough_when_already_present(relay_class):
     relay_info = forwarded.options.get(
         DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
     )
-    assert relay_info == RelayAgentInformation([TlvOption(1, b"existing")])
+    assert relay_info == RelayAgentInformation([TLVOption(1, b"existing")])
 
 
 def test_client_relay_info_passes_through_when_explicitly_trusted(relay_class):
@@ -310,7 +310,7 @@ def test_client_relay_info_passes_through_when_explicitly_trusted(relay_class):
     forwarded = DHCPMessage.decode(data)
     assert forwarded.options.get(
         DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
-    ) == RelayAgentInformation([TlvOption(1, b"existing")])
+    ) == RelayAgentInformation([TLVOption(1, b"existing")])
 
 
 def test_forward_to_client_broadcast_flag(relay_class):
@@ -434,7 +434,7 @@ def test_relay_strips_relay_agent_information_from_replies(relay_class):
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
     reply.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
-        [TlvOption(1, b"circuit-1")]
+        [TLVOption(1, b"circuit-1")]
     )
     context = _server_context()
 

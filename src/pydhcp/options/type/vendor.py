@@ -79,7 +79,7 @@ class UserClass(_LengthPrefixedOpaqueList):
     """RFC 3004 user-class opaque byte list."""
 
 
-class TlvOption(DHCPOptionType):
+class TLVOption(DHCPOptionType):
     def __init__(
         self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]
     ) -> None:
@@ -90,7 +90,7 @@ class TlvOption(DHCPOptionType):
         return f"{type(self).__name__}(code={self.code}, value={self.value!r})"
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, TlvOption):
+        if not isinstance(other, TLVOption):
             return NotImplemented
         return (self.code, self.value) == (other.code, other.value)
 
@@ -112,7 +112,7 @@ _EncapsulatedOptionsT = _ty.TypeVar(
 )
 
 
-class EncapsulatedOptions(RecordList[TlvOption]):
+class EncapsulatedOptions(RecordList[TLVOption]):
     """TLV container used to build vendor-specific sub-option payloads."""
 
     # Only the *read* framing is its own: unlike a plain record list this one
@@ -140,7 +140,7 @@ class EncapsulatedOptions(RecordList[TlvOption]):
             idx += 1
             if idx + length > size:
                 raise DHCPDecodeError(f"{cls.__name__} option is truncated")
-            self.append(TlvOption(code, option[idx : idx + length]))
+            self.append(TLVOption(code, option[idx : idx + length]))
             idx += length
         return self, idx
 

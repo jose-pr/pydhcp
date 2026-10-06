@@ -7,10 +7,10 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DHCPOptionType
 from .domain import decode_domain_name, encode_domain_name
 
-_ClientFqdnT = _ty.TypeVar("_ClientFqdnT", bound="ClientFqdn")
+_ClientFQDNT = _ty.TypeVar("_ClientFQDNT", bound="ClientFQDN")
 
 
-class ClientFqdn(DHCPOptionType):
+class ClientFQDN(DHCPOptionType):
     """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
 
     With the E bit the name is a fully qualified name (RFC 1035 labels and the
@@ -56,7 +56,7 @@ class ClientFqdn(DHCPOptionType):
         rcode2: int = 0,
         partial: bool = False,
     ) -> None:
-        if isinstance(name, ClientFqdn):
+        if isinstance(name, ClientFQDN):
             name, flags, rcode1, rcode2, partial = (
                 name.name,
                 name.flags,
@@ -73,15 +73,15 @@ class ClientFqdn(DHCPOptionType):
             partial = bool(mapping.get("partial", False))
         for label, value in (("flags", flags), ("rcode1", rcode1), ("rcode2", rcode2)):
             if not 0 <= int(value) <= 0xFF:
-                raise DHCPValueError(f"ClientFqdn {label} must fit in one octet")
+                raise DHCPValueError(f"ClientFQDN {label} must fit in one octet")
         if int(flags) & ~self.FLAGS_MASK:
             raise DHCPValueError(
-                f"ClientFqdn flags {int(flags):#04x} set reserved bits; "
+                f"ClientFQDN flags {int(flags):#04x} set reserved bits; "
                 "RFC 4702 s2.1 requires the senders to clear them"
             )
         if partial and not int(flags) & self.FLAG_E:
             raise DHCPValueError(
-                "ClientFqdn partial applies to the DNS wire format: set the E bit"
+                "ClientFQDN partial applies to the DNS wire format: set the E bit"
             )
         self.name = str(name)
         self.flags = int(flags)
@@ -96,11 +96,11 @@ class ClientFqdn(DHCPOptionType):
 
     @classmethod
     def _dhcp_read(
-        cls: type[_ClientFqdnT], option: memoryview
-    ) -> tuple[_ClientFqdnT, int]:
+        cls: type[_ClientFQDNT], option: memoryview
+    ) -> tuple[_ClientFQDNT, int]:
         if len(option) < 3:
             raise DHCPDecodeError(
-                "ClientFqdn option is truncated: needs at least 3 octets"
+                "ClientFQDN option is truncated: needs at least 3 octets"
             )
         # RFC 4702 s2.1: the reserved bits MUST be ignored.
         flags, rcode1, rcode2 = option[0] & cls.FLAGS_MASK, option[1], option[2]
@@ -112,7 +112,7 @@ class ClientFqdn(DHCPOptionType):
             try:
                 name = rest.tobytes().split(b"\x00", 1)[0].decode("utf-8")
             except UnicodeDecodeError as exc:
-                raise DHCPDecodeError("ClientFqdn name is not valid UTF-8") from exc
+                raise DHCPDecodeError("ClientFQDN name is not valid UTF-8") from exc
         return cls(name, flags, rcode1, rcode2, partial), len(option)
 
     @staticmethod
@@ -121,19 +121,19 @@ class ClientFqdn(DHCPOptionType):
         if not field:
             return "", True
         try:
-            name, read = decode_domain_name(field, 0, "ClientFqdn name")
+            name, read = decode_domain_name(field, 0, "ClientFQDN name")
         except DHCPDecodeError:
             # Ran out before a terminating label: a partial name if what was
             # read is whole labels, an error if a label is cut short. Reading
             # the labels followed by a terminator tells the two apart.
             name, read = decode_domain_name(
-                memoryview(field.tobytes() + b"\x00"), 0, "ClientFqdn name"
+                memoryview(field.tobytes() + b"\x00"), 0, "ClientFQDN name"
             )
             if read != len(field) + 1:
-                raise DHCPDecodeError("ClientFqdn name is truncated") from None
+                raise DHCPDecodeError("ClientFQDN name is truncated") from None
             return name, True
         if read != len(field):
-            raise DHCPDecodeError("ClientFqdn has trailing data after the name")
+            raise DHCPDecodeError("ClientFQDN has trailing data after the name")
         return name, False
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -142,7 +142,7 @@ class ClientFqdn(DHCPOptionType):
         data.append(self.rcode1)
         data.append(self.rcode2)
         if self.encoded:
-            wire = encode_domain_name(self.name, "ClientFqdn name", allow_root=True)
+            wire = encode_domain_name(self.name, "ClientFQDN name", allow_root=True)
             # A partial name has no terminating label; with no name at all the
             # field is empty (RFC 4702 s2.3).
             data.extend(wire[:-1] if self.partial else wire)
@@ -151,7 +151,7 @@ class ClientFqdn(DHCPOptionType):
         return len(data) - start
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ClientFqdn):
+        if not isinstance(other, ClientFQDN):
             return NotImplemented
         return (self.name, self.flags, self.rcode1, self.rcode2, self.partial) == (
             other.name,
@@ -166,7 +166,7 @@ class ClientFqdn(DHCPOptionType):
 
     def __repr__(self) -> str:
         return (
-            f"ClientFqdn(name={self.name!r}, flags={self.flags:#04x}, "
+            f"ClientFQDN(name={self.name!r}, flags={self.flags:#04x}, "
             f"rcode1={self.rcode1}, rcode2={self.rcode2}"
             + (", partial=True)" if self.partial else ")")
         )
