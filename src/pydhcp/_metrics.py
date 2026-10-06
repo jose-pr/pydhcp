@@ -30,6 +30,7 @@ class DHCPMetrics:
         "packets_dropped_no_client_id",
         "packets_dropped_other_server",
         "addresses_refused",
+        "replies_dropped_pin",
     )
 
     packets_received: int
@@ -74,6 +75,10 @@ class DHCPMetrics:
     #: Requested addresses the server refused to lease (off the served
     #: network, its own, in use, quarantined).
     addresses_refused: int
+    #: Broadcast replies dropped because they could not be pinned to the
+    #: interface the request arrived on, with or without its index. Sent
+    #: unpinned they could have left by another interface.
+    replies_dropped_pin: int
 
     def __init__(self) -> None:
         self.reset()

@@ -8,6 +8,7 @@ and `transport-16` (the broadcast fallback retried a broadcast, and the
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import socket
 import threading
@@ -16,11 +17,17 @@ import time
 import pytest
 
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
+from driving import LOOPS
 import ipaddress
 
 import netimps
 
-from pydhcp.listener import DHCPListener, PktInfoUDPTransport, UDPTransport
+from pydhcp.listener import (
+    DHCPListener,
+    DHCPMetrics,
+    PktInfoUDPTransport,
+    UDPTransport,
+)
 from pydhcp import SocketAddress
 
 # the receive path is not public
@@ -785,37 +792,194 @@ def test_the_pktinfo_fallback_never_escalates_a_unicast_to_a_broadcast() -> None
     assert ("255.255.255.255", 68) not in sock.sendto_calls
 
 
-def test_the_pktinfo_fallback_still_broadcasts_for_an_unconfigured_client() -> None:
-    """The counterpart: broadcast *is* the right delivery when the reply was
-    already addressed to the limited broadcast, so the guard must not turn that
-    into a lost reply."""
-    sock = FailingSocket()
-    endpoint = RecordingEndpoint(error=OSError("invalid argument"))
+def _broadcast_fails_by_index_only():
+    """An endpoint whose pin by index (an `Interface`) fails and whose pin by
+    address alone works: a stale ifindex."""
+
+    class IndexRefused(RecordingEndpoint):
+        def send(self, data, address, port, src=None):
+            if isinstance(src, netimps.Interface):
+                self.sends.append(((address, port), src))
+                raise OSError(19, "No such device")
+            return super().send(data, address, port, src=src)
+
+    return IndexRefused()
+
+
+def test_a_broadcast_whose_index_pin_fails_is_retried_with_the_address_alone() -> None:
+    """The retry names the address and never the index, and never leaves the
+    pin: the unpinned broadcast would go by whichever interface the routing
+    table picks (measured: the other segment)."""
+    sock, endpoint = FailingSocket(), _broadcast_fails_by_index_only()
+    transport = _pinned(sock, endpoint, ifindex=99999)
+    transport.limit = _LogLimit()
 
     assert (
-        _pinned(sock, endpoint, ifindex=99999).send(
-            b"x" * 20, IPv4("0.0.0.0"), port=68, client_mac=b"\x00" * 6
-        )
+        transport.send(b"x" * 20, IPv4("0.0.0.0"), port=68, client_mac=b"\x00" * 6)
         == 20
     )
 
-    assert [dest for dest, _src in endpoint.sends] == [("255.255.255.255", 68)]
-    assert sock.sendto_calls == [("255.255.255.255", 68)]
+    assert [dest for dest, _src in endpoint.sends] == [("255.255.255.255", 68)] * 2
+    first, second = (src for _dest, src in endpoint.sends)
+    assert isinstance(first, netimps.Interface) and first.index == 99999
+    assert second == IPv4("192.0.2.1")
+    assert sock.sendto_calls == [], "the broadcast was sent unpinned"
 
 
-def test_the_pin_names_exactly_the_receiving_address_and_interface() -> None:
-    """The pin is a netimps `Interface` holding just ``local_ip``: an adapter
-    with several IPv4 addresses must answer from the one the client used, and
-    a bare address would make netimps enumerate every adapter per reply."""
+def test_a_broadcast_that_cannot_be_pinned_at_all_is_dropped_and_counted(
+    caplog,
+) -> None:
+    sock = FailingSocket()
+    endpoint = RecordingEndpoint(error=OSError(101, "Network is unreachable"))
+    transport = _pinned(sock, endpoint, ifindex=3)
+    transport.limit = _LogLimit()
+    transport.metrics = DHCPMetrics()
+
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        with pytest.raises(OSError):
+            transport.send(
+                b"x" * 20, IPv4("255.255.255.255"), port=68, client_mac=b"\x00" * 6
+            )
+
+    assert len(endpoint.sends) == 2, "by index, then by address alone, then no more"
+    assert sock.sendto_calls == [], "the broadcast was sent unpinned"
+    assert transport.metrics.replies_dropped_pin == 1
+    assert any("Dropping a broadcast reply" in r.getMessage() for r in caplog.records)
+
+
+def test_a_broadcast_with_no_index_is_pinned_by_address_once() -> None:
+    sock = FailingSocket()
+    endpoint = RecordingEndpoint(error=OSError(101, "Network is unreachable"))
+    transport = _pinned(sock, endpoint, ifindex=0)
+    transport.limit = _LogLimit()
+
+    with pytest.raises(OSError):
+        transport.send(
+            b"x" * 20, IPv4("255.255.255.255"), port=68, client_mac=b"\x00" * 6
+        )
+
+    assert [src for _dest, src in endpoint.sends] == [IPv4("192.0.2.1")]
+    assert sock.sendto_calls == []
+
+
+def test_a_broadcast_pin_names_the_receiving_address_and_interface() -> None:
+    """A broadcast goes out of the interface it is pinned to, so the pin is a
+    netimps `Interface` holding just ``local_ip`` and the arrival index: an
+    adapter with several IPv4 addresses must answer from the one the client
+    used, and a bare address would make netimps enumerate every adapter per
+    reply."""
     endpoint = RecordingEndpoint()
     _pinned(FailingSocket(), endpoint).send(
-        b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\0" * 6
+        b"x" * 20, IPv4("255.255.255.255"), port=68, client_mac=b"\0" * 6
     )
 
     ((_dest, src),) = endpoint.sends
     assert isinstance(src, netimps.Interface)
     assert src.index == 3
     assert [str(ip) for ip in src.ips] == ["192.0.2.1/32"]
+
+
+def test_a_unicast_is_pinned_to_the_address_alone() -> None:
+    """With the arrival interface's index the kernel is made to put the unicast
+    on that interface even when its route is through another, ARPs there for an
+    address nobody answers for and loses the reply without an error."""
+    endpoint = RecordingEndpoint()
+    _pinned(FailingSocket(), endpoint).send(
+        b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\0" * 6
+    )
+
+    ((_dest, src),) = endpoint.sends
+    assert src == IPv4("192.0.2.1")
+
+
+class FullBuffer(RecordingEndpoint):
+    """An endpoint whose first sends find the socket's send buffer full."""
+
+    def __init__(self, full_times) -> None:
+        super().__init__()
+        self.full_times = full_times
+
+    def send(self, data, address, port, src=None):
+        if self.full_times > 0:
+            self.full_times -= 1
+            self.sends.append(((address, port), src))
+            raise BlockingIOError(11, "Resource temporarily unavailable")
+        return super().send(data, address, port, src=src)
+
+
+@pytest.mark.parametrize("dest", ["255.255.255.255", "192.0.2.9"])
+def test_a_full_send_buffer_is_waited_out_and_is_not_a_pin_failure(
+    dest, caplog
+) -> None:
+    """The asyncio listener makes its sockets non-blocking and sends from the
+    worker thread, so a full buffer raises `BlockingIOError`. That is not a
+    failed pin: the same pinned send is repeated once the socket is writable,
+    with no warning, no unpinned send and no change of pin."""
+    real = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    endpoint = FullBuffer(full_times=2)
+    try:
+        transport = _pinned(real, endpoint)
+        transport.metrics = DHCPMetrics()
+        transport.limit = _LogLimit()
+        with caplog.at_level(logging.DEBUG, logger="pydhcp"):
+            sent = transport.send(
+                b"x" * 20, IPv4(dest), port=68, client_mac=b"\x00" * 6
+            )
+    finally:
+        real.close()
+
+    assert sent == 20
+    pins = [src for _dest, src in endpoint.sends]
+    assert len(pins) == 3 and pins[0] == pins[1] == pins[2]
+    assert transport.metrics.replies_dropped_pin == 0
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING] == []
+
+
+def test_a_send_buffer_that_stays_full_raises_what_it_is() -> None:
+    real = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    endpoint = FullBuffer(full_times=10**6)
+    try:
+        transport = _pinned(real, endpoint)
+        transport.metrics = DHCPMetrics()
+        transport.limit = _LogLimit()
+        transport.SEND_WAIT_SECONDS = 0.05
+        began = time.monotonic()
+        with pytest.raises(BlockingIOError):
+            transport.send(
+                b"x" * 20, IPv4("255.255.255.255"), port=68, client_mac=b"\0" * 6
+            )
+        waited = time.monotonic() - began
+    finally:
+        real.close()
+
+    assert 0.04 <= waited < 2
+    assert transport.metrics.replies_dropped_pin == 0
+
+
+def test_the_plain_transport_also_waits_for_a_full_send_buffer() -> None:
+    real = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    calls: list = []
+
+    class Full:
+        def fileno(self) -> int:
+            return real.fileno()
+
+        def sendto(self, data, address):
+            calls.append(address)
+            if len(calls) < 3:
+                raise BlockingIOError(11, "Resource temporarily unavailable")
+            return len(data)
+
+    try:
+        transport = UDPTransport(Full())  # type: ignore[arg-type]
+        sent = transport.send(
+            b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\0" * 6
+        )
+    finally:
+        real.close()
+
+    assert sent == 20
+    assert calls == [("192.0.2.9", 68)] * 3
 
 
 def test_no_local_address_means_no_pin() -> None:
@@ -873,3 +1037,68 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
     if any("WinError 10049" in r.getMessage() for r in caplog.records):
         pytest.skip("this Windows build refuses a pin to an unassigned 127.0.0.2")
     assert source == "127.0.0.2"
+
+
+class _FullThenReal:
+    """The listener's endpoint, finding the send buffer full for its first sends."""
+
+    def __init__(self, real, full_times: int) -> None:
+        self.real = real
+        self.full_times = full_times
+        self.refused = 0
+        self.has_src_pinning = real.has_src_pinning
+
+    def send(self, data, address, port, src=None):
+        if self.full_times > 0:
+            self.full_times -= 1
+            self.refused += 1
+            raise BlockingIOError(11, "Resource temporarily unavailable")
+        return self.real.send(data, address, port, src=src)
+
+
+@pytest.mark.parametrize("loop_type", LOOPS, ids=lambda loop: loop.__name__)
+def test_a_reply_from_the_async_worker_waits_for_a_full_send_buffer(loop_type) -> None:
+    """Through a real `AsyncDHCPListener` on each loop type, the reply sent from
+    its worker thread on its non-blocking socket survives the endpoint finding
+    the buffer full, and arrives pinned. (A real buffer cannot be filled on
+    Windows over loopback; the interop tests fill one under Linux.)"""
+    from pydhcp import AsyncDHCPListener
+
+    wrapped: list = []
+
+    class Replying(AsyncDHCPListener):
+        def handle(self, msg, context) -> None:
+            transport = context.transport
+            transport.endpoint = _FullThenReal(transport.endpoint, 2)
+            wrapped.append(transport.endpoint)
+            transport.send(
+                b"r" * 20, context.client.ip, port=context.client.port, client_mac=b""
+            )
+
+    async def scenario() -> "tuple[bytes, str]":
+        listener = Replying(listen=("0.0.0.0", 0))
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("127.0.0.1", 0))
+        client.settimeout(3)
+        await listener.start()
+        try:
+            port = listener.bound_addresses[0].port
+            client.sendto(build_request().encode(), ("127.0.0.1", port))
+            loop = asyncio.get_running_loop()
+            data, (source, _port) = await loop.run_in_executor(
+                None, client.recvfrom, 64
+            )
+            return data, source
+        finally:
+            client.close()
+            await listener.aclose()
+
+    loop = loop_type()
+    try:
+        data, source = loop.run_until_complete(scenario())
+    finally:
+        loop.close()
+
+    assert data == b"r" * 20
+    assert source == "127.0.0.1"
+    assert wrapped and wrapped[0].refused == 2

@@ -263,29 +263,44 @@ everything below from `pydhcp.listener` itself.
 - **`UDPTransport(socket)`** — plain UDP send. It does not own the socket and
   never closes it: the listener that bound the socket closes it. A destination of `0.0.0.0`
   ("this client has no address yet") is sent to `255.255.255.255`, per
-  RFC 2131 §4.1. A failed **unicast** retries as a broadcast (logged as a
-  warning); a failed **broadcast** raises, since the retry would be the
-  identical syscall.
-  - **Caveat**: that retry does not know whether broadcast was an acceptable
-    delivery for this particular reply. It is right for a client with no
-    address yet and wrong for one the server deliberately unicast to (a
-    RENEWING client at its own `ciaddr`, a relay at `giaddr`), where it puts
-    the reply's `yiaddr`, `chaddr`, lease options and echoed
-    `RELAY_AGENT_INFORMATION` in front of the whole segment. Deciding this
-    properly needs a signal from the caller that `DHCPTransport.send` does not
-    currently carry.
+  RFC 2131 §4.1. A failed send raises `OSError`; **it is never escalated to a
+  broadcast**, which would put a reply the caller deliberately unicast (a
+  RENEWING client at its own `ciaddr`, a relay at `giaddr`) with its `yiaddr`,
+  `chaddr`, lease options and echoed `RELAY_AGENT_INFORMATION` in front of the
+  whole segment. Whether to broadcast is the caller's decision.
+  - **A full send buffer is waited out.** The asyncio listener makes its sockets
+    non-blocking and replies from its worker thread, so a full buffer raises
+    `BlockingIOError` there. The send waits for the socket to be writable and is
+    repeated as it was, for at most `SEND_WAIT_SECONDS` (class attribute, 1.0), and
+    then raises the `BlockingIOError`. It holds the worker thread for that long at
+    most. On a blocking socket nothing changes.
 - **`PktInfoUDPTransport(socket, endpoint=None)`** — a transport (which, like
   `UDPTransport`, never closes the socket or the endpoint) that sends
-  from a pinned source for wildcard sockets: `local_ip` is the source address
-  and `ifindex` the interface (0/`None` pins the address alone). Pinning goes
+  from the address the request arrived on, for wildcard sockets: `local_ip` is the
+  source address and `ifindex` the interface (0/`None`: none known). Pinning goes
   through `netimps.UDPEndpoint.send(src=...)` (`endpoint`, or one wrapping
-  `socket`), which builds the control message for Linux, macOS and Windows
-  alike. Falls back to `UDPTransport.send` when `local_ip` isn't set or the
-  endpoint reports no source pinning. If the pinned send itself **fails** (a
-  stale `ifindex`, a `local_ip` no longer on that adapter) it retries once,
-  unpinned, **to the same destination** — it does not go through
-  `UDPTransport.send`, so a failed unicast is never escalated into a broadcast
-  here; the error propagates instead.
+  `socket`), which builds the control message for Linux, macOS and Windows alike.
+  Plain `UDPTransport.send` when `local_ip` isn't set or the endpoint reports no
+  source pinning. What is pinned depends on where the reply goes:
+  - **A unicast is pinned to the address alone.** With the arrival interface's
+    index the kernel puts it on that interface even when its route is through
+    another one, ARPs there for an address nobody answers for and loses the reply
+    without an error (measured on Linux). The routing table picks the interface. A
+    failed pin is retried **unpinned**, to the same destination, never as a
+    broadcast.
+  - **A broadcast** (`255.255.255.255`, so also a destination of `0.0.0.0`) is
+    pinned to the address **and** the interface index, where the platform takes
+    both (FreeBSD IPv4 has no index pin: netimps pins the interface's address).
+    If that fails it is tried once more **with the address alone**, which on Linux
+    and Windows still keeps a limited broadcast on the interface that owns the
+    address. If that fails too the reply is **dropped**: `OSError` is raised,
+    `replies_dropped_pin` is counted and one WARNING per interval says why. It is
+    never sent unpinned, because a broadcast leaves by whichever interface the
+    routing table picks and reaches a segment the client is not on.
+  - A full send buffer is neither: see `UDPTransport`.
+  - `.limit` is the listener's log limit and `.metrics` its `DHCPMetrics` (both
+    `None` on a transport made by hand, which then shares one process-wide limit
+    and counts nothing).
 - **`DHCPRequestContext`** (`NamedTuple`) — `transport: DHCPTransport`, `interface:
   NetworkInterface`, `client: SocketAddress`, `client_mac: bytes`,
   `ifindex: int | None = None`, `local_ip: IPv4 | None = None`,
@@ -800,8 +815,10 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     a bad option string is not counted), `packets_dropped_no_client_id` (a
     server dropped a message with neither option 61 nor a hardware address),
     `packets_dropped_other_server` (a message other than a REQUEST naming
-    another server) and `addresses_refused` (a requested address the server
-    refused to lease).
+    another server), `addresses_refused` (a requested address the server
+    refused to lease) and `replies_dropped_pin` (a broadcast reply that could not
+    be pinned to the interface the request arrived on, with or without its index,
+    and was dropped rather than sent by an interface the routing table picks).
   - `leases_declined` counts `DHCPDECLINE`, which used to land in
     `leases_released` though it means the opposite — the client found the
     address already in use. An address-conflict storm read as orderly

@@ -198,6 +198,7 @@ class _RelayCore(_Timed):
             out.ifindex = pending.ifindex
             out.local_ip = pending.local_ip
             out.limit = transport.limit
+            out.metrics = transport.metrics
             return out
         return self._routed_transport(transport)
 

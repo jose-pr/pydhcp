@@ -28,11 +28,6 @@ def _offers(tap):
     return [f for f in tap.frames() if f.sport == 67 and f.type_name() == "DHCPOFFER"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="a unicast reply whose route leaves by another interface is pinned "
-    "to the arrival interface's index and is lost",
-)
 def test_a_unicast_reply_routed_through_another_interface_arrives(lab):
     net = two_homed(lab)
     tap_a = lab.tap(net.a, "a0", "segment-a")
@@ -106,11 +101,6 @@ def test_a_broadcast_reply_stays_on_the_arrival_segment(lab):
     assert _offers(tap_b) == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="when the pin fails the broadcast reply is retried unpinned and "
-    "leaves by whichever interface the routing table picks",
-)
 def test_a_broadcast_reply_whose_pin_fails_never_reaches_another_segment(lab):
     net = two_homed(lab)
     tap_a = lab.tap(net.a, "a0", "segment-a")

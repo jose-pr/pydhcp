@@ -272,6 +272,7 @@ class _ListenerCore:
                 destination,
                 is_unicast,
                 adapter,
+                self.metrics,
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
                 bound = _net.SocketAddress.from_socket(sock)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging as _logging
 import ipaddress as _ipaddress
+import select as _select
 import socket as _socket
 import time as _time
 import typing as _ty
@@ -11,6 +12,7 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import _constants as _const
+from .._metrics import DHCPMetrics
 from ._limit import _brief, _LogLimit
 
 LOGGER = _logging.getLogger(__name__)
@@ -54,8 +56,34 @@ def _dest_string(dst: _ipaddress.IPv4Address) -> str:
 
 
 class UDPTransport(DHCPTransport):
+    #: Seconds a reply waits for a full send buffer to drain before it is given
+    #: up on. The asyncio listener makes its sockets non-blocking and replies
+    #: from its one worker thread, so a full buffer raises `BlockingIOError`
+    #: there; the wait holds the worker for at most this long.
+    SEND_WAIT_SECONDS: float = 1.0
+
     def __init__(self, socket: _socket.socket):
         self.socket = socket
+
+    def _until_writable(self, send: "_ty.Callable[[], int]") -> int:
+        """Run ``send``, waiting for room when the socket's send buffer is full.
+
+        A full buffer on a non-blocking socket is not a failure of the send's
+        arguments (a pin, a route): the send is repeated as it was once the
+        socket is writable, for at most `SEND_WAIT_SECONDS`, and then raised as
+        it is.
+        """
+        deadline: "_ty.Optional[float]" = None
+        while True:
+            try:
+                return send()
+            except BlockingIOError:
+                now = _time.monotonic()
+                if deadline is None:
+                    deadline = now + self.SEND_WAIT_SECONDS
+                if deadline - now <= 0:
+                    raise
+                _select.select([], [self.socket], [], deadline - now)
 
     def _send_to(
         self,
@@ -64,7 +92,7 @@ class UDPTransport(DHCPTransport):
         port: int,
     ) -> int:
         """One `sendto`, with no fallback of any kind."""
-        return self.socket.sendto(data, (dest_str, port))
+        return self._until_writable(lambda: self.socket.sendto(data, (dest_str, port)))
 
     def send(
         self,
@@ -99,13 +127,31 @@ class UDPTransport(DHCPTransport):
 
 
 class PktInfoUDPTransport(UDPTransport):
-    """A transport that sends from a pinned interface and source address.
+    """A transport that sends from the address a request arrived on.
 
-    For a wildcard socket: the reply leaves from the address and interface the
-    request arrived on (``local_ip``, ``ifindex``), which the routing table
-    alone would not choose on a multi-homed host. Pinning goes through
+    For a wildcard socket: the reply leaves from ``local_ip``, the address the
+    request was sent to or the receiving interface's own, which the routing
+    table alone would not choose on a multi-homed host. Pinning goes through
     `netimps.UDPEndpoint.send(src=...)`, which builds the per-platform control
     message -- Linux, macOS and Windows lay it out three different ways.
+
+    What is pinned depends on where the reply goes:
+
+    - **A broadcast** (the limited broadcast, which is also where a
+      destination of 0.0.0.0 goes) is pinned to the address *and* the arrival
+      interface's index, where the platform takes both, because a broadcast is
+      put on the wire of the interface it is sent from. If that pin fails, it
+      is tried once more with the address alone, which the kernel still keeps
+      on the interface that owns the address. If that fails too the reply is
+      dropped and counted: sent unpinned it would leave by whichever interface
+      the routing table picks and reach a segment the client is not on.
+    - **A unicast** is pinned to the address alone. An index would force it out
+      of the arrival interface even when its route is through another one, and
+      the kernel then waits for an ARP answer that never comes and loses the
+      reply without an error. A failed pin is retried unpinned: the routing
+      table delivers a unicast to where it belongs.
+
+    A full send buffer is neither: see `UDPTransport.SEND_WAIT_SECONDS`.
     """
 
     def __init__(
@@ -118,25 +164,29 @@ class PktInfoUDPTransport(UDPTransport):
         self.local_ip: _ipaddress.IPv4Address | None = None
         #: The listener's log limit; a transport made by hand uses a shared one.
         self.limit: _ty.Optional[_LogLimit] = None
+        #: The listener's counters, for a reply that is dropped.
+        self.metrics: _ty.Optional[DHCPMetrics] = None
         self.endpoint = endpoint or _netimps.UDPEndpoint(socket, pktinfo=False)
 
     def _source(self) -> _netimps.Interface:
-        """The pin, as a netimps `Interface` holding exactly ``local_ip``.
+        """The pin by address and index, as a netimps `Interface`.
 
-        Not the bare address: netimps resolves an address to its interface by
-        enumerating every adapter, measured at 1.29 ms per send against 0.04 ms
-        for an `Interface` -- per reply, which is the per-packet enumeration
-        cost this module has already removed once from the receive side. And not
-        the receiving adapter's own `Interface`, which may hold several IPv4
-        addresses: netimps would pick one, and the reply must come from the one
-        the client addressed. An index of 0 means "unknown" and pins the address
-        alone.
+        Holds exactly ``local_ip``: not the bare address, which netimps resolves
+        to its interface by enumerating every adapter (1.29 ms per send against
+        0.04 ms for an `Interface`), and not the receiving adapter's own
+        `Interface`, which may hold several IPv4 addresses, of which the reply
+        must come from the one the client addressed.
         """
         assert self.local_ip is not None
         return _netimps.Interface(
             name=f"ifindex {self.ifindex or 0}",
             index=self.ifindex or 0,
             ips=[_ipaddress.IPv4Interface(self.local_ip)],
+        )
+
+    def _limited(self, level: int, reason: str, message: str, *args: object) -> None:
+        (self.limit or _FALLBACK_LIMIT).log(
+            LOGGER, level, reason, message, *args, now=_time.monotonic()
         )
 
     def send(
@@ -147,50 +197,106 @@ class PktInfoUDPTransport(UDPTransport):
         port: int,
         client_mac: bytes,
     ) -> int:
+        # `_dest_string`, not `str(dest)`: a yiaddr of 0.0.0.0 -- the normal
+        # case for a client that has no address yet -- must go to the limited
+        # broadcast and never to host 0.0.0.0.
         dest_str = _dest_string(dst)
-        if self.local_ip is not None and self.endpoint.has_src_pinning:
-            try:
-                # `_dest_string`, not `str(dest)`: this path took a yiaddr of
-                # 0.0.0.0 -- the normal case for a client that has no address
-                # yet -- and asked the kernel to send to host 0.0.0.0, which is
-                # the one destination a reply to an unconfigured client must
-                # never be.
-                return int(
-                    self.endpoint.send(bytes(data), dest_str, port, src=self._source())
-                )
-            except Exception as e:
-                # This path's own failure modes -- a stale ifindex, a local_ip
-                # no longer on that adapter -- used to propagate and lose the
-                # reply outright. Retry without the pin, which is the thing that
-                # went stale.
-                #
-                # Deliberately `_send_to` and not `super().send()`: the base
-                # send answers a failed *unicast* with a broadcast to the whole
-                # segment. That is right for a client with no address yet, and
-                # wrong for one the server deliberately unicast to -- a
-                # RENEWING client at its own ciaddr, or a relay at giaddr. Going
-                # through it here would put yiaddr, chaddr, the lease options
-                # and the echoed RELAY_AGENT_INFORMATION (RFC 3046 s2.2, whose
-                # circuit-id identifies the subscriber's physical port) in front
-                # of every host on the segment. Measured on the version this
-                # replaces: sendmsg -> 192.0.2.50, sendto -> 192.0.2.50, sendto
-                # -> 255.255.255.255. Same destination, one attempt, and the
-                # error propagates if it fails.
-                (self.limit or _FALLBACK_LIMIT).log(
-                    LOGGER,
-                    _logging.WARNING,
-                    "pinned send failed",
-                    "Pinned send from %s (ifindex %s) failed (%s | %s); retrying "
-                    "unpinned to %s.",
-                    self.local_ip,
-                    self.ifindex,
-                    e.__class__.__name__,
-                    _brief(e),
-                    dest_str,
-                    now=_time.monotonic(),
-                )
-                return self._send_to(data, dest_str, port)
-        return super().send(data, dst, port=port, client_mac=client_mac)
+        if self.local_ip is None or not self.endpoint.has_src_pinning:
+            return super().send(data, dst, port=port, client_mac=client_mac)
+        if dest_str == BROADCAST_ADDRESS:
+            return self._send_broadcast(data, dest_str, port)
+        return self._send_unicast(data, dest_str, port)
+
+    def _pinned(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest_str: str,
+        port: int,
+        source: "_ty.Union[_netimps.Interface, _ipaddress.IPv4Address]",
+    ) -> int:
+        return self._until_writable(
+            lambda: int(self.endpoint.send(bytes(data), dest_str, port, src=source))
+        )
+
+    def _send_broadcast(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest_str: str,
+        port: int,
+    ) -> int:
+        assert self.local_ip is not None
+        by_index = self.ifindex is not None and self.ifindex > 0
+        try:
+            return self._pinned(
+                data, dest_str, port, self._source() if by_index else self.local_ip
+            )
+        except BlockingIOError:
+            raise
+        except (OSError, ValueError) as first:
+            self._limited(
+                _logging.WARNING,
+                "pinned send failed",
+                "Pinned send from %s (ifindex %s) failed (%s | %s)%s.",
+                self.local_ip,
+                self.ifindex,
+                first.__class__.__name__,
+                _brief(first),
+                "; retrying with the address alone" if by_index else "",
+            )
+            failure: Exception = first
+            if by_index:
+                try:
+                    return self._pinned(data, dest_str, port, self.local_ip)
+                except BlockingIOError:
+                    raise
+                except (OSError, ValueError) as second:
+                    failure = second
+            # Never unpinned: a broadcast with no pin leaves by whichever
+            # interface the routing table picks, which may be another segment.
+            if self.metrics is not None:
+                self.metrics.replies_dropped_pin += 1
+            self._limited(
+                _logging.WARNING,
+                "broadcast reply dropped",
+                "Dropping a broadcast reply to port %s: it cannot be pinned to %s "
+                "(%s | %s), and unpinned it could leave by another interface.",
+                port,
+                self.local_ip,
+                failure.__class__.__name__,
+                _brief(failure),
+            )
+            raise failure
+
+    def _send_unicast(
+        self,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        dest_str: str,
+        port: int,
+    ) -> int:
+        assert self.local_ip is not None
+        try:
+            return self._pinned(data, dest_str, port, self.local_ip)
+        except BlockingIOError:
+            raise
+        except (OSError, ValueError) as e:
+            # Deliberately `_send_to` and not `super().send()`: the base send
+            # does not escalate a failed unicast to a broadcast either, and this
+            # must not become a way to. A broadcast would put a reply the caller
+            # deliberately unicast (a RENEWING client at its own ciaddr, a relay
+            # at giaddr) with its yiaddr, chaddr, lease options and echoed
+            # option 82 in front of every host on the segment.
+            self._limited(
+                _logging.WARNING,
+                "pinned send failed",
+                "Pinned send from %s (ifindex %s) failed (%s | %s); retrying "
+                "unpinned to %s.",
+                self.local_ip,
+                self.ifindex,
+                e.__class__.__name__,
+                _brief(e),
+                dest_str,
+            )
+            return self._send_to(data, dest_str, port)
 
 
 class _Datagram(_ty.NamedTuple):

@@ -11,6 +11,7 @@ import netimps as _netimps
 
 from .. import _network as _net
 from .._clock import _Instant
+from .._metrics import DHCPMetrics
 from ._interfaces import _resolve_interface
 from ._limit import _LogLimit
 from ._spec import ListenLike, _listen_uses_wildcard
@@ -179,6 +180,7 @@ def _context_for(
     destination: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     is_unicast: "_ty.Optional[bool]" = None,
     adapter: "_ty.Optional[_netimps.Interface]" = None,
+    metrics: "_ty.Optional[DHCPMetrics]" = None,
 ) -> DHCPRequestContext:
     """Build the context for one received datagram.
 
@@ -186,7 +188,8 @@ def _context_for(
     every fix the sync half gained. ``endpoint`` is the one the datagram was
     received through, reused for the pinned reply. ``received`` is the time the
     driver read when the datagram arrived. ``limit`` is the listener's log limit,
-    which a transport writes its own warnings through. ``adapter`` is the
+    which a transport writes its own warnings through, and ``metrics`` the
+    counters it writes a dropped reply to. ``adapter`` is the
     receiving interface as netimps resolved it with the datagram.
     """
     transport: DHCPTransport
@@ -195,6 +198,7 @@ def _context_for(
         pkt_transport.ifindex = ifindex
         pkt_transport.local_ip = local_ip
         pkt_transport.limit = limit
+        pkt_transport.metrics = metrics
         transport = pkt_transport
     else:
         transport = UDPTransport(sock)
