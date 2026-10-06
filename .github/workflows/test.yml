@@ -83,6 +83,12 @@ jobs:
       - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
         run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
 
+      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed after netimps because its own requirement is that
+      # unpublished netimps. Remove this step once 0.1.0 is published.
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
@@ -135,6 +141,12 @@ jobs:
       # the requirement already met. Remove this step once 0.4.0 is published.
       - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
         run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
+      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed after netimps because its own requirement is that
+      # unpublished netimps. Remove this step once 0.1.0 is published.
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install package and test dependencies
         run: |
@@ -214,6 +226,12 @@ jobs:
       # the requirement already met. Remove this step once 0.4.0 is published.
       - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
         run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
+      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed after netimps because its own requirement is that
+      # unpublished netimps. Remove this step once 0.1.0 is published.
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install benchmark dependencies
         run: |
