@@ -7,10 +7,8 @@ one DISCOVER carrying a 255-octet client identifier. Each scenario starts
 and keeps what the command wrote: its standard output, the files and their
 names, its status.
 
-`expected/` holds what the command wrote before the record writer moved into the
-library. `python build.py write` rewrites it from the code in the tree;
-`python build.py raw DIRECTORY` writes what the command produced with nothing
-normalised, to compare by hand.
+`expected/` holds what the command wrote, with a line feed ending every line on
+every platform. `python build.py write` rewrites it from the code in the tree.
 
 Every input holds only private addresses and locally administered hardware
 addresses: a recorded case already does, and the two messages in `tests/data/`
@@ -20,7 +18,6 @@ carry a placeholder address whose first octet is made locally administered here.
 from __future__ import annotations
 
 import json
-import os
 import pathlib
 import shutil
 import socket
@@ -42,11 +39,7 @@ if str(TESTS) not in sys.path:
 from cli_process import BIND_SECONDS, environment, free_port  # noqa: E402
 
 #: How `pydhcp capture` is told to write one file for each record.
-PER_CAPTURE: "tuple[str, ...]" = ("--output-mode", "per-capture")
-
-#: What the platform's text mode makes of a line feed. The command writes through
-#: text-mode files and a text-mode stdout, so on Windows its lines end CR LF.
-NATIVE_EOL = os.linesep.encode()
+PER_CAPTURE: "tuple[str, ...]" = ("--per-capture",)
 
 #: The most a scenario waits for the command to end by itself.
 RUN_SECONDS = 120.0
@@ -183,13 +176,8 @@ def _tree(root: pathlib.Path, prefix: str) -> "dict[str, bytes]":
     }
 
 
-def build(work: pathlib.Path, *, normalise: bool = True) -> "dict[str, bytes]":
+def build(work: pathlib.Path) -> "dict[str, bytes]":
     """Run every scenario under `work`; the files that make up `expected/`, by path."""
-
-    def lf(data: bytes) -> bytes:
-        if normalise and NATIVE_EOL != b"\n":
-            return data.replace(NATIVE_EOL, b"\n")
-        return data
 
     sent = datagrams()
     half = len(sent) // 2
@@ -199,14 +187,14 @@ def build(work: pathlib.Path, *, normalise: bool = True) -> "dict[str, bytes]":
     for name in ("json", "yaml"):
         done = run(["--format", name, "--count", str(len(sent))], sent)
         statuses[f"stdout_{name}"] = done.status
-        files[f"stdout_{name}.out"] = lf(done.stdout)
+        files[f"stdout_{name}.out"] = done.stdout
 
     for name in ("json", "yaml"):
         target = work / f"growing_{name}" / "nested" / f"all.{name}"
         for number, part in enumerate((sent[:half], sent[half:]), 1):
             done = run(["--output", str(target), "--count", str(len(part))], part)
             statuses[f"growing_{name}_run{number}"] = done.status
-        files[f"growing/all.{name}"] = lf(target.read_bytes())
+        files[f"growing/all.{name}"] = target.read_bytes()
 
     for name in ("json", "yaml", "toml", "ini"):
         root = work / f"tree_{name}"
@@ -224,7 +212,7 @@ def build(work: pathlib.Path, *, normalise: bool = True) -> "dict[str, bytes]":
             sent,
         )
         statuses[f"tree_{name}"] = done.status
-        files.update({k: lf(v) for k, v in _tree(root, f"tree_{name}").items()})
+        files.update(_tree(root, f"tree_{name}"))
 
     # No --format: the ending of the pattern names the format.
     root = work / "tree_ending"
@@ -239,7 +227,7 @@ def build(work: pathlib.Path, *, normalise: bool = True) -> "dict[str, bytes]":
         sent,
     )
     statuses["tree_ending"] = done.status
-    files.update({k: lf(v) for k, v in _tree(root, "tree_ending").items()})
+    files.update(_tree(root, "tree_ending"))
 
     # A budget of three files and a fourth client: the run ends by itself.
     root = work / "budget"
@@ -255,7 +243,7 @@ def build(work: pathlib.Path, *, normalise: bool = True) -> "dict[str, bytes]":
         ],
         distinct_clients(4),
     )
-    files.update({k: lf(v) for k, v in _tree(root, "budget").items()})
+    files.update(_tree(root, "budget"))
     summary = {
         "statuses": statuses,
         "budget": {"status": done.status, "last_line": done.stderr[-1]},
@@ -276,14 +264,11 @@ def write(directory: pathlib.Path, files: "dict[str, bytes]") -> None:
 
 
 def main(argv: "_ty.Sequence[str]") -> int:
-    if not argv or argv[0] not in ("write", "raw"):
+    if list(argv) != ["write"]:
         print(__doc__)
         return 2
     with tempfile.TemporaryDirectory() as work:
-        if argv[0] == "write":
-            write(EXPECTED, build(pathlib.Path(work)))
-        else:
-            write(pathlib.Path(argv[1]), build(pathlib.Path(work), normalise=False))
+        write(EXPECTED, build(pathlib.Path(work)))
     return 0
 
 

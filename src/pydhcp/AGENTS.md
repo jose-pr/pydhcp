@@ -26,7 +26,7 @@ is imported from the module that owns it:
 | `ServerAddressLike`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
 | `ClientIdentifierLike` | `pydhcp.client` |
 | `PacketFilterLike` | `pydhcp.capture` |
-| `validate_filename_pattern`, `FILENAME_FIELDS` | `pydhcp.capture` |
+| `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook` | `pydhcp.capture` |
 | `main`, `App` | `pydhcp.cli` |
 
 A name outside a module's `__all__` is not API. The address and MAC types are
@@ -847,26 +847,60 @@ exchange has an entry in the pending table.
   `.destination` (`SocketAddress`: where the datagram was sent, so the broadcast
   address for a client with no address, and the port it arrived on),
   `.message_type` (str name or `"UNKNOWN"`),
-  `.client_id` (str), `.xid` (8-hex-digit str). `.format_filename(pattern,
-  format) -> str` fills `{client_id}`/`{timestamp}`/`{msg_type}`/`{xid}`/
-  `{format}` placeholders (each value filesystem-sanitized). It is called per
-  packet, from inside the receive handler — check the pattern once at startup
-  with `validate_filename_pattern` rather than letting it raise there.
-- **`FILENAME_FIELDS`** — the five names above, in order; the only placeholders
-  `format_filename` can fill.
-- **`UNIQUE_FILENAME_FIELDS`** — `{"timestamp", "xid"}`, the subset that
+  `.client_id` (str), `.xid` (8-hex-digit str).
+- **`DHCPCaptureWriter(target, format=None, *, per_capture=False,
+  max_files=1000)`** — writes the records of a capture, built on pktcap's
+  `CaptureWriter`. Called with a `CaptureEvent` it writes one record, so it is
+  a `sink=`: `DHCPCapture(sink=DHCPCaptureWriter("caps.json"))`. A record is
+  exactly `DHCPMessage.to_text(format)`: one compact line of JSON for `json`,
+  and the text of the message for `yaml`, `toml` and `ini`, in UTF-8 with a
+  line feed ending every line on every platform. Properties: `.format`,
+  `.written` (records written), `.refused` (records a full budget turned away);
+  `close()`, and a context manager. A stream stays the caller's to close.
+  - `target` is a path or a **binary** stream (`sys.stdout.buffer`). A path is
+    **appended to**, and its directories are made when the first record is
+    written (building the writer touches nothing); a `yaml` file gets `---`
+    before every document, the first included, so an appended file stays one
+    valid stream; `json` is one record per line.
+  - `format` is `json`, `yaml`, `toml` or `ini`; `None` takes it from the ending
+    of `target`'s name (`.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`,
+    `.ini`, any letter case) and raises `pktcap.UnsupportedFormatError` (a
+    `ValueError`) when the ending names none. `toml` and `ini` hold one record
+    per file and so need `per_capture`; `toml` needs the `toml` extra
+    (`ImportError` naming it).
+  - `per_capture=True`: `target` is a filename pattern in `str.format` syntax
+    (`out/{client_id}/{timestamp}_{msg_type}.{format}`), one file per record,
+    directories made as needed. The placeholders are `FILENAME_FIELDS`:
+    `{client_id}`, `{msg_type}` and `{xid}` from the event, `{timestamp}` (the
+    event's `captured_at` in UTC, `20260714T123015.000000Z`; a naive time is read
+    as UTC), `{index}` (an `int` counting from 0, so `{index:06d}` works) and
+    `{format}`. Each value from the event is at most 64 characters: one with
+    runs of other than `A-Za-z0-9_.-` becomes `_`, leading and trailing `.` and
+    `_` are dropped (`unknown` when nothing is left), and a longer one is cut to
+    its first 55 characters and ends in `-` and 8 hexadecimal digits of the
+    SHA-256 of the whole, so two long identifiers that start alike name two
+    files. A file name Windows opens as a device (`NUL`) gets a leading `_`.
+    A pattern that is malformed, names a placeholder that is no field or uses
+    anything but bare names (`{}`, `{0}`, `{xid.real}`) is a `ValueError`
+    **when the writer is built**; format specs (`{client_id:>12}`) are fine. A
+    pattern naming none of `UNIQUE_FILENAME_FIELDS` logs one warning, because
+    each record then replaces the last.
+  - `max_files` (a `ValueError` below 1) bounds the distinct files a
+    `per_capture` writer creates: a record that needs one more is **not
+    written**, counted in `refused`, and logged once at WARNING by `pktcap`.
+    Rewriting a file already written is free, which leaves a pattern the client
+    cannot influence unlimited. The pattern is filled with values the client
+    chooses, so without the bound one unauthenticated sender decides how many
+    files land on the disk (measured: 5,000 forged identifiers, 5,000 files).
+  - `write`'s `OSError` (a full disk, a directory that is a file) is let through
+    as it is, so a sink that must not raise catches it.
+- **`FILENAME_FIELDS`** — `("client_id", "timestamp", "msg_type", "xid",
+  "format", "index")`, the placeholders a `per_capture` pattern may name.
+- **`UNIQUE_FILENAME_FIELDS`** — `{"timestamp", "xid", "index"}`, the subset that
   differs between two packets of one capture. A pattern naming none of them
   resolves to the same filename for packets that agree on the rest, so each
   record overwrites the last.
-- **`validate_filename_pattern(pattern) -> frozenset[str]`** — returns the
-  fields `pattern` names; raises `ValueError` for a malformed pattern or a
-  placeholder that is not in `FILENAME_FIELDS`. Format specs are fine
-  (`{client_id:>12}`), including one level of nesting; positional (`{}`,
-  `{0}`) and attribute/index access (`{xid.real}`) are not, because
-  `format_filename` formats against a plain dict of the five values. Intersect
-  the result with `UNIQUE_FILENAME_FIELDS` to tell whether records will
-  overwrite. Not re-exported from the top-level package — import it from
-  `pydhcp.capture`.
+- **`MAX_CAPTURE_FILES`** (`1000`) — the default `max_files`.
 - **`command_hook(command, *, packet_format="json", timeout=HOOK_TIMEOUT_SECONDS,
   fail_fast=False) -> CaptureHook`** — a hook that runs a program once per
   captured packet. `command` is found when the hook is made: a name with a
@@ -1266,8 +1300,8 @@ stayed at the root level and the library's output never appeared.
   (`--decode`/`--encode` mutually exclusive+required, `--input`/`--output`
   accepting `-` for stdio, `--format json|yaml|toml|ini|summary`; `summary` is
   decode-only, its first line is the op and XID), `capture` (`--listen`,
-  `--filter`, `--format`, `--output` file/pattern/`-`, `--output-mode
-  stream|single|per-capture`, `--max-files`, `--count`, `--hook` `module:function` or an
+  `--filter`, `--format`, `--output` file/pattern/`-`, `--per-capture`,
+  `--max-files`, `--count`, `--hook` `module:function` or an
   executable (a name with a directory is that file, resolved against the working
   directory when the capture starts and run by its absolute path; a bare name is
   looked up on `PATH`; a non-executable file is refused at start-up), `--hook-fail-fast`, `--per-interface`). Also gets
@@ -1284,7 +1318,7 @@ stayed at the root level and the library's output never appeared.
   command, named for it, and its keys are the command's field names
   (`listen`, `per_interface`, `lease_file`; `server`, `max_hops`,
   `insert_relay_agent_info`, `circuit_id`, `remote_id`; `packet_filter`,
-  `packet_format`, `output`, `output_mode`, `count`, `hook`, `hook_fail_fast`):
+  `packet_format`, `output`, `per_capture`, `count`, `hook`, `hook_fail_fast`):
 
   ```yaml
   server:
@@ -1313,28 +1347,30 @@ stayed at the root level and the library's output never appeared.
   IPv6 support: `relay._normalize_server_address` still calls `IPv4()` on
   whatever it receives, so an IPv6 upstream now fails with a clearer message
   rather than a different one.
-- **`capture --output-mode per-capture` validates its filename pattern before
-  binding**, via `capture.validate_filename_pattern`: an unknown placeholder
-  is a startup `ValueError`, and a pattern naming neither `{timestamp}` nor
-  `{xid}` gets a warning that records will overwrite each other. Both are
-  invisible otherwise — the pattern is expanded per packet inside the receive
+- **`capture --per-capture` validates its filename pattern before binding**:
+  `DHCPCaptureWriter` is built first, so an unknown placeholder is a startup
+  `ValueError` (status 2), and a pattern naming none of `{timestamp}`, `{xid}`
+  or `{index}` gets a warning that records will overwrite each other. Both are
+  invisible otherwise: the pattern is expanded per packet inside the receive
   handler, where the listener logs the exception and carries on, so
   `--output "cap_{mac}.json"` recorded nothing while logging once per packet.
-  The overwrite case is a **warning, not an error, deliberately** — see
-  `MAX_PER_CAPTURE_FILES` next.
-- **`MAX_PER_CAPTURE_FILES`** (1000; `--max-files N` sets the bound) — how many
-  *distinct* files one `per-capture` run may create. The pattern interpolates
-  values the client chooses, so without a bound one unauthenticated sender
-  decides how much of the operator's disk to use (measured: 5,000 forged
-  identifiers, 5,000 files). **A record that needs a file past the bound ends the
-  capture**: status 1 and a last line, `pydhcp: error: capture stopped: N files
-  written, the limit of --max-files; M records refused ...`. Rewriting an
-  already-seen path is always free, which is what leaves a pattern the client
-  cannot influence unlimited. `--max-files` with any other `--output-mode`, or
+  The overwrite case is a **warning, not an error, deliberately**: rewriting one
+  file is also how a pattern the client cannot influence stays outside the file
+  budget.
+- **`--max-files N`** (default `MAX_CAPTURE_FILES`, 1000) is the writer's
+  `max_files`: how many *distinct* files one `--per-capture` run may create. **A
+  record that needs a file past the bound ends the capture**: status 1 and a last
+  line, `pydhcp: error: capture stopped: N files written, the limit of
+  --max-files; M records refused ...`. `--max-files` without `--per-capture`, or
   below 1, is a wrong invocation (status 2). Each value interpolated into a
-  filename is at most 64 characters: a longer one is cut and ends in an
-  eight-digit hash of the whole, so two long client identifiers still name two
-  files.
+  filename is at most 64 characters (see `DHCPCaptureWriter`).
+- **Where the records go**: `--output -` (the default) is standard output, as
+  UTF-8 with a line feed ending each line on every platform (Windows included),
+  flushed after each record; `--output FILE` is appended to, and `--output
+  PATTERN --per-capture` is one file per record. `--format` is `json`, `yaml`,
+  `toml` or `ini`; without it the ending of `--output` names it (`.json`,
+  `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`, `.ini`), and an ending that names
+  none, and standard output, are `json`.
 - **A record that cannot be written ends the capture**: the first one that
   fails (a directory the pattern names is a file, a full or read-only disk, a
   path that is a directory) stops the capture with status 1 and one line,
@@ -1377,10 +1413,10 @@ stayed at the root level and the library's output never appeared.
   (skips the noise of an unset optional or an off `store_true` flag) — don't
   hand-write "(default: ...)" in a field's docstring, it's redundant and can
   drift out of sync with the real default.
-- Capture's newline-delimited JSON stream output (`--format json` in
-  `stream`/`single` mode) is compact JSON by design (one object per line);
-  use `message.to_text("json")` directly only for single structured packet
-  files where pretty JSON is acceptable.
+- Capture's JSON output (`--format json`, to standard output or a growing
+  file) is compact JSON by design, one object per line; a `--per-capture` JSON
+  file holds the same one line. Use `message.to_text("json")` directly only for
+  single structured packet files where pretty JSON is acceptable.
 
 ## Environment variables
 
@@ -1397,7 +1433,7 @@ variable (status 2).
 | `PYDHCP_MCP` | not read: the root disables the tool server, and the variable is left untouched |
 | `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE` | `server --listen`, `--per-interface`, `--lease-file` |
 | `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
-| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_OUTPUT_MODE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--output-mode`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
+| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_CAPTURE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--per-capture`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
 | `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` (`--decode` and `--encode` choose a mode and are not settings) |
 | `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
 | `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input |

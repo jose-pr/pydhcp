@@ -263,10 +263,19 @@ Write one file containing all accepted captures:
 pydhcp capture --listen 127.0.0.1:6767 --output captures.json --format json
 ```
 
+From Python, `DHCPCaptureWriter` is the sink:
+
+```python
+from pydhcp.capture import DHCPCapture, DHCPCaptureWriter
+
+with DHCPCaptureWriter("captures.yaml") as writer:  # appended to; the ending names the format
+    DHCPCapture(listen="127.0.0.1:6767", sink=writer).serve_forever()
+```
+
 Write one file per accepted packet:
 
 ```bash
-pydhcp capture --listen 127.0.0.1:6767 --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --output-mode per-capture
+pydhcp capture --listen 127.0.0.1:6767 --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-capture
 ```
 
 The filename pattern uses values the client chooses, so one run creates at most `--max-files`

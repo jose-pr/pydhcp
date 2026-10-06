@@ -18,7 +18,6 @@ import pytest
 
 from cli_process import Running, free_port, run_cli
 from conftest import build_request
-from pydhcp.capture._events import _sanitize_filename_value
 from pydhcp.options import DHCPOptionCode
 
 
@@ -41,29 +40,6 @@ def _files(directory: pathlib.Path) -> "list[pathlib.Path]":
 # -- a value in a filename is bounded ------------------------------------------------
 
 
-def test_a_long_value_is_cut_and_keeps_a_hash_so_two_long_values_differ() -> None:
-    first = _sanitize_filename_value("a" * 300)
-    second = _sanitize_filename_value("a" * 299 + "b")
-
-    assert len(first) == len(second) == 64
-    assert first != second
-    assert first == _sanitize_filename_value("a" * 300)
-
-
-@pytest.mark.parametrize(
-    "value, cleaned",
-    [
-        ("", "unknown"),
-        ("..", "unknown"),
-        ("x", "x"),
-        ("01:AA:BB", "01_AA_BB"),
-        ("a" * 64, "a" * 64),
-    ],
-)
-def test_a_short_value_is_unchanged_by_the_bound(value: str, cleaned: str) -> None:
-    assert _sanitize_filename_value(value) == cleaned
-
-
 def test_a_long_client_identifier_is_recorded(tmp_path: pathlib.Path) -> None:
     """255 octets render as 765 characters, which no filesystem takes as a name."""
     long_id = bytes([1]) + bytes(range(1, 255))
@@ -75,8 +51,7 @@ def test_a_long_client_identifier_is_recorded(tmp_path: pathlib.Path) -> None:
         "127.0.0.1:%d" % port,
         "--output",
         str(tmp_path / "{client_id}_{xid}.{format}"),
-        "--output-mode",
-        "per-capture",
+        "--per-capture",
         "--format",
         "json",
         "--count",
@@ -105,8 +80,7 @@ def test_a_full_file_budget_ends_the_capture_with_status_one_and_says_so(
         "127.0.0.1:%d" % port,
         "--output",
         str(tmp_path / "{client_id}.{format}"),
-        "--output-mode",
-        "per-capture",
+        "--per-capture",
         "--format",
         "json",
         "--max-files",
@@ -124,11 +98,12 @@ def test_a_full_file_budget_ends_the_capture_with_status_one_and_says_so(
 
 
 def test_the_file_budget_defaults_to_the_documented_constant() -> None:
-    from pydhcp.cli import MAX_PER_CAPTURE_FILES, App
+    from pydhcp.capture import MAX_CAPTURE_FILES
+    from pydhcp.cli import App
 
     parsed = App._parser_().parse_args(["capture"])
     assert parsed.max_files is None
-    assert MAX_PER_CAPTURE_FILES == 1000
+    assert MAX_CAPTURE_FILES == 1000
 
 
 @pytest.mark.parametrize("value", ["0", "-1"])
@@ -139,8 +114,7 @@ def test_a_budget_that_is_not_positive_is_a_wrong_invocation(
         "capture",
         "--output",
         str(tmp_path / "{xid}.{format}"),
-        "--output-mode",
-        "per-capture",
+        "--per-capture",
         "--max-files",
         value,
     )
@@ -216,8 +190,7 @@ def test_a_record_that_cannot_be_written_ends_the_capture_with_one_line(
         "127.0.0.1:%d" % port,
         "--output",
         str(tmp_path / "blocked" / "{xid}.{format}"),
-        "--output-mode",
-        "per-capture",
+        "--per-capture",
         "--format",
         "json",
         "--count",

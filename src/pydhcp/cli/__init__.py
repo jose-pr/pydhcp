@@ -21,7 +21,7 @@ from ._interfaces import Interfaces
 from ._server import Server
 from ._relay import Relay
 from ._packet import Packet
-from ._capture import MAX_PER_CAPTURE_FILES, Capture
+from ._capture import Capture
 
 #: The command line's logger, a child of the package logger `pydhcp`: the
 #: `-v` and `--loglevel pydhcp:DEBUG` options configure the parent.
@@ -112,6 +112,5 @@ __all__ = [
     "Server",
     "Relay",
     "Packet",
-    "MAX_PER_CAPTURE_FILES",
     "Capture",
 ]

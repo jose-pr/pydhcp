@@ -77,7 +77,6 @@ EXPECTED_CLI = [
     "CAPTURE_FORMATS",
     "Capture",
     "Interfaces",
-    "MAX_PER_CAPTURE_FILES",
     "PACKET_FORMATS",
     "Packet",
     "Relay",
@@ -234,13 +233,14 @@ EXPECTED_CAPTURE = [
     "CapturePredicate",
     "CaptureSink",
     "DHCPCapture",
+    "DHCPCaptureWriter",
     "FILENAME_FIELDS",
     "HOOK_TIMEOUT_SECONDS",
+    "MAX_CAPTURE_FILES",
     "PacketFilterLike",
     "UNIQUE_FILENAME_FIELDS",
     "command_hook",
     "compile_capture_filter",
-    "validate_filename_pattern",
 ]
 
 EXPECTED_LEASE = [

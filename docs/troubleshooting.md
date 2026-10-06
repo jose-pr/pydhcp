@@ -62,7 +62,7 @@ pydhcp capture --filter "option.DHCP_MESSAGE_TYPE=DHCPREQUEST"
 For long troubleshooting sessions, split captures into one file per packet.
 
 ```bash
-pydhcp capture --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --output-mode per-capture
+pydhcp capture --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-capture
 ```
 
 Hooks are trusted local code. A Python hook uses `module:function`; a command hook path is

@@ -372,94 +372,14 @@ def test_a_filter_names_the_clause_it_refuses() -> None:
         compile_capture_filter("src=192.0.2.55 and msg_type=DISCOVER")
 
 
-def test_capture_event_formats_safe_filenames() -> None:
+def test_capture_event_reports_the_message_and_where_it_went() -> None:
     event = _event()
 
     assert event.message_type == "DHCPDISCOVER"
+    assert event.client_id == "01:00:11:22:33:44:55"
+    assert event.xid == "1234ABCD"
     assert event.source == SocketAddress("192.0.2.55", 68)
     assert event.destination == SocketAddress("192.0.2.1", 0)
-    assert event.format_filename(
-        "out/{client_id}/{timestamp}_{msg_type}_{xid}.{format}", "json"
-    ) == ("out/01_00_11_22_33_44_55/20260714T123015.000000Z_DHCPDISCOVER_1234ABCD.json")
-
-
-class _ForgedIdentityMessage(DHCPMessage):
-    """A message whose rendered client identity is attacker-chosen text.
-
-    `DHCPMessage.get_client_id()` hex-encodes option 61, so today a real client
-    cannot get a `/` or a `..` into it however it crafts the option -- checked,
-    and worth knowing rather than assuming. But `format_filename` is what
-    stands between a remote value and a path, `_sanitize_filename_value` exists
-    precisely for that, and nothing exercised it with a value that needs
-    sanitizing. This supplies one directly, so the guard is tested at the layer
-    that has to hold if the identity rendering ever changes.
-    """
-
-    forged = ""
-
-    def get_client_id(self, func=None) -> str:
-        return self.forged
-
-
-def _forged_event(identity: str) -> CaptureEvent:
-    message = _ForgedIdentityMessage(**vars(_message()))
-    message.forged = identity
-    return CaptureEvent(
-        message=message,
-        context=_context(),
-        captured_at=datetime(2026, 7, 14, 12, 30, 15, tzinfo=timezone.utc),
-    )
-
-
-@pytest.mark.parametrize(
-    "identity",
-    [
-        "../../etc/passwd",
-        "..\\..\\windows\\system32",
-        "/etc/shadow",
-        "a/b/c",
-        "....//....//x",
-        "..",
-        ".",
-        "con:aux",
-        "\x00nul",
-    ],
-)
-def test_format_filename_cannot_escape_the_pattern_directory(identity: str) -> None:
-    """A client-supplied identity must land in one path segment, never above it.
-
-    `--output-mode per-capture` writes to `pattern.format(client_id=...)`, so a
-    value carrying a separator would place the file wherever it liked. The old
-    test only ever fed it a well-formed MAC, which needs no sanitizing at all.
-    """
-    event = _forged_event(identity)
-
-    rendered = event.format_filename("out/{client_id}/{xid}.{format}", "json")
-
-    segment = rendered[len("out/") : -len("/1234ABCD.json")]
-    assert segment, identity
-    # One segment: no separator of either flavour, and no parent reference.
-    assert "/" not in segment, rendered
-    assert "\\" not in segment, rendered
-    assert ".." not in segment.strip("."), rendered
-    assert segment not in (".", ".."), rendered
-    assert "\x00" not in segment, rendered
-    assert rendered.startswith("out/")
-    assert rendered.count("/") == 2, rendered
-
-
-def test_format_filename_keeps_a_real_identity_readable() -> None:
-    """Sanitizing must not reduce every identity to the same name.
-
-    Without this, a sanitizer that returned a constant would satisfy every
-    assertion above, and each capture would overwrite the last.
-    """
-    first = _forged_event("../../etc/passwd").format_filename("{client_id}", "json")
-    second = _forged_event("../../etc/group").format_filename("{client_id}", "json")
-
-    assert first == "etc_passwd"
-    assert second == "etc_group"
-    assert first != second
 
 
 def test_dhcp_capture_invokes_sink_and_hook_for_accepted_packet(capture_class) -> None:

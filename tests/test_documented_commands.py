@@ -188,7 +188,7 @@ def test_a_readme_command_line_runs_as_written(
                 out.sendto(_discover(), ("127.0.0.1", port))
             if "--hook" in arguments:
                 assert _wait_for(lambda: (tmp_path / "hook-ran.txt").exists())
-            elif "per-capture" in arguments:
+            elif "--per-capture" in arguments:
                 assert _wait_for(
                     lambda: any(p.is_file() for p in (tmp_path / "output").rglob("*"))
                 )

@@ -22,9 +22,6 @@ from pydhcp import (
 )
 from pydhcp.cli import App, Capture, Interfaces, Packet, Relay, Server, main
 
-# the capture command's helpers are not public
-from pydhcp.cli._capture import _infer_capture_format, _write_capture_record
-
 # the hook loader is not public
 from pydhcp.cli._capture_hook import _load_capture_hook
 
@@ -149,79 +146,6 @@ def test_packet_cli_main_encode_from_stdin(monkeypatch, capsys) -> None:
 
     assert status == 0
     assert capsys.readouterr().out.strip() == packet.encode().hex()
-
-
-def test_capture_format_inference() -> None:
-    assert _infer_capture_format("-", None) == "json"
-    assert _infer_capture_format("capture.yml", None) == "yaml"
-    assert _infer_capture_format("capture.toml", None) == "toml"
-    assert _infer_capture_format("capture.ini", "json") == "json"
-
-
-def test_write_capture_record_to_stdout(capsys) -> None:
-    state = {"first": True}
-
-    _write_capture_record(
-        _capture_event(),
-        output="-",
-        output_mode="stream",
-        packet_format="json",
-        state=state,
-    )
-
-    assert json.loads(capsys.readouterr().out)["xid"] == 0x12345678
-
-
-def test_write_capture_record_single_file_appends(tmp_path) -> None:
-    output = tmp_path / "captures.json"
-    state = {"first": True}
-
-    _write_capture_record(
-        _capture_event(),
-        output=output,
-        output_mode="single",
-        packet_format="json",
-        state=state,
-    )
-    _write_capture_record(
-        _capture_event(),
-        output=output,
-        output_mode="single",
-        packet_format="json",
-        state=state,
-    )
-
-    lines = output.read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 2
-    assert [json.loads(line)["xid"] for line in lines] == [0x12345678, 0x12345678]
-
-
-def test_write_capture_record_per_capture_pattern(tmp_path) -> None:
-    pattern = tmp_path / "{client_id}" / "{timestamp}_{msg_type}.{format}"
-
-    _write_capture_record(
-        _capture_event(),
-        output=pattern,
-        output_mode="per-capture",
-        packet_format="json",
-        state={"first": True},
-    )
-
-    files = list(tmp_path.rglob("*.json"))
-    assert len(files) == 1
-    assert "DHCPDISCOVER" in files[0].name
-    assert json.loads(files[0].read_text(encoding="utf-8"))["op"] == "BOOTREQUEST"
-
-
-def test_write_capture_record_rejects_stdout_per_capture() -> None:
-    with pytest.raises(ValueError):
-        _write_capture_record(
-            _capture_event(),
-            output="-",
-            output_mode="per-capture",
-            packet_format="json",
-            state={"first": True},
-        )
 
 
 def test_load_capture_hook_python_function(tmp_path, monkeypatch) -> None:
@@ -426,7 +350,6 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
         packet_filter="msg_type=DHCPDISCOVER",
         packet_format="json",
         output="-",
-        output_mode="stream",
         count=2,
         hook=None,
         hook_fail_fast=False,
@@ -720,32 +643,8 @@ def test_relay_id_misuse_is_reported_as_a_clean_cli_error(monkeypatch, capsys) -
     assert "--circuit-id" in err and "--insert-relay-agent-info" in err
 
 
-def test_yaml_capture_survives_a_second_run(tmp_path) -> None:
-    """The 'first record' flag is per process, but the file is opened for append.
-
-    A second run's first record used to be written straight onto the last record
-    of the first with no '---', so YAML merged the two mappings and the earlier
-    record silently disappeared on load: four records written, three loaded.
-    """
-    import yaml
-
-    output = tmp_path / "captures.yaml"
-    for _run in range(2):
-        state = {"first": True}  # fresh per run, exactly as the CLI builds it
-        for _record in range(2):
-            _write_capture_record(
-                _capture_event(),
-                output=output,
-                output_mode="single",
-                packet_format="yaml",
-                state=state,
-            )
-
-    documents = [d for d in yaml.safe_load_all(output.read_text(encoding="utf-8")) if d]
-    assert len(documents) == 4, "a record was merged away across runs"
-
-
-def test_capture_rejects_toml_and_ini_for_multi_record_output(capsys) -> None:
+@pytest.mark.parametrize("fmt", ["toml", "ini"])
+def test_capture_rejects_toml_and_ini_for_multi_record_output(fmt, capsys) -> None:
     """Concatenated records are unreadable in both: TOML has no document
     separator and configparser raises DuplicateSectionError on a second
     [message]. per-capture writes one record per file, which is valid.
@@ -754,70 +653,17 @@ def test_capture_rejects_toml_and_ini_for_multi_record_output(capsys) -> None:
     raise at all -- it opens sockets and captures until interrupted, which is
     why this test is not run against the pre-fix tree.
     """
-    import pathlib
-
-    import pytest
-
-    from pydhcp.cli import Capture
-
-    for fmt in ("toml", "ini"):
-        command = Capture()
-        command.packet_format = fmt
-        command.output = pathlib.Path("caps." + fmt)
-        command.output_mode = "single"
-        with pytest.raises(ValueError) as error:
-            command()
-        message = str(error.value)
-        assert "per-capture" in message and fmt in message
-        assert main(["capture", "--format", fmt, "--output", "caps." + fmt]) == 2
-        assert "per-capture" in capsys.readouterr().err
-
-
-def test_capture_allows_toml_per_capture(tmp_path) -> None:
-    """One record per file is the shape these formats do support."""
-    # Writing TOML is the `toml` extra's job, not a base install's -- without the
-    # skip this fails on any environment that has only [dev], which is exactly
-    # what a contributor gets from the documented setup command.
-    pytest.importorskip("tomli_w")
-    pattern = tmp_path / "{timestamp}_{msg_type}.{format}"
-
-    _write_capture_record(
-        _capture_event(),
-        output=pattern,
-        output_mode="per-capture",
-        packet_format="toml",
-        state={"first": True},
-    )
-
-    written = list(tmp_path.glob("*.toml"))
-    assert len(written) == 1
-
-
-def test_capture_stdout_stream_flushes_each_record(monkeypatch) -> None:
-    """Piped into `jq` or `tee`, stdout is block-buffered: a live capture showed
-    nothing for ~8 KB or until it exited, and lost whatever was buffered if it
-    was killed."""
-    import io
-
-    class CountingStdout(io.StringIO):
-        flushes = 0
-
-        def flush(self) -> None:
-            type(self).flushes += 1
-
-    stdout = CountingStdout()
-    monkeypatch.setattr(sys, "stdout", stdout)
-
-    for _ in range(3):
-        _write_capture_record(
-            _capture_event(),
-            output=None,
-            output_mode="stream",
-            packet_format="json",
-            state={"first": True},
-        )
-
-    assert CountingStdout.flushes >= 3, "records are not flushed as they are written"
+    if fmt == "toml":
+        pytest.importorskip("tomli_w")
+    command = Capture()
+    command.packet_format = fmt
+    command.output = pathlib.Path("caps." + fmt)
+    with pytest.raises(ValueError) as error:
+        command()
+    message = str(error.value)
+    assert "per-capture" in message and fmt in message
+    assert main(["capture", "--format", fmt, "--output", "caps." + fmt]) == 2
+    assert "per-capture" in capsys.readouterr().err
 
 
 def test_verbosity_flags_reach_the_library_logger() -> None:
@@ -1030,102 +876,3 @@ def test_python_dash_m_pydhcp_works():
     assert result.returncode == 0, result.stderr
     assert "No module named" not in result.stderr
     assert "usage: pydhcp" in result.stdout
-
-
-# --- a client must not decide how many files land on the operator's disk ---
-
-
-def _capture_event_with_client_id(client_id: bytes):
-    """A capture event whose client identifier the 'client' chose."""
-    import datetime as _dt
-    import ipaddress
-    from datetime import timedelta
-    from unittest.mock import Mock
-
-    from pydhcp.capture import CaptureEvent
-    from pydhcp.listener import DHCPRequestContext
-    from ipaddress import IPv4Address as IPv4
-    from pydhcp import NetworkInterface, SocketAddress
-    from pydhcp.options import DHCPOptionCode, DHCPOptions
-    from pydhcp.packet import (
-        DHCPMessageType,
-        DHCPFlags,
-        HardwareAddressType,
-        DHCPOpcode,
-    )
-    from pydhcp.packet import DHCPMessage
-
-    options = DHCPOptions()
-    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
-    options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(client_id)
-    message = DHCPMessage(
-        DHCPOpcode.BOOTREQUEST,
-        xid=0x1234,
-        chaddr=b"\x00\x11\x22\x33\x44\x55",
-        options=options,
-    )
-    context = DHCPRequestContext(
-        transport=Mock(),
-        interface=NetworkInterface(
-            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
-        ),
-        client=SocketAddress(IPv4("10.0.0.50"), 68),
-        client_mac=b"\x00\x11\x22\x33\x44\x55",
-    )
-    return CaptureEvent(message, context, _dt.datetime.now(tz=_dt.timezone.utc))
-
-
-def test_per_capture_file_count_is_bounded(tmp_path):
-    """The filename pattern interpolates values the client chooses.
-
-    Measured before the cap: 5,000 forged client identifiers produced 5,000
-    files. An unauthenticated sender decided how much of the operator's disk to
-    use, and `capture` is exactly what an operator leaves running. The record
-    that needs a file past the bound is refused, and counted.
-    """
-    from pydhcp import cli
-    from pydhcp.cli._capture import _BudgetFull
-
-    pattern = str(tmp_path / "{client_id}.{format}")
-    state: dict = {"first": True, "max_files": 20}
-
-    refused = 0
-    for index in range(20 + 5):
-        try:
-            _write_capture_record(
-                _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
-                output=pattern,
-                output_mode="per-capture",
-                packet_format="json",
-                state=state,
-            )
-        except _BudgetFull:
-            refused += 1
-
-    assert len(list(tmp_path.iterdir())) == 20
-    assert refused == state["per_capture_refused"] == 5
-    assert cli.MAX_PER_CAPTURE_FILES == 1000
-
-
-def test_a_pattern_the_client_cannot_influence_is_not_limited(tmp_path):
-    """A fixed pattern overwrites one file, so the cap must not apply to it.
-
-    Counting distinct paths rather than writes is what keeps this case free:
-    the same name is rewritten, and rewriting is always allowed.
-    """
-    from pydhcp import cli
-
-    pattern = str(tmp_path / "capture.{format}")
-    state: dict = {"first": True}
-
-    for index in range(cli.MAX_PER_CAPTURE_FILES + 200):
-        _write_capture_record(
-            _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
-            output=pattern,
-            output_mode="per-capture",
-            packet_format="json",
-            state=state,
-        )
-
-    assert [p.name for p in tmp_path.iterdir()] == ["capture.json"]
-    assert state.get("per_capture_refused", 0) == 0

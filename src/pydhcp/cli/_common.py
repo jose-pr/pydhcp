@@ -39,20 +39,28 @@ class _Failed(Exception):
     """
 
 
-def write_line(text: str) -> None:
-    """One result line on stdout, flushed; `BrokenPipeError` if nobody reads it.
+def closed_stdout(error: OSError) -> "_ty.Optional[BrokenPipeError]":
+    """`BrokenPipeError` when `error` says nobody reads stdout any more, else `None`.
 
     A closed pipe is `BrokenPipeError` on POSIX and `OSError(EINVAL)` on Windows.
     """
+    if isinstance(error, BrokenPipeError) or error.errno in (
+        _errno.EPIPE,
+        _errno.EINVAL,
+    ):
+        return BrokenPipeError(_errno.EPIPE, "stdout is closed")
+    return None
+
+
+def write_line(text: str) -> None:
+    """One result line on stdout, flushed; `BrokenPipeError` if nobody reads it."""
     try:
         _sys.stdout.write(text if text.endswith("\n") else text + "\n")
         _sys.stdout.flush()
     except OSError as error:
-        if isinstance(error, BrokenPipeError) or error.errno in (
-            _errno.EPIPE,
-            _errno.EINVAL,
-        ):
-            raise BrokenPipeError(_errno.EPIPE, "stdout is closed") from None
+        closed = closed_stdout(error)
+        if closed is not None:
+            raise closed from None
         raise
 
 

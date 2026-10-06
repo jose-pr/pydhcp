@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pydhcp.capture.DHCPCaptureWriter(target, format=None, *, per_capture=False, max_files=1000)`**
+  and **`MAX_CAPTURE_FILES`**: the record writer, no longer reachable only from `pydhcp capture`.
+  Called with a `CaptureEvent` it writes one record, so it is a `sink=`; it writes to a path
+  (appended to), a binary stream or, with `per_capture`, one file per record under a filename
+  pattern, and counts `written` and `refused`. It is built on pktcap, which pydhcp now requires.
+  `FILENAME_FIELDS` and `UNIQUE_FILENAME_FIELDS` gain `{index}`, a count from 0 the writer fills in.
+  Without `--format`, the ending of `--output` names the format: `.jsonl` and `.ndjson` join
+  `.json`, `.yaml`, `.yml`, `.toml` and `.ini`.
 - **`pydhcp.capture.command_hook(command, *, packet_format, timeout, fail_fast)` and
   `HOOK_TIMEOUT_SECONDS`** (10 seconds): the command hook is a library function, no longer
   reachable only from `pydhcp capture --hook`. **`DHCPHookError`** (`pydhcp.exceptions`,
@@ -108,6 +116,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
+  `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
+  `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is
+  `PYDHCP_CAPTURE_PER_CAPTURE` (a boolean) and the configuration key `output_mode` is `per_capture`.
+  **Breaking** for a command line, a variable or a file that said `--output-mode`.
+- **Breaking: `pydhcp.capture.validate_filename_pattern`, `CaptureEvent.format_filename` and
+  `pydhcp.cli.MAX_PER_CAPTURE_FILES` are gone.** Building a `DHCPCaptureWriter` makes the same
+  checks of the pattern and raises `ValueError` (the message names the field and lists the fields);
+  `pydhcp.capture.MAX_CAPTURE_FILES` is the default budget. The cleaning of a filename value
+  is pktcap's, the same rule: a name that Windows opens as a device (`NUL`) now gets a leading `_`.
+- **A capture writes a line feed at the end of every line on every platform.** On Windows a record
+  file, and standard output, ended each line with CR LF; they no longer do. Standard output is
+  UTF-8 on every platform. Nothing changes on Linux or macOS, and a record's other octets are the
+  same in all four formats.
 - **The capture filter's grammar is pktcap's, which pydhcp now requires** (`pktcap>=0.1.0,<0.2`): what
   each key means stays in pydhcp. A malformed or unusable expression raises `pktcap.CaptureFilterError`
   (a `ValueError`), whose message names the clause. These expressions mean something new:

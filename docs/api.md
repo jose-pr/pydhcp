@@ -86,6 +86,10 @@ serve a private or vendor option space instead of the IANA registry above.
 
 ::: pydhcp.capture.CaptureEvent
 
+## DHCPCaptureWriter
+
+::: pydhcp.capture.DHCPCaptureWriter
+
 ## AsyncDHCPServer
 
 ::: pydhcp.server.AsyncDHCPServer
