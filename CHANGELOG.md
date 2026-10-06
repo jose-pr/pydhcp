@@ -88,6 +88,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   reaches `serve_forever()` as `KeyboardInterrupt`; the `pydhcp server`, `relay`
   and `capture` commands catch it, log the same line and exit with status 0, as
   before.
+- **Breaking: constructors take `listen` (and, for the relays, `server_addresses`)
+  positionally and every other option by keyword.** This applies to `DHCPListener`,
+  `DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient` and the asyncio
+  counterparts; a seventh positional argument is a `TypeError`. The same position
+  meant different things on the two drivers (`select_timeout` against
+  `max_packet_size`), and the shipped header's `DHCPRelay` signature omitted
+  `trust_client_relay_agent_info`, so a positional `select_timeout` written from it
+  turned that trust on. `select_timeout` is now **`poll_interval`** on the
+  synchronous classes (how often a wait looks at the shutdown flag; a shutdown no
+  longer waits for it). `reuse_address` and `receive_buffer_size` are new
+  keywords; each defaults to the `REUSE_ADDRESS` / `RECEIVE_BUFFER_SIZE` class
+  attribute, which still works.
+- **Constructors perform no I/O.** A listener no longer asks a socket whether the
+  platform has packet info, and no longer lists adapters, until `bind()`.
+  `FileLeaseBackend(filepath)` now requires its path (the default `leases.json` in
+  the current directory is gone) and reads nothing: `open()` reads the file once,
+  and the first lease operation or `with` calls it, so a missing file creates
+  nothing and an unreadable one is not set aside until then.
+- **Breaking: `SocketAddress(sock)` is `SocketAddress.from_socket(sock)`**, and
+  `SocketAddress(ip, port)` needs both arguments (`TypeError` otherwise, where it
+  was `ValueError`).
 - **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
   are gone** (they exported nothing); the layers are private modules of
   `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.

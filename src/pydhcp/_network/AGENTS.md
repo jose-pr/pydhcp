@@ -26,11 +26,11 @@ of the installed package).
     uses. It is *defined* here because the option codecs need it to name a client
     identifier's type octet and `pydhcp.packet` imports the codecs — defining
     it there made that a cycle.
-- **`SocketAddress(ip, port=None)`** (`NamedTuple[ip: IPv4Address, port: int]`) —
-  `ip` may be a `str`, an `ipaddress.IPv4Address`, or a bound `socket.socket`
-  (reads `getsockname()`, in which case `port` must be omitted); passing a
-  non-socket `ip` with `port=None` raises `ValueError`. `str()` is
-  `"host:port"`.
+- **`SocketAddress(ip, port)`** (`NamedTuple[ip: IPv4Address, port: int]`) —
+  `ip` is a `str` or an `ipaddress.IPv4Address`; both arguments are required
+  and the constructor does no I/O. `str()` is `"host:port"`.
+  - `SocketAddress.from_socket(sock) -> SocketAddress` — the local address a
+    socket is bound to; it asks the socket (`getsockname()`).
   - `.compat() -> tuple[str, int]` — plain `(str, int)` pair for stdlib socket
     calls.
   - It does not bind: the listener calls `netimps.bind()`, which raises
