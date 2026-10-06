@@ -254,7 +254,12 @@ class _ListenerCore:
                 self._log_limit,
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
-                msg.log(client, _net.SocketAddress.from_socket(sock), _logging.DEBUG)
+                bound = _net.SocketAddress.from_socket(sock)
+                msg.log(
+                    client,
+                    _net.SocketAddress(local_ip or bound.ip, bound.port),
+                    _logging.DEBUG,
+                )
             self.handle(msg, context)
         except Exception as e:
             # `DHCPCapture.hook_fail_fast` relies on this staying a catch rather

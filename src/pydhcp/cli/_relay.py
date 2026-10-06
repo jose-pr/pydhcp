@@ -111,7 +111,7 @@ class Relay(_Command):
         # argument was reported *after* "Starting DHCP relay..." and read as a
         # runtime failure rather than as the argument error it is.
         relay = DHCPRelay(
-            listen=self.listen or "*",
+            listen="*" if self.listen is None else self.listen,
             server_addresses=server_addresses,
             max_hops=self.max_hops,
             insert_relay_agent_info=self.insert_relay_agent_info,
@@ -121,7 +121,7 @@ class Relay(_Command):
         )
         self._logger_.info(
             "Starting DHCP relay, listening on: %s, forwarding to: %s...",
-            self.listen or "*",
+            "*" if self.listen is None else self.listen,
             ", ".join(self.server),
         )
         try:

@@ -106,7 +106,7 @@ _RECEIVE_PATH = (
     "_pktinfo_supported",
     "_bind_sockets",
     "_arrival",
-    "_binding_host",
+    "_iter_listen_bindings",
     "_close_socket",
     "_context_for",
     "_resolve_interface",

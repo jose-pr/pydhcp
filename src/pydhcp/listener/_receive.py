@@ -49,10 +49,10 @@ def _is_loopback(context: DHCPRequestContext) -> bool:
     (Windows allows it, which is how a loopback harness can pass on one platform
     and hang on the other).
     """
-    for candidate in (context.local_ip, context.interface.ip, context.client.ip):
-        if candidate is not None:
-            return bool(candidate.is_loopback)
-    return False
+    candidate = (
+        context.local_ip if context.local_ip is not None else context.interface.ip
+    )
+    return bool(candidate.is_loopback)
 
 
 def _pktinfo_supported(listen: ListenLike, per_interface: "_ty.Optional[bool]") -> bool:

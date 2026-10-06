@@ -222,4 +222,5 @@ def _close_socket(
         else:
             sock.close()
     except Exception:
-        pass
+        # Closing is cleanup and must not mask the error that led to it.
+        LOGGER.debug("Closing a listening socket failed", exc_info=True)

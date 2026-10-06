@@ -41,7 +41,13 @@ class Server(_Command):
         # `--config shared.yaml --listen 127.0.0.1:6767` bound whatever the file
         # said, which is the opposite of what every other CLI does and gives no
         # way to override a shared config for one run.
-        listen = self.listen or server_config.get("listen") or "*"
+        # `is None`, not falsiness: an empty `--listen` or `listen = ""` names no
+        # address and the listener says so, rather than serving the wildcard.
+        listen = self.listen
+        if listen is None:
+            listen = server_config.get("listen")
+        if listen is None:
+            listen = "*"
         lease_file = self.lease_file or server_config.get("lease_file")
         unknown = sorted(set(server_config) - {"listen", "lease_file"})
         if unknown:

@@ -238,7 +238,7 @@ class Capture(_Command):
 
             hook = _load_capture_hook(self.hook, packet_format, self.hook_fail_fast)
             capture = DHCPCapture(
-                listen=self.listen or "*",
+                listen="*" if self.listen is None else self.listen,
                 packet_filter=self.packet_filter,
                 sink=sink,
                 hook=hook,
