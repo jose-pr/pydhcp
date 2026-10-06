@@ -51,7 +51,9 @@ def test_an_option_that_declares_a_length_and_supplies_nothing_is_dropped() -> N
         msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=False) is None
     ), "an empty payload was kept, so the option reads as present"
     # The decode that used to raise.
-    assert msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=T.IPv4Address) is None
+    assert (
+        msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=T.IPv4AddressOption) is None
+    )
 
 
 def test_a_partially_truncated_option_keeps_what_arrived() -> None:

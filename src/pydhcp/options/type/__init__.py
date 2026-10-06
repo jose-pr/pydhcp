@@ -44,7 +44,7 @@ from .mos import (
     MoSFqdnList as MoSFqdnList,
 )
 from .addresses import (
-    IPv4Address as IPv4Address,
+    IPv4AddressOption as IPv4AddressOption,
     ClasslessRoute as ClasslessRoute,
     PolicyFilter as PolicyFilter,
     StaticRoute as StaticRoute,
@@ -94,7 +94,7 @@ __all__ = [
     "List",
     "RecordList",
     "DHCPOptionCodes",
-    "IPv4Address",
+    "IPv4AddressOption",
     "ClasslessRoute",
     "PolicyFilter",
     "StaticRoute",

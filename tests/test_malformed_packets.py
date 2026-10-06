@@ -121,7 +121,7 @@ def test_truncated_options(caplog):
     # And what the truncated option itself becomes: **dropped**, because it
     # supplied no octets at all. It used to be kept with an empty payload,
     # which read as present and then raised
-    # `ValueError: IPv4Address payload must be exactly 4 octets, got 0` the
+    # `ValueError: IPv4AddressOption payload must be exactly 4 octets, got 0` the
     # moment anything decoded it -- a remote packet raising out of a
     # deliberately *lenient* path, reachable by any sender. This assertion was
     # written to pin that behaviour and name the open question; the question is

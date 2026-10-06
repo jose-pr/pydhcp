@@ -159,7 +159,7 @@ class MockDHCPServerWithBackend(DHCPServer):
     DEFAULT_PORTS = (6767,)
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        from pydhcp.options.type import IPv4Address, U32
+        from pydhcp.options.type import IPv4AddressOption, U32
 
         existing = self.lease_backend.lookup(client_id)
         if existing:
@@ -172,7 +172,9 @@ class MockDHCPServerWithBackend(DHCPServer):
                 return renewed
             return existing
 
-        requested_ip = msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=IPv4Address)
+        requested_ip = msg.options.get(
+            DHCPOptionCode.REQUESTED_IP, decode=IPv4AddressOption
+        )
         requested_ttl = msg.options.get(
             DHCPOptionCode.IP_ADDRESS_LEASE_TIME, decode=U32
         )

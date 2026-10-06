@@ -141,7 +141,7 @@ def test_a_bare_string_is_one_domain_not_one_per_character() -> None:
     With no `__init__` this inherited `list`'s, where a `str` is an iterable
     of characters. Measured: `options[119] = "corp"` stored four
     single-letter search domains and encoded all four, silently. Every other
-    container in the package normalizes -- `List[IPv4Address]` has
+    container in the package normalizes -- `List[IPv4AddressOption]` has
     `_normalize` -- and this one is now the same shape: a list or tuple
     argument is several entries, anything else is one.
     """

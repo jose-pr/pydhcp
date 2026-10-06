@@ -6,7 +6,7 @@ import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from .base import DHCPOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
-from .addresses import IPv4Address
+from .addresses import IPv4AddressOption
 from .scalar import Bytes
 
 _MoSLabelListT = _ty.TypeVar("_MoSLabelListT", bound="_MoSLabelList")
@@ -153,13 +153,13 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
             return Bytes(value)
         if isinstance(value, List):
             return value
-        return List[IPv4Address](value)
+        return List[IPv4AddressOption](value)
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
         if len(payload) % 4:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
-        return List[IPv4Address](
+        return List[IPv4AddressOption](
             [payload[i : i + 4].tobytes() for i in range(0, len(payload), 4)]
         )
 

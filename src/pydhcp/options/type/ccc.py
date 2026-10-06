@@ -6,7 +6,7 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import network as _net
 from .base import DHCPOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
-from .addresses import IPv4Address
+from .addresses import IPv4AddressOption
 from .scalar import Boolean, Bytes, U8
 
 
@@ -79,17 +79,17 @@ class CccProvisioningServerAddress(DHCPOptionType):
             kind, payload = value
             kind_name = str(kind).lower()
             if kind_name in {"ipv4", "address"}:
-                return "ipv4", IPv4Address(payload)
+                return "ipv4", IPv4AddressOption(payload)
             if kind_name in {"fqdn", "domain"}:
                 return "fqdn", CccProvisioningServerFqdn(payload)
             raise DHCPValueError(
                 "CCC provisioning server address kind must be ipv4 or fqdn"
             )
         if isinstance(value, _net.IPv4):
-            return "ipv4", IPv4Address(value)
+            return "ipv4", IPv4AddressOption(value)
         if isinstance(value, str):
             try:
-                return "ipv4", IPv4Address(value)
+                return "ipv4", IPv4AddressOption(value)
             except ValueError:
                 # `ValueError` only: `ipaddress.AddressValueError` (its
                 # subclass) is what a non-address string raises -- measured
@@ -100,7 +100,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
                 return "fqdn", CccProvisioningServerFqdn(value)
         if isinstance(value, CccProvisioningServerFqdn):
             return "fqdn", value
-        return "ipv4", IPv4Address(value)
+        return "ipv4", IPv4AddressOption(value)
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> "CccProvisioningServerAddress":
@@ -112,7 +112,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
                 raise DHCPDecodeError(
                     "CCC provisioning server IPv4 payload must be 5 bytes"
                 )
-            return cls(("ipv4", IPv4Address(payload[1:5].tobytes())))
+            return cls(("ipv4", IPv4AddressOption(payload[1:5].tobytes())))
         if kind == 0:
             text, read = _decode_no_compression_domain(payload, 1)
             if 1 + read != len(payload):
@@ -133,7 +133,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
     def _dhcp_write(self, data: bytearray) -> int:
         data.append(1 if self.kind == "ipv4" else 0)
         if self.kind == "ipv4":
-            ipv4_payload = _ty.cast(IPv4Address, self.value)
+            ipv4_payload = _ty.cast(IPv4AddressOption, self.value)
             data.extend(ipv4_payload.packed)
             return 5
         fqdn_payload = _ty.cast(CccProvisioningServerFqdn, self.value)
@@ -163,11 +163,11 @@ class CccProvisioningServerAddress(DHCPOptionType):
         return hash((self.kind, self.value))
 
 
-class CccPrimaryDhcpServerAddress(IPv4Address):
+class CccPrimaryDhcpServerAddress(IPv4AddressOption):
     """CCC sub-option 1 primary DHCP server address."""
 
 
-class CccSecondaryDhcpServerAddress(IPv4Address):
+class CccSecondaryDhcpServerAddress(IPv4AddressOption):
     """CCC sub-option 2 secondary DHCP server address."""
 
 
@@ -289,7 +289,7 @@ class CccSecurityTicketControl(DHCPOptionType, int):
         return int(self)
 
 
-class CccKdcServerAddressList(List[IPv4Address]):
+class CccKdcServerAddressList(List[IPv4AddressOption]):
     """CCC sub-option 10 KDC server address list."""
 
 

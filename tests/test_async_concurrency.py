@@ -4,7 +4,7 @@ import asyncio
 import socket
 import time
 from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPOptions
-from pydhcp.options.type import IPv4Address
+from pydhcp.options.type import IPv4AddressOption
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
@@ -13,7 +13,9 @@ from conftest import build_request
 
 class MockAsyncServerForConcurrency(AsyncDHCPServer):
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        requested_ip = msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=IPv4Address)
+        requested_ip = msg.options.get(
+            DHCPOptionCode.REQUESTED_IP, decode=IPv4AddressOption
+        )
         ip = requested_ip if requested_ip else IPv4("127.0.0.1")
         options = DHCPOptions()
         return self.lease_backend.allocate(client_id, ip, 3600, options)

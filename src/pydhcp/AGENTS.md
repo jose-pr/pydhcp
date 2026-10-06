@@ -18,11 +18,11 @@ does not. Import from the owning module when a name is not in `__all__`
 version, read from its metadata).
 
 **Removed from the top level** (breaking, see the changelog):
-**`IPv4Address`**, **`List`**, **`Bytes`**, **`String`** and **`Boolean`** are
-no longer re-exported here. They are option **codecs** and their bare names did
-not say so — `pydhcp.IPv4Address` was the codec, not `ipaddress.IPv4Address`,
-so `isinstance(interface.ip, pydhcp.IPv4Address)` was **False** while looking
-exactly like the check you meant to write. Import them from
+**`IPv4AddressOption`**, **`List`**, **`Bytes`**, **`String`** and **`Boolean`** are
+not re-exported here. They are option **codecs** and a bare name would not say
+so; the address codec is `IPv4AddressOption` so that the bare name
+`IPv4Address` is only ever the address type, and `isinstance(interface.ip,
+pydhcp.options.type.IPv4AddressOption)` is **False**. Import them from
 **`pydhcp.options.type`**, which is where they have always lived. The stdlib
 address type is **`pydhcp.IPv4`**.
 
@@ -539,7 +539,7 @@ observed by this relay instance.
 **Gotcha**: `CaptureEvent.destination` casts `context.interface.ip` to `IPv4`
 to satisfy `SocketAddress`; an IPv6-only interface isn't actually handled
 (`NetworkInterface.ip` is `ipaddress.IPv4Address | ipaddress.IPv6Address`
-— spelled out because `pydhcp.IPv4Address` is a *different* thing, see the
+— spelled out because the codec `IPv4AddressOption` is a *different* thing, see the
 name-collision note at the top) — capture on an
 IPv6-only interface can break at runtime.
 

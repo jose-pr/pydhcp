@@ -171,7 +171,7 @@ EXPECTED_OPTIONS_TYPE = [
     "FixedLengthInteger",
     "Flag",
     "I32",
-    "IPv4Address",
+    "IPv4AddressOption",
     "List",
     "MoSFqdnList",
     "MoSFqdnRecord",

@@ -3,7 +3,7 @@ import logging
 import json
 from pydhcp.options.type import (
     List,
-    IPv4Address,
+    IPv4AddressOption,
     String,
     Boolean,
     Bytes,
@@ -58,7 +58,7 @@ from ipaddress import ip_network
 def test_ipv4address_option():
     # Test valid decode
     ip_bytes = b"\xc0\xa8\x01\x64"  # 192.168.1.100
-    addr, length = IPv4Address._dhcp_read(memoryview(ip_bytes))
+    addr, length = IPv4AddressOption._dhcp_read(memoryview(ip_bytes))
     assert addr == IPv4("192.168.1.100")
     assert length == 4
 
@@ -113,10 +113,12 @@ def test_repr_and_json_value_shapes():
     assert repr(Boolean(True)) == "Boolean(True)"
     assert repr(U16(500)) == "U16(500)"
 
-    ipv4 = IPv4Address("192.0.2.1")
+    ipv4 = IPv4AddressOption("192.0.2.1")
     raw = Bytes(b"\x01\x02\x03")
     flag = Boolean(1)
-    addrs = List[IPv4Address]([IPv4Address("192.0.2.1"), IPv4Address("198.51.100.2")])
+    addrs = List[IPv4AddressOption](
+        [IPv4AddressOption("192.0.2.1"), IPv4AddressOption("198.51.100.2")]
+    )
 
     assert ipv4.__json__() == "192.0.2.1"
     assert raw.__json__() == "010203"
@@ -126,10 +128,12 @@ def test_repr_and_json_value_shapes():
 
 
 def test_json_round_trip_shapes():
-    ipv4 = IPv4Address("192.0.2.1")
+    ipv4 = IPv4AddressOption("192.0.2.1")
     raw = Bytes(b"\x01\x02\x03")
     flag = Boolean(1)
-    addrs = List[IPv4Address]([IPv4Address("192.0.2.1"), IPv4Address("198.51.100.2")])
+    addrs = List[IPv4AddressOption](
+        [IPv4AddressOption("192.0.2.1"), IPv4AddressOption("198.51.100.2")]
+    )
     route = ClasslessRoute(IPv4("192.168.1.1"), ip_network("10.0.0.0/8"))
 
     assert type(ipv4)(json.loads(json.dumps(ipv4.__json__()))) == ipv4
@@ -354,14 +358,17 @@ def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
     decoded, length = MoSIpv4AddressList._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == len(buf)
-    assert decoded[0].value == [IPv4Address("192.0.2.1"), IPv4Address("192.0.2.2")]
+    assert decoded[0].value == [
+        IPv4AddressOption("192.0.2.1"),
+        IPv4AddressOption("192.0.2.2"),
+    ]
     assert decoded[1].code == 99
     assert decoded[1].value == b"\x01\x02"
 
     raw = (
         bytes([1, 8])
-        + IPv4Address("198.51.100.1").packed
-        + IPv4Address("198.51.100.2").packed
+        + IPv4AddressOption("198.51.100.1").packed
+        + IPv4AddressOption("198.51.100.2").packed
     )
     decoded_raw, length = MoSIpv4AddressList._dhcp_read(memoryview(raw))
     assert decoded_raw == MoSIpv4AddressList(
@@ -1008,10 +1015,10 @@ def test_generic_subscription_is_cached():
     a fresh class, and two class objects for one type make identity and
     issubclass checks unreliable.
     """
-    assert List[IPv4Address] is List[IPv4Address]
+    assert List[IPv4AddressOption] is List[IPv4AddressOption]
     assert List[U8] is List[U8]
-    assert List[U8] is not List[IPv4Address]
-    assert List[IPv4Address]._args_ == (IPv4Address,)
+    assert List[U8] is not List[IPv4AddressOption]
+    assert List[IPv4AddressOption]._args_ == (IPv4AddressOption,)
 
 
 def test_two_generic_classes_do_not_share_a_cache():
@@ -1038,7 +1045,7 @@ def test_record_codecs_are_hashable_and_lists_are_not():
     Python sets `__hash__ = None` for such a class, so `set(...)` or a dict key
     over decoded option values worked or raised `TypeError` depending purely on
     which option the caller happened to touch -- `Bytes`, `String`,
-    `IPv4Address` and the integer codecs were hashable through their bases while
+    `IPv4AddressOption` and the integer codecs were hashable through their bases while
     ten record types were not. List codecs are a different case: they are
     genuinely mutable, so `list.__hash__ is None` is correct for them and this
     test asserts that too, to keep a future "fix" from making them hashable.

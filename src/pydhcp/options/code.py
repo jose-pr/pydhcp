@@ -83,7 +83,7 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
         it: the user's codec landed in `_CODEMAP`, then the first `get_type()`
         imported `registry.py`, which re-registered the built-in over it.
         Measured in a pristine interpreter -- `_CODEMAP[6]` was the caller's
-        codec until the lazy load turned it back into `List[IPv4Address]`.
+        codec until the lazy load turned it back into `List[IPv4AddressOption]`.
         Loading first makes the caller's registration the later write, which is
         what "register" is supposed to mean.
         """

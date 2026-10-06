@@ -105,6 +105,7 @@ importable. Replace each name in the left column with the one beside it.
 | `UdpTransport` | `UDPTransport` |
 | `PktInfoUdpTransport` | `PktInfoUDPTransport` |
 | `Transport` | `DHCPTransport` |
+| `pydhcp.options.type.IPv4Address` (the option codec) | `IPv4AddressOption`; `IPv4Address` is only the address type |
 
 ### Fixed
 

@@ -116,7 +116,7 @@ def test_a_registration_made_before_the_lazy_load_survives_it() -> None:
 
     `register_type` wrote straight into `_CODEMAP`. A caller who registered
     before anything triggered the lazy load therefore had their codec undone
-    by it: the built-in `List[IPv4Address]` was written over their class by
+    by it: the built-in `List[IPv4AddressOption]` was written over their class by
     `registry.py` the moment the first `get_type()` fired, with no error and
     no warning. Registering the built-ins first makes the caller's write the
     later one.

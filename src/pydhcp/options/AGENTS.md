@@ -3,7 +3,7 @@
 Header-file-style reference for `pydhcp.options`: the DHCP options
 container, the option-code registry, and the option payload codecs
 (`pydhcp.options.type`). Most exports are also re-exported from the top-level
-`pydhcp` package -- **except `IPv4Address`, `List`, `Bytes`, `String` and
+`pydhcp` package -- **except `IPv4AddressOption`, `List`, `Bytes`, `String` and
 `Boolean`**, whose bare names did not say they were codecs; import those from
 `pydhcp.options.type`. The top-level package header ships beside this
 one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
@@ -148,7 +148,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 
 - **`DHCPOptionType`** — the base protocol above.
 - **`List[T]`** (generic, subscript with a `DHCPOptionType`, e.g.
-  `List[IPv4Address]`) — a homogeneous repeated-record list; items are
+  `List[IPv4AddressOption]`) — a homogeneous repeated-record list; items are
   normalized through `T(...)` on append/extend/`__setitem__`.
 - **`RecordList[T]`** (`List[T]` subclass) — the same container for a record
   type built from **two** constructor arguments (`T(code, value)`). It differs
@@ -204,7 +204,7 @@ Split by family: addresses and routes, domain-name lists and single names, the
 client FQDN, and server-locator/status codecs. Import every one of them from
 `pydhcp.options.type`.
 
-- **`IPv4Address`** (`ipaddress.IPv4Address` subclass) — single 4-byte IPv4
+- **`IPv4AddressOption`** (`ipaddress.IPv4Address` subclass) — single 4-byte IPv4
   address.
 - **`ClasslessRoute(gateway, network)`** — RFC 3442 classless static route
   (variable-length prefix + gateway). Also accepts a single
@@ -347,8 +347,8 @@ carrying a name can reach it with no import-order constraint.
   two are different shapes. **`CccSubOption`** — the sub-option TLV record base.
 - Typed sub-option payloads, each a thin wrapper with its own
   `_dhcp_read`/`_dhcp_write`: **`CccPrimaryDhcpServerAddress`** /
-  **`CccSecondaryDhcpServerAddress`** (`IPv4Address`-backed);
-  **`CccProvisioningServerAddress`**, which is **not** `IPv4Address`-backed but
+  **`CccSecondaryDhcpServerAddress`** (`IPv4AddressOption`-backed);
+  **`CccProvisioningServerAddress`**, which is **not** `IPv4AddressOption`-backed but
   a *tagged union* — a leading type octet selects an IPv4 address (1) or an
   FQDN (0), so it carries whichever the sender used;
   **`CccProvisioningServerFqdn`** / **`CccKerberosRealmName`**
@@ -358,7 +358,7 @@ carrying a name can reach it with no import-order constraint.
   `Boolean`; **`CccSecurityTicketControl`**, a **16-bit integer mask** and not
   a flag — the two were previously documented together as "`U8`/`Boolean`-backed
   flags", which was wrong for both; and **`CccKdcServerAddressList`**
-  (`List[IPv4Address]`). Each has a matching `*SubOption` TLV-record wrapper
+  (`List[IPv4AddressOption]`). Each has a matching `*SubOption` TLV-record wrapper
   (**`CccPrimaryDhcpServerAddressSubOption`**,
   **`CccSecondaryDhcpServerAddressSubOption`**,
   **`CccProvisioningServerAddressSubOption`**,

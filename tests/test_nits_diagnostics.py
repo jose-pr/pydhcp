@@ -17,7 +17,7 @@ from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.options.type import DomainList, OptionOverload
 from pydhcp.options.type.base import DHCPOptionCodes
 from pydhcp.options.type.ccc import CccProvisioningServerAddress
-from pydhcp.options.type.addresses import IPv4Address
+from pydhcp.options.type.addresses import IPv4AddressOption
 from pydhcp.options.type.scalar import U32
 from pydhcp.packet import DHCPMessageType
 from pydhcp.packet import message as _message
@@ -82,10 +82,10 @@ def test_wrong_option_size_names_the_codec_and_both_lengths() -> None:
 def test_trailing_octets_message_is_spelled_correctly() -> None:
     # Was the misspelled "Couldnt decode whole option".
     with pytest.raises(ValueError) as exc:
-        IPv4Address._dhcp_decode(bytes(5))
+        IPv4AddressOption._dhcp_decode(bytes(5))
     text = _message_of(exc)
     assert "Couldnt" not in text
-    assert "IPv4Address" in text
+    assert "IPv4AddressOption" in text
 
 
 @pytest.mark.parametrize(
@@ -123,13 +123,13 @@ def test_ccc_address_narrows_its_except_to_valueerror() -> None:
 
     import pydhcp.options.type.ccc as ccc
 
-    original = ccc.IPv4Address
-    ccc.IPv4Address = _explode  # type: ignore[assignment]
+    original = ccc.IPv4AddressOption
+    ccc.IPv4AddressOption = _explode  # type: ignore[assignment]
     try:
         with pytest.raises(RuntimeError, match="codec defect"):
             CccProvisioningServerAddress("boot.example.com")
     finally:
-        ccc.IPv4Address = original  # type: ignore[assignment]
+        ccc.IPv4AddressOption = original  # type: ignore[assignment]
 
 
 def test_dead_helpers_are_gone() -> None:

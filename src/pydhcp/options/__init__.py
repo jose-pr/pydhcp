@@ -121,7 +121,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
                 # moment anything decodes it, moving the failure out of this
                 # deliberately lenient decoder and into whatever handler touches
                 # the value. Measured -- a DHCPREQUEST ending in the two bytes
-                # `50 04` made `DHCPServer.handle` raise "IPv4Address payload
+                # `50 04` made `DHCPServer.handle` raise "IPv4AddressOption payload
                 # must be exactly 4 octets, got 0", from any sender.
                 LOGGER.warning(
                     f"Option {code} at offset {offset} claims {length} bytes but only {remaining} available"

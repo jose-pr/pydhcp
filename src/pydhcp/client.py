@@ -397,7 +397,7 @@ class DHCPClient(DHCPListener):
         if offer is None:
             return None
         server_identifier = offer.options.get(
-            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
+            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
         )
         if server_identifier is None:
             # RFC 2131 s4.3.2: a REQUEST in SELECTING state MUST carry the

@@ -20,7 +20,7 @@ from pydhcp.options.type import (
     String,
     Bytes,
     List,
-    IPv4Address,
+    IPv4AddressOption,
     DomainList,
     ClasslessRoute,
 )
@@ -134,12 +134,12 @@ _ADDRESS = st.ip_addresses(v=4).map(str)
 
 @given(_sized(lambda **kw: st.lists(_ADDRESS, **kw), 16, 64, 90))
 def test_list_ipv4address_round_trip(addrs: list[str]) -> None:
-    decoded = _round_trip(List[IPv4Address](addrs))
+    decoded = _round_trip(List[IPv4AddressOption](addrs))
     # The whole list and its order, not just its first entry: a codec that
     # stopped after one address, or reversed them, produced an equal *first*
     # element. `max_size` was 8, i.e. 32 octets -- comfortably inside one
     # option instance, so the long branch above is what reaches past 255.
-    assert list(decoded) == [IPv4Address(a) for a in addrs]
+    assert list(decoded) == [IPv4AddressOption(a) for a in addrs]
     assert len(decoded) == len(addrs)
 
 

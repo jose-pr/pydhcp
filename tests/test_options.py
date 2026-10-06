@@ -3,7 +3,7 @@ from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptions
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options.type import (
-    IPv4Address,
+    IPv4AddressOption,
     SipServers,
     ClientFqdn,
     String,
@@ -61,18 +61,20 @@ def _assert_scalar(opts, code, width: type, expected: int):
 def _assert_addresses(opts, code, expected: list):
     """Assert an address-list option decodes to exactly these addresses.
 
-    `isinstance(value[0], IPv4Address)` was the whole assertion before: the
+    `isinstance(value[0], IPv4AddressOption)` was the whole assertion before: the
     list's length, every entry after the first, and every address in it went
     unchecked, so a codec that stopped after one entry -- or produced the right
     count of wrong addresses -- passed. The per-element type check is kept as
-    well because `IPv4Address` compares equal to a plain
+    well because `IPv4AddressOption` compares equal to a plain
     `ipaddress.IPv4Address`, so values alone would not pin the type.
     """
     value = opts.get(code)
-    assert [type(item) for item in value] == [IPv4Address] * len(
+    assert [type(item) for item in value] == [IPv4AddressOption] * len(
         expected
     ), f"{code!r}: {[type(item).__name__ for item in value]}"
-    assert list(value) == [IPv4Address(a) for a in expected], f"{code!r}: {value!r}"
+    assert list(value) == [
+        IPv4AddressOption(a) for a in expected
+    ], f"{code!r}: {value!r}"
     return value
 
 
@@ -88,7 +90,9 @@ def test_options_set_get():
     # Test decoding with type
     from pydhcp.network import IPv4
 
-    assert opts.get(DHCPOptionCode.ROUTER, decode=IPv4Address) == IPv4("192.168.1.1")
+    assert opts.get(DHCPOptionCode.ROUTER, decode=IPv4AddressOption) == IPv4(
+        "192.168.1.1"
+    )
 
     # Test missing / default
     assert opts.get(999, default="hello") == "hello"
@@ -157,10 +161,10 @@ def test_options_partial_encode_splits_and_returns_leftovers():
 def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.TCP_KEEPALIVE_GARBAGE.name == "TCP_KEEPALIVE_GARBAGE"
     assert DHCPOptionCode.NNTP_SERVER.name == "NNTP_SERVER"
-    assert DHCPOptionCode.RFC868_TIMESERVER.get_type()._args_[0] is IPv4Address
-    assert DHCPOptionCode.SWAP_SERVER.get_type() is IPv4Address
+    assert DHCPOptionCode.RFC868_TIMESERVER.get_type()._args_[0] is IPv4AddressOption
+    assert DHCPOptionCode.SWAP_SERVER.get_type() is IPv4AddressOption
     assert DHCPOptionCode.NETBIOS_SCOPE.get_type() is String
-    assert DHCPOptionCode.LOG_SERVER.get_type()._args_[0] is IPv4Address
+    assert DHCPOptionCode.LOG_SERVER.get_type()._args_[0] is IPv4AddressOption
     # RFC 3361 s3.1: an encoding octet selects names (0) or addresses (1),
     # so this is not a bare address list.
     assert DHCPOptionCode.SIP_SERVERS.get_type() is SipServers
@@ -171,29 +175,29 @@ def test_typed_registrations_and_aliases():
         DHCPOptionCode.BCMCS_DOMAIN_NAME_LIST.get_type().__name__
         == "UncompressedDomainList"
     )
-    assert DHCPOptionCode.BCMCS_IPV4_ADDRESS.get_type()._args_[0] is IPv4Address
+    assert DHCPOptionCode.BCMCS_IPV4_ADDRESS.get_type()._args_[0] is IPv4AddressOption
     assert DHCPOptionCode.CLIENT_LAST_TRANSACTION_TIME.get_type().__name__ == "U32"
-    assert DHCPOptionCode.ASSOCIATED_IP.get_type()._args_[0] is IPv4Address
+    assert DHCPOptionCode.ASSOCIATED_IP.get_type()._args_[0] is IPv4AddressOption
     assert (
         DHCPOptionCode.CLIENT_SYSTEM_ARCHITECTURE.get_type()._args_[0].__name__ == "U16"
     )
     assert DHCPOptionCode.PCODE.get_type() is String
     assert DHCPOptionCode.TCODE.get_type() is String
     assert DHCPOptionCode.IPV6_ONLY.get_type().__name__ == "U32"
-    assert DHCPOptionCode.NETINFO_ADDRESS.get_type() is IPv4Address
+    assert DHCPOptionCode.NETINFO_ADDRESS.get_type() is IPv4AddressOption
     assert DHCPOptionCode.NETINFO_TAG.get_type() is String
     assert DHCPOptionCode.DHCP_CAPTIVE_PORTAL.get_type() is String
     assert DHCPOptionCode.AUTO_CONFIG.get_type() is Boolean
     assert DHCPOptionCode.VI_VENDOR_CLASS.get_type() is ViVendorClass
-    assert DHCPOptionCode.CAPWAP_AC_V4.get_type()._args_[0] is IPv4Address
+    assert DHCPOptionCode.CAPWAP_AC_V4.get_type()._args_[0] is IPv4AddressOption
     assert (
         DHCPOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.get_type().__name__ == "DomainList"
     )
-    assert DHCPOptionCode.IPV4_ADDRESS_ANDSF.get_type()._args_[0] is IPv4Address
+    assert DHCPOptionCode.IPV4_ADDRESS_ANDSF.get_type()._args_[0] is IPv4AddressOption
     assert DHCPOptionCode.V4_SZTP_REDIRECT.get_type() is UriList
     assert DHCPOptionCode.V4_DOTS_RI.get_type().__name__ == "DomainName"
-    assert DHCPOptionCode.V4_DOTS_ADDRESS.get_type()._args_[0] is IPv4Address
-    assert DHCPOptionCode.TFTP_SERVER_ADDRESS.get_type()._args_[0] is IPv4Address
+    assert DHCPOptionCode.V4_DOTS_ADDRESS.get_type()._args_[0] is IPv4AddressOption
+    assert DHCPOptionCode.TFTP_SERVER_ADDRESS.get_type()._args_[0] is IPv4AddressOption
     assert DHCPOptionCode.BASE_TIME.get_type().__name__ == "U32"
     assert DHCPOptionCode.START_TIME_OF_STATE.get_type().__name__ == "U32"
     assert DHCPOptionCode.QUERY_START_TIME.get_type().__name__ == "U32"
@@ -230,7 +234,7 @@ def test_typed_registrations_and_aliases():
     )
     # RFC 2937 s3: 16-bit name service option codes, not domain names.
     assert DHCPOptionCode.NAME_SERVICE_SEARCH.get_type()._args_[0].__name__ == "U16"
-    assert DHCPOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4Address
+    assert DHCPOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4AddressOption
     assert DHCPOptionCode.RDNSS_SELECTION.get_type() is RdnssSelection
     assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
     assert DHCPOptionCode.IPV4_FQDN_MOS.get_type() is MoSFqdnList
@@ -298,14 +302,14 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DHCPOptionCode.TCODE, decode=String) == "tz.example/ref"
     _assert_addresses(opts, DHCPOptionCode.RFC868_TIMESERVER, ["10.0.0.4"])
     _assert_addresses(opts, DHCPOptionCode.IEN116_NAMESERVER, ["10.0.0.5"])
-    assert opts.get(DHCPOptionCode.SWAP_SERVER) == IPv4Address("10.0.0.6")
+    assert opts.get(DHCPOptionCode.SWAP_SERVER) == IPv4AddressOption("10.0.0.6")
     sip = opts.get(DHCPOptionCode.SIP_SERVERS)
     assert sip == SipServers(["10.0.0.3"], SipServers.ENCODING_ADDRESS)
     assert opts.get(DHCPOptionCode.ASSOCIATED_IP) == [
-        IPv4Address("192.0.2.20"),
-        IPv4Address("192.0.2.21"),
+        IPv4AddressOption("192.0.2.20"),
+        IPv4AddressOption("192.0.2.21"),
     ]
-    assert opts.get(DHCPOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
+    assert opts.get(DHCPOptionCode.NETINFO_ADDRESS) == IPv4AddressOption("192.0.2.21")
     assert opts.get(DHCPOptionCode.NETINFO_TAG, decode=String) == "lab-a"
     assert (
         opts.get(DHCPOptionCode.DHCP_CAPTIVE_PORTAL, decode=String)
@@ -400,8 +404,10 @@ def test_typed_registrations_and_aliases():
         MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
         (99, b"\x03raw"),
     ]
-    assert opts.get(DHCPOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
-    assert opts.get(DHCPOptionCode.STATIC_ROUTE)[0][0] == IPv4Address("192.0.2.0")
+    assert opts.get(DHCPOptionCode.POLICY_FILTER)[0][0] == IPv4AddressOption(
+        "192.0.2.1"
+    )
+    assert opts.get(DHCPOptionCode.STATIC_ROUTE)[0][0] == IPv4AddressOption("192.0.2.0")
     assert opts.get(DHCPOptionCode.USER_CLASS, decode=UserClass) == UserClass(
         [b"alpha", b"\x00\xff"]
     )
@@ -416,7 +422,9 @@ def test_typed_registrations_and_aliases():
         == 32473
     )
     assert opts.get(DHCPOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
-    assert opts.get(DHCPOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address("192.0.2.64")
+    assert opts.get(DHCPOptionCode.SUBNET_SELECTION_OPTION) == IPv4AddressOption(
+        "192.0.2.64"
+    )
     assert opts.get(DHCPOptionCode.RDNSS_SELECTION) == RdnssSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
@@ -526,15 +534,19 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DHCPOptionCode.CLIENT_SYSTEM_ARCHITECTURE) == [U16(1), U16(2)]
     assert decoded.get(DHCPOptionCode.PCODE, decode=String) == "Europe/Berlin"
     assert decoded.get(DHCPOptionCode.TCODE, decode=String) == "tz.example/ref"
-    assert decoded.get(DHCPOptionCode.RFC868_TIMESERVER)[0] == IPv4Address("192.0.2.12")
-    assert decoded.get(DHCPOptionCode.SWAP_SERVER) == IPv4Address("192.0.2.13")
+    assert decoded.get(DHCPOptionCode.RFC868_TIMESERVER)[0] == IPv4AddressOption(
+        "192.0.2.12"
+    )
+    assert decoded.get(DHCPOptionCode.SWAP_SERVER) == IPv4AddressOption("192.0.2.13")
     _assert_scalar(decoded, DHCPOptionCode.CLIENT_LAST_TRANSACTION_TIME, U32, 1234)
     assert decoded.get(DHCPOptionCode.ASSOCIATED_IP) == [
-        IPv4Address("192.0.2.20"),
-        IPv4Address("192.0.2.21"),
+        IPv4AddressOption("192.0.2.20"),
+        IPv4AddressOption("192.0.2.21"),
     ]
     _assert_scalar(decoded, DHCPOptionCode.IPV6_ONLY, U32, 4321)
-    assert decoded.get(DHCPOptionCode.NETINFO_ADDRESS) == IPv4Address("192.0.2.21")
+    assert decoded.get(DHCPOptionCode.NETINFO_ADDRESS) == IPv4AddressOption(
+        "192.0.2.21"
+    )
     assert decoded.get(DHCPOptionCode.NETINFO_TAG, decode=String) == "lab-a"
     assert (
         decoded.get(DHCPOptionCode.DHCP_CAPTIVE_PORTAL, decode=String)
@@ -591,8 +603,12 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DHCPOptionCode.ALL_SUBNETS_ARE_LOCAL) == Boolean(1)
     assert decoded.get(DHCPOptionCode.MERIT_DUMP_FILE, decode=String) == "crash.dump"
     assert decoded.get(DHCPOptionCode.STATUS_CODE).code == 7
-    assert decoded.get(DHCPOptionCode.POLICY_FILTER)[0][0] == IPv4Address("192.0.2.1")
-    assert decoded.get(DHCPOptionCode.STATIC_ROUTE)[0][1] == IPv4Address("192.0.2.1")
+    assert decoded.get(DHCPOptionCode.POLICY_FILTER)[0][0] == IPv4AddressOption(
+        "192.0.2.1"
+    )
+    assert decoded.get(DHCPOptionCode.STATIC_ROUTE)[0][1] == IPv4AddressOption(
+        "192.0.2.1"
+    )
     assert decoded.get(DHCPOptionCode.USER_CLASS, decode=UserClass) == UserClass(
         [b"alpha", b"\x00\xff"]
     )
@@ -607,7 +623,7 @@ def test_registered_option_code_round_trips():
         == 32473
     )
     assert decoded.get(DHCPOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
-    assert decoded.get(DHCPOptionCode.SUBNET_SELECTION_OPTION) == IPv4Address(
+    assert decoded.get(DHCPOptionCode.SUBNET_SELECTION_OPTION) == IPv4AddressOption(
         "192.0.2.64"
     )
     assert decoded.get(DHCPOptionCode.RDNSS_SELECTION) == RdnssSelection(
@@ -665,7 +681,7 @@ def test_raw_wire_decoding_for_opaque_and_enterprise_specific_options():
 def test_raw_wire_decoding_for_new_primitive_registrations():
     encoded = bytearray()
     encoded.extend([DHCPOptionCode.ASSOCIATED_IP, 4])
-    encoded.extend(IPv4Address("192.0.2.25").packed)
+    encoded.extend(IPv4AddressOption("192.0.2.25").packed)
     encoded.extend([DHCPOptionCode.CLIENT_LAST_TRANSACTION_TIME, 4])
     encoded.extend((1234).to_bytes(4, "big"))
     encoded.extend([DHCPOptionCode.DHCP_STATE, 1, 7])
@@ -677,7 +693,9 @@ def test_raw_wire_decoding_for_new_primitive_registrations():
     decoded = DHCPOptions()
     decoded.decode(memoryview(encoded))
 
-    assert decoded.get(DHCPOptionCode.ASSOCIATED_IP) == [IPv4Address("192.0.2.25")]
+    assert decoded.get(DHCPOptionCode.ASSOCIATED_IP) == [
+        IPv4AddressOption("192.0.2.25")
+    ]
     _assert_scalar(decoded, DHCPOptionCode.CLIENT_LAST_TRANSACTION_TIME, U32, 1234)
     _assert_scalar(decoded, DHCPOptionCode.DHCP_STATE, U8, 7)
     assert decoded.get(DHCPOptionCode.AUTO_CONFIG) == Boolean(1)
@@ -791,8 +809,8 @@ def test_register_type_rejects_invalid_type():
 
 def test_copy_shares_no_mutable_state_with_the_original():
     original = DHCPOptions()
-    original[DHCPOptionCode.ROUTER] = [IPv4Address("192.0.2.1")]
-    original[DHCPOptionCode.DNS] = [IPv4Address("192.0.2.53")]
+    original[DHCPOptionCode.ROUTER] = [IPv4AddressOption("192.0.2.1")]
+    original[DHCPOptionCode.DNS] = [IPv4AddressOption("192.0.2.53")]
 
     copied = original.copy()
     assert copied is not original
@@ -801,7 +819,7 @@ def test_copy_shares_no_mutable_state_with_the_original():
 
     # Structural edits on the copy leave the original alone ...
     del copied[DHCPOptionCode.DNS]
-    copied[DHCPOptionCode.SUBNET_MASK] = IPv4Address("255.255.255.0")
+    copied[DHCPOptionCode.SUBNET_MASK] = IPv4AddressOption("255.255.255.0")
     assert DHCPOptionCode.DNS in original
     assert DHCPOptionCode.SUBNET_MASK not in original
 

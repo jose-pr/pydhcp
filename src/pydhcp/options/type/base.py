@@ -76,11 +76,11 @@ def hashable_payload(value: _ty.Any) -> _ty.Any:
     """A hashable stand-in for a payload value, for use inside `__hash__`.
 
     Ten record codecs define `__eq__` and so were left unhashable by Python's
-    `__hash__ = None` rule, while `Bytes`, `String`, `IPv4Address` and the
+    `__hash__ = None` rule, while `Bytes`, `String`, `IPv4AddressOption` and the
     integer codecs stayed hashable through their bases -- so
     `set(options.get(code))` worked or raised `TypeError` depending on which
     option the caller happened to touch. Several of those records hold a
-    payload that may itself be a list codec (`List[IPv4Address]`, `UserClass`,
+    payload that may itself be a list codec (`List[IPv4AddressOption]`, `UserClass`,
     a MoS label list), which is what stops a plain `hash((a, b))` from working.
 
     Every such codec is a flat sequence of hashable items, so the tuple of its

@@ -238,7 +238,7 @@ class _LeasePolicy(_ServerState):
             return existing
 
         requested_ip = msg.options.get(
-            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
         ttl = self.lease_seconds(msg)
 

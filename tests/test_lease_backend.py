@@ -11,7 +11,7 @@ from pydhcp import (
     DHCPOptions,
     IPv4,
 )
-from pydhcp.options.type import IPv4Address
+from pydhcp.options.type import IPv4AddressOption
 from pydhcp.options import DHCPOptionCode
 
 
@@ -27,9 +27,9 @@ def test_in_memory_lease_backend():
     lease = backend.allocate(client_id, ip, ttl, options)
     assert lease is not None
     assert lease.ip == ip
-    assert lease.options.get(DHCPOptionCode.SUBNET_MASK, decode=IPv4Address) == IPv4(
-        "255.255.255.0"
-    )
+    assert lease.options.get(
+        DHCPOptionCode.SUBNET_MASK, decode=IPv4AddressOption
+    ) == IPv4("255.255.255.0")
     assert isinstance(lease.expires, _dt.datetime)
 
     # Test lookup
@@ -92,9 +92,9 @@ def test_file_lease_backend(tmp_path):
     loaded = new_backend.lookup(client_id)
     assert loaded is not None
     assert loaded.ip == ip
-    assert loaded.options.get(DHCPOptionCode.SUBNET_MASK, decode=IPv4Address) == IPv4(
-        "255.255.255.0"
-    )
+    assert loaded.options.get(
+        DHCPOptionCode.SUBNET_MASK, decode=IPv4AddressOption
+    ) == IPv4("255.255.255.0")
 
     # Renew
     new_backend.renew(client_id, 120)

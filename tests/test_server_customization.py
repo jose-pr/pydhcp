@@ -746,7 +746,7 @@ def _discover_requesting_ip(ip):
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
-    options[DHCPOptionCode.REQUESTED_IP] = _optype.IPv4Address(ip)
+    options[DHCPOptionCode.REQUESTED_IP] = _optype.IPv4AddressOption(ip)
     return DHCPMessage(
         op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,

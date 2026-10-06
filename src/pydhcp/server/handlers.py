@@ -69,7 +69,7 @@ class _Handlers(_Replies):
             "[XID=%08x] Received %s from %s", msg.xid, msg_ty_name, context.client.ip
         )
         server_id: _ty.Optional[_net.IPv4] = msg.options.get(
-            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
+            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
         )
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
 
@@ -136,9 +136,13 @@ class _Handlers(_Replies):
         # makes the server answer for clients that belong to another server on
         # the same segment, i.e. behave as a rogue.
         if (
-            msg.options.get(DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address)
+            msg.options.get(
+                DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
+            )
             is None
-            and msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address)
+            and msg.options.get(
+                DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
+            )
             is not None
             and msg.ciaddr == _net.WILDCARD_IPv4
             and self.lease_backend.lookup(client_id) is None
@@ -159,7 +163,7 @@ class _Handlers(_Replies):
             )
             return
         ip_req: _ty.Optional[_net.IPv4] = msg.options.get(
-            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
         if not ip_req:
             ip_req = msg.ciaddr
@@ -188,7 +192,7 @@ class _Handlers(_Replies):
             f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}"
         )
         declined: _ty.Optional[_net.IPv4] = msg.options.get(
-            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
         if declined is None and msg.ciaddr != _net.WILDCARD_IPv4:
             declined = msg.ciaddr

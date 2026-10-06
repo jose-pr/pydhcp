@@ -276,7 +276,7 @@ class PcpServerList(DHCPOptionType, list[list[str]]):
 
     Each entry is a List-Length octet giving the octet count, then that many
     octets of IPv4 addresses; separate entries are separate PCP servers.
-    Registered as a flat `List[IPv4Address]` the length octet was read as
+    Registered as a flat `List[IPv4AddressOption]` the length octet was read as
     address data, so a conformant option raised and an emitted one carried no
     length octet at all.
     """

@@ -8,16 +8,16 @@ from ...network import IPv4 as _IP, IPv4Network as _Network
 from .base import DHCPOptionType
 from collections.abc import Iterable
 
-_IPv4AddressT = _ty.TypeVar("_IPv4AddressT", bound="IPv4Address")
+_IPv4AddressOptionT = _ty.TypeVar("_IPv4AddressOptionT", bound="IPv4AddressOption")
 
 
-class IPv4Address(DHCPOptionType, _IP):
+class IPv4AddressOption(DHCPOptionType, _IP):
     """A single IPv4 address carried in network byte order."""
 
     @classmethod
     def _dhcp_read(
-        cls: type[_IPv4AddressT], option: memoryview
-    ) -> tuple[_IPv4AddressT, int]:
+        cls: type[_IPv4AddressOptionT], option: memoryview
+    ) -> tuple[_IPv4AddressOptionT, int]:
         if len(option) < 4:
             raise DHCPDecodeError(
                 f"{cls.__name__} option is truncated: needs 4 octets, got {len(option)}"
