@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and several exchanges may be pending on one client. Its `on_reply` hook runs on
   the event loop, not on a worker thread. `import pydhcp` imports `asyncio` as it
   did before.
+- **`DHCPRequestContext.destination` and `.is_unicast`** (appended, with
+  defaults, so a context built by hand keeps working): the address the datagram
+  was sent to, and whether it names one host. A broadcast DISCOVER shows
+  `255.255.255.255`, a RENEWING client's unicast shows the server's address, which
+  is what RFC 2131 section 4.3.2 tells RENEWING from REBINDING by. `None` when the
+  socket reports no packet info.
 
 ### Changed
 
@@ -646,6 +652,15 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **A capture reports the address a datagram was sent to as its destination.** It
+  reported the receiving interface's own address, so a broadcast DISCOVER
+  showed as addressed to the host, and the `dst` filter key could not select
+  broadcasts. A broadcast now shows `255.255.255.255` (or the subnet broadcast).
+- **A unicast to an address the adapter does not list is answered from that
+  address.** The reply (and its source pin) came from the adapter's first address, a
+  source the client never addressed: a request to `127.0.0.2` was answered from
+  `127.0.0.1`. The reply source is now the destination of every unicast;
+  `SERVER_IDENTIFIER` and the pool still come from an address the adapter lists.
 - **Every public annotation resolves with `typing.get_type_hints` on Python
   3.9.** `X | Y` in a signature, a `typing_extensions.Self` imported only
   under `TYPE_CHECKING` and names a function could not see failed there with a
