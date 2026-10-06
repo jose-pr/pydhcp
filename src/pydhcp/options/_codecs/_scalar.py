@@ -410,6 +410,14 @@ class ClientIdentifier(Bytes):
             )
         return super().unpack_from(option)
 
+    def pack_into(self, data: bytearray) -> int:
+        if len(self) < 2:
+            raise DHCPValueError(
+                f"{type(self).__name__} needs at least 2 octets, a type and an "
+                f"identifier (RFC 2132 section 9.14), got {len(self)}"
+            )
+        return super().pack_into(data)
+
     def display_text(self) -> str:
         if not self:
             return ""

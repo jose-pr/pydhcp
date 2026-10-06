@@ -191,6 +191,10 @@ class SIPServers(_Record):
         return cls(values, encoding), len(option)
 
     def pack_into(self, data: bytearray) -> int:
+        if not self.values:
+            raise DHCPValueError(
+                "SIPServers needs at least one name or address (RFC 3361 section 3)"
+            )
         start = len(data)
         data.append(self.encoding)
         if self.encoding == self.ENCODING_ADDRESS:
@@ -313,6 +317,11 @@ class PCPServerList(_NormalizedList[list[str]]):
         addresses = [str(_IP(address)) for address in entry]
         if not addresses:
             raise DHCPValueError("PCPServerList entry must hold at least one address")
+        if len(addresses) > 63:
+            raise DHCPValueError(
+                f"PCPServerList entry holds {len(addresses)} addresses; "
+                "its length octet allows at most 63"
+            )
         return addresses
 
     @classmethod

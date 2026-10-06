@@ -459,6 +459,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   realm built by hand is still upper-cased. A `DomainList` encoded past 16,383
   octets writes a name in full where a compression pointer could not reach the
   suffix it shares, and a summary names an unnamed hardware type `HTYPE_<n>`.
+- **Codecs refuse on write what the wire cannot hold, and name it.** A `TLVOption`
+  (relay agent and encapsulated sub-options) with a code outside 0 to 255 or a
+  value over 255 octets, and a `PCPServerList` entry of more than 63 addresses,
+  raise `DHCPValueError` when built, where `bytearray` said `byte must be in
+  range(0, 256)`. A `ClientIdentifier` of one octet and an empty `SIPServers`
+  raise `DHCPValueError` when written; both still decode.
 
 ### Renamed
 

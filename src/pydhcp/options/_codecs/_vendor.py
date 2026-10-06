@@ -82,8 +82,19 @@ class TLVOption(_Record):
     def __init__(
         self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]
     ) -> None:
-        _set(self, "code", int(code))
-        _set(self, "value", _octets(value))
+        code = int(code)
+        octets = _octets(value)
+        if not 0 <= code <= 255:
+            raise DHCPValueError(
+                f"sub-option code {code} does not fit one octet (0 to 255)"
+            )
+        if len(octets) > 255:
+            raise DHCPValueError(
+                f"sub-option {code} is {len(octets)} octets; "
+                "a sub-option holds at most 255"
+            )
+        _set(self, "code", code)
+        _set(self, "value", octets)
 
     def to_json(self) -> list[_ty.Any]:
         return [self.code, self.value.to_json()]
