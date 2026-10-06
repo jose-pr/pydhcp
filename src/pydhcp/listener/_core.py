@@ -20,7 +20,7 @@ from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from ._binding import _bind_sockets, _close_socket
 from ._limit import _brief, _LogLimit
-from ._receive import DHCPRequestContext, _context_for, _pktinfo_supported
+from ._receive import DHCPRequestContext, _Arrival, _context_for, _pktinfo_supported
 from ._spec import ListenLike, _expand_wildcards, _parselisteners
 
 LOGGER = _logging.getLogger(__name__)
@@ -206,6 +206,19 @@ class _ListenerCore:
             client,
         )
 
+    def _dispatch_arrival(self, arrival: _Arrival, sock: _socket.socket) -> None:
+        """`_dispatch` for one `_arrival`."""
+        self._dispatch(
+            arrival.data,
+            arrival.client,
+            sock,
+            arrival.ifindex,
+            arrival.local_ip,
+            destination=arrival.destination,
+            is_unicast=arrival.is_unicast,
+            adapter=arrival.adapter,
+        )
+
     def _dispatch(
         self,
         data: bytes,
@@ -213,6 +226,10 @@ class _ListenerCore:
         sock: _socket.socket,
         ifindex: "_ty.Optional[int]" = None,
         local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
+        *,
+        destination: "_ty.Optional[_ipaddress.IPv4Address]" = None,
+        is_unicast: "_ty.Optional[bool]" = None,
+        adapter: "_ty.Optional[_netimps.Interface]" = None,
     ) -> None:
         """Decode, count and hand one datagram to `handle()`.
 
@@ -252,6 +269,9 @@ class _ListenerCore:
                 self._endpoints.get(sock),
                 received,
                 self._log_limit,
+                destination,
+                is_unicast,
+                adapter,
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
                 bound = _net.SocketAddress.from_socket(sock)

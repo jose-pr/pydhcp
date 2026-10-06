@@ -451,3 +451,32 @@ def test_dhcp_capture_hook_error_stays_none_without_fail_fast(capture_class) -> 
     capture.handle(_message(), _context())
 
     assert capture.hook_error is None
+
+
+def _event_sent_to(destination: str | None) -> CaptureEvent:
+    context = _context()._replace(
+        destination=IPv4(destination) if destination else None,
+        is_unicast=None if destination is None else destination == "192.0.2.1",
+    )
+    return CaptureEvent(
+        message=_message(),
+        context=context,
+        captured_at=datetime(2026, 7, 14, 12, 30, 15, tzinfo=timezone.utc),
+    )
+
+
+def test_a_capture_event_reports_where_the_datagram_was_sent() -> None:
+    """A broadcast is addressed to the broadcast, not to the interface that heard
+    it; the `dst` filter selects on it."""
+    broadcast = _event_sent_to("255.255.255.255")
+    unicast = _event_sent_to("192.0.2.1")
+
+    assert broadcast.destination.ip == IPv4("255.255.255.255")
+    assert unicast.destination.ip == IPv4("192.0.2.1")
+    assert compile_capture_filter("dst=255.255.255.255")(broadcast)
+    assert not compile_capture_filter("dst=255.255.255.255")(unicast)
+    assert not compile_capture_filter("dst=192.0.2.1")(broadcast)
+
+
+def test_a_capture_event_without_packet_info_reports_the_reply_address() -> None:
+    assert _event_sent_to(None).destination.ip == IPv4("192.0.2.1")

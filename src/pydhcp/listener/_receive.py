@@ -38,6 +38,14 @@ class DHCPRequestContext(_ty.NamedTuple):
     #: `None` on a context built by hand.
     received_at: _ty.Optional[_dt.datetime] = None
     received_monotonic: _ty.Optional[float] = None
+    #: The address the datagram was sent to: the limited or a subnet broadcast
+    #: for a client with no address (or one rebinding), the server's own address
+    #: for a unicast. `None` where the socket reports no packet info. RFC 2131
+    #: s4.3.2 tells RENEWING from REBINDING by it.
+    destination: _ty.Optional[_ipaddress.IPv4Address] = None
+    #: Whether `destination` names one host (not a broadcast, a multicast group
+    #: or the wildcard); `None` when `destination` is unknown.
+    is_unicast: _ty.Optional[bool] = None
 
 
 def _is_loopback(context: DHCPRequestContext) -> bool:
@@ -74,30 +82,44 @@ def _pktinfo_supported(listen: ListenLike, per_interface: "_ty.Optional[bool]") 
     )
 
 
-Arrival = _ty.Tuple[
-    bytes, _net.SocketAddress, _ty.Optional[int], _ty.Optional[_ipaddress.IPv4Address]
-]
+class _Arrival(_ty.NamedTuple):
+    """What one received datagram tells a listener, in the listener's terms."""
+
+    data: bytes
+    client: _net.SocketAddress
+    #: The interface the datagram arrived on, by index.
+    ifindex: _ty.Optional[int] = None
+    #: The address a reply leaves from: the destination of a unicast, else this
+    #: host's address on the receiving interface.
+    local_ip: _ty.Optional[_ipaddress.IPv4Address] = None
+    #: The address the datagram was sent to, and whether it names one host.
+    destination: _ty.Optional[_ipaddress.IPv4Address] = None
+    is_unicast: _ty.Optional[bool] = None
+    #: The receiving adapter as netimps resolved it, so no second lookup is made.
+    adapter: _ty.Optional[_netimps.Interface] = None
 
 
 def _arrival(
     datagram: _netimps.Datagram,
     max_packet_size: int,
     on_control_truncated: "_ty.Optional[_ty.Callable[[_net.SocketAddress], None]]" = None,
-) -> Arrival:
-    """Turn one netimps `Datagram` into ``(data, client, ifindex, local_ip)``.
+) -> _Arrival:
+    """Turn one netimps `Datagram` into an `_Arrival`.
 
     The one conversion both listeners use, for every receive path.
 
-    ``local_ip`` is **this host's address on the receiving interface** -- what
-    the reply's SERVER_IDENTIFIER and source are derived from -- which is not
-    always what netimps reports. `Datagram.destination` is the address the datagram
-    was sent *to*: for a broadcast DISCOVER that is 255.255.255.255 (or a subnet
-    broadcast), which names no interface. The old Linux-only receive path read
-    `ipi_spec_dst` instead, the kernel's choice of local address, which macOS
-    zero-fills and Windows does not report at all -- so it only ever worked on
-    Linux. When the destination is not one of the interface's own addresses,
-    the interface's `primary_ip()` stands in for it: a routable address, else a
-    loopback one, else a link-local one.
+    ``local_ip`` is the address a reply leaves from, which is not always what
+    netimps reports. `Datagram.destination` is the address the datagram was sent
+    *to*. For a unicast it is this host's own address, and the reply comes from
+    it -- including an address the adapter does not list (the rest of 127/8, a
+    virtual address held on `lo`), where answering from the adapter's first
+    address is a source the client never addressed. For a broadcast, a
+    multicast group or the wildcard (255.255.255.255 or a subnet broadcast)
+    the destination names no interface and the interface's `primary_ip()`
+    stands in: a routable address, else a loopback one, else a link-local one.
+    The old Linux-only receive path read `ipi_spec_dst` instead, the kernel's
+    choice of local address, which macOS zero-fills and Windows does not report
+    at all.
     """
     data = datagram.data
     sender = datagram.sender
@@ -123,31 +145,26 @@ def _arrival(
         if on_control_truncated is not None:
             on_control_truncated(client)
     ifindex = datagram.interface_index or None
-    local: "_ipaddress.IPv4Address | None" = None
-    destination = datagram.destination
-    if destination is not None:
-        unmapped = _netimps.unmap(destination)
-        if isinstance(unmapped, _ipaddress.IPv4Address) and not unmapped.is_unspecified:
-            local = unmapped
-    interface = datagram.interface
-    if interface is not None:
-        own = [
-            address.ip
-            for address in interface.ips
-            if isinstance(address, _ipaddress.IPv4Interface)
-        ]
-        if local not in own:
-            primary = interface.primary_ip()
-            # primary_ip() is typed for both families and answers from the IPv4
-            # entries unless asked for IPv6.
-            local = (
-                _ty.cast(_ipaddress.IPv4Address, primary.ip)
-                if primary is not None
-                else None
-            )
-    elif local is not None and datagram.is_unicast is False:
-        local = None
-    return data, client, ifindex, local
+    destination: "_ty.Optional[_ipaddress.IPv4Address]" = None
+    if datagram.destination is not None:
+        unmapped = _netimps.unmap(datagram.destination)
+        if isinstance(unmapped, _ipaddress.IPv4Address):
+            destination = unmapped
+    is_unicast = datagram.is_unicast
+    adapter = datagram.interface
+    local: "_ty.Optional[_ipaddress.IPv4Address]" = None
+    if destination is not None and is_unicast and not destination.is_unspecified:
+        local = destination
+    elif adapter is not None:
+        primary = adapter.primary_ip()
+        # primary_ip() is typed for both families and answers from the IPv4
+        # entries unless asked for IPv6.
+        local = (
+            _ty.cast(_ipaddress.IPv4Address, primary.ip)
+            if primary is not None
+            else None
+        )
+    return _Arrival(data, client, ifindex, local, destination, is_unicast, adapter)
 
 
 def _context_for(
@@ -159,6 +176,9 @@ def _context_for(
     endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
     received: "_ty.Optional[_Instant]" = None,
     limit: "_ty.Optional[_LogLimit]" = None,
+    destination: "_ty.Optional[_ipaddress.IPv4Address]" = None,
+    is_unicast: "_ty.Optional[bool]" = None,
+    adapter: "_ty.Optional[_netimps.Interface]" = None,
 ) -> DHCPRequestContext:
     """Build the context for one received datagram.
 
@@ -166,7 +186,8 @@ def _context_for(
     every fix the sync half gained. ``endpoint`` is the one the datagram was
     received through, reused for the pinned reply. ``received`` is the time the
     driver read when the datagram arrived. ``limit`` is the listener's log limit,
-    which a transport writes its own warnings through.
+    which a transport writes its own warnings through. ``adapter`` is the
+    receiving interface as netimps resolved it with the datagram.
     """
     transport: DHCPTransport
     if ifindex is not None or local_ip is not None:
@@ -179,11 +200,13 @@ def _context_for(
         transport = UDPTransport(sock)
     return DHCPRequestContext(
         transport=transport,
-        interface=_resolve_interface(sock, local_ip, ifindex),
+        interface=_resolve_interface(sock, local_ip, ifindex, adapter),
         client=client,
         client_mac=client_mac,
         ifindex=ifindex,
         local_ip=local_ip,
         received_at=received.utc if received is not None else None,
         received_monotonic=received.monotonic if received is not None else None,
+        destination=destination,
+        is_unicast=is_unicast,
     )

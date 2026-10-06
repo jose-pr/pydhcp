@@ -289,13 +289,31 @@ everything below from `pydhcp.listener` itself.
 - **`DHCPRequestContext`** (`NamedTuple`) — `transport: DHCPTransport`, `interface:
   NetworkInterface`, `client: SocketAddress`, `client_mac: bytes`,
   `ifindex: int | None = None`, `local_ip: IPv4 | None = None`,
-  `received_at: datetime | None = None` (timezone-aware UTC) and
-  `received_monotonic: float | None = None` (`time.monotonic()` seconds): the
-  listener stamps both when the datagram arrives, and the server, relay and
-  capture read the time of an exchange from them. A context built by hand has
-  `None` for both and the hooks use the driver's clock instead. Handlers use
-  `context.transport`/`context.interface` to reply out the same interface a
-  request arrived on.
+  `received_at: datetime | None = None` (timezone-aware UTC),
+  `received_monotonic: float | None = None` (`time.monotonic()` seconds),
+  `destination: IPv4 | None = None` and `is_unicast: bool | None = None`.
+  - `received_at` and `received_monotonic`: the listener stamps both when the
+    datagram arrives, and the server, relay and capture read the time of an
+    exchange from them. A context built by hand has `None` for both and the hooks
+    use the driver's clock instead.
+  - `destination` is the address the datagram was **sent to**: `255.255.255.255`
+    or a subnet broadcast for a client with no address (or one rebinding), this
+    host's own address for a unicast. `is_unicast` says whether it names one host
+    (not a broadcast, a multicast group or `0.0.0.0`). RFC 2131 s4.3.2 tells a
+    RENEWING client (unicast) from a REBINDING one (broadcast) by it. Both are
+    `None` when the socket reports no packet info (a socket bound to one address)
+    and on a context built by hand.
+  - `local_ip` is the address a reply leaves from. For a unicast it is the
+    destination, **including an address the adapter does not list** (the rest of
+    127/8, a virtual address held on `lo`): the reply comes from the address the
+    client used, while `interface` (and so `SERVER_IDENTIFIER` and the pool) stays
+    an entry the adapter lists. For a broadcast, a multicast group or the
+    wildcard it is the receiving interface's own primary address.
+  - `interface` comes from the adapter that arrived with the datagram, with no
+    lookup of its own; a socket bound to one address (no packet info) resolves it
+    from the bound address.
+  Handlers use `context.transport`/`context.interface` to reply out the same
+  interface a request arrived on.
 - **`ListenLike`** — type alias for the `listen` argument accepted above: `None`, one
   binding (text, an `IPv4Address`, or a `(host, ports)` pair as tuple or list), or a
   sequence of bindings.
@@ -611,7 +629,9 @@ observed by this relay instance.
   how many events passed the filter.
 - **`CaptureEvent`** (frozen dataclass) — `message: DHCPMessage`, `context:
   DHCPRequestContext`, `captured_at: datetime`. Properties: `.source` /
-  `.destination` (`SocketAddress`), `.message_type` (str name or `"UNKNOWN"`),
+  `.destination` (`SocketAddress`: where the datagram was sent, so the broadcast
+  address for a client with no address, and the port it arrived on),
+  `.message_type` (str name or `"UNKNOWN"`),
   `.client_id` (str), `.xid` (8-hex-digit str). `.format_filename(pattern,
   format) -> str` fills `{client_id}`/`{timestamp}`/`{msg_type}`/`{xid}`/
   `{format}` placeholders (each value filesystem-sanitized). It is called per
@@ -646,12 +666,16 @@ observed by this relay instance.
   `src`/`dst` as IPv4 addresses, so a typo is one startup error instead of one
   per packet — or, for `src`/`dst`, instead of a filter that matches nothing.
 
-**Gotcha**: `CaptureEvent.destination` casts `context.interface.ip` to `IPv4`
-to satisfy `SocketAddress`; an IPv6-only interface isn't actually handled
+**Gotcha**: without packet info (a socket bound to one address)
+`CaptureEvent.destination` falls back to the address replies leave from, which it
+takes from `context.interface.ip` and casts to `IPv4` to satisfy `SocketAddress`;
+an IPv6-only interface isn't actually handled
 (`NetworkInterface.ip` is `ipaddress.IPv4Address | ipaddress.IPv6Address`
 — spelled out because the codec `IPv4AddressOption` is a *different* thing, see the
 name-collision note at the top) — capture on an
-IPv6-only interface can break at runtime.
+IPv6-only interface can break at runtime. The `dst` filter key compares with
+`.destination`, so `dst=255.255.255.255` selects the broadcasts and
+`dst=<server address>` the unicasts.
 
 - **`AsyncDHCPCapture(listen=None, *, packet_filter=None, sink=None, hook=None,
   hook_fail_fast=False, max_packet_size=None, per_interface=None,

@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from ._peers import dhclient
 from ._topo import ROLES_SINGLE, single
 from .conftest import need, peer_version, record_case
@@ -72,11 +70,6 @@ def test_a_capture_beside_a_server_is_refused_the_port_not_shared(lab):
     assert "already in use" in capture.text()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the capture reports the receiving interface's address as the "
-    "destination of a datagram that was broadcast",
-)
 def test_capture_reports_the_destination_the_datagram_was_sent_to(lab):
     need("dhclient")
     net = single(lab)

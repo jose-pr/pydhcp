@@ -44,8 +44,14 @@ class CaptureEvent:
 
     @property
     def destination(self) -> _net.SocketAddress:
-        local_ip = self.context.local_ip or _ty.cast(
-            _ipaddress.IPv4Address, self.context.interface.ip
+        # Where the datagram was sent: a broadcast for a client with no
+        # address, not the address of the interface that heard it. Without
+        # packet info (a socket bound to one address) the destination is the
+        # address this host answers from.
+        address = (
+            self.context.destination
+            or self.context.local_ip
+            or _ty.cast(_ipaddress.IPv4Address, self.context.interface.ip)
         )
         # The port the packet was received on. Hardcoding 0 here made the
         # documented `dst_port=` filter key unable to match anything, while
@@ -58,7 +64,7 @@ class CaptureEvent:
                 port = int(socket.getsockname()[1])
             except Exception:  # pragma: no cover - closed or unusual socket
                 port = 0
-        return _net.SocketAddress(local_ip, port)
+        return _net.SocketAddress(address, port)
 
     @property
     def message_type(self) -> str:

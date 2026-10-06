@@ -46,6 +46,25 @@ def _network_interface(
     )
 
 
+def _adapter_interface(
+    adapter: _netimps.Interface, address: "_ty.Optional[_ipaddress.IPv4Address]"
+) -> "_ty.Optional[_net.NetworkInterface]":
+    """The view of an adapter a reply to ``address`` is made from.
+
+    The entry holding ``address`` when the adapter lists it. Otherwise (a
+    broadcast arrival, or a unicast to an address the host accepts as its own
+    without the adapter listing it, such as the rest of 127/8) the adapter's own
+    `primary_ip()` entry: the server identifier and the pool come from an entry
+    the host really holds, while the reply's source is the address the client
+    used.
+    """
+    if address is not None:
+        held = _network_interface(adapter, address)
+        if held is not None:
+            return held
+    return _network_interface(adapter)
+
+
 @_functools.lru_cache(maxsize=256)
 def _warn_synthetic(local_ip: str) -> None:
     """Log the synthetic-interface fallback once per address.
@@ -65,6 +84,7 @@ def _resolve_interface(
     sock: _socket.socket,
     pkt_local_ip: _ty.Optional[_ipaddress.IPv4Address] = None,
     pkt_ifindex: _ty.Optional[int] = None,
+    adapter: "_ty.Optional[_netimps.Interface]" = None,
 ) -> _net.NetworkInterface:
     """Find the NetworkInterface a datagram actually arrived on.
 
@@ -86,6 +106,10 @@ def _resolve_interface(
     per-bind cache this replaced -- notices an address the host gains or loses
     within a second, without a re-bind.
 
+    ``adapter`` is the interface netimps resolved with the datagram: when it is
+    given, nothing is looked up. The lookups below serve a datagram that came
+    with no adapter and a socket bound to one address.
+
     A local address of 0.0.0.0 is no address at all and is treated as absent.
     It is what a zero-filled `ipi_spec_dst` decodes to, and taking it literally
     skipped the index lookup, so the datagram resolved to a synthetic
@@ -94,6 +118,10 @@ def _resolve_interface(
     """
     if pkt_local_ip is not None and pkt_local_ip.is_unspecified:
         pkt_local_ip = None
+    if adapter is not None:
+        found = _adapter_interface(adapter, pkt_local_ip)
+        if found is not None:
+            return found
     if pkt_local_ip is not None:
         local_ip = str(pkt_local_ip)
     else:

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ipaddress as _ipaddress
 import asyncio as _asyncio
 import concurrent.futures as _futures
 import logging as _logging
@@ -13,9 +12,8 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import _network as _net
 from ._core import _ListenerCore
-from ._receive import _TruncatedDatagram, _arrival
+from ._receive import _Arrival, _TruncatedDatagram, _arrival
 from ._spec import ListenLike
 
 LOGGER = _logging.getLogger(__name__)
@@ -122,17 +120,9 @@ class AsyncDHCPListener(_ListenerCore):
                     return  # closed underneath us; nothing more will arrive
                 self._note_receive_error("an async socket", e)
                 continue
-            data, client, ifindex, local_ip = arrival
-            self._dispatch_received(data, client, sock, ifindex, local_ip)
+            self._dispatch_received(arrival, sock)
 
-    def _dispatch_received(
-        self,
-        data: bytes,
-        client: _net.SocketAddress,
-        sock: _socket.socket,
-        ifindex: "_ty.Optional[int]" = None,
-        local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
-    ) -> None:
+    def _dispatch_received(self, arrival: _Arrival, sock: _socket.socket) -> None:
         """Run one datagram's handling off the event loop.
 
         Exactly one worker thread, so handlers still run one at a time and in
@@ -146,7 +136,7 @@ class AsyncDHCPListener(_ListenerCore):
         """
         worker = self._worker
         if worker is None:  # on the loop: not started, or `_HANDLE_ON_WORKER` is off
-            self._handle_datagram(data, client, sock, ifindex, local_ip)
+            self._handle_datagram(arrival, sock)
             return
         with self._pending_lock:
             full = self._pending >= self._max_queued
@@ -157,9 +147,7 @@ class AsyncDHCPListener(_ListenerCore):
             self._report_backlog()
             return
         try:
-            future = worker.submit(
-                self._handle_datagram, data, client, sock, ifindex, local_ip
-            )
+            future = worker.submit(self._handle_datagram, arrival, sock)
         except RuntimeError:  # the worker was shut down since it was read
             self._finished()
             return
@@ -192,18 +180,11 @@ class AsyncDHCPListener(_ListenerCore):
                 f"{error.__class__.__name__} | {error}"
             )
 
-    def _handle_datagram(
-        self,
-        data: bytes,
-        client: _net.SocketAddress,
-        sock: _socket.socket,
-        ifindex: "_ty.Optional[int]" = None,
-        local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
-    ) -> None:
+    def _handle_datagram(self, arrival: _Arrival, sock: _socket.socket) -> None:
         if self._closing:  # shut down after this was queued
             self.metrics.packets_dropped_backlog += 1
             return
-        self._dispatch(data, client, sock, ifindex, local_ip)
+        self._dispatch_arrival(arrival, sock)
 
     # -- lifecycle ---------------------------------------------------------
 

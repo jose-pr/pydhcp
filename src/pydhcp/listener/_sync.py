@@ -247,7 +247,7 @@ class DHCPListener(_ListenerCore):
                 endpoint = self._endpoints[sock] = _netimps.UDPEndpoint(
                     sock, pktinfo=False
                 )
-            data, client, ifindex, local_ip = _arrival(
+            arrival = _arrival(
                 endpoint.recv(self._max_packet_size + 1),
                 self._max_packet_size,
                 self._control_truncated,
@@ -259,7 +259,7 @@ class DHCPListener(_ListenerCore):
             self._note_receive_error(self._describe(sock), e)
             return
 
-        self._dispatch(data, client, sock, ifindex, local_ip)
+        self._dispatch_arrival(arrival, sock)
 
     @staticmethod
     def _describe(sock: _socket.socket) -> str:

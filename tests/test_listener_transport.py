@@ -21,11 +21,12 @@ import ipaddress
 import netimps
 
 from pydhcp.listener import DHCPListener, PktInfoUDPTransport, UDPTransport
+from pydhcp import SocketAddress
 
 # the receive path is not public
 # Private: the limiter a transport writes its warnings through.
 from pydhcp.listener._limit import _LogLimit
-from pydhcp.listener._receive import _arrival, _TruncatedDatagram
+from pydhcp.listener._receive import _arrival, _context_for, _TruncatedDatagram
 from ipaddress import IPv4Address as IPv4
 
 
@@ -142,13 +143,11 @@ def test_arrival_warns_when_the_control_data_was_cut(caplog) -> None:
     the interface is what the reply's SERVER_IDENTIFIER comes from."""
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         said: list = []
-        data, client, ifindex, local_ip = _arrival(
-            _datagram(control_truncated=True), 576, said.append
-        )
+        arrival = _arrival(_datagram(control_truncated=True), 576, said.append)
 
-    assert len(data) == 40
-    assert ifindex is None and local_ip is None
-    assert said == [client]
+    assert len(arrival.data) == 40
+    assert arrival.ifindex is None and arrival.local_ip is None
+    assert said == [arrival.client]
 
 
 def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:
@@ -156,7 +155,7 @@ def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:
     broadcast DISCOVER that is 255.255.255.255, which names no interface and
     must never become the server identifier; the receiving interface's own
     address does."""
-    *_, ifindex, local_ip = _arrival(
+    arrival = _arrival(
         _datagram(
             destination=IPv4("255.255.255.255"),
             interface_index=4,
@@ -165,14 +164,14 @@ def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:
         576,
     )
 
-    assert ifindex == 4
-    assert local_ip == IPv4("192.0.2.1"), "APIPA or the broadcast was chosen"
+    assert arrival.ifindex == 4
+    assert arrival.local_ip == IPv4("192.0.2.1"), "APIPA or the broadcast was chosen"
 
 
 def test_arrival_keeps_a_unicast_destination_the_interface_holds() -> None:
     """A NIC with several addresses: the one the client addressed is the one
     to answer from."""
-    *_, local_ip = _arrival(
+    arrival = _arrival(
         _datagram(
             destination=IPv4("192.0.2.2"),
             interface_index=4,
@@ -181,13 +180,78 @@ def test_arrival_keeps_a_unicast_destination_the_interface_holds() -> None:
         576,
     )
 
-    assert local_ip == IPv4("192.0.2.2")
+    assert arrival.local_ip == IPv4("192.0.2.2")
+
+
+def test_arrival_keeps_a_unicast_destination_the_interface_does_not_list() -> None:
+    """The client addressed 192.0.2.77, which the host accepts as its own
+    without the adapter listing it (a virtual address, the rest of 127/8):
+    the reply comes from it, not from the adapter's first address."""
+    arrival = _arrival(
+        _datagram(
+            destination=IPv4("192.0.2.77"),
+            interface_index=4,
+            interface=_interface("192.0.2.1/24"),
+        ),
+        576,
+    )
+
+    assert arrival.local_ip == IPv4("192.0.2.77")
+
+
+def test_arrival_reports_the_broadcast_a_datagram_was_sent_to() -> None:
+    adapter = _interface("192.0.2.1/24")
+    for sent_to in ("255.255.255.255", "192.0.2.255", "0.0.0.0"):
+        arrival = _arrival(
+            _datagram(destination=IPv4(sent_to), interface_index=4, interface=adapter),
+            576,
+        )
+
+        assert arrival.destination == IPv4(sent_to), sent_to
+        assert arrival.is_unicast is False, sent_to
+
+
+def test_arrival_reports_the_unicast_a_datagram_was_sent_to() -> None:
+    arrival = _arrival(
+        _datagram(
+            destination=IPv4("192.0.2.1"),
+            interface_index=4,
+            interface=_interface("192.0.2.1/24"),
+        ),
+        576,
+    )
+
+    assert arrival.destination == IPv4("192.0.2.1")
+    assert arrival.is_unicast is True
+
+
+def test_arrival_without_packet_info_does_not_know_where_it_was_sent() -> None:
+    arrival = _arrival(_datagram(), 576)
+
+    assert arrival.destination is None
+    assert arrival.is_unicast is None
+    assert arrival.adapter is None
+
+
+def test_arrival_hands_on_the_adapter_netimps_resolved() -> None:
+    adapter = _interface("192.0.2.1/24")
+
+    arrival = _arrival(
+        _datagram(
+            destination=IPv4("255.255.255.255"),
+            interface_index=4,
+            interface=adapter,
+        ),
+        576,
+    )
+
+    assert arrival.adapter is adapter
 
 
 def test_arrival_resolves_an_apipa_only_interface() -> None:
     """An APIPA-only NIC is the normal state of an isolated DHCP-only segment;
     resolution must still find it, only selection prefers otherwise."""
-    *_, local_ip = _arrival(
+    arrival = _arrival(
         _datagram(
             destination=IPv4("255.255.255.255"),
             interface_index=9,
@@ -196,16 +260,16 @@ def test_arrival_resolves_an_apipa_only_interface() -> None:
         576,
     )
 
-    assert local_ip == IPv4("169.254.7.7")
+    assert arrival.local_ip == IPv4("169.254.7.7")
 
 
 def test_arrival_without_an_interface_drops_a_broadcast_destination() -> None:
-    *_, ifindex, local_ip = _arrival(
+    arrival = _arrival(
         _datagram(destination=IPv4("255.255.255.255"), interface_index=3), 576
     )
 
-    assert ifindex == 3
-    assert local_ip is None
+    assert arrival.ifindex == 3
+    assert arrival.local_ip is None
 
 
 def test_arrival_answers_from_the_routable_address_of_a_loopback_holding_adapter() -> (
@@ -215,7 +279,7 @@ def test_arrival_answers_from_the_routable_address_of_a_loopback_holding_adapter
     address added to it): `Interface.primary_ip()` ranks routable above
     loopback, where the first non-link-local address in the adapter's order
     was the loopback one."""
-    *_, local_ip = _arrival(
+    arrival = _arrival(
         _datagram(
             destination=IPv4("255.255.255.255"),
             interface_index=1,
@@ -224,7 +288,7 @@ def test_arrival_answers_from_the_routable_address_of_a_loopback_holding_adapter
         576,
     )
 
-    assert local_ip == IPv4("192.0.2.1")
+    assert arrival.local_ip == IPv4("192.0.2.1")
 
 
 def test_arrival_without_an_interface_drops_a_subnet_broadcast() -> None:
@@ -240,21 +304,212 @@ def test_arrival_without_an_interface_drops_a_subnet_broadcast() -> None:
         pytest.skip("no interface with a subnet broadcast address on this host")
     subnet_broadcast = held[0].network.broadcast_address
 
-    *_, local_ip = _arrival(
-        _datagram(destination=subnet_broadcast, interface_index=3), 576
-    )
+    arrival = _arrival(_datagram(destination=subnet_broadcast, interface_index=3), 576)
 
-    assert local_ip is None
+    assert arrival.local_ip is None
+    assert arrival.is_unicast is False
 
 
 def test_arrival_treats_a_zero_local_address_as_absent() -> None:
     """A zero-filled `ipi_spec_dst` decodes to 0.0.0.0; taken literally it
     resolved a synthetic 0.0.0.0/32 interface and the server served nothing."""
-    *_, local_ip = _arrival(
-        _datagram(destination=IPv4("0.0.0.0"), interface_index=3), 576
+    arrival = _arrival(_datagram(destination=IPv4("0.0.0.0"), interface_index=3), 576)
+
+    assert arrival.local_ip is None
+
+
+def _context(arrival, sock=None):
+    own = sock or socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        return _context_for(
+            own,
+            arrival.client,
+            b"\0" * 6,
+            arrival.ifindex,
+            arrival.local_ip,
+            destination=arrival.destination,
+            is_unicast=arrival.is_unicast,
+            adapter=arrival.adapter,
+        )
+    finally:
+        if sock is None:
+            own.close()
+
+
+def test_a_context_says_where_the_datagram_was_addressed() -> None:
+    adapter = _interface("192.0.2.1/24")
+    broadcast = _context(
+        _arrival(
+            _datagram(
+                destination=IPv4("255.255.255.255"),
+                interface_index=4,
+                interface=adapter,
+            ),
+            576,
+        )
+    )
+    unicast = _context(
+        _arrival(
+            _datagram(
+                destination=IPv4("192.0.2.1"), interface_index=4, interface=adapter
+            ),
+            576,
+        )
     )
 
-    assert local_ip is None
+    assert (broadcast.destination, broadcast.is_unicast) == (
+        IPv4("255.255.255.255"),
+        False,
+    )
+    assert broadcast.local_ip == IPv4("192.0.2.1")
+    assert (unicast.destination, unicast.is_unicast) == (IPv4("192.0.2.1"), True)
+
+
+def test_a_context_built_by_hand_does_not_know_where_it_was_addressed() -> None:
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        context = _context_for(sock, SocketAddress(IPv4("192.0.2.5"), 68), b"\0" * 6)
+    finally:
+        sock.close()
+
+    assert context.destination is None and context.is_unicast is None
+
+
+def test_the_interface_comes_from_the_datagram_without_a_lookup(enumerations) -> None:
+    adapter = _interface("192.0.2.1/24", "198.51.100.1/24")
+    arrival = _arrival(
+        _datagram(
+            destination=IPv4("198.51.100.1"), interface_index=4, interface=adapter
+        ),
+        576,
+    )
+
+    context = _context(arrival)
+
+    assert (context.interface.name, str(context.interface.ip)) == (
+        "eth-test",
+        "198.51.100.1",
+    )
+    assert len(enumerations) == 0
+
+
+def test_an_unlisted_unicast_destination_is_the_source_not_the_interface() -> None:
+    """The reply leaves from the address the client used; the interface (what the
+    server identifier and the pool come from) stays an entry the host lists."""
+    adapter = _interface("192.0.2.1/24")
+    arrival = _arrival(
+        _datagram(destination=IPv4("192.0.2.77"), interface_index=4, interface=adapter),
+        576,
+    )
+
+    context = _context(arrival)
+
+    assert str(context.interface.ip_interface) == "192.0.2.1/24"
+    assert context.local_ip == IPv4("192.0.2.77")
+
+
+def _wildcard_listener():
+    listener = ContextListener(listen=("0.0.0.0", 0), poll_interval=0.05)
+    listener.bind()
+    return listener
+
+
+class ContextListener(DHCPListener):
+    """Keeps the context of each datagram and answers it from the transport."""
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.contexts: list = []
+
+    def handle(self, msg, context) -> None:
+        self.contexts.append(context)
+        context.transport.send(
+            b"r" * 20, context.client.ip, port=context.client.port, client_mac=b""
+        )
+
+
+def _serve_one(listener, sender, target, port):
+    """Send one datagram to ``target`` and return what the listener's context
+    and the client's receive saw."""
+    thread = threading.Thread(target=listener.serve_forever, daemon=True)
+    thread.start()
+    sender.settimeout(3)
+    try:
+        sender.sendto(build_request().encode(), (target, port))
+        try:
+            _data, (source, _port) = sender.recvfrom(64)
+        except OSError:
+            source = None
+        return listener.contexts[0] if listener.contexts else None, source
+    finally:
+        listener.shutdown()
+        thread.join(5)
+        listener.close()
+
+
+@pytest.mark.skipif(
+    not LOOPBACK_ALIAS_BINDABLE, reason="127.0.0.2 is not usable on this host"
+)
+def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
+    caplog,
+) -> None:
+    """On real sockets: the client addressed 127.0.0.2, which `lo` does not
+    list, and the reply must come from there (the adapter's first address,
+    127.0.0.1, is a source the client never addressed). Windows Server refuses
+    a pin to an address it does not assign, and only that refusal skips."""
+    listener = _wildcard_listener()
+    port = listener.bound_addresses[0].port
+    if not listener._pktinfo:
+        listener.close()
+        pytest.skip("no packet info on this platform")
+    listener._log_limit = _LogLimit()
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client.bind(("127.0.0.1", 0))
+    try:
+        with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            context, source = _serve_one(listener, client, "127.0.0.2", port)
+    finally:
+        client.close()
+
+    assert context is not None
+    assert (context.destination, context.is_unicast) == (IPv4("127.0.0.2"), True)
+    assert context.local_ip == IPv4("127.0.0.2")
+    # Not the address the client used, but one the adapter holds.
+    loopback = netimps.get_interface("127.0.0.1")
+    assert loopback is not None
+    assert context.interface.ip != IPv4("127.0.0.2")
+    assert context.interface.ip in [entry.ip for entry in loopback.ipv4]
+    if any("WinError 10049" in r.getMessage() for r in caplog.records):
+        pytest.skip("this Windows build refuses a pin to an unassigned 127.0.0.2")
+    assert source == "127.0.0.2"
+
+
+def test_a_broadcast_is_reported_as_one_with_the_interface_address_as_source() -> None:
+    """On real sockets: a datagram sent to the loopback subnet broadcast
+    reports that address and not the address of the interface that heard it."""
+    listener = _wildcard_listener()
+    port = listener.bound_addresses[0].port
+    if not listener._pktinfo:
+        listener.close()
+        pytest.skip("no packet info on this platform")
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    client.bind(("127.0.0.1", 0))
+    try:
+        try:
+            context, _source = _serve_one(listener, client, "127.255.255.255", port)
+        except OSError as error:
+            pytest.skip(f"cannot send to 127.255.255.255 here: {error}")
+    finally:
+        client.close()
+
+    if context is None:
+        pytest.skip("the loopback broadcast was not delivered on this host")
+    assert context.destination == IPv4("127.255.255.255")
+    assert context.is_unicast is False
+    loopback = netimps.get_interface("127.0.0.1")
+    assert loopback is not None
+    assert context.local_ip in [entry.ip for entry in loopback.ipv4]
 
 
 def test_a_reply_to_a_vanished_client_does_not_cost_the_next_datagram(caplog) -> None:
