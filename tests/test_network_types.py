@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import ipaddress
 
+import pytest
+
 import netimps
 
 from pydhcp import _network as network  # the module's own surface is what is tested
@@ -72,3 +74,13 @@ def test_a_loopback_only_adapter_resolves_to_loopback() -> None:
 
     assert found is not None
     assert str(found.ip) == "127.0.0.1"
+
+
+def test_a_socket_address_port_is_one_a_socket_can_have() -> None:
+    from pydhcp import DHCPValueError
+
+    for port in (-1, 65536, 70000):
+        with pytest.raises(DHCPValueError):
+            SocketAddress("127.0.0.1", port)
+    assert SocketAddress("127.0.0.1", 0).port == 0
+    assert str(SocketAddress("127.0.0.1", 65535)) == "127.0.0.1:65535"

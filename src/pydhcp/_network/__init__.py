@@ -7,6 +7,8 @@ import typing as _ty
 
 import netimps as _netimps
 
+from ..exceptions import DHCPValueError as _DHCPValueError
+
 #: Pseudo-members for hardware types with no name, cached so identity holds.
 _HTYPE_PSEUDO_MEMBERS: "dict[int, HardwareAddressType]" = {}
 
@@ -116,6 +118,8 @@ class _SocketAddress(_ty.NamedTuple):
 
 class SocketAddress(_SocketAddress):
     def __new__(cls, ip: _ty.Union[str, _ip.IPv4Address], port: int) -> "SocketAddress":
+        if not 0 <= int(port) <= 65535:
+            raise _DHCPValueError(f"port out of range: {port} (must be 0-65535)")
         return super(SocketAddress, cls).__new__(cls, _ip.IPv4Address(ip), int(port))
 
     @classmethod

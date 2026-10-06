@@ -445,6 +445,8 @@ importable. Replace each name in the left column with the one beside it.
   kept, and a final octet that starts a pointer no longer raises `IndexError`.
 - Re-binding a started `AsyncDHCPListener` whose listen list shrank retires the
   dropped socket's receive task cleanly; it used to wait for ever.
+- `SocketAddress` refuses a port outside 0-65535 with `DHCPValueError`; `str()` of one
+  with a port such as 70000 used to raise.
 
 ## [0.7.0] - 2026-10-03
 

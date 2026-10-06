@@ -28,7 +28,8 @@ of the installed package).
     it there made that a cycle.
 - **`SocketAddress(ip, port)`** (`NamedTuple[ip: IPv4Address, port: int]`) —
   `ip` is a `str` or an `ipaddress.IPv4Address`; both arguments are required
-  and the constructor does no I/O. `str()` is `"host:port"`.
+  and the constructor does no I/O. A `port` outside 0-65535 raises
+  `DHCPValueError`. `str()` is `"host:port"`.
   - `SocketAddress.from_socket(sock) -> SocketAddress` — the local address a
     socket is bound to; it asks the socket (`getsockname()`).
   - `.compat() -> tuple[str, int]` — plain `(str, int)` pair for stdlib socket
