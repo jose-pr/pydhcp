@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `255.255.255.255`, a RENEWING client's unicast shows the server's address, which
   is what RFC 2131 section 4.3.2 tells RENEWING from REBINDING by. `None` when the
   socket reports no packet info.
+- **`DHCPMetrics.replies_dropped_pin`**: broadcast replies dropped because they
+  could not be pinned to the interface the request arrived on.
 
 ### Changed
 
@@ -652,6 +654,22 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **A unicast reply whose route leaves by another interface arrives.** Every
+  reply on a wildcard socket was pinned to the arrival interface's index, so a
+  unicast (a reply to a relay's `giaddr`, a RENEWING client) whose route is through
+  another interface was put on the arrival interface, ARPed for there and lost with
+  no error. A unicast is now pinned to the address alone and the routing table picks
+  the interface; a broadcast keeps the address and the index.
+- **A broadcast reply whose pin fails never reaches another segment.** It was
+  retried unpinned and left by whichever interface the routing table picks (a
+  reply to a client on segment A appeared on segment B). It is now retried with the
+  address alone, then dropped and counted in `replies_dropped_pin`; a failed pin of a
+  unicast is still retried unpinned.
+- **A full send buffer no longer loses the reply.** The asyncio listener makes its
+  sockets non-blocking and replies from its worker thread, where a full buffer
+  raised `BlockingIOError`, which the pin's error path read as a failed pin and
+  retried unpinned (and so failed again). A reply now waits up to
+  `UDPTransport.SEND_WAIT_SECONDS` (1 s) for room and is sent as it was.
 - **A capture reports the address a datagram was sent to as its destination.** It
   reported the receiving interface's own address, so a broadcast DISCOVER
   showed as addressed to the host, and the `dst` filter key could not select
