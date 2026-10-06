@@ -6,15 +6,31 @@ Otherwise it is a *binding* or a sequence of bindings, and a binding is:
 * text, `"host"`, `"host:port"`, `"*"`, `"*:port"` or `":port"` (the wildcard),
   or several of them joined by commas;
 * an `IPv4Address`, or `None` (the wildcard), on the default ports;
+* a `netimps.Interface` or `netimps.MACAddress`, on the default ports;
 * a pair of host and ports, as a tuple or a list (a configuration file only has
-  lists): the host is `None`, blank text, `"*"`, text or an `IPv4Address`; the
-  ports are an `int`, digit text, `None` (the default ports) or a sequence of
-  those. A pair is told from two bindings by its second item being port-like.
+  lists): the host is `None`, blank text, `"*"`, text, an `IPv4Address`, an
+  `Interface` or a `MACAddress`; the ports are an `int`, digit text, `None` (the
+  default ports) or a sequence of those. A pair is told from two bindings by its
+  second item being port-like.
+
+**An interface.** Text that is not an IPv4 address names an interface, and the
+reading is in this order, so no name is looked up as a host name (a host name is
+never resolved): the wildcard forms; an IPv4 address; a MAC in any spelling
+(`aa:bb:cc:dd:ee:ff`, `aa-bb-cc-dd-ee-ff`, `aabb.ccdd.eeff`, `aa.bb.cc.dd.ee.ff`,
+`aabbccddeeff`); otherwise an adapter name (`eth1`, `Wi-Fi 2`, `eth0.100`). So
+`"eth1"` and `"localhost"` are adapters, and an adapter whose name is also an
+address or a MAC is given as a `netimps.Interface`. A port follows the last colon
+(`"eth1:67"`, `"aa-bb-cc-dd-ee-ff:67"`); the colon spelling of a MAC takes its port
+in a pair (`("aa:bb:cc:dd:ee:ff", 67)`), and an adapter name holding a colon is
+given as an `Interface`. Whether an interface exists is checked when the sockets
+are bound, not when the argument is read. An interface binding is one wildcard
+socket that drops what arrives on any other interface (a MAC names every adapter
+carrying it); `"*"` on the same port, or an address, takes precedence.
 
 A `bool`, a bare number and any other type are refused; so is a port outside
-0-65535, a port written twice that disagrees (`("*:67", 68)`), a host that is not
-an IPv4 address, and anything that names no address at all (`""`, `[]`, `" , "`).
-Text and pairs are read by `netimps.split_host`.
+0-65535, a port written twice that disagrees (`("*:67", 68)`), an IPv6 address,
+and anything that names no address at all (`""`, `[]`, `" , "`). Text and pairs
+are read by `netimps.split_host`.
 """
 
 from __future__ import annotations
@@ -26,8 +42,11 @@ import netimps as _netimps
 
 from .. import _constants as _const, _network as _net
 
-#: The host of a binding: `None` and blank text mean every address.
-ListenAddress = _ty.Optional[_ty.Union[str, _ipaddress.IPv4Address]]
+#: The host of a binding: `None` and blank text mean every address; an
+#: `Interface` or a `MACAddress` names an interface.
+ListenAddress = _ty.Optional[
+    _ty.Union[str, _ipaddress.IPv4Address, _netimps.Interface, _netimps.MACAddress]
+]
 
 #: One port, as an `int` or as digit text.
 ListenPort = _ty.Union[int, str]
@@ -45,10 +64,19 @@ ListenBinding = _ty.Union[
 #: of bindings.
 ListenLike = _ty.Optional[_ty.Union[ListenBinding, _ty.Sequence[ListenBinding]]]
 
-#: What a binding parses to: an address and its ports, `None` for the defaults.
-_Parsed = _ty.Tuple[_ipaddress.IPv4Address, _ty.Optional[_ty.List[int]]]
+#: What names an interface: a `MACAddress`, an adapter name, an `Interface`.
+Selector = _ty.Union[_netimps.MACAddress, str, _netimps.Interface]
+
+#: What a binding parses to: an address and its ports (`None` for the defaults),
+#: and the interface it is limited to (`None` for an address). An interface
+#: binding's address is the wildcard.
+_Parsed = _ty.Tuple[
+    _ipaddress.IPv4Address, _ty.Optional[_ty.List[int]], _ty.Optional[Selector]
+]
 
 _DIGITS_AND_SIGNS = frozenset("0123456789+- _")
+
+_WILDCARD = _ipaddress.IPv4Address("0.0.0.0")
 
 
 def _split_listen_string(value: str) -> list[str]:
@@ -75,6 +103,34 @@ def _split_host_port(value: str) -> tuple[str, _ty.Optional[int]]:
     return host or "0.0.0.0", port
 
 
+def _host(
+    text: str,
+) -> "_ty.Tuple[_ipaddress.IPv4Address, _ty.Optional[Selector]]":
+    """What the host text of a binding names: an address, or an interface.
+
+    An IPv4 address first, then a MAC, then an adapter name. IPv6 is refused.
+    """
+    try:
+        return _ipaddress.IPv4Address(text), None
+    except _ipaddress.AddressValueError as refused:
+        try:
+            _ipaddress.IPv6Address(text.split("%")[0])
+        except ValueError:
+            pass
+        else:
+            raise refused
+    return _WILDCARD, _selector(text)
+
+
+def _selector(text: str) -> Selector:
+    mac = _netimps.MACAddress.try_parse(text)
+    if mac is not None:
+        return mac
+    if not text.strip() or "/" in text:
+        raise ValueError(f"{text!r} is not an interface name")
+    return text
+
+
 def _is_port_like(value: object) -> bool:
     """Whether `value` can be a pair's second item rather than a second binding."""
     if value is None:
@@ -96,7 +152,10 @@ def _is_port_like(value: object) -> bool:
 
 
 def _is_host_like(value: object) -> bool:
-    return value is None or isinstance(value, (str, _ipaddress.IPv4Address))
+    return value is None or isinstance(
+        value,
+        (str, _ipaddress.IPv4Address, _netimps.Interface, _netimps.MACAddress),
+    )
 
 
 def _is_pair(value: _ty.Sequence[object]) -> bool:
@@ -109,33 +168,53 @@ def _is_pair(value: _ty.Sequence[object]) -> bool:
 
 
 def _one_text(text: str) -> _Parsed:
+    stripped = text.strip()
+    mac = _netimps.MACAddress.try_parse(stripped)
+    if mac is not None:
+        return _WILDCARD, None, mac
     host, port = _split_host_port(text)
-    return _ipaddress.IPv4Address(host), None if port is None else [port]
+    address, selector = _host(host)
+    return address, None if port is None else [port], selector
 
 
-def _pair(host: ListenAddress, ports: ListenPorts) -> _Parsed:
-    if host is None:
-        host_text = "0.0.0.0"
-    else:
-        host_text = _wildcard_text(str(host).strip()) or "0.0.0.0"
+def _ports_of(
+    host_text: str, ports: ListenPorts, label: object
+) -> _ty.Tuple[str, _ty.Optional[_ty.List[int]]]:
+    """The host and the ports of a pair, checked by `netimps.split_host`."""
     wanted: _ty.Sequence[object]
     if ports is None or isinstance(ports, (int, str)):
         wanted = [ports]
     else:
         wanted = list(ports)
         if not wanted:
-            raise ValueError(f"{(host, ports)!r} names no port")
+            raise ValueError(f"{label!r} names no port")
     resolved: _ty.Optional[_ty.List[int]] = None
-    address: _ty.Optional[_ipaddress.IPv4Address] = None
+    host = host_text
     for one in wanted:
         # `split_host` checks the type and range of the port and that it agrees
         # with one written in the host.
-        text, port = _netimps.split_host((host_text, _ty.cast("_ty.Any", one)))
-        address = _ipaddress.IPv4Address(text)
+        host, port = _netimps.split_host((host_text, _ty.cast("_ty.Any", one)))
         if port is not None:
             resolved = (resolved or []) + [port]
-    assert address is not None
-    return address, resolved
+    return host, resolved
+
+
+def _pair(host: ListenAddress, ports: ListenPorts) -> _Parsed:
+    if isinstance(host, (_netimps.Interface, _netimps.MACAddress)):
+        _host_text, resolved = _ports_of("0.0.0.0", ports, (host, ports))
+        return _WILDCARD, resolved, host
+    if host is None:
+        host_text = "0.0.0.0"
+    else:
+        host_text = _wildcard_text(str(host).strip()) or "0.0.0.0"
+    mac = _netimps.MACAddress.try_parse(host_text)
+    if mac is not None:
+        # The colon spelling cannot carry a port in the text: it comes second.
+        _host_text, resolved = _ports_of("0.0.0.0", ports, (host, ports))
+        return _WILDCARD, resolved, mac
+    text, resolved = _ports_of(host_text, ports, (host, ports))
+    address, selector = _host(text)
+    return address, resolved, selector
 
 
 def _bindings_of(item: object) -> _ty.Iterator[_Parsed]:
@@ -147,14 +226,16 @@ def _bindings_of(item: object) -> _ty.Iterator[_Parsed]:
             raise ValueError(f"listen names no address: {item!r}")
         for part in parts:
             yield _one_text(part)
-    elif isinstance(item, _ipaddress.IPv4Address):
+    elif isinstance(item, (_ipaddress.IPv4Address, _netimps.Interface)):
+        yield _pair(item, None)
+    elif isinstance(item, _netimps.MACAddress):
         yield _pair(item, None)
     elif isinstance(item, (tuple, list)) and _is_pair(item):
         yield _pair(item[0], item[1])
     else:
         raise TypeError(
-            "a listen binding is text, an IPv4 address, None or a (host, ports) "
-            f"pair, not {type(item).__name__} {item!r}"
+            "a listen binding is text, an IPv4 address, an interface, None or a "
+            f"(host, ports) pair, not {type(item).__name__} {item!r}"
         )
 
 
@@ -171,7 +252,7 @@ def _iter_listen_bindings(listen: object) -> _ty.Iterator[_Parsed]:
 def _listen_uses_wildcard(listen: ListenLike) -> bool:
     return any(
         address == _const.WILDCARD_V4
-        for address, _ports in _iter_listen_bindings(listen)
+        for address, _ports, _selector in _iter_listen_bindings(listen)
     )
 
 
@@ -182,7 +263,7 @@ def _parselisteners(
 ) -> list[_net.SocketAddress]:
     """The addresses `listen` names, each once and in order; refuses a spec naming none."""
     _listen: list[_net.SocketAddress] = []
-    for address, ports in _iter_listen_bindings(listen):
+    for address, ports, _selector in _iter_listen_bindings(listen):
         for p in default_ports if ports is None else ports:
             bind_addr = _net.SocketAddress(address, int(p))
             if bind_addr not in _listen:
@@ -214,3 +295,23 @@ def _expand_wildcards(
             if entry not in expanded:
                 expanded.append(entry)
     return expanded
+
+
+def _interface_limits(
+    listen: ListenLike, default_ports: _ty.Sequence[int] = ()
+) -> "dict[_net.SocketAddress, tuple[Selector, ...]]":
+    """The interfaces each wildcard socket is limited to, by the socket's address.
+
+    A socket named by an interface binding only. A port the wildcard is also
+    named for plainly (`"*:67"`, `"0.0.0.0"`) has no limit and is absent.
+    """
+    limits: "dict[_net.SocketAddress, tuple[Selector, ...]]" = {}
+    open_sockets: "set[_net.SocketAddress]" = set()
+    for address, ports, selector in _iter_listen_bindings(listen):
+        for p in default_ports if ports is None else ports:
+            socket_address = _net.SocketAddress(address, int(p))
+            if selector is None:
+                open_sockets.add(socket_address)
+            elif selector not in limits.get(socket_address, ()):
+                limits[socket_address] = limits.get(socket_address, ()) + (selector,)
+    return {a: found for a, found in limits.items() if a not in open_sockets}

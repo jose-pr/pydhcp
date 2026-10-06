@@ -31,6 +31,7 @@ class DHCPMetrics:
         "packets_dropped_other_server",
         "addresses_refused",
         "replies_dropped_pin",
+        "packets_dropped_other_interface",
     )
 
     packets_received: int
@@ -79,6 +80,9 @@ class DHCPMetrics:
     #: interface the request arrived on, with or without its index. Sent
     #: unpinned they could have left by another interface.
     replies_dropped_pin: int
+    #: Datagrams dropped before decoding because they arrived on an interface
+    #: other than the one(s) the listener was told to serve.
+    packets_dropped_other_interface: int
 
     def __init__(self) -> None:
         self.reset()

@@ -18,10 +18,16 @@ from .. import _clock, _constants as _const, _leniency, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from ._binding import _bind_sockets, _close_socket
+from ._binding import _bind_sockets, _close_socket, _requested
+from ._interfaces import _interface_indexes
 from ._limit import _brief, _LogLimit
 from ._receive import DHCPRequestContext, _Arrival, _context_for, _pktinfo_supported
-from ._spec import ListenLike, _expand_wildcards, _parselisteners
+from ._spec import (
+    ListenLike,
+    _expand_wildcards,
+    _interface_limits,
+    _parselisteners,
+)
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -62,6 +68,14 @@ class _ListenerCore:
         self._listen = _parselisteners(
             listen, self.DEFAULT_PORTS, expand_wildcard=False
         )
+        #: The interfaces a wildcard socket is limited to, by the address it
+        #: was asked for; resolved to indexes by `bind()`.
+        self._limits = _interface_limits(listen, self.DEFAULT_PORTS)
+        if self._limits and per_interface:
+            raise ValueError(
+                "per_interface cannot be combined with listening on an interface: "
+                "one socket per address hears no broadcast on most platforms"
+            )
         self._per_interface = per_interface
         #: ``None`` takes the class attribute when binding.
         self._reuse_address = reuse_address
@@ -72,6 +86,8 @@ class _ListenerCore:
         self._sockets: list[_socket.socket] = []
         #: The netimps endpoint each socket is received through.
         self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
+        #: The interface indexes a socket serves, for a socket limited to some.
+        self._allowed: "dict[_socket.socket, frozenset[int]]" = {}
         self.metrics = DHCPMetrics()
         #: What a sender can make this listener, or the role on it, write.
         self._log_limit = _LogLimit()
@@ -121,6 +137,17 @@ class _ListenerCore:
         """
         if self._closed:
             raise RuntimeError(f"{type(self).__name__} is closed")
+        # Before anything is opened: an interface that does not exist is an
+        # error of the arguments, and leaves no socket behind.
+        allowed = {
+            address: _interface_indexes(selectors)
+            for address, selectors in self._limits.items()
+        }
+        if allowed and not self._pktinfo:
+            raise ValueError(
+                "listening on an interface needs packet info, which sockets on "
+                "this host do not report"
+            )
         listen = (
             _expand_wildcards(self._listen) if self._expand_wildcard else self._listen
         )
@@ -141,6 +168,32 @@ class _ListenerCore:
                 else self._receive_buffer_size
             ),
         )
+        self._allowed = {
+            sock: allowed[requested]
+            for sock in self._sockets
+            if (requested := _requested(sock)) in allowed
+        }
+
+    def _admits(self, arrival: _Arrival, sock: _socket.socket) -> bool:
+        """Whether a datagram arrived on an interface this socket serves.
+
+        A socket told to serve some interfaces drops, before decoding, what
+        arrives on any other, and counts it: one wildcard socket hears every
+        interface, which is the only way to hear a broadcast.
+        """
+        allowed = self._allowed.get(sock)
+        if allowed is None or arrival.ifindex in allowed:
+            return True
+        self.metrics.packets_dropped_other_interface += 1
+        self._log_limited(
+            LOGGER,
+            _logging.DEBUG,
+            "datagram from another interface",
+            "Dropping a datagram that arrived on interface %s: this socket serves %s.",
+            arrival.ifindex,
+            sorted(allowed),
+        )
+        return False
 
     def _read_clock(self) -> _clock._Instant:
         return _clock._read()

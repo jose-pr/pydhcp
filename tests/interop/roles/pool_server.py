@@ -2,8 +2,10 @@
 
 Run: python pool_server.py [--async] [--relay-network CIDR] [--gate-chaddr HEX
          --gate-file PATH --ready-file PATH] [--status PATH] [--lease-seconds N]
+         [--listen SPEC]
 
-Listens on the wildcard at port 67 -- the path a real deployment uses. A stock
+Listens on the wildcard at port 67 (or on `--listen`) -- the path a real
+deployment uses. A stock
 `DHCPServer` allocates nothing for a client that asks for no address, so the
 pool is the override the documentation describes: the next free host from .100
 of the network the request belongs to (the relay's network when `giaddr` is
@@ -42,6 +44,7 @@ parser.add_argument("--gate-chaddr")
 parser.add_argument("--gate-file")
 parser.add_argument("--ready-file")
 parser.add_argument("--status")
+parser.add_argument("--listen", default="*:67")
 parser.add_argument("--lease-seconds", type=int, default=600)
 parser.add_argument(
     "--private-store",
@@ -157,7 +160,7 @@ def report(server) -> None:
 
 
 def run_sync() -> None:
-    server = SyncPool(listen=("*", 67))
+    server = SyncPool(listen=args.listen)
     done = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: done.set())
     server.start()
@@ -168,7 +171,7 @@ def run_sync() -> None:
 
 
 async def run_async() -> None:
-    server = AsyncPool(listen=("*", 67))
+    server = AsyncPool(listen=args.listen)
     loop = asyncio.get_running_loop()
     done = asyncio.Event()
     loop.add_signal_handler(signal.SIGTERM, done.set)

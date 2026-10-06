@@ -27,6 +27,11 @@ _REQUESTED_ADDRESS: "_ty.MutableMapping[_socket.socket, _net.SocketAddress]" = (
 )
 
 
+def _requested(sock: _socket.socket) -> "_ty.Optional[_net.SocketAddress]":
+    """The address `sock` was asked to bind, or `None` for one not bound here."""
+    return _REQUESTED_ADDRESS.get(sock)
+
+
 _ADDRESS_BOUND_WARNED = False
 
 

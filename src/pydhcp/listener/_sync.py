@@ -259,7 +259,8 @@ class DHCPListener(_ListenerCore):
             self._note_receive_error(self._describe(sock), e)
             return
 
-        self._dispatch_arrival(arrival, sock)
+        if self._admits(arrival, sock):
+            self._dispatch_arrival(arrival, sock)
 
     @staticmethod
     def _describe(sock: _socket.socket) -> str:

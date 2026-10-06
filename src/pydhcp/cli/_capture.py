@@ -147,7 +147,7 @@ class Capture(_Command):
     _parsername_ = "capture"
 
     listen: _ty.Optional[str] = None
-    "Listen address/port spec, for example '*' or '127.0.0.1:6767,127.0.0.1:6768'"
+    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff')"
     ("--listen", "-l")
 
     packet_filter: _ty.Optional[str] = None

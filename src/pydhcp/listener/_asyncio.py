@@ -120,7 +120,8 @@ class AsyncDHCPListener(_ListenerCore):
                     return  # closed underneath us; nothing more will arrive
                 self._note_receive_error("an async socket", e)
                 continue
-            self._dispatch_received(arrival, sock)
+            if self._admits(arrival, sock):
+                self._dispatch_received(arrival, sock)
 
     def _dispatch_received(self, arrival: _Arrival, sock: _socket.socket) -> None:
         """Run one datagram's handling off the event loop.

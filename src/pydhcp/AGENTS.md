@@ -68,10 +68,12 @@ everything below from `pydhcp.listener` itself.
   (the constructors, `pydhcp server|relay|capture --listen` and the `listen`
   key of a configuration file). `None` is the wildcard on the default ports. A
   binding is: text — `"host"`, `"host:port"`, `"*"`, `"*:port"`, `":port"`, several
-  joined by commas; an `IPv4Address`, or `None` (the wildcard); or a **pair
+  joined by commas; an `IPv4Address`, or `None` (the wildcard); a
+  `netimps.Interface` or `netimps.MACAddress` (an interface, below); or a **pair
   `(host, ports)` as a tuple or a list** (a JSON, YAML or TOML file only has
   lists, so `["127.0.0.1", 6767]` is one binding). In a pair the host is
-  `None`, blank text, `"*"`, text or an `IPv4Address`, and the ports are an
+  `None`, blank text, `"*"`, text, an `IPv4Address`, an `Interface` or a
+  `MACAddress`, and the ports are an
   `int`, digit text, `None` (the default ports) or a sequence of those
   (`("127.0.0.1", [6767, 6768])`); the pair is read by
   `netimps.split_host`, so a type, a range (0-65535) and a port written twice
@@ -81,8 +83,8 @@ everything below from `pydhcp.listener` itself.
   wildcard everywhere**, `(None, 6767)` included. Refused at construction with
   nothing bound: a `bool` or a bare number (`True`, `6767`) as an address or
   a port (`TypeError`), an empty result (`""`, `" , "`, `[]`, a pair with no port;
-  `ValueError`), a bad or out-of-range port, and a host that is not an IPv4
-  address (`ipaddress.AddressValueError`). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
+  `ValueError`), a bad or out-of-range port, and an IPv6 address
+  (`ipaddress.AddressValueError`). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
   `"*:67"`, `"0.0.0.0:67"`, `("0.0.0.0", 67)` — binds one wildcard socket and
   learns each datagram's arrival interface through `netimps.UDPEndpoint`
   (packet info), on Linux, macOS and Windows and on every supported CPython.
@@ -99,14 +101,38 @@ everything below from `pydhcp.listener` itself.
   wildcard alone. `.bind()` logs a WARNING once per process when it binds such
   an address. Every instance
   owns `self.metrics: DHCPMetrics` — there is no global metrics singleton.
+  - **Listening on an interface.** Text that is not an IPv4 address names an
+    interface, read in this order so that no name is looked up as a host name (a
+    host name is **never resolved**): the wildcard forms; an IPv4 address; a MAC
+    in any spelling (`aa:bb:cc:dd:ee:ff`, `aa-bb-cc-dd-ee-ff`, `aabb.ccdd.eeff`,
+    `aa.bb.cc.dd.ee.ff`, `aabbccddeeff`); otherwise an adapter name (`eth1`,
+    `Wi-Fi 2`, `eth0.100`). So `"eth1"` and `"localhost"` are both adapters, and an
+    adapter whose name is also an address or a MAC is given as a
+    `netimps.Interface`. The port follows the last colon (`"eth1:67"`,
+    `"aa-bb-cc-dd-ee-ff:67"`), so `eth0:1` is `eth0` on port 1: the colon spelling
+    of a MAC takes its port in a pair (`("aa:bb:cc:dd:ee:ff", 67)`) and an adapter
+    name that holds a colon is given as an `Interface`. A `/` in a name is
+    refused. **The adapter is looked up by `.bind()`**, not by the constructor
+    (`netimps.iter_interfaces`: a name names one adapter, a MAC every adapter
+    carrying it, an `Interface` itself); one that matches nothing raises
+    `ValueError` ("no interface matches ...") with nothing bound. The listener
+    binds **one wildcard socket** (so a broadcast is heard) and **drops, before
+    decoding, a datagram that arrived on another interface**, counting it in
+    `metrics.packets_dropped_other_interface` (and writing a DEBUG line through
+    the log limit). Several interfaces on one port share the socket; naming the
+    wildcard plainly on that port (`"*:67"`, `"0.0.0.0:67"`) takes precedence and
+    removes the limit. It needs packet info (`ValueError` at `.bind()` where the
+    socket reports none) and cannot be combined with `per_interface=True`
+    (`ValueError` at construction). Every listener, role and the client take it.
+    A device-bound socket is not used: netimps offers none.
   - **`host:port` text is read strictly** (netimps' `split_host`): the port is
     ASCII digits only, and square brackets may enclose only an IPv6 literal.
     `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`, `"127.0.0.1:8_0"` and
     `"[127.0.0.1]:6767"` raise `ValueError` (netimps' `NetimpsValueError`),
     the message naming the port or the brackets. The same rule applies to
     each `--listen` and `--server` value. A host name is not an address:
-    `listen` takes IPv4 addresses, and a name raises
-    `ipaddress.AddressValueError`.
+    `listen` takes IPv4 addresses and interfaces, a name is read as an adapter name
+    and never resolved, and IPv6 raises `ipaddress.AddressValueError`.
   - **Wildcard expansion uses the APIPA-filtered address list.** A wildcard on
     a platform without packet info (or with `per_interface=True`) becomes one
     socket per `host_ip_interfaces()` address, read when `.bind()` runs and not when the listener is constructed, which
@@ -330,8 +356,8 @@ everything below from `pydhcp.listener` itself.
   Handlers use `context.transport`/`context.interface` to reply out the same
   interface a request arrived on.
 - **`ListenLike`** — type alias for the `listen` argument accepted above: `None`, one
-  binding (text, an `IPv4Address`, or a `(host, ports)` pair as tuple or list), or a
-  sequence of bindings.
+  binding (text, an `IPv4Address`, a `netimps.Interface`, a `netimps.MACAddress`, or a
+  `(host, ports)` pair as tuple or list), or a sequence of bindings.
 
 **Gotcha**: a socket bound to a specific loopback address (`127.0.0.1`, not
 `0.0.0.0`) cannot originate a UDP broadcast send on POSIX (Windows is lenient
@@ -816,9 +842,11 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     server dropped a message with neither option 61 nor a hardware address),
     `packets_dropped_other_server` (a message other than a REQUEST naming
     another server), `addresses_refused` (a requested address the server
-    refused to lease) and `replies_dropped_pin` (a broadcast reply that could not
+    refused to lease), `replies_dropped_pin` (a broadcast reply that could not
     be pinned to the interface the request arrived on, with or without its index,
-    and was dropped rather than sent by an interface the routing table picks).
+    and was dropped rather than sent by an interface the routing table picks) and
+    `packets_dropped_other_interface` (a datagram dropped before decoding because it
+    arrived on an interface the listener was not told to serve).
   - `leases_declined` counts `DHCPDECLINE`, which used to land in
     `leases_released` though it means the opposite — the client found the
     address already in use. An address-conflict storm read as orderly

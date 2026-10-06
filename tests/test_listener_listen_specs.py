@@ -84,11 +84,13 @@ def test_a_malformed_port_or_bracket_is_named_as_such(
         DHCPListener(listen=listen, per_interface=per_interface)
 
 
-@pytest.mark.parametrize("listen", ["localhost:6767", "eth0", ("localhost", 6767)])
+@pytest.mark.parametrize("listen", ["::1", "[::1]:6767", ("fe80::1", 6767)])
 @pytest.mark.parametrize("per_interface", [False, True])
-def test_a_host_name_is_refused_as_not_an_ipv4_address(listen, per_interface) -> None:
-    """`listen` takes addresses; a name is not one, and both paths say so in the
-    same words (`ipaddress`'s), not a wildcard-detection error."""
+def test_an_ipv6_address_is_refused_as_not_an_ipv4_address(
+    listen, per_interface
+) -> None:
+    """`listen` takes IPv4 addresses; both paths say so in the same words
+    (`ipaddress`'s), not a wildcard-detection error."""
     with pytest.raises(ipaddress.AddressValueError, match="Expected 4 octets"):
         DHCPListener(listen=listen, per_interface=per_interface)
 
