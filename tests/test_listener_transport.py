@@ -38,7 +38,7 @@ class RecordingListener(DHCPListener):
 
 def _drain(listener: DHCPListener, turns: int = 1) -> None:
     """Run the receive loop just long enough to take what is already queued."""
-    listener._select_timeout = 0.05
+    listener._poll_interval = 0.05
     thread = threading.Thread(target=listener.serve_forever, daemon=True)
     thread.start()
     deadline = time.monotonic() + 3
@@ -265,7 +265,7 @@ def test_a_reply_to_a_vanished_client_does_not_cost_the_next_datagram(caplog) ->
     closed_port = gone.getsockname()[1]
     gone.close()
 
-    listener = RecordingListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener = RecordingListener(listen=("127.0.0.1", 0), poll_interval=0.05)
     listener.bind()
     address = listener.bound_addresses[0]
     # The reply to the vanished client, from the listening socket itself.
@@ -292,7 +292,7 @@ class ExplodingListener(DHCPListener):
 
 
 def test_an_undecodable_datagram_is_a_warning_with_its_size(caplog) -> None:
-    listener = RecordingListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener = RecordingListener(listen=("127.0.0.1", 0), poll_interval=0.05)
     listener.bind()
     address = listener.bound_addresses[0]
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -314,7 +314,7 @@ def test_an_undecodable_datagram_is_a_warning_with_its_size(caplog) -> None:
 def test_a_failing_handler_is_an_error_with_a_traceback(caplog) -> None:
     """The one failure whose class name and `str()` say nothing about where it
     came from was the one logging them without `exc_info`."""
-    listener = ExplodingListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener = ExplodingListener(listen=("127.0.0.1", 0), poll_interval=0.05)
     listener.handled = []  # type: ignore[attr-defined]
     listener.bind()
     address = listener.bound_addresses[0]

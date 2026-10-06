@@ -68,7 +68,7 @@ def _wait(predicate, timeout: float = 3.0) -> None:
 def test_a_wildcard_listener_learns_where_a_datagram_arrived() -> None:
     """The datagram must say which address and interface it reached: the
     reply's SERVER_IDENTIFIER and egress are derived from them."""
-    listener = _Recording(listen=("0.0.0.0", 0), select_timeout=0.05)
+    listener = _Recording(listen=("0.0.0.0", 0), poll_interval=0.05)
     listener.bind()
     port = listener.bound_addresses[0].port
     listener.start()
@@ -140,7 +140,7 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     it resolved a synthetic /32 interface with nothing in it to lease, and the
     server received the DISCOVER and stayed silent. Only an allocation and a
     reply prove the path works."""
-    server = DHCPServer(listen=spec, select_timeout=0.05)
+    server = DHCPServer(listen=spec, poll_interval=0.05)
     server.bind()
     port = server.bound_addresses[0].port
     server.start()
@@ -173,7 +173,7 @@ def test_every_wildcard_spelling_hears_a_limited_broadcast(spelling) -> None:
         "*:p": f"*:{port}",
     }
 
-    listener = _Recording(listen=spec[spelling], select_timeout=0.05)
+    listener = _Recording(listen=spec[spelling], poll_interval=0.05)
     listener.bind()
     listener.start()
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

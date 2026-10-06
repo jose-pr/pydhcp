@@ -24,12 +24,15 @@ class AsyncDHCPCapture(_CaptureCore, AsyncDHCPListener):
     def __init__(
         self,
         listen: ListenSpec = None,
+        *,
         packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
         sink: _ty.Optional[CaptureSink] = None,
         hook: _ty.Optional[CaptureHook] = None,
         hook_fail_fast: bool = False,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        reuse_address: _ty.Optional[bool] = None,
+        receive_buffer_size: _ty.Optional[int] = None,
         max_queued: _ty.Optional[int] = None,
     ) -> None:
         AsyncDHCPListener.__init__(
@@ -37,6 +40,8 @@ class AsyncDHCPCapture(_CaptureCore, AsyncDHCPListener):
             listen=listen,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            reuse_address=reuse_address,
+            receive_buffer_size=receive_buffer_size,
             max_queued=max_queued,
         )
         self._init_capture_state(

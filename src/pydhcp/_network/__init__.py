@@ -115,23 +115,14 @@ class _SocketAddress(_ty.NamedTuple):
 
 
 class SocketAddress(_SocketAddress):
-    def __new__(
-        cls,
-        ip: _ty.Union[str, _ip.IPv4Address, _socket.socket],
-        port: _ty.Optional[int] = None,
-    ) -> "SocketAddress":
-        if isinstance(ip, _socket.socket):
-            ip_val, port_val = ip.getsockname()
-        elif port is None:
-            raise ValueError(
-                f"SocketAddress({ip!r}) needs an explicit port; a port is only "
-                "inferred when the first argument is a socket"
-            )
-        else:
-            ip_val, port_val = ip, port
-        return super(SocketAddress, cls).__new__(
-            cls, _ip.IPv4Address(ip_val), int(port_val)
-        )
+    def __new__(cls, ip: _ty.Union[str, _ip.IPv4Address], port: int) -> "SocketAddress":
+        return super(SocketAddress, cls).__new__(cls, _ip.IPv4Address(ip), int(port))
+
+    @classmethod
+    def from_socket(cls, sock: _socket.socket) -> "SocketAddress":
+        """The local address `sock` is bound to; asks the socket (`getsockname()`)."""
+        ip, port = sock.getsockname()[:2]
+        return cls(ip, port)
 
     def compat(self) -> tuple[str, int]:
         return (str(self.ip), self.port)

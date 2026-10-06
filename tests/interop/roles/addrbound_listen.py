@@ -33,11 +33,11 @@ class Counting(DHCPListener):
 
 
 listeners = {
-    "address": Counting(listen=(address, base), select_timeout=0.05),
+    "address": Counting(listen=(address, base), poll_interval=0.05),
     "per_interface": Counting(
-        listen=("0.0.0.0", base + 1), select_timeout=0.05, per_interface=True
+        listen=("0.0.0.0", base + 1), poll_interval=0.05, per_interface=True
     ),
-    "wildcard": Counting(listen=("0.0.0.0", base + 2), select_timeout=0.05),
+    "wildcard": Counting(listen=("0.0.0.0", base + 2), poll_interval=0.05),
 }
 for listener in listeners.values():
     listener.start()

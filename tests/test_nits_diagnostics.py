@@ -31,10 +31,19 @@ def _message_of(exc: pytest.ExceptionInfo[BaseException]) -> str:
     return str(exc.value)
 
 
-def test_socket_address_without_a_port_explains_itself() -> None:
-    with pytest.raises(ValueError) as exc:
-        SocketAddress("127.0.0.1")
-    assert "port" in _message_of(exc)
+def test_socket_address_needs_a_port_and_a_socket_has_its_own_constructor() -> None:
+    import socket
+
+    with pytest.raises(TypeError, match="port"):
+        SocketAddress("127.0.0.1")  # type: ignore[call-arg]
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.bind(("127.0.0.1", 0))
+        assert SocketAddress.from_socket(sock) == SocketAddress(
+            "127.0.0.1", sock.getsockname()[1]
+        )
+    finally:
+        sock.close()
 
 
 def test_option_code_over_one_octet_names_the_value() -> None:

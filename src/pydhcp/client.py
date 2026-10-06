@@ -63,15 +63,20 @@ class DHCPClient(DHCPListener):
     def __init__(
         self,
         listen: ListenSpec = None,
-        select_timeout: _ty.Optional[float] = None,
+        *,
+        poll_interval: _ty.Optional[float] = None,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        reuse_address: _ty.Optional[bool] = None,
+        receive_buffer_size: _ty.Optional[int] = None,
     ) -> None:
         super().__init__(
             listen=listen,
-            select_timeout=select_timeout,
+            poll_interval=poll_interval,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            reuse_address=reuse_address,
+            receive_buffer_size=receive_buffer_size,
         )
         self._replies: _queue.Queue[tuple[DHCPMessage, DHCPRequestContext]] = (
             _queue.Queue(maxsize=self.MAX_QUEUED_REPLIES)

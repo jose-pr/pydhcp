@@ -140,7 +140,7 @@ def _bind_sockets(
         requested = _REQUESTED_ADDRESS.get(sock)
         if requested is None:  # pragma: no cover - not bound through here
             try:
-                requested = _net.SocketAddress(sock)
+                requested = _net.SocketAddress.from_socket(sock)
             except OSError:
                 continue
         active[requested] = sock

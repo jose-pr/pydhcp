@@ -28,15 +28,14 @@ LOGGER = _logging.getLogger(__name__)
 class _ListenerCore:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DHCPPort)
 
-    #: Whether to set ``SO_REUSEADDR`` on every listening socket. Off: see
-    #: `_bind_sockets` for what sharing a DHCP port actually looks like when it
-    #: goes wrong. A class attribute rather than a constructor argument so every
-    #: subclass (server, client, relay, capture) inherits it without each
-    #: constructor having to forward it.
+    #: Whether to set ``SO_REUSEADDR`` on every listening socket when the
+    #: constructor's `reuse_address` is not given. Off: see `_bind_sockets` for
+    #: what sharing a DHCP port actually looks like when it goes wrong.
     REUSE_ADDRESS: bool = False
 
-    #: Receive buffer to ask the OS for on every listening socket, in octets;
-    #: 0 keeps the OS default. 1 MiB holds about 3500 typical 300-octet DHCP
+    #: Receive buffer to ask the OS for on every listening socket, in octets,
+    #: when the constructor's `receive_buffer_size` is not given; 0 keeps the
+    #: OS default. 1 MiB holds about 3500 typical 300-octet DHCP
     #: datagrams, against about 220 in Windows' 64 KiB default -- a segment
     #: powering up sends its DISCOVERs together. The kernel may grant less
     #: (Linux caps at net.core.rmem_max); a shortfall is logged at INFO.
@@ -48,27 +47,49 @@ class _ListenerCore:
     def __init__(
         self,
         listen: ListenSpec = None,
+        *,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        reuse_address: _ty.Optional[bool] = None,
+        receive_buffer_size: _ty.Optional[int] = None,
     ) -> None:
         #: ``None`` and 0 both mean the largest UDP payload.
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
         if listen is None:
             listen = "*"
-        self._pktinfo = _pktinfo_supported(listen, per_interface)
+        self._listen_spec = listen
         self._listen = _parselisteners(
             listen, self.DEFAULT_PORTS, expand_wildcard=False
         )
-        #: Without packet info a wildcard is served by one socket per host
-        #: address; the expansion is read when binding, not when constructing.
-        self._expand_wildcard = not self._pktinfo
         self._per_interface = per_interface
+        #: ``None`` takes the class attribute when binding.
+        self._reuse_address = reuse_address
+        self._receive_buffer_size = receive_buffer_size
+        self._pktinfo_probed: _ty.Optional[bool] = None
         #: Closed is final: set by `close()`, never cleared.
         self._closed = False
         self._sockets: list[_socket.socket] = []
         #: The netimps endpoint each socket is received through.
         self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
         self.metrics = DHCPMetrics()
+
+    @property
+    def _pktinfo(self) -> bool:
+        """Whether this listener receives through the packet-info path.
+
+        Asked of a socket on first use, which is `bind()`: a constructor
+        performs no I/O.
+        """
+        if self._pktinfo_probed is None:
+            self._pktinfo_probed = _pktinfo_supported(
+                self._listen_spec, self._per_interface
+            )
+        return self._pktinfo_probed
+
+    @property
+    def _expand_wildcard(self) -> bool:
+        """Without packet info a wildcard is served by one socket per host address."""
+        return not self._pktinfo
 
     @property
     def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
@@ -82,7 +103,7 @@ class _ListenerCore:
         addresses = []
         for sock in self._sockets:
             try:
-                addresses.append(_net.SocketAddress(sock))
+                addresses.append(_net.SocketAddress.from_socket(sock))
             except OSError:  # pragma: no cover - socket closed underneath us
                 continue
         return tuple(addresses)
@@ -106,8 +127,16 @@ class _ListenerCore:
             self._endpoints,
             self._pktinfo,
             label=self._BIND_LABEL,
-            reuse_address=self.REUSE_ADDRESS,
-            receive_buffer=self.RECEIVE_BUFFER_SIZE,
+            reuse_address=(
+                self.REUSE_ADDRESS
+                if self._reuse_address is None
+                else self._reuse_address
+            ),
+            receive_buffer=(
+                self.RECEIVE_BUFFER_SIZE
+                if self._receive_buffer_size is None
+                else self._receive_buffer_size
+            ),
         )
 
     def _read_clock(self) -> _clock._Instant:
@@ -153,7 +182,7 @@ class _ListenerCore:
                 self._read_clock(),
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
-                msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
+                msg.log(client, _net.SocketAddress.from_socket(sock), _logging.DEBUG)
             self.handle(msg, context)
         except Exception as e:
             # `DHCPCapture.hook_fail_fast` relies on this staying a catch rather

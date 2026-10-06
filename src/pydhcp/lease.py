@@ -213,12 +213,37 @@ class FileLeaseBackend(InMemoryLeaseBackend):
     #: Seconds to coalesce writes over. 0 writes on every mutation.
     SAVE_INTERVAL_SECONDS: float = 0.0
 
-    def __init__(self, filepath: str = "leases.json") -> None:
+    def __init__(self, filepath: str) -> None:
+        # Constructing reads nothing: the file is read by `open()`, which the
+        # first lease operation (and `with`) calls.
+        self._loaded = False
         super().__init__()
         self.filepath = filepath
         self._dirty = False
         self._last_save = float("-inf")
-        self._load()
+
+    @property
+    def _leases(self) -> _ty.Dict[str, DHCPLease]:
+        if not self._loaded:
+            self.open()
+        return self._store
+
+    @_leases.setter
+    def _leases(self, value: _ty.Dict[str, DHCPLease]) -> None:
+        self._store = value
+
+    def open(self) -> None:
+        """Read the lease file, once. A missing file is an empty store.
+
+        An unreadable file is moved aside as `<path>.corrupt`, as before, and the
+        store starts empty. Called by the first lease operation if the caller
+        has not, and by `with`.
+        """
+        with self._lock:
+            if self._loaded:
+                return
+            self._loaded = True
+            self._load()
 
     def flush(self) -> None:
         """Write now if anything is pending. Safe to call when nothing is."""
@@ -231,6 +256,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         self.flush()
 
     def __enter__(self) -> "FileLeaseBackend":
+        self.open()
         return self
 
     def __exit__(self, *_exc: _ty.Any) -> None:

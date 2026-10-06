@@ -37,8 +37,11 @@ class AsyncDHCPListener(_ListenerCore):
     def __init__(
         self,
         listen: ListenSpec = None,
+        *,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        reuse_address: _ty.Optional[bool] = None,
+        receive_buffer_size: _ty.Optional[int] = None,
         max_queued: _ty.Optional[int] = None,
     ) -> None:
         _ListenerCore.__init__(
@@ -46,6 +49,8 @@ class AsyncDHCPListener(_ListenerCore):
             listen=listen,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            reuse_address=reuse_address,
+            receive_buffer_size=receive_buffer_size,
         )
         if max_queued is None:
             max_queued = self.MAX_QUEUED_DATAGRAMS

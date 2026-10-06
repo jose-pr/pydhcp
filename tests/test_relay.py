@@ -28,7 +28,7 @@ def relay_class(request):
     Parametrized rather than duplicated on purpose: a second copy of these
     assertions is exactly how the async half of this project drifted from the
     sync half last time. `AsyncDHCPRelay` takes the same arguments minus
-    `select_timeout`, which none of these tests passes, and `handle()` is
+    `poll_interval`, which none of these tests passes, and `handle()` is
     ordinary synchronous code on both, so it needs no event loop here.
     """
     return request.param

@@ -82,3 +82,89 @@ def test_the_header_offers_broadcast_only_where_it_exists(name, header_text) -> 
         f"header {'offers' if documented_broadcast else 'omits'} `broadcast` for "
         f"{name}, but the code {'accepts' if _accepts(name, 'broadcast') else 'does not'}"
     )
+
+
+# --- every documented constructor ---
+
+HEADERS = sorted(HEADER.parent.rglob("AGENTS.md"))
+_CONSTRUCTOR = re.compile(r"\*\*`(\w+)\(([^`]*)\)`\*\*")
+_MODULES = (
+    "pydhcp",
+    "pydhcp.listener",
+    "pydhcp.server",
+    "pydhcp.relay",
+    "pydhcp.capture",
+    "pydhcp.client",
+    "pydhcp.lease",
+)
+
+
+def _resolve(name: str) -> "type | None":
+    import importlib
+
+    for module in _MODULES:
+        found = getattr(importlib.import_module(module), name, None)
+        if inspect.isclass(found):
+            return found
+    return None
+
+
+def _documented_parameters(text: str) -> "list[str]":
+    """Names in order, with `*` where the header marks the keyword-only start."""
+    parts, depth, current = [], 0, ""
+    for char in text:
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        if char == "," and depth == 0:
+            parts.append(current)
+            current = ""
+        else:
+            current += char
+    parts.append(current)
+    return [part.strip().split("=")[0].strip() for part in parts if part.strip()]
+
+
+def _documented_constructors() -> "list[tuple[str, str, type]]":
+    found = []
+    for path in HEADERS:
+        for name, signature in _CONSTRUCTOR.findall(path.read_text(encoding="utf-8")):
+            cls = _resolve(name)
+            if cls is not None and ("__init__" in vars(cls) or "__new__" in vars(cls)):
+                found.append((path.parent.name, name, signature, cls))
+    return [(f"{p}/{n}", s, c) for p, n, s, c in found]
+
+
+_CONSTRUCTORS = _documented_constructors()
+
+
+def test_the_header_documents_the_roles_constructors() -> None:
+    names = {entry[0].split("/")[1] for entry in _CONSTRUCTORS}
+    assert {
+        "DHCPListener",
+        "AsyncDHCPListener",
+        "DHCPServer",
+        "AsyncDHCPServer",
+        "DHCPRelay",
+        "AsyncDHCPRelay",
+        "DHCPCapture",
+        "AsyncDHCPCapture",
+        "DHCPClient",
+        "FileLeaseBackend",
+        "SocketAddress",
+    } <= names
+
+
+@pytest.mark.parametrize(
+    "label, signature, cls", _CONSTRUCTORS, ids=[c[0] for c in _CONSTRUCTORS]
+)
+def test_a_documented_constructor_matches_inspect_signature(
+    label, signature, cls
+) -> None:
+    actual = []
+    for parameter in inspect.signature(cls).parameters.values():
+        if parameter.kind is parameter.KEYWORD_ONLY and "*" not in actual:
+            actual.append("*")
+        actual.append(parameter.name)
+    assert _documented_parameters(signature) == actual, label

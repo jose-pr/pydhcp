@@ -21,6 +21,7 @@ class AsyncDHCPRelay(_RelayCore, AsyncDHCPListener):
         self,
         listen: ListenSpec = None,
         server_addresses: _ty.Sequence[ServerAddress] = (),
+        *,
         max_hops: int = DEFAULT_MAX_HOPS,
         insert_relay_agent_info: bool = False,
         circuit_id: _ty.Optional[bytes] = None,
@@ -28,6 +29,8 @@ class AsyncDHCPRelay(_RelayCore, AsyncDHCPListener):
         trust_client_relay_agent_info: bool = False,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        reuse_address: _ty.Optional[bool] = None,
+        receive_buffer_size: _ty.Optional[int] = None,
         max_queued: _ty.Optional[int] = None,
     ) -> None:
         AsyncDHCPListener.__init__(
@@ -35,6 +38,8 @@ class AsyncDHCPRelay(_RelayCore, AsyncDHCPListener):
             listen=listen,
             max_packet_size=max_packet_size,
             per_interface=per_interface,
+            reuse_address=reuse_address,
+            receive_buffer_size=receive_buffer_size,
             max_queued=max_queued,
         )
         self._init_relay_state(

@@ -36,16 +36,24 @@ class DHCPListener(_ListenerCore):
     def __init__(
         self,
         listen: ListenSpec = None,
-        select_timeout: _ty.Optional[float] = None,
+        *,
+        poll_interval: _ty.Optional[float] = None,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
+        reuse_address: _ty.Optional[bool] = None,
+        receive_buffer_size: _ty.Optional[int] = None,
     ) -> None:
         super().__init__(
-            listen=listen, max_packet_size=max_packet_size, per_interface=per_interface
+            listen=listen,
+            max_packet_size=max_packet_size,
+            per_interface=per_interface,
+            reuse_address=reuse_address,
+            receive_buffer_size=receive_buffer_size,
         )
-        #: Upper bound on one wait for a datagram: a `KeyboardInterrupt` is
-        #: delivered to the main thread between waits, not during one, on Windows.
-        self._select_timeout = select_timeout or 1
+        #: Seconds between looks at the shutdown flag when no datagram arrives:
+        #: Windows delivers a `KeyboardInterrupt` to the main thread between
+        #: waits, not during one.
+        self._poll_interval = poll_interval or 1
         self._state_lock = _thread.Lock()
         self._close_lock = _thread.Lock()
         self._serving = False
@@ -197,7 +205,7 @@ class DHCPListener(_ListenerCore):
         while not self._stopping:
             try:
                 rlist, _, _ = _select.select(
-                    [*self._sockets, wake], [], [], self._select_timeout
+                    [*self._sockets, wake], [], [], self._poll_interval
                 )
             except (OSError, ValueError):
                 if self._stopping:  # a close() that gave up waiting
@@ -260,6 +268,6 @@ class DHCPListener(_ListenerCore):
     @staticmethod
     def _describe(sock: _socket.socket) -> str:
         try:
-            return str(_net.SocketAddress(sock))
+            return str(_net.SocketAddress.from_socket(sock))
         except OSError:  # pragma: no cover - closed underneath us
             return "a closed socket"

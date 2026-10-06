@@ -35,7 +35,7 @@ def capture_class(request):
     """Every capture-policy test runs against both captures.
 
     Parametrized rather than duplicated: `AsyncDHCPCapture` takes the same
-    arguments minus `select_timeout`, and `handle()` is ordinary synchronous
+    arguments minus `poll_interval`, and `handle()` is ordinary synchronous
     code on both -- on the async listener it runs on the handler worker thread,
     not on the event loop, so calling it directly here is the same call the
     listener makes.
