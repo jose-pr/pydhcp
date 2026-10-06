@@ -91,21 +91,14 @@ of the installed package).
   returns the enum member name (or `BaseDHCPOptionCode.label()`'s
   `"UNKNOWN"` fallback for an unregistered raw int). `.register_type(ty:
   type[DHCPOptionType]) -> None` binds a codec to a specific member;
-  `.get_type() -> type[DHCPOptionType]` resolves it (calling
-  `.ensure_registered()` first). `DHCPOptionCode.ensure_registered()` lazily
-  imports `options/_registry.py`, which calls `.register_type(...)` for every
-  standard option — this runs automatically the first time a `DHCPOptions`
-  keyed by `DHCPOptionCode` is constructed or a lookup is made, so
-  application code never needs to call it directly. Unregistered codes
-  (`PAD`, `END`, and any code without a `_registry.py` entry) fall back to
-  `Bytes` (opaque).
-  **`.register_type()` loads the built-in registry first**, so *your*
-  registration is always the later write and survives the lazy load —
-  registering before anything triggered it used to be silently undone by it.
-  The load is serialized and the "loaded" flag is published only once
-  `_registry.py` has finished, so a concurrent `get_type()` never sees the
-  `Bytes` placeholder for a code being registered, and an import that
-  *raises* is retried on the next call instead of being remembered as done.
+  `.get_type() -> type[DHCPOptionType]` resolves it. The built-in codecs are
+  bound to the standard codes when the options package is imported
+  (`options/_registry.py` calls `.register_type(...)` for each), so a lookup
+  never depends on an earlier call and *your* registration is always the later
+  write. Unregistered codes (`PAD`, `END`, and any code without a registry
+  entry) fall back to `Bytes` (opaque). `DHCPMessageType`, the codec of option
+  53, is defined in the options package and re-exported by `pydhcp.packet` and
+  the root.
 - **`BaseDHCPOptionCode`** — protocol/base for a custom code enum:
   `.get_type()`, `.label()`, `.from_code(code: int)` (classmethod,
   constructs/looks up a code value), `.normalize(code, value) -> DHCPOption`,
