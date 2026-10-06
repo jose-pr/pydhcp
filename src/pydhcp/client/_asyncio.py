@@ -238,6 +238,7 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
             client_identifier=client_identifier,
             parameter_request_list=parameter_request_list,
             broadcast=broadcast,
+            now=self._monotonic(),
         )
         if request is None:
             return None

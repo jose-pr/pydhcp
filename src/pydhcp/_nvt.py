@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import logging as _logging
 
+from . import _leniency
+
 LOGGER = _logging.getLogger(__name__)
 
 
@@ -33,8 +35,13 @@ def decode(raw: bytes, what: str = "text") -> str:
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError:
-        LOGGER.warning(
-            f"{what} is not valid UTF-8, preserving the original octets: {raw.hex()}"
+        # DEBUG, and counted by the listener through `_leniency`: a sender
+        # chooses how often this runs, and a decoder holds no state to limit it.
+        _leniency.note()
+        LOGGER.debug(
+            "%s is not valid UTF-8, preserving the original octets: %s",
+            what,
+            raw.hex(),
         )
         return raw.decode("utf-8", _ERRORS)
 

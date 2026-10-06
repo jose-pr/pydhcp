@@ -11,11 +11,16 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 import typing as _ty
 
 from ..capture._events import CaptureEvent
+from ..listener._limit import _brief, _LogLimit
 
 LOGGER = _logging.getLogger(__name__)
+
+#: A command hook runs once per captured packet, so a failing one is limited.
+_FAILURES = _LogLimit()
 
 
 def _serialize_capture_event(event: CaptureEvent, packet_format: str) -> str:
@@ -134,10 +139,14 @@ def _load_capture_hook(
         if result.stdout:
             LOGGER.debug("Capture hook command output: %s", result.stdout.strip())
         if result.returncode != 0:
-            LOGGER.error(
+            _FAILURES.log(
+                LOGGER,
+                _logging.ERROR,
+                "command hook failed",
                 "Capture hook command failed (%s): %s",
                 result.returncode,
-                result.stderr.strip(),
+                _brief(result.stderr.strip(), 400),
+                now=time.monotonic(),
             )
             if fail_fast:
                 raise RuntimeError(

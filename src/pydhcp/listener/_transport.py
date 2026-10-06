@@ -5,13 +5,18 @@ from __future__ import annotations
 import logging as _logging
 import ipaddress as _ipaddress
 import socket as _socket
+import time as _time
 import typing as _ty
 
 import netimps as _netimps
 
 from .. import _constants as _const
+from ._limit import _brief, _LogLimit
 
 LOGGER = _logging.getLogger(__name__)
+
+#: Where a transport built without a listener writes its limited lines.
+_FALLBACK_LIMIT = _LogLimit()
 
 #: The all-ones address every DHCP client can be reached at before it has one of
 #: its own (RFC 2131 s4.1).
@@ -111,6 +116,8 @@ class PktInfoUDPTransport(UDPTransport):
         super().__init__(socket)
         self.ifindex: int | None = None
         self.local_ip: _ipaddress.IPv4Address | None = None
+        #: The listener's log limit; a transport made by hand uses a shared one.
+        self.limit: _ty.Optional[_LogLimit] = None
         self.endpoint = endpoint or _netimps.UDPEndpoint(socket, pktinfo=False)
 
     def _source(self) -> _netimps.Interface:
@@ -169,10 +176,18 @@ class PktInfoUDPTransport(UDPTransport):
                 # replaces: sendmsg -> 192.0.2.50, sendto -> 192.0.2.50, sendto
                 # -> 255.255.255.255. Same destination, one attempt, and the
                 # error propagates if it fails.
-                LOGGER.warning(
-                    f"Pinned send from {self.local_ip} (ifindex {self.ifindex}) "
-                    f"failed ({e.__class__.__name__} | {e}); retrying unpinned to "
-                    f"{dest_str}."
+                (self.limit or _FALLBACK_LIMIT).log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "pinned send failed",
+                    "Pinned send from %s (ifindex %s) failed (%s | %s); retrying "
+                    "unpinned to %s.",
+                    self.local_ip,
+                    self.ifindex,
+                    e.__class__.__name__,
+                    _brief(e),
+                    dest_str,
+                    now=_time.monotonic(),
                 )
                 return self._send_to(data, dest_str, port)
         return super().send(data, dst, port=port, client_mac=client_mac)

@@ -10,6 +10,7 @@ import typing as _ty
 
 from .. import _constants as _const, _network as _net
 from ..lease import DHCPLease, LeaseBackend
+from ..listener._limit import _brief
 from ..options._codes import DHCPOptionCode
 from ..options import DHCPOptions
 from ..options import _codecs as _type
@@ -261,8 +262,18 @@ class _LeasePolicy(_ServerState):
 
         refusal = self._address_refusal(ip, _server, client_id)
         if refusal is not None:
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Refusing {ip} for {client_id}: {refusal}"
+            self.metrics.addresses_refused += 1
+            # No context reaches `acquire_lease`: the driver's reading stands in.
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "refused address",
+                "[XID=%08x] Refusing %s for %s: %s",
+                msg.xid,
+                ip,
+                _brief(client_id),
+                _brief(refusal),
+                now=self._read_clock().monotonic,
             )
             return None
 

@@ -81,10 +81,10 @@ def test_string_option(caplog):
     assert decoded == "hello"
     assert length == 11
 
-    # UTF-8 decoding errors are warned about, and the octets are kept so the
+    # UTF-8 decoding errors are logged at DEBUG, and the octets are kept so the
     # value re-encodes to exactly what arrived.
     bad_bytes = b"\xff\xfe\xff"
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG):
         decoded_bad, _ = String.unpack_from(memoryview(bad_bytes))
     assert "not valid UTF-8" in caplog.text
     round_tripped = bytearray()

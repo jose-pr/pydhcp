@@ -8,6 +8,7 @@ import typing as _ty
 
 from .._clock import _Timed
 from .._metrics import DHCPMetrics
+from ..listener._limit import _LogLimit
 from ..lease import LeaseBackend
 from ..packet import _enums as _enum
 
@@ -24,6 +25,8 @@ class _ServerState(_Timed):
     """
 
     metrics: DHCPMetrics
+    #: The listener's limit on lines a sender can provoke.
+    _log_limit: _LogLimit
 
     DEFAULT_PORTS: _ty.Sequence[int] = (_enum.DHCPPort.SERVER,)
 

@@ -11,6 +11,7 @@ import logging as _logging
 import typing as _ty
 
 from .._clock import _Timed
+from ..listener._limit import _LogLimit
 from ..listener._receive import DHCPRequestContext
 from ..packet._message import DHCPMessage
 from ._events import (
@@ -31,6 +32,8 @@ class _CaptureCore(_Timed):
     """Filter, sink and hook policy shared by `DHCPCapture` and `AsyncDHCPCapture`."""
 
     if _ty.TYPE_CHECKING:
+
+        _log_limit: _LogLimit
 
         def shutdown(self) -> None: ...
 
@@ -76,7 +79,14 @@ class _CaptureCore(_Timed):
             try:
                 self.hook(event)
             except Exception as exc:
-                LOGGER.exception("Capture hook failed")
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.ERROR,
+                    f"hook failed: {type(exc).__name__}",
+                    "Capture hook failed",
+                    now=self._instant(context).monotonic,
+                    exc_info=True,
+                )
                 if self.hook_fail_fast:
                     # Re-raising alone achieved nothing: handle() runs inside the
                     # listener's per-packet try, which logs and carries on, so

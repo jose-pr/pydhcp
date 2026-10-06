@@ -290,8 +290,12 @@ class _Replies(_LeasePolicy):
             try:
                 _check = DHCPMessage.decode(memoryview(data))
             except Exception:
-                LOGGER.warning(
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "reply does not decode",
                     "Encoded reply does not decode cleanly -- sending it anyway",
+                    now=self._instant(context).monotonic,
                     exc_info=True,
                 )
             else:

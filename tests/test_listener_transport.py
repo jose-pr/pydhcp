@@ -139,13 +139,14 @@ def test_arrival_warns_when_the_control_data_was_cut(caplog) -> None:
     """MSG_CTRUNC leaves the payload intact but the interface unresolved, and
     the interface is what the reply's SERVER_IDENTIFIER comes from."""
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        said: list = []
         data, client, ifindex, local_ip = _arrival(
-            _datagram(control_truncated=True), 576
+            _datagram(control_truncated=True), 576, said.append
         )
 
     assert len(data) == 40
     assert ifindex is None and local_ip is None
-    assert any("control data truncated" in r.getMessage() for r in caplog.records)
+    assert said == [client]
 
 
 def test_arrival_answers_a_broadcast_from_the_interface_address() -> None:

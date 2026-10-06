@@ -98,7 +98,7 @@ def test_truncated_options(caplog):
     truncated_option = bytearray([1, 4])
     packet = packet[:end] + truncated_option
 
-    with caplog.at_level(logging.WARNING):
+    with caplog.at_level(logging.DEBUG):
         decoded = DHCPMessage.decode(packet)
 
     assert f"Option 1 at offset {end} claims 4 bytes but only 0 available" in (

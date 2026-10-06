@@ -20,6 +20,7 @@ from ..listener._transport import (
     DHCPTransport as _DHCPTransport,
     UDPTransport as _UDPTransport,
 )
+from ..listener._limit import _brief, _LogLimit
 from ..listener._receive import DHCPRequestContext, _is_loopback
 from .. import _constants as _const, _network as _net
 from ..packet import _enums as _enum
@@ -104,6 +105,7 @@ class _RelayCore(_Timed):
     """
 
     metrics: DHCPMetrics
+    _log_limit: _LogLimit
     _max_packet_size: int
 
     DEFAULT_PORTS: _ty.Sequence[int] = (_enum.DHCPPort.SERVER,)
@@ -156,8 +158,14 @@ class _RelayCore(_Timed):
         elif msg.op == _enum.DHCPOpcode.BOOTREPLY:
             self._forward_to_client(msg, context)
         else:
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Received message with unknown op {msg.op}, ignoring."
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "unknown op",
+                "[XID=%08x] Received message with unknown op %s, ignoring.",
+                msg.xid,
+                _brief(msg.op),
+                now=self._instant(context).monotonic,
             )
 
     @staticmethod
@@ -189,6 +197,7 @@ class _RelayCore(_Timed):
             out = _PktInfoUDPTransport(transport.socket, transport.endpoint)
             out.ifindex = pending.ifindex
             out.local_ip = pending.local_ip
+            out.limit = transport.limit
             return out
         return self._routed_transport(transport)
 
@@ -220,9 +229,15 @@ class _RelayCore(_Timed):
             # picks its own policy on any server that trusts option 82. Pass
             # trust_client_relay_agent_info=True only when the access layer
             # below is trusted to set it.
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Dropping request from {context.client}: "
-                "RELAY_AGENT_INFORMATION present with giaddr 0 (untrusted source)"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "option 82 with giaddr 0",
+                "[XID=%08x] Dropping request from %s: RELAY_AGENT_INFORMATION "
+                "present with giaddr 0 (untrusted source)",
+                msg.xid,
+                context.client,
+                now=self._instant(context).monotonic,
             )
             self.metrics.packets_dropped_untrusted += 1
             return
@@ -254,7 +269,7 @@ class _RelayCore(_Timed):
             forwarded.giaddr = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
 
         self._record_pending(msg, context)
-        self._insert_relay_agent_info(forwarded)
+        self._insert_relay_agent_info(forwarded, self._instant(context).monotonic)
 
         data = self._encode_for_forward(forwarded)
         transport = self._routed_transport(context.transport)
@@ -267,12 +282,18 @@ class _RelayCore(_Timed):
             transport.send(data, server_ip, port=server_port, client_mac=msg.chaddr)
             self.metrics.packets_sent += 1
 
-    def _insert_relay_agent_info(self, msg: DHCPMessage) -> None:
+    def _insert_relay_agent_info(self, msg: DHCPMessage, now: float) -> None:
         if not self.insert_relay_agent_info:
             return
         if DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options:
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Request already carries RELAY_AGENT_INFORMATION, passing through unmodified."
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "option 82 already present",
+                "[XID=%08x] Request already carries RELAY_AGENT_INFORMATION, "
+                "passing through unmodified.",
+                msg.xid,
+                now=now,
             )
             return
         suboptions: list[tuple[int, bytes]] = []
@@ -316,9 +337,16 @@ class _RelayCore(_Timed):
             and existing.client.ip != context.client.ip
             and now - existing.recorded_at < self.PENDING_TTL_SECONDS
         ):
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Ignoring a request from {context.client} that "
-                f"reuses the transaction of {existing.client}"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "reused transaction",
+                "[XID=%08x] Ignoring a request from %s that reuses the "
+                "transaction of %s",
+                msg.xid,
+                context.client,
+                existing.client,
+                now=now,
             )
             return
         self._pending_clients[key] = PendingClient(
@@ -357,9 +385,15 @@ class _RelayCore(_Timed):
             # relay's own address -- naming the attacker as router and DNS, and
             # arriving from the port DHCP-snooping switches trust. RFC 1542
             # s4.1.2 assumes replies come from the servers we forwarded to.
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Dropping BOOTREPLY from {context.client}: "
-                "not a configured server address"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "BOOTREPLY from an unconfigured source",
+                "[XID=%08x] Dropping BOOTREPLY from %s: not a configured server "
+                "address",
+                msg.xid,
+                context.client,
+                now=self._instant(context).monotonic,
             )
             self.metrics.packets_dropped_untrusted += 1
             return

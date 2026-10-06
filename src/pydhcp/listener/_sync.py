@@ -248,19 +248,15 @@ class DHCPListener(_ListenerCore):
                     sock, pktinfo=False
                 )
             data, client, ifindex, local_ip = _arrival(
-                endpoint.recv(self._max_packet_size + 1), self._max_packet_size
+                endpoint.recv(self._max_packet_size + 1),
+                self._max_packet_size,
+                self._control_truncated,
             )
         except _TruncatedDatagram as e:
-            self.metrics.packets_dropped_truncated += 1
-            LOGGER.warning(f"Dropping a truncated datagram: {e}")
+            self._note_truncated(e)
             return
         except OSError as e:
-            self.metrics.packets_dropped_error += 1
-            LOGGER.error(
-                f"Receive failed on {self._describe(sock)}: "
-                f"{e.__class__.__name__} | {e}",
-                exc_info=True,
-            )
+            self._note_receive_error(self._describe(sock), e)
             return
 
         self._dispatch(data, client, sock, ifindex, local_ip)

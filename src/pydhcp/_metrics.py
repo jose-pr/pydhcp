@@ -26,6 +26,10 @@ class DHCPMetrics:
         "packets_dropped_error",
         "replies_dropped_overflow",
         "packets_dropped_backlog",
+        "packets_decoded_leniently",
+        "packets_dropped_no_client_id",
+        "packets_dropped_other_server",
+        "addresses_refused",
     )
 
     packets_received: int
@@ -57,6 +61,19 @@ class DHCPMetrics:
     #: backlog behind the handler was at its bound, or the listener
     #: was stopping and discarded what was queued.
     packets_dropped_backlog: int
+    #: Datagrams that decoded because the decoder forgave something: an option
+    #: cut short (what arrived is kept) or text that is not UTF-8 (its octets
+    #: are kept). One per datagram, however many places in it. Option text is
+    #: read when a handler asks for it, so a bad option string is not counted.
+    packets_decoded_leniently: int
+    #: Messages a server dropped because they carry neither a client
+    #: identifier nor a hardware address.
+    packets_dropped_no_client_id: int
+    #: Messages other than a REQUEST that name another server's identifier.
+    packets_dropped_other_server: int
+    #: Requested addresses the server refused to lease (off the served
+    #: network, its own, in use, quarantined).
+    addresses_refused: int
 
     def __init__(self) -> None:
         self.reset()

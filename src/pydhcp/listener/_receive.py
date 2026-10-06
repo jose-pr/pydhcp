@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import datetime as _dt
-import logging as _logging
 import ipaddress as _ipaddress
 import socket as _socket
 import typing as _ty
@@ -13,10 +12,9 @@ import netimps as _netimps
 from .. import _network as _net
 from .._clock import _Instant
 from ._interfaces import _resolve_interface
+from ._limit import _LogLimit
 from ._spec import ListenLike, _listen_uses_wildcard
 from ._transport import PktInfoUDPTransport, DHCPTransport, UDPTransport
-
-LOGGER = _logging.getLogger(__name__)
 
 
 class _TruncatedDatagram(Exception):
@@ -81,7 +79,11 @@ Arrival = _ty.Tuple[
 ]
 
 
-def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
+def _arrival(
+    datagram: _netimps.Datagram,
+    max_packet_size: int,
+    on_control_truncated: "_ty.Optional[_ty.Callable[[_net.SocketAddress], None]]" = None,
+) -> Arrival:
     """Turn one netimps `Datagram` into ``(data, client, ifindex, local_ip)``.
 
     The one conversion both listeners use, for every receive path.
@@ -118,10 +120,8 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
         # The payload is intact but the control message was cut, so the
         # interface below may be missing or partial. Worth saying: the reply's
         # SERVER_IDENTIFIER and egress interface are derived from it.
-        LOGGER.warning(
-            f"Packet-info control data truncated for a datagram from "
-            f"{client}; the receiving interface may be resolved wrongly."
-        )
+        if on_control_truncated is not None:
+            on_control_truncated(client)
     ifindex = datagram.interface_index or None
     local: "_ipaddress.IPv4Address | None" = None
     destination = datagram.destination
@@ -158,19 +158,22 @@ def _context_for(
     local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
     received: "_ty.Optional[_Instant]" = None,
+    limit: "_ty.Optional[_LogLimit]" = None,
 ) -> DHCPRequestContext:
     """Build the context for one received datagram.
 
     Shared by both listeners: duplicating it is what let the async half miss
     every fix the sync half gained. ``endpoint`` is the one the datagram was
     received through, reused for the pinned reply. ``received`` is the time the
-    driver read when the datagram arrived.
+    driver read when the datagram arrived. ``limit`` is the listener's log limit,
+    which a transport writes its own warnings through.
     """
     transport: DHCPTransport
     if ifindex is not None or local_ip is not None:
         pkt_transport = PktInfoUDPTransport(sock, endpoint)
         pkt_transport.ifindex = ifindex
         pkt_transport.local_ip = local_ip
+        pkt_transport.limit = limit
         transport = pkt_transport
     else:
         transport = UDPTransport(sock)

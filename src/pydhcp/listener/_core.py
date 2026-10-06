@@ -14,11 +14,12 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import _clock, _constants as _const, _network as _net
+from .. import _clock, _constants as _const, _leniency, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from ._binding import _bind_sockets, _close_socket
+from ._limit import _brief, _LogLimit
 from ._receive import DHCPRequestContext, _context_for, _pktinfo_supported
 from ._spec import ListenLike, _expand_wildcards, _parselisteners
 
@@ -72,6 +73,8 @@ class _ListenerCore:
         #: The netimps endpoint each socket is received through.
         self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
         self.metrics = DHCPMetrics()
+        #: What a sender can make this listener, or the role on it, write.
+        self._log_limit = _LogLimit()
 
     @property
     def _pktinfo(self) -> bool:
@@ -147,6 +150,62 @@ class _ListenerCore:
             _close_socket(sock, self._endpoints)
         self._sockets.clear()
 
+    def _log_limited(
+        self,
+        logger: _logging.Logger,
+        level: int,
+        reason: str,
+        message: str,
+        *args: object,
+        exc_info: bool = False,
+    ) -> None:
+        """Write a line about something a sender did, at the limited rate.
+
+        Reads the clock on the way out of an error path only, never per datagram.
+        """
+        self._log_limit.log(
+            logger,
+            level,
+            reason,
+            message,
+            *args,
+            now=self._read_clock().monotonic,
+            exc_info=exc_info,
+        )
+
+    def _note_truncated(self, error: object) -> None:
+        self.metrics.packets_dropped_truncated += 1
+        self._log_limited(
+            LOGGER,
+            _logging.WARNING,
+            "truncated datagram",
+            "Dropping a truncated datagram: %s",
+            _brief(error),
+        )
+
+    def _note_receive_error(self, where: str, error: BaseException) -> None:
+        self.metrics.packets_dropped_error += 1
+        self._log_limited(
+            LOGGER,
+            _logging.ERROR,
+            f"receive failed: {type(error).__name__}",
+            "Receive failed on %s: %s | %s",
+            where,
+            type(error).__name__,
+            _brief(error),
+            exc_info=True,
+        )
+
+    def _control_truncated(self, client: _net.SocketAddress) -> None:
+        self._log_limited(
+            LOGGER,
+            _logging.WARNING,
+            "control data truncated",
+            "Packet-info control data truncated for a datagram from %s; the "
+            "receiving interface may be resolved wrongly.",
+            client,
+        )
+
     def _dispatch(
         self,
         data: bytes,
@@ -158,18 +217,30 @@ class _ListenerCore:
         """Decode, count and hand one datagram to `handle()`.
 
         Split in two because they fail for unrelated reasons and need different
-        reports: a malformed packet is the sender's doing and a warning, a
-        failure inside `handle()` is ours and keeps its traceback.
+        reports: a malformed packet is the sender's doing and a limited warning,
+        a failure inside `handle()` is ours and keeps its traceback for the first
+        occurrence of each exception class.
         """
+        received = self._read_clock()
         try:
-            msg = DHCPMessage.decode(memoryview(data))
+            with _leniency.collecting() as forgiven:
+                msg = DHCPMessage.decode(memoryview(data))
         except Exception as e:
             self.metrics.packets_dropped_error += 1
-            LOGGER.warning(
-                f"Discarding an undecodable {len(data)}-octet datagram from "
-                f"{client}: {e.__class__.__name__} | {e}"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "undecodable datagram",
+                "Discarding an undecodable %d-octet datagram from %s: %s | %s",
+                len(data),
+                client,
+                e.__class__.__name__,
+                _brief(e),
+                now=received.monotonic,
             )
             return
+        if forgiven.count:
+            self.metrics.packets_decoded_leniently += 1
         try:
             self.metrics.packets_received += 1
             context = _context_for(
@@ -179,7 +250,8 @@ class _ListenerCore:
                 ifindex,
                 local_ip,
                 self._endpoints.get(sock),
-                self._read_clock(),
+                received,
+                self._log_limit,
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
                 msg.log(client, _net.SocketAddress.from_socket(sock), _logging.DEBUG)
@@ -188,8 +260,14 @@ class _ListenerCore:
             # `DHCPCapture.hook_fail_fast` relies on this staying a catch rather
             # than a propagate.
             self.metrics.packets_dropped_error += 1
-            LOGGER.error(
-                f"Encounter error handling request from {client}: "
-                f"{e.__class__.__name__} | {e}",
+            self._log_limit.log(
+                LOGGER,
+                _logging.ERROR,
+                f"handler error: {type(e).__name__}",
+                "Encounter error handling request from %s: %s | %s",
+                client,
+                e.__class__.__name__,
+                _brief(e),
+                now=received.monotonic,
                 exc_info=True,
             )

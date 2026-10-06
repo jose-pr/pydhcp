@@ -104,6 +104,7 @@ class AsyncDHCPListener(_ListenerCore):
                 arrival = _arrival(
                     await endpoint.arecv(self._max_packet_size + 1),
                     self._max_packet_size,
+                    self._control_truncated,
                 )
             except (BlockingIOError, InterruptedError):  # spurious readability
                 continue
@@ -114,18 +115,12 @@ class AsyncDHCPListener(_ListenerCore):
                     return
                 raise
             except _TruncatedDatagram as e:
-                self.metrics.packets_dropped_truncated += 1
-                LOGGER.warning(f"Dropping a truncated datagram: {e}")
+                self._note_truncated(e)
                 continue
             except OSError as e:
                 if sock.fileno() == -1:
                     return  # closed underneath us; nothing more will arrive
-                self.metrics.packets_dropped_error += 1
-                LOGGER.error(
-                    f"Encounter error reading async datagram: "
-                    f"{e.__class__.__name__} | {e}",
-                    exc_info=True,
-                )
+                self._note_receive_error("an async socket", e)
                 continue
             data, client, ifindex, local_ip = arrival
             self._dispatch_received(data, client, sock, ifindex, local_ip)

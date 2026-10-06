@@ -12,6 +12,8 @@ from __future__ import annotations
 import datetime as _dt
 import ipaddress
 import logging
+
+import pytest
 import subprocess
 import sys
 from unittest.mock import MagicMock
@@ -229,3 +231,34 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     names = {record.name for record in caplog.records}
     assert "pydhcp.server._handlers" not in names
     assert "pydhcp.listener._interfaces" in names
+
+
+@pytest.fixture(autouse=True)
+def _fresh_command_hook_limit(monkeypatch) -> None:
+    from pydhcp.listener._limit import _LogLimit
+
+    monkeypatch.setattr(capture_hook_module, "_FAILURES", _LogLimit())
+
+
+def test_a_command_hook_that_fails_every_time_is_logged_once_per_interval(
+    tmp_path, monkeypatch, caplog
+) -> None:
+    command = tmp_path / "hook"
+    command.write_text("", encoding="utf-8")
+    command.chmod(0o755)
+
+    class Result:
+        stdout = ""
+        stderr = "boom\n" * 200
+        returncode = 3
+
+    monkeypatch.setattr(capture_hook_module.subprocess, "run", lambda *a, **k: Result())
+    hook = capture_hook_module._load_capture_hook(str(command), "json", fail_fast=False)
+    assert hook is not None
+    with caplog.at_level(logging.ERROR, logger="pydhcp"):
+        for _ in range(5):
+            hook(_event())
+    failures = [r for r in caplog.records if "command failed" in r.getMessage()]
+    assert len(failures) == 1
+    assert "\n" not in failures[0].getMessage()
+    assert len(failures[0].getMessage()) < 600

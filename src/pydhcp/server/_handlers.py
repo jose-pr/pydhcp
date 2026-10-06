@@ -8,6 +8,7 @@ import typing as _ty
 
 from .. import _constants as _const
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
+from ..listener._limit import _brief
 from ..listener._receive import DHCPRequestContext
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
@@ -29,8 +30,14 @@ class _Handlers(_Replies):
         context: DHCPRequestContext,
     ) -> None:
         if msg.op != _enum.DHCPOpcode.BOOTREQUEST:
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Received a reply msg from {context.client} ignoring it."
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "BOOTREPLY received",
+                "[XID=%08x] Received a reply msg from %s ignoring it.",
+                msg.xid,
+                context.client,
+                now=self._instant(context).monotonic,
             )
             return
         try:
@@ -39,7 +46,16 @@ class _Handlers(_Replies):
             # Nothing to key a lease on, and RFC 2131 s4.2 requires the client to
             # supply one. Serving it would hand out an address under an identity
             # every other such client shares.
-            LOGGER.warning(f"[XID={msg.xid:08x}] Ignoring unidentifiable client: {e}")
+            self.metrics.packets_dropped_no_client_id += 1
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "unidentifiable client",
+                "[XID=%08x] Ignoring unidentifiable client: %s",
+                msg.xid,
+                _brief(e),
+                now=self._instant(context).monotonic,
+            )
             return
         # Read once, guarded: `message_type` is `None` for an option 53 of the
         # wrong size, and an unassigned number is an unnamed member that no
@@ -48,10 +64,17 @@ class _Handlers(_Replies):
         msg_ty = msg.message_type
         if msg_ty is None and DHCPOptionCode.DHCP_MESSAGE_TYPE in msg.options:
             raw = msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE, decode=False)
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Dropping a message from "
-                f"{context.client}|{client_id} with an unusable DHCP message "
-                f"type (option 53 = {bytes(raw).hex() if raw else '<empty>'})"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "unusable message type",
+                "[XID=%08x] Dropping a message from %s|%s with an unusable DHCP "
+                "message type (option 53 = %s)",
+                msg.xid,
+                context.client,
+                _brief(client_id),
+                bytes(raw).hex() if raw else "<empty>",
+                now=self._instant(context).monotonic,
             )
             return
         msg_ty_name = msg_ty.label() if msg_ty is not None else str(msg_ty)
@@ -78,8 +101,18 @@ class _Handlers(_Replies):
                 if self.release_lease(client_id, server_id, msg):
                     self.metrics.leases_released += 1
             else:
-                LOGGER.warning(
-                    f"[XID={msg.xid:08x}] Received a message for {server_id} by {context.client}|{client_id} at {actual_server_id} ignoring"
+                self.metrics.packets_dropped_other_server += 1
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "message for another server",
+                    "[XID=%08x] Received a message for %s by %s|%s at %s ignoring",
+                    msg.xid,
+                    server_id,
+                    context.client,
+                    _brief(client_id),
+                    actual_server_id,
+                    now=self._instant(context).monotonic,
                 )
             return
 
@@ -94,8 +127,18 @@ class _Handlers(_Replies):
         elif msg_ty is _enum.DHCPMessageType.DHCPINFORM:
             self.handle_inform(msg, context)
         else:
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] Received a DHCP Message with message type: {msg_ty} from: {context.client}|{client_id} at: {actual_server_id}, which we don't handle"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "message type not handled",
+                "[XID=%08x] Received a DHCP Message with message type: %s from: "
+                "%s|%s at: %s, which is not handled",
+                msg.xid,
+                msg_ty_name,
+                context.client,
+                _brief(client_id),
+                actual_server_id,
+                now=self._instant(context).monotonic,
             )
 
     def handle_discover(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
@@ -144,9 +187,16 @@ class _Handlers(_Replies):
             and msg.ciaddr == _const.WILDCARD_V4
             and self.lease_backend.lookup(client_id) is None
         ):
-            LOGGER.warning(
-                f"[XID={msg.xid:08x}] INIT-REBOOT from {context.client}|{client_id} "
-                "with no record of this client, remaining silent"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "INIT-REBOOT from an unknown client",
+                "[XID=%08x] INIT-REBOOT from %s|%s with no record of this "
+                "client, remaining silent",
+                msg.xid,
+                context.client,
+                _brief(client_id),
+                now=self._instant(context).monotonic,
             )
             return
 
@@ -186,8 +236,15 @@ class _Handlers(_Replies):
         """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
         client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
-        LOGGER.warning(
-            f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}"
+        self._log_limit.log(
+            LOGGER,
+            _logging.WARNING,
+            "DHCPDECLINE",
+            "[XID=%08x] DHCPDECLINE from %s|%s",
+            msg.xid,
+            context.client,
+            _brief(client_id),
+            now=self._instant(context).monotonic,
         )
         declined: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
@@ -221,10 +278,17 @@ class _Handlers(_Replies):
         existing = self.lease_backend.lookup(client_id)
         if existing is not None and msg.ciaddr != _const.WILDCARD_V4:
             if existing.ip != msg.ciaddr:
-                LOGGER.warning(
-                    f"[XID={msg.xid:08x}] Ignoring DHCPRELEASE from "
-                    f"{context.client}|{client_id} for {msg.ciaddr}: it holds "
-                    f"{existing.ip}"
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "DHCPRELEASE for an address not held",
+                    "[XID=%08x] Ignoring DHCPRELEASE from %s|%s for %s: it holds %s",
+                    msg.xid,
+                    context.client,
+                    _brief(client_id),
+                    msg.ciaddr,
+                    existing.ip,
+                    now=self._instant(context).monotonic,
                 )
                 self.metrics.releases_ignored += 1
                 return

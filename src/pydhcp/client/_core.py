@@ -19,6 +19,7 @@ import netimps as _netimps
 from .. import _constants as _const
 from .._network import IPv4AddressLike
 from .._metrics import DHCPMetrics
+from ..listener._limit import _LogLimit
 from ..listener._receive import DHCPRequestContext
 from ..options import DHCPOptions
 from ..options import _codecs as _type
@@ -47,6 +48,7 @@ class _ClientCore:
     """
 
     metrics: DHCPMetrics
+    _log_limit: _LogLimit
 
     DEFAULT_PORTS: _ty.Sequence[int] = (_enum.DHCPPort.CLIENT,)
 
@@ -267,8 +269,12 @@ class _ClientCore:
         client_identifier: _ty.Optional[ClientIdentifierLike],
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]],
         broadcast: bool,
+        now: float,
     ) -> _ty.Optional[DHCPMessage]:
-        """The DHCPREQUEST that selects `offer`, or `None` when it cannot be built."""
+        """The DHCPREQUEST that selects `offer`, or `None` when it cannot be built.
+
+        `now` is the driver's monotonic reading, for the limited warning.
+        """
         server_identifier = offer.options.get(
             DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
         )
@@ -277,9 +283,14 @@ class _ClientCore:
             # server identifier, and the server uses it to tell "this offer is
             # mine" from "another server's offer was chosen". Sending one
             # without it asks every server on the segment to answer.
-            LOGGER.warning(
-                f"[XID={offer.xid:08x}] DHCPOFFER has no SERVER_IDENTIFIER; "
-                "cannot send a conforming DHCPREQUEST"
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "DHCPOFFER without a server identifier",
+                "[XID=%08x] DHCPOFFER has no SERVER_IDENTIFIER; cannot send a "
+                "conforming DHCPREQUEST",
+                offer.xid,
+                now=now,
             )
             return None
         return self.build_request(

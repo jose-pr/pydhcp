@@ -13,7 +13,7 @@ from ._codecs import DHCPOptionType as DHCPOptionType, OptionCodec as OptionCode
 from ._codecs._base import is_codec, is_codec_class
 from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
-from .. import _constants as _const
+from .. import _constants as _const, _leniency
 from . import _wire
 from .._missing import MISSING as _MISSING
 
@@ -188,7 +188,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         """Parse a TLV options buffer into a new bag.
 
         Liberal on receive: PAD octets are skipped, parsing stops at END, and a
-        truncated option logs a warning and keeps what arrived. Octets after END
+        truncated option keeps what arrived (logged at DEBUG and counted by a listener). Octets after END
         are ignored. A repeated code is joined (RFC 3396).
         """
         options = cls(codemap)
@@ -212,8 +212,11 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
                 break
 
             if len(options) < 2:
-                LOGGER.warning(
-                    f"Option {code} at offset {offset} is truncated (cannot read length)"
+                _leniency.note()
+                LOGGER.debug(
+                    "Option %d at offset %d is truncated (cannot read length)",
+                    code,
+                    offset,
                 )
                 options = options[len(options) :]
                 break
@@ -224,8 +227,13 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
                 # Keep what arrived only if there is something to keep: an
                 # option that declares a length and supplies nothing would read
                 # as present and then fail in whatever handler decodes it.
-                LOGGER.warning(
-                    f"Option {code} at offset {offset} claims {length} bytes but only {remaining} available"
+                _leniency.note()
+                LOGGER.debug(
+                    "Option %d at offset %d claims %d bytes but only %d available",
+                    code,
+                    offset,
+                    length,
+                    remaining,
                 )
                 data = options[2:]
                 if data:
