@@ -169,6 +169,11 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
     out by `pydhcp.packet.structured` (below). `"toml"` needs Python 3.11+ or
     `pydhcp[toml]`. A file the capture command wrote loads with `from_text`.
+  - **`DHCPMessage.from_hex(text: str) -> DHCPMessage`** — decode a message
+    written as hexadecimal text, the form `pydhcp packet --decode` reads: spaces,
+    tabs, line ends and colons between the digits are ignored. `ValueError` for any
+    other character or an odd number of digits, `DHCPDecodeError` when the octets
+    are not a message.
   - **`.log(src, dst, level: int) -> None`** — logs `.summary()` framed with a
     header, at `pydhcp`'s `LOGGER`, at the given `logging` level.
 

@@ -16,7 +16,7 @@ import duho
 from duho import AUTO, Cli, DefaultsFormatter
 
 from . import _settings
-from ._common import PACKET_FORMATS, CAPTURE_FORMATS, _Configured, _Failed
+from ._common import _Configured, _Failed
 from ._interfaces import Interfaces
 from ._server import Server
 from ._relay import Relay
@@ -107,8 +107,6 @@ def main(argv: "_ty.Optional[_ty.Sequence[str]]" = None) -> int:
 __all__ = [
     "App",
     "main",
-    "PACKET_FORMATS",
-    "CAPTURE_FORMATS",
     "Interfaces",
     "Server",
     "Relay",

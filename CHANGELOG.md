@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`DHCPMessage.from_hex(text)`**: decode a message written as hexadecimal text (spaces, line
+  ends and colons between the digits are ignored), the reader `pydhcp packet --decode` used to
+  keep to itself.
 - **`pydhcp capture --read FILE`** and **`pydhcp.capture.read_capture(source, *, packet_filter=None,
   ports=(67, 68), dissector=None)`**: the DHCP messages of a pcap or pcapng capture, through the
   same filter, output formats and hook as a live capture, with no socket bound. An event read from a
@@ -154,6 +157,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   checks of the pattern and raises `ValueError` (the message names the field and lists the fields);
   `pydhcp.capture.MAX_CAPTURE_FILES` is the default budget. The cleaning of a filename value
   is pktcap's, the same rule: a name that Windows opens as a device (`NUL`) now gets a leading `_`.
+- **Breaking: `pydhcp.cli` exports `App`, `main` and the six commands, and nothing else.**
+  `PACKET_FORMATS` and `CAPTURE_FORMATS` are no longer re-exported from it (the capture formats are
+  `pktcap.OUTPUT_FORMATS`). `server`, `relay` and `capture` declare `--listen` and `--per-interface`
+  once, in a shared base; their options, variables and help text are unchanged. `pydhcp packet
+  --decode` reads its hex text through `DHCPMessage.from_hex`.
 - **A capture writes a line feed at the end of every line on every platform.** On Windows a record
   file, and standard output, ended each line with CR LF; they no longer do. Standard output is
   UTF-8 on every platform. Nothing changes on Linux or macOS, and a record's other octets are the

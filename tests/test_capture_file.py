@@ -301,6 +301,55 @@ def test_a_hook_runs_for_each_event_of_a_file(
     assert (tmp_path / "runs.txt").read_text() == "xxxx"
 
 
+def _failing_hook(directory: pathlib.Path) -> pathlib.Path:
+    from hook_programs import python_hook
+
+    return python_hook(
+        directory,
+        "fails",
+        """
+        import sys
+        sys.stdin.buffer.read()
+        sys.stderr.write("refused")
+        raise SystemExit(3)
+        """,
+    )
+
+
+def test_a_failing_hook_is_logged_and_the_read_goes_on(
+    pcap: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    done = _command(
+        "capture",
+        "--read",
+        str(pcap),
+        "--hook",
+        str(_failing_hook(tmp_path)),
+        "--count",
+        "3",
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert len(done.stdout.splitlines()) == 3
+
+
+def test_a_failing_hook_ends_the_read_under_fail_fast(
+    pcap: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    done = _command(
+        "capture",
+        "--read",
+        str(pcap),
+        "--hook",
+        str(_failing_hook(tmp_path)),
+        "--hook-fail-fast",
+    )
+
+    assert done.returncode == 1
+    assert len(done.stdout.splitlines()) == 1
+    assert b"hook failed" in done.stderr
+
+
 # -- replay --------------------------------------------------------------------------
 
 

@@ -15,8 +15,7 @@ from ..capture._run import CaptureRun
 from ..capture._sync import DHCPCapture
 from ..capture._writer import MAX_CAPTURE_FILES, DHCPCaptureWriter
 from ._capture_hook import _load_capture_hook
-from ._common import CAPTURE_FORMATS, _arguments, _Configured, _Failed, closed_stdout
-from ._settings import listen_value
+from ._common import CAPTURE_FORMATS, _arguments, _Failed, _Listening, closed_stdout
 
 
 def _probe(path: pathlib.Path) -> None:
@@ -34,16 +33,10 @@ def _probe(path: pathlib.Path) -> None:
         ) from None
 
 
-class Capture(_Configured):
+class Capture(_Listening):
     """Capture DHCP packets"""
 
     _parsername_ = "capture"
-
-    listen: _ty.Annotated[
-        _ty.Optional[str], Meta(env="PYDHCP_CAPTURE_LISTEN", type=listen_value)
-    ] = None
-    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff'). Default: every address, port 67"
-    ("--listen", "-l")
 
     packet_filter: _ty.Annotated[
         _ty.Optional[str], Meta(env="PYDHCP_CAPTURE_FILTER", metavar="EXPRESSION")
@@ -88,10 +81,6 @@ class Capture(_Configured):
     "With --per-capture: end the capture, status 1, when a record needs more than this many distinct files. Default: 1000"
     ("--max-files",)
 
-    per_interface: _ty.Annotated[bool, Meta(env="PYDHCP_CAPTURE_PER_INTERFACE")] = False
-    "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
-    ("--per-interface",)
-
     read: _ty.Annotated[_ty.Optional[pathlib.Path], Meta(env="PYDHCP_CAPTURE_READ")] = (
         None
     )
@@ -119,7 +108,7 @@ class Capture(_Configured):
 
     def _read(
         self, run: CaptureRun, hook: "_ty.Optional[CaptureHook]"
-    ) -> "_ty.Optional[BaseException]":
+    ) -> "_ty.Optional[Exception]":
         """Put the messages of the capture file through the sink and the hook.
 
         Returns the hook failure that ended the run under `--hook-fail-fast`.
@@ -127,27 +116,17 @@ class Capture(_Configured):
         path = "-" if self.read is None else str(self.read)
         source = sys.stdin.buffer if path == "-" else path
         frames = capture_dissector()
+        events = read_capture(
+            source, packet_filter=self.packet_filter, dissector=frames
+        )
         try:
-            for event in read_capture(
-                source, packet_filter=self.packet_filter, dissector=frames
-            ):
-                run(event)
-                if hook is not None:
-                    try:
-                        hook(event)
-                    except Exception as error:
-                        self._logger_.error("Capture hook failed", exc_info=True)
-                        if self.hook_fail_fast:
-                            return error
-                if run.stopped:
-                    break
+            return run.drain(events, hook, fail_fast=self.hook_fail_fast)
         except _pktcap.CaptureFormatError as error:
             raise ValueError(f"{path}: {error}") from None
         finally:
             say = unread_note(path, frames)
             if say:
                 print(say, file=sys.stderr)
-        return None
 
     def __call__(self) -> None:
         output = str(self.output)
@@ -192,11 +171,7 @@ class Capture(_Configured):
                         hook_fail_fast=self.hook_fail_fast,
                         per_interface=self.per_interface,
                     )
-                try:
-                    with capture:
-                        capture.serve_forever()
-                except KeyboardInterrupt:
-                    self._logger_.info("Stopped listening due to Ctrl-C")
+                self._serve(capture)
                 hook_error = capture.hook_error
         failure = run.failure
         if isinstance(failure, OSError) and output == "-":

@@ -10,8 +10,7 @@ from ..listener._spec import _split_host_port
 from ..relay._core import DEFAULT_MAX_HOPS
 from ..relay._sync import DHCPRelay
 from ..packet._enums import DHCPPort
-from ._common import _arguments, _Configured
-from ._settings import listen_value
+from ._common import _arguments, _Listening
 
 
 def _parse_server_address(value: str) -> "tuple[str, int]":
@@ -37,16 +36,10 @@ def _parse_server_address(value: str) -> "tuple[str, int]":
     return host, int(DHCPPort.SERVER) if port is None else port
 
 
-class Relay(_Configured):
+class Relay(_Listening):
     """Start DHCP relay agent"""
 
     _parsername_ = "relay"
-
-    listen: _ty.Annotated[
-        _ty.Optional[str], Meta(env="PYDHCP_RELAY_LISTEN", type=listen_value)
-    ] = None
-    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff'). Default: every address, port 67"
-    ("--listen", "-l")
 
     # A tuple, not a list: a mutable class-level default is shared by every
     # instance -- `a.server is b.server is Relay.server` -- so one command
@@ -81,10 +74,6 @@ class Relay(_Configured):
     )
     "Hex-encoded remote ID sub-option (requires --insert-relay-agent-info). Default: none"
     ("--remote-id",)
-
-    per_interface: _ty.Annotated[bool, Meta(env="PYDHCP_RELAY_PER_INTERFACE")] = False
-    "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
-    ("--per-interface",)
 
     def __call__(self) -> None:
         # The ids are named by their flags here; the constructor refuses the same
@@ -127,8 +116,4 @@ class Relay(_Configured):
             listen,
             ", ".join(self.server),
         )
-        try:
-            with relay:
-                relay.serve_forever()
-        except KeyboardInterrupt:
-            self._logger_.info("Stopped listening due to Ctrl-C")
+        self._serve(relay)

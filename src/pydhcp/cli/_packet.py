@@ -71,11 +71,7 @@ class Packet(_Command):
                 payload_text = self.input.read_text(encoding="utf-8")
 
             if self.mode:
-                packet = DHCPMessage.decode(
-                    bytearray.fromhex(
-                        "".join(ch for ch in payload_text if ch not in " \t\r\n:")
-                    )
-                )
+                packet = DHCPMessage.from_hex(payload_text)
                 if self.packet_format == "summary":
                     output = (
                         f"{packet.op.name} XID={packet.xid:08X}\n{packet.summary()}"

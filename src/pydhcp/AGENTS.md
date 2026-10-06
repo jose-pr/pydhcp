@@ -1316,11 +1316,15 @@ fails at write time. Anything rendering one must call `display()` first —
 
 A package: `App` and `main()` are in `pydhcp.cli` itself, and each subcommand
 has its own private module (`cli._interfaces`, `cli._server`, `cli._relay`,
-`cli._packet`, `cli._capture`, with `cli._capture_hook` for `--hook` loading (a command
-is `capture.command_hook`) and
-`cli._common` for the shared base). `pydhcp.cli` exports `App`, `main`, the five
-command classes and the format and limit constants named in its `__all__`; patch a
-name where the command module looks it up (`pydhcp.cli._server.DHCPServer`).
+`cli._packet`, `cli._capture`, `cli._replay`, with `cli._capture_hook` for `--hook`
+loading (a command is `capture.command_hook`) and `cli._common` for the shared
+bases: `server`, `relay` and `capture` declare `--listen` and `--per-interface` once,
+in a base class that also gives each its `PYDHCP_<COMMAND>_*` variables and ends
+the run on Ctrl-C). `pydhcp.cli` exports `App`, `main` and the six command
+classes, and nothing else: no limit or format list is reachable only from there
+(`pydhcp.capture.MAX_CAPTURE_FILES`, `pktcap.OUTPUT_FORMATS`), and no command module
+is over 200 lines. Patch a name where the command module looks it up
+(`pydhcp.cli._server.DHCPServer`).
 
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both

@@ -74,10 +74,8 @@ EXPECTED_ROOT = [
 
 EXPECTED_CLI = [
     "App",
-    "CAPTURE_FORMATS",
     "Capture",
     "Interfaces",
-    "PACKET_FORMATS",
     "Packet",
     "Relay",
     "Replay",

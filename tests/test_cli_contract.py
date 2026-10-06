@@ -228,3 +228,32 @@ def test_the_filter_option_shows_a_metavar_that_is_not_a_field_name() -> None:
     result = run_cli("capture", "--help")
     assert "PACKET_FILTER" not in result.stdout
     assert "--filter EXPRESSION" in result.stdout
+
+
+def test_no_module_of_the_command_line_is_over_200_lines() -> None:
+    """A command that needs more holds logic that belongs in the library."""
+    import pathlib
+
+    import pydhcp.cli
+
+    root = pathlib.Path(pydhcp.cli.__file__).parent
+    long = {
+        path.name: len(path.read_text(encoding="utf-8").splitlines())
+        for path in root.glob("*.py")
+    }
+    assert {name: n for name, n in long.items() if n > 200} == {}
+
+
+def test_the_command_line_package_exports_commands_and_main_only() -> None:
+    import pydhcp.cli as cli
+
+    assert sorted(cli.__all__) == [
+        "App",
+        "Capture",
+        "Interfaces",
+        "Packet",
+        "Relay",
+        "Replay",
+        "Server",
+        "main",
+    ]

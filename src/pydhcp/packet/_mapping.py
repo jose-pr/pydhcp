@@ -246,6 +246,17 @@ class _MessageMapping(_MessageEncode):
         """
         return cls.from_mapping(_structured.loads(text, format), codemap=codemap)
 
+    @classmethod
+    def from_hex(cls: "type[_Mapped]", text: str) -> _Mapped:
+        """Decode a message written as hexadecimal text.
+
+        Spaces, tabs, line ends and colons between the digits are ignored, so
+        `01:01:06:00` and a hexdump's lines read the same. `ValueError` for
+        anything else that is not a hexadecimal digit or for an odd number of
+        digits; `DHCPDecodeError` when the octets are not a message.
+        """
+        return cls.decode(bytes.fromhex(_strip_hex_text(text)))
+
     def _survives_round_trip(
         self, code: int, option_value: _ty.Any, original: _ty.Any
     ) -> bool:

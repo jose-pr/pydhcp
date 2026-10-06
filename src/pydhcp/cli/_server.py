@@ -9,24 +9,13 @@ from duho import Meta
 
 from ..server._sync import DHCPServer
 from ..lease import FileLeaseBackend, LeaseBackend
-from ._common import _arguments, _Configured
-from ._settings import listen_value
+from ._common import _arguments, _Listening
 
 
-class Server(_Configured):
+class Server(_Listening):
     """Start DHCP server"""
 
     _parsername_ = "server"
-
-    listen: _ty.Annotated[
-        _ty.Optional[str], Meta(env="PYDHCP_SERVER_LISTEN", type=listen_value)
-    ] = None
-    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff'). Default: every address, port 67"
-    ("--listen", "-l")
-
-    per_interface: _ty.Annotated[bool, Meta(env="PYDHCP_SERVER_PER_INTERFACE")] = False
-    "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
-    ("--per-interface",)
 
     lease_file: _ty.Annotated[
         _ty.Optional[pathlib.Path], Meta(env="PYDHCP_SERVER_LEASE_FILE")
@@ -58,14 +47,7 @@ class Server(_Configured):
             if backend is not None:
                 self._logger_.info("Persisting leases to %s", self.lease_file)
             self._logger_.info("Starting DHCP server, listening on: %s...", listen)
-            try:
-                # The library installs no signal handler: Ctrl-C arrives here
-                # as `KeyboardInterrupt`, and leaving the block closes the
-                # server.
-                with server:
-                    server.serve_forever()
-            except KeyboardInterrupt:
-                self._logger_.info("Stopped listening due to Ctrl-C")
+            self._serve(server)
         finally:
             # Flush a coalescing backend, and let the in-memory one no-op.
             close = getattr(backend, "close", None)

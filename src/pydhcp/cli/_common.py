@@ -12,7 +12,7 @@ import pktcap as _pktcap
 from duho import Cmd, LoggingArgs, Meta
 
 from .._config import CONFIG_FORMATS
-from ._settings import CONFIG_ENV, CONFIG_FORMAT_ENV
+from ._settings import CONFIG_ENV, CONFIG_FORMAT_ENV, listen_value
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 
@@ -97,3 +97,42 @@ class _Configured(_Command):
     ] = None
     "Format of the configuration file. Default: from the file's extension"
     ("--config-format",)
+
+
+class _Listening(_Configured):
+    """A command that listens: `server`, `relay` and `capture`.
+
+    It declares `--listen` and `--per-interface` once. Each subclass gets the
+    variables `PYDHCP_<COMMAND>_LISTEN` and `PYDHCP_<COMMAND>_PER_INTERFACE`, named
+    for its `_parsername_` when the class is built.
+    """
+
+    listen: _ty.Annotated[_ty.Optional[str], Meta(type=listen_value)] = None
+    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff'). Default: every address, port 67"
+    ("--listen", "-l")
+
+    per_interface: _ty.Annotated[bool, Meta()] = False
+    "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
+    ("--per-interface",)
+
+    def __init_subclass__(cls, **kwargs: _ty.Any) -> None:
+        super().__init_subclass__(**kwargs)
+        command = str(getattr(cls, "_parsername_", "")).upper()
+        cls.__annotations__ = {
+            **cls.__dict__.get("__annotations__", {}),
+            "listen": _ty.Annotated[
+                _ty.Optional[str],
+                Meta(env=f"PYDHCP_{command}_LISTEN", type=listen_value),
+            ],
+            "per_interface": _ty.Annotated[
+                bool, Meta(env=f"PYDHCP_{command}_PER_INTERFACE")
+            ],
+        }
+
+    def _serve(self, role: _ty.Any) -> None:
+        """Run `role` until it ends or is interrupted; Ctrl-C is a clean end."""
+        try:
+            with role:
+                role.serve_forever()
+        except KeyboardInterrupt:
+            self._logger_.info("Stopped listening due to Ctrl-C")
