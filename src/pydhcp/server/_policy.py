@@ -14,6 +14,7 @@ from ..listener._limit import _brief
 from ..options._codes import DHCPOptionCode
 from ..options import DHCPOptions
 from ..options import _codecs as _type
+from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from math import inf as _inf
 from ._state import _ServerState
@@ -166,12 +167,30 @@ class _LeasePolicy(_ServerState):
         The base implementation is intentionally small. A client with a record
         gets it back: on `commit=False` as it stands, on `commit=True` an
         offered lease committed (`LeaseBackend.commit`) and a bound one renewed.
-        A client with none gets an address only when it supplies `REQUESTED_IP`
-        or `ciaddr`: held as an offer for `OFFER_HOLD_SECONDS` on
-        `commit=False`, allocated on `commit=True`.
+        Only a DHCPDISCOVER makes a record: from a client with none it holds
+        the address in `REQUESTED_IP` (or `ciaddr`) as an offer for
+        `OFFER_HOLD_SECONDS` on `commit=False`, and allocates it on
+        `commit=True`. A DHCPREQUEST from a client with no record gets `None`.
+        A message whose `giaddr` is outside the served network gets `None`:
+        the stock allocator has the one network to give.
         """
         _server = _servable_interface(server_id)
         if _server is None:
+            return None
+
+        if msg.giaddr != _const.WILDCARD_V4 and msg.giaddr not in _server.network:
+            self.metrics.addresses_refused += 1
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "refused relay",
+                "[XID=%08x] Refusing %s: relay %s is outside the served network %s",
+                msg.xid,
+                _brief(client_id),
+                msg.giaddr,
+                _server.network,
+                now=self._read_clock().monotonic,
+            )
             return None
 
         backend = self.lease_backend
@@ -190,6 +209,9 @@ class _LeasePolicy(_ServerState):
                 self.metrics.leases_renewed += 1
                 return renewed
             return existing
+
+        if msg.message_type is not _enum.DHCPMessageType.DHCPDISCOVER:
+            return None
 
         requested_ip = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
@@ -290,6 +312,31 @@ class _LeasePolicy(_ServerState):
             if holder is not None and holder != client_id:
                 return f"already leased to {holder}"
         return None
+
+    def _inform_refusal(
+        self,
+        msg: DHCPMessage,
+        sender: _ipaddress.IPv4Address,
+        server_id: _ipaddress.IPv4Address,
+    ) -> _ty.Optional[str]:
+        """Say why a DHCPINFORM must not be answered, or None if it may be.
+
+        RFC 2131 s4.3.5 sends the ACK to `ciaddr`, the address the client claims
+        for itself. A `ciaddr` that is neither the datagram's source nor in the
+        network served would make this server send a reply wherever the sender
+        chose; such a request is refused.
+        """
+        if msg.ciaddr == _const.WILDCARD_V4:
+            return "it carries no ciaddr to answer"
+        if msg.ciaddr == sender:
+            return None
+        served = _servable_interface(server_id)
+        if served is not None and msg.ciaddr in served.network:
+            return None
+        return (
+            f"ciaddr {msg.ciaddr} is neither the sender's address {sender} "
+            "nor in the served network"
+        )
 
     def quarantine_address(
         self, ip: _ipaddress.IPv4Address, *, now: _ty.Optional[float] = None

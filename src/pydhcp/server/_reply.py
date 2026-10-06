@@ -23,6 +23,32 @@ __all__: list[str] = []
 
 LOGGER = _logging.getLogger(__name__)
 
+#: Where the options field starts: the fixed header and the magic cookie.
+_OPTIONS_OFFSET = 240
+
+
+def _overloads(data: bytes) -> bool:
+    """Whether the encoded message carries the option-overload option (52).
+
+    The options field is read to its END; the option is placed in it whenever
+    `sname` or `file` carries options.
+    """
+    view = memoryview(data)
+    index = _OPTIONS_OFFSET
+    while index < len(view):
+        code = view[index]
+        if code == 255:
+            return False
+        if code == 0:
+            index += 1
+            continue
+        if code == int(DHCPOptionCode.OPTION_OVERLOAD):
+            return True
+        if index + 1 >= len(view):
+            return False
+        index += 2 + view[index + 1]
+    return False
+
 
 class _Replies(_LeasePolicy):
     """Reply construction (`_create_response`) and delivery (`_filter_and_send`)."""
@@ -45,6 +71,23 @@ class _Replies(_LeasePolicy):
             now = self._read_clock().utc
         return self._build_reply(
             msg, lease.options, actual_server_id, resp_ty, lease=lease, now=now
+        )
+
+    def _create_nak(
+        self,
+        msg: DHCPMessage,
+        actual_server_id: _ipaddress.IPv4Address,
+        reason: str,
+    ) -> DHCPMessage:
+        """The DHCPNAK to `msg`: only what RFC 2131 Table 3 gives a NAK."""
+        return self._build_reply(
+            msg,
+            DHCPOptions(),
+            actual_server_id,
+            _enum.DHCPMessageType.DHCPNAK,
+            lease=None,
+            now=None,
+            text=reason,
         )
 
     def _create_inform_response(
@@ -72,12 +115,18 @@ class _Replies(_LeasePolicy):
         *,
         lease: "_ty.Optional[DHCPLease]",
         now: "_ty.Optional[_dt.datetime]",
+        text: "_ty.Optional[str]" = None,
     ) -> DHCPMessage:
         resp = DHCPMessage(**msg.__dict__.copy())
         # A copy, never the stored lease's own bag: the response pipeline injects
         # bookkeeping options and PARAMETER_REQUEST_LIST filtering deletes
-        # entries, and a lease's options are read-only.
-        resp.options = options.copy()
+        # entries, and a lease's options are read-only. A NAK takes none of
+        # them: Table 3 allows it only the options added below.
+        resp.options = (
+            DHCPOptions()
+            if resp_ty is _enum.DHCPMessageType.DHCPNAK
+            else options.copy()
+        )
         resp.op = _enum.DHCPOpcode.BOOTREPLY
         resp.hops = 0
         resp.secs = _dt.timedelta(seconds=0)
@@ -139,6 +188,8 @@ class _Replies(_LeasePolicy):
                 resp.yiaddr = lease.ip
         resp.options[DHCPOptionCode.SERVER_IDENTIFIER] = actual_server_id
         resp.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        if text is not None:
+            resp.options[DHCPOptionCode.DHCP_MESSAGE] = text
         relay_info = msg.options.get(
             DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=False
         )
@@ -207,9 +258,6 @@ class _Replies(_LeasePolicy):
                 DHCPOptionCode.DHCP_MESSAGE_TYPE,
                 DHCPOptionCode.RELAY_AGENT_INFORMATION,
             ]
-            resp.options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
-                msg.get_client_id().replace(":", "")
-            )
         if requests_params:
 
             def _paramfilter(opt: tuple[int, bytearray]) -> bool:
@@ -219,6 +267,21 @@ class _Replies(_LeasePolicy):
                 filter(_paramfilter, resp.options.items(decoded=False))
             )
         resp.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
+        # RFC 3046 s2.2: the echoed relay agent information goes last.
+        relay_info = resp.options.get(
+            DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=False
+        )
+        if relay_info is not None:
+            del resp.options[DHCPOptionCode.RELAY_AGENT_INFORMATION]
+            resp.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = relay_info
+        if (
+            resp_ty is _enum.DHCPMessageType.DHCPNAK
+            and msg.giaddr != _const.WILDCARD_V4
+        ):
+            # RFC 2131 s4.3.2: through a relay the server MUST set the broadcast
+            # bit, so that the relay broadcasts the NAK to the client; the
+            # client's other flag bits (Table 3: 'flags' from the client) stay.
+            resp.flags = resp.flags | _enum.DHCPFlags.BROADCAST
 
         max_size_opt = msg.options.get(
             DHCPOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE,
@@ -251,7 +314,32 @@ class _Replies(_LeasePolicy):
         # has to say, not by the ceiling the client offers, so an inflated 57
         # buys an attacker nothing and clamping it to a guessed MTU would break
         # a jumbo-frame segment that legitimately asked for more.
-        data = resp.encode(max_size)
+        try:
+            data = resp.encode(max_size)
+            without_relay_info = relay_info is not None and _overloads(data)
+        except OverflowError:
+            # Even with `sname` and `file`, the options do not fit.
+            if relay_info is None:
+                raise
+            without_relay_info = True
+        if without_relay_info:
+            # RFC 3046 s2.2: the option is never placed in the overloaded `sname`
+            # or `file`; a reply that cannot carry it in the options field is
+            # sent without it, and counted.
+            del resp.options[DHCPOptionCode.RELAY_AGENT_INFORMATION]
+            data = resp.encode(max_size)
+            self.metrics.relay_info_omitted += 1
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "relay information omitted",
+                "[XID=%08x] Sending %s without the relay agent information "
+                "option: it does not fit in the options field of %d octets",
+                msg.xid,
+                resp_ty.label(),
+                max_size,
+                now=self._instant(context).monotonic,
+            )
 
         dest: _ipaddress.IPv4Address
         dest_port: int = context.client.port
@@ -264,8 +352,6 @@ class _Replies(_LeasePolicy):
             # refusal to the very address the client was told it may not use, so
             # the client never saw it and retried until its timers expired.
             if msg.giaddr != _const.WILDCARD_V4:
-                resp.flags = _enum.DHCPFlags.BROADCAST
-                data = resp.encode(max_size)
                 dest = msg.giaddr
                 dest_port = 67 if context.client.port == 68 else context.client.port
             else:

@@ -63,6 +63,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Two counters in `DHCPMetrics`**: `leases_offered` (addresses held by an OFFER)
   and `offers_withdrawn` (offers dropped because the client's REQUEST named another
   server).
+- **Two more counters in `DHCPMetrics`**: `informs_ignored` (a DHCPINFORM whose
+  `ciaddr` the server will not answer) and `relay_info_omitted` (a reply sent without
+  option 82 because it would not fit the options field).
 
 ### Changed
 
@@ -610,6 +613,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   address for two clients), and `renew` extends a bound lease only.
   `InMemoryLeaseBackend.lookup_by_ip` is answered from an address index: its cost
   no longer grows with the number of leases.
+- **Breaking: the stock server answers a DHCPREQUEST from what it holds, shape by
+  shape (RFC 2131 section 4.3.2).** A SELECTING request (option 54 names this server)
+  it cannot satisfy gets a DHCPNAK where it got silence, and one with no offer
+  behind it allocates nothing (it allocated the address on the spot). A RENEWING or
+  REBINDING request (`ciaddr`, no options 50 and 54) from a client the server holds
+  nothing for is silence and creates no binding (it was ACKed, and an address was
+  bound). An INIT-REBOOT request is answered through `acquire_lease`, so a server that
+  returns leases and stores nothing in the lease backend answers a rebooting client
+  (it stayed silent for every one); a lease for another address is a NAK. A request
+  with no option 54, no option 50 and no `ciaddr` is dropped. The stock
+  `acquire_lease` returns `None` for a DHCPREQUEST from a client with no record, and an
+  override that allocated on any request is unchanged.
+- **The DHCPNAK carries what RFC 2131 Table 3 gives it.** The client identifier is
+  returned exactly as the client sent it and is absent when it sent none (RFC 6842
+  section 3); the NAK carried an invented one, the hardware type and `chaddr`, for a
+  client that sent none. It holds the server identifier, the message type, a
+  `DHCP_MESSAGE` text and the relay agent information, and nothing else; through a
+  relay it sets the broadcast bit and keeps the client's other flag bits (it replaced
+  them).
+- **The stock allocator refuses a message whose `giaddr` is outside the served
+  network**, counted in `addresses_refused`: a client behind a relay on another network
+  was offered an address of this server's own network with its mask.
+- **A DHCPINFORM is answered only when `ciaddr` is the datagram's source address or lies
+  in the served network** (the ACK goes to `ciaddr`); any other, and an INFORM with no
+  `ciaddr`, is dropped and counted in `informs_ignored`.
+- **The echoed relay agent information option (82) is the last option of a reply and is
+  never placed in `sname` or `file`** (RFC 3046 section 2.2): a reply that would need
+  the overloaded fields, or that does not fit at all, is sent without it and counted in
+  `relay_info_omitted`.
 - **`pydhcp.lease` re-exports its names from private modules** (`_lease_store`,
   `_lease_file`): the log lines of the two stores come from the loggers
   `pydhcp._lease_store` and `pydhcp._lease_file`, not `pydhcp.lease`.

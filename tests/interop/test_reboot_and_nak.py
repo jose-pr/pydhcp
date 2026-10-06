@@ -9,7 +9,6 @@ client identifier option in a reply only if the client sent one.
 
 from __future__ import annotations
 
-import pytest
 
 from pydhcp.options import DHCPOptionCode
 
@@ -74,10 +73,6 @@ def test_a_nak_to_a_client_that_sent_no_client_identifier_is_accepted(lab):
     assert client.leases(), client.proc.text()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="a NAK to a client that sent no client identifier carries one",
-)
 def test_a_nak_carries_no_client_identifier_the_client_did_not_send(lab):
     frames, _client = _known_client_asks_for_a_foreign_address(lab)
 
@@ -130,11 +125,6 @@ def test_a_rebooting_client_is_answered_by_a_server_that_keeps_leases_in_its_bac
     assert "DHCPDISCOVER" not in sent
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="a server that answers through acquire_lease alone never answers an "
-    "INIT-REBOOT request",
-)
 def test_a_rebooting_client_is_answered_by_a_server_that_answers_through_acquire_lease_alone(
     lab,
 ):

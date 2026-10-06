@@ -169,77 +169,102 @@ class _Handlers(_Replies):
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPOFFER)
 
     def handle_request(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        """Handle DHCPREQUEST by ACKing or NAKing the lease returned from `acquire_lease`."""
+        """Handle DHCPREQUEST by ACKing or NAKing the lease returned from `acquire_lease`.
+
+        RFC 2131 s4.3.2 and Table 4 tell the four shapes apart, and each is
+        answered from the record `acquire_lease` returns for the client:
+
+        - SELECTING (option 54 names this server): a lease for the address asked
+          for is ACKed; a request this server cannot satisfy is NAKed (s3.1
+          step 4), never left unanswered.
+        - INIT-REBOOT (option 50, no option 54, `ciaddr` 0), RENEWING (`ciaddr`,
+          unicast to this server) and REBINDING (`ciaddr`, broadcast): a lease
+          for the address is ACKed, a lease for another address is NAKed, and
+          no lease at all is silence, because the client may belong to another
+          server on the same wire.
+        """
         client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPREQUEST from {context.client}|{client_id}"
         )
-
-        # INIT-REBOOT: no server identifier, a requested address, and ciaddr 0.
-        # RFC 2131 4.3.2 -- "If the server has no record of this client, then it
-        # MUST remain silent, and MAY output a warning". Allocating here instead
-        # makes the server answer for clients that belong to another server on
-        # the same segment, i.e. behave as a rogue.
-        if (
-            msg.options.get(
-                DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
-            )
-            is None
-            and msg.options.get(
-                DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
-            )
-            is not None
-            and msg.ciaddr == _const.WILDCARD_V4
-            and self.lease_backend.lookup(client_id) is None
-        ):
+        server_id = msg.options.get(
+            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
+        )
+        requested: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
+        )
+        if server_id is not None:
+            shape = "SELECTING"
+        elif msg.ciaddr != _const.WILDCARD_V4:
+            shape = "RENEWING" if context.is_unicast is not False else "REBINDING"
+        elif requested is not None:
+            shape = "INIT-REBOOT"
+        else:
             self._log_limit.log(
                 LOGGER,
                 _logging.WARNING,
-                "INIT-REBOOT from an unknown client",
-                "[XID=%08x] INIT-REBOOT from %s|%s with no record of this "
-                "client, remaining silent",
+                "REQUEST of no address",
+                "[XID=%08x] DHCPREQUEST from %s|%s names no address: no "
+                "server identifier, no requested address and no ciaddr",
                 msg.xid,
                 context.client,
                 _brief(client_id),
                 now=self._instant(context).monotonic,
             )
             return
+        ip_req = requested if requested is not None else msg.ciaddr
 
-        # Decide first, on a view that cannot extend the binding: a REQUEST for
+        # Decide first, on a call that cannot extend the binding: a REQUEST for
         # the wrong address is about to be NAKed, and renewing the address it is
         # being refused was exactly backwards.
         lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
         if not lease:
-            LOGGER.info(
-                f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
+            if shape == "SELECTING":
+                self._nak(msg, context, "the address is not available")
+                return
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                f"{shape} from an unknown client",
+                "[XID=%08x] %s from %s|%s with no record of this client, "
+                "remaining silent",
+                msg.xid,
+                shape,
+                context.client,
+                _brief(client_id),
+                now=self._instant(context).monotonic,
             )
             return
-        ip_req: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
-            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
-        )
-        if not ip_req:
-            ip_req = msg.ciaddr
         now = self._instant(context).utc
-        if ip_req == lease.ip and self._has_time_left(lease, now):
-            resp_ty = _enum.DHCPMessageType.DHCPACK
-            # Only now is anything agreed, so this is where the lease time the
-            # ACK advertises is actually committed.
-            committed = self.acquire_lease(
-                client_id, actual_server_id, msg, commit=True
-            )
-            if committed is not None:
-                lease = committed
-            elif lease.offered:
-                # The hold lapsed between the decision and the commit.
-                resp_ty = _enum.DHCPMessageType.DHCPNAK
-        else:
+        if ip_req != lease.ip:
+            self._nak(msg, context, "the requested address is not the client's")
+            return
+        if not self._has_time_left(lease, now):
             # A lease with no time left NAKs rather than ACKing nothing: the
             # client is told to start over, which is recoverable, instead of
             # being handed an ACK with no address in it.
-            resp_ty = _enum.DHCPMessageType.DHCPNAK
-        resp = self._create_response(msg, lease, actual_server_id, resp_ty, now=now)
-        self._filter_and_send(msg, resp, context, resp_ty)
+            self._nak(msg, context, "the lease has expired")
+            return
+        # Only now is anything agreed, so this is where the lease time the ACK
+        # advertises is actually committed.
+        committed = self.acquire_lease(client_id, actual_server_id, msg, commit=True)
+        if committed is not None:
+            lease = committed
+        elif lease.offered:
+            # The hold lapsed between the decision and the commit.
+            self._nak(msg, context, "the offer has lapsed")
+            return
+        resp = self._create_response(
+            msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPACK, now=now
+        )
+        self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPACK)
+
+    def _nak(self, msg: DHCPMessage, context: DHCPRequestContext, reason: str) -> None:
+        """Send a DHCPNAK to `msg`, with `reason` as its message option."""
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
+        resp = self._create_nak(msg, actual_server_id, reason)
+        self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPNAK)
 
     def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
@@ -315,6 +340,21 @@ class _Handlers(_Replies):
         # so an INFORM flood grew the lease store -- and bypassed the
         # allocation-free hook documented for exactly this path whenever a
         # binding happened to exist.
+        refusal = self._inform_refusal(msg, context.client.ip, actual_server_id)
+        if refusal is not None:
+            self.metrics.informs_ignored += 1
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "DHCPINFORM refused",
+                "[XID=%08x] Ignoring DHCPINFORM from %s|%s: %s",
+                msg.xid,
+                context.client,
+                _brief(client_id),
+                _brief(refusal),
+                now=self._instant(context).monotonic,
+            )
+            return
         resp = self._create_inform_response(
             msg, self.get_inform_options(actual_server_id, msg), actual_server_id
         )

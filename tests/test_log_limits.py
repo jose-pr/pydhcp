@@ -524,6 +524,29 @@ def _init_reboot() -> DHCPMessage:
     return message
 
 
+def _renewing_unknown() -> DHCPMessage:
+    return build_request(
+        DHCPMessageType.DHCPREQUEST, ciaddr=ipaddress.IPv4Address("10.0.0.60")
+    )
+
+
+def _names_no_address() -> DHCPMessage:
+    return build_request(DHCPMessageType.DHCPREQUEST)
+
+
+def _inform_for_another_address() -> DHCPMessage:
+    return build_request(
+        DHCPMessageType.DHCPINFORM, ciaddr=ipaddress.IPv4Address("203.0.113.9")
+    )
+
+
+def _relayed_from_another_network() -> DHCPMessage:
+    message = build_request(DHCPMessageType.DHCPDISCOVER)
+    message.giaddr = ipaddress.IPv4Address("10.5.5.1")
+    message.options[DHCPOptionCode.REQUESTED_IP] = ipaddress.IPv4Address("10.0.0.60")
+    return message
+
+
 def _off_subnet_discover() -> DHCPMessage:
     message = build_request(DHCPMessageType.DHCPDISCOVER)
     message.options[DHCPOptionCode.REQUESTED_IP] = ipaddress.IPv4Address("172.16.9.9")
@@ -541,6 +564,18 @@ SERVER_SITES: "list[tuple[str, ty.Callable[[], DHCPMessage], ty.Optional[str]]]"
         None,
     ),
     ("an INIT-REBOOT from an unknown client", _init_reboot, None),
+    ("a RENEWING request from an unknown client", _renewing_unknown, None),
+    ("a REQUEST that names no address", _names_no_address, None),
+    (
+        "a DHCPINFORM for another address",
+        _inform_for_another_address,
+        "informs_ignored",
+    ),
+    (
+        "a request relayed from another network",
+        _relayed_from_another_network,
+        "addresses_refused",
+    ),
     (
         "a DHCPDECLINE",
         lambda: build_request(DHCPMessageType.DHCPDECLINE),
@@ -591,6 +626,31 @@ def test_a_release_naming_an_address_the_client_does_not_hold_is_limited_and_cou
         caplog, clock, HANDLERS, lambda: server.handle(release, _context(clock))
     )
     assert server.metrics.releases_ignored == INSIDE + 1
+
+
+def test_a_reply_that_leaves_out_the_relay_information_is_limited_and_counted(
+    caplog: pytest.LogCaptureFixture,
+    clock: Clock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "pydhcp.server._policy._servable_interface",
+        lambda _ip: NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
+    )
+    server = _server(clock)
+    discover = build_request(DHCPMessageType.DHCPDISCOVER)
+    discover.giaddr = ipaddress.IPv4Address("10.0.0.2")
+    discover.options[DHCPOptionCode.REQUESTED_IP] = ipaddress.IPv4Address("10.0.0.60")
+    discover.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = bytearray(
+        bytes([1, 250]) + b"c" * 250 + bytes([2, 250]) + b"r" * 250
+    )
+    _assert_bounded(
+        caplog,
+        clock,
+        "pydhcp.server._reply",
+        lambda: server.handle(discover, _context(clock)),
+    )
+    assert server.metrics.relay_info_omitted == INSIDE + 1
 
 
 def test_a_reply_that_does_not_decode_is_limited(

@@ -22,6 +22,8 @@ class DHCPMetrics:
         "leases_declined",
         "offers_withdrawn",
         "releases_ignored",
+        "informs_ignored",
+        "relay_info_omitted",
         "packets_dropped_hop_limit",
         "packets_dropped_untrusted",
         "packets_dropped_truncated",
@@ -57,6 +59,14 @@ class DHCPMetrics:
     #: binding. Visible so "nobody is releasing" reads differently from
     #: "somebody is releasing addresses they do not hold".
     releases_ignored: int
+    #: DHCPINFORMs not answered because `ciaddr` was neither the sender's
+    #: address nor in the served network: the ACK goes to `ciaddr`, so
+    #: answering would send a reply to an address the sender chose.
+    informs_ignored: int
+    #: Replies sent without the relay agent information option because
+    #: carrying it would have needed the overloaded `sname` or `file`
+    #: field (RFC 3046 s2.2 forbids the option there).
+    relay_info_omitted: int
     packets_dropped_hop_limit: int
     packets_dropped_untrusted: int
     #: Datagrams dropped before decoding because they did not fit

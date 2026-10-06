@@ -390,16 +390,23 @@ A test that patches a module global patches it in the private module that reads 
     the keyword (one that does not raises `TypeError` on every DISCOVER), and
     one that writes to a store of its own, or extends a binding, does so only
     when `commit` is true: `self.lease_backend` is the real backend on both
-    calls, and only the base implementation reads through a view that does not
-    extend a binding when `commit` is false. Base impl, for a client with a record: on `commit=False` returns it as it
-    stands, on `commit=True` commits an **offered** lease and renews a bound
-    one. For a client with none: when the client supplies `REQUESTED_IP` or a
-    non-wildcard `ciaddr`, it **holds the address as an offer** for
-    `OFFER_HOLD_SECONDS` on `commit=False` (the DISCOVER) and allocates it on
-    `commit=True`; returns `None` when nothing can be offered (silently drops
-    the message), which includes any address outside the served network — so a
-    relayed client on another subnet is refused rather than answered with
-    values that do not apply there.
+    calls. An override that keeps its leases in the backend answers a
+    `commit=False` call with `offer` (the address is held for a short time and a
+    client that never REQUESTs it loses it) and a `commit=True` call with
+    `commit` or `allocate`; one that returns a `DHCPLease` and stores nothing
+    is answered for every shape of request.
+    Base impl, for a client **with a record**: on `commit=False` returns it as it
+    stands, on `commit=True` commits an **offered** lease and renews a bound one.
+    For a client **with none**: only a DHCPDISCOVER makes a record. With
+    `REQUESTED_IP` (or a non-wildcard `ciaddr`) it **holds the address as an
+    offer** for `OFFER_HOLD_SECONDS` on `commit=False` and allocates it on
+    `commit=True`; a DHCPREQUEST from a client with no record gets `None`.
+    Returns `None` when nothing can be offered (silently drops the message),
+    which includes an address outside the served network and **any message whose
+    `giaddr` is outside the served network** (the base allocator has the one
+    network to give: it does not answer a client behind a relay on another
+    network with this network's mask; an override that serves relayed
+    networks supplies its own). Both refusals count in `addresses_refused`.
     - **`OFFER_HOLD_SECONDS`** (class attribute, `120.0`) — how long an offered
       address is held for the client it was offered to. A forged DHCPDISCOVER
       therefore holds an address for this long and no longer; the OFFER
@@ -451,6 +458,35 @@ A test that patches a module global patches it in the private module that reads 
   - `.handle_discover/.handle_request/.handle_decline/.handle_release/
     .handle_inform(msg, context) -> None` — per-message-type handlers called
     from `.handle()`; each is independently overridable.
+  - **`.handle_request()` answers each shape of RFC 2131 §4.3.2 from the lease
+    `.acquire_lease()` returns for the client**, told apart by Table 4:
+    **SELECTING** (option 54 names this server) is ACKed for the address it asks
+    for and NAKed when it cannot be satisfied (the address is held by another
+    client or off the network, the offer lapsed, another address was offered) —
+    never left unanswered, never allocated on the spot. **INIT-REBOOT**
+    (option 50, no option 54, `ciaddr` 0), **RENEWING** (`ciaddr`, unicast to
+    this server: `context.is_unicast`) and **REBINDING** (`ciaddr`, broadcast)
+    are ACKed for the address the client holds, NAKed for another, and answered
+    with silence when `acquire_lease` returns nothing: the client may belong to
+    another server on the same wire, and nothing is allocated for it. A RENEWING
+    and a REBINDING request are answered alike; the log line names which. A
+    request with no option 54, no option 50 and no `ciaddr` is dropped.
+  - **The DHCPNAK carries what RFC 2131 Table 3 gives it**: the server
+    identifier, the message type, a `DHCP_MESSAGE` text saying why, the relay
+    agent information when the request had it, and the **client identifier
+    exactly as the client sent it, and none when it sent none** (RFC 6842 §3).
+    `yiaddr`, `ciaddr`, `siaddr`, `sname` and `file` are empty; `flags`,
+    `giaddr`, `chaddr` and `xid` are the request's, and through a relay
+    (`giaddr` set) the broadcast bit is set as well (§4.3.2). No lease time,
+    and none of the options the client asked for.
+  - **`.handle_inform()` answers only a `ciaddr` that is the datagram's source
+    address or lies in the served network** (RFC 2131 §4.3.5 sends the ACK to
+    `ciaddr`); any other, and an INFORM with no `ciaddr`, is dropped and
+    counted in `informs_ignored`.
+  - **Echoed option 82 is the last option of the reply** (RFC 3046 §2.2) and is
+    never placed in the overloaded `sname` or `file`: a reply that would need
+    them (or does not fit at all) is sent without the option and counted in
+    `relay_info_omitted`, with one rate-limited warning.
   - `.handle(msg, context) -> None` — dispatches on `DHCP_MESSAGE_TYPE`;
     ignores non-`BOOTREQUEST` messages and messages addressed to a different
     `SERVER_IDENTIFIER` than this interface's IP (a DHCPREQUEST first gives
@@ -886,11 +922,14 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     server dropped a message with neither option 61 nor a hardware address),
     `packets_dropped_other_server` (a message other than a REQUEST naming
     another server), `addresses_refused` (a requested address the server
-    refused to lease), `replies_dropped_pin` (a broadcast reply that could not
+    refused to lease, or a message relayed from a network the stock allocator does not serve), `replies_dropped_pin` (a broadcast reply that could not
     be pinned to the interface the request arrived on, with or without its index,
     and was dropped rather than sent by an interface the routing table picks) and
     `packets_dropped_other_interface` (a datagram dropped before decoding because it
-    arrived on an interface the listener was not told to serve).
+    arrived on an interface the listener was not told to serve),
+    `informs_ignored` (a DHCPINFORM whose `ciaddr` is neither the sender's address nor
+    in the served network, or absent) and `relay_info_omitted` (a reply sent without
+    option 82 because it would not fit in the options field).
   - **`leases_offered` counts offers, `leases_allocated` counts commits.** A
     DHCPOFFER holds an address (`offer`) and adds one to `leases_offered`; the
     REQUEST that accepts it (`commit`), or an address allocated and committed

@@ -86,7 +86,7 @@ def test_discover_does_not_extend_an_existing_lease(backend) -> None:
     """The measured repro: option 51 = 999999 on a DISCOVER moved expiry 12 days."""
     server = _ServedServer(backend)
     seed = _message(DHCPMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
-    lease = server.acquire_lease(_client_id(seed), IPv4("10.0.0.1"), seed)
+    lease = backend.allocate(_client_id(seed), IPv4("10.0.0.50"), 3600)
     assert lease is not None
     before = backend.lookup(_client_id(seed))
     assert before is not None
@@ -104,7 +104,7 @@ def test_discover_does_not_extend_an_existing_lease(backend) -> None:
 def test_a_naked_request_leaves_the_binding_untouched(backend) -> None:
     server = _ServedServer(backend)
     seed = _message(DHCPMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
-    assert server.acquire_lease(_client_id(seed), IPv4("10.0.0.1"), seed) is not None
+    assert backend.allocate(_client_id(seed), IPv4("10.0.0.50"), 3600) is not None
     before = backend.lookup(_client_id(seed))
     assert before is not None
 
@@ -127,7 +127,7 @@ def test_an_acked_request_still_commits_the_renewal(backend) -> None:
     """The other half: suppressing the probe must not stop a real renewal."""
     server = _ServedServer(backend)
     seed = _message(DHCPMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
-    assert server.acquire_lease(_client_id(seed), IPv4("10.0.0.1"), seed) is not None
+    assert backend.allocate(_client_id(seed), IPv4("10.0.0.50"), 3600) is not None
     before = backend.lookup(_client_id(seed))
     assert before is not None
 

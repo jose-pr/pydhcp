@@ -85,13 +85,15 @@ def test_inform_can_customize_options_without_allocating_address() -> None:
 
     transport = Mock()
     server = InformOnlyServer()
-    server.handle(_message(DHCPMessageType.DHCPINFORM), _context(transport))
+    inform = _message(DHCPMessageType.DHCPINFORM)
+    inform.ciaddr = IPv4("127.0.0.1")  # the sender's own address (RFC 2131 s4.4.3)
+    server.handle(inform, _context(transport))
 
     data, dest = transport.send.call_args.args
     port = transport.send.call_args.kwargs["port"]
     _ = transport.send.call_args.kwargs["client_mac"]
     response = DHCPMessage.decode(data)
-    assert dest == IPv4("255.255.255.255")
+    assert dest == IPv4("127.0.0.1")  # RFC 2131 s4.3.5: straight to ciaddr
     assert port == 68
     assert response.yiaddr == IPv4("0.0.0.0")
     assert response.options.get(DHCPOptionCode.DNS) == [IPv4("9.9.9.9")]
@@ -368,17 +370,46 @@ def test_a_client_that_sends_no_request_list_is_told_everything() -> None:
 # --- RFC 2131 4.3.2 / 4.3.5: INIT-REBOOT silence and DHCPINFORM ---
 
 
-def test_init_reboot_from_an_unknown_client_is_answered_with_silence() -> None:
-    """RFC 2131 4.3.2: with no record of the client the server MUST remain
+def test_init_reboot_from_an_unknown_client_is_answered_with_silence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """RFC 2131 s4.3.2: with no record of the client the server MUST remain
     silent. Answering makes it a rogue server for clients that belong to another
-    server on the same segment."""
+    server on the same segment. The record is what the stock `acquire_lease`
+    finds: it allocates nothing for a REQUEST."""
+    monkeypatch.setattr(
+        "pydhcp.server._policy._servable_interface",
+        lambda _ip: NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
+    )
     msg = _message(DHCPMessageType.DHCPREQUEST)
     msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.99")  # no server id
     transport = Mock()
+    server = DHCPServer()
 
-    _NakServer().handle(msg, _context(transport))
+    server.handle(msg, _lan_context(transport))
 
     transport.send.assert_not_called()
+    assert server.lease_backend.lookup(msg.get_client_id()) is None
+
+
+def test_init_reboot_is_answered_from_what_acquire_lease_knows() -> None:
+    """RFC 2131 s4.3.2, with "the record" being what `acquire_lease` returns: a
+    server that answers through it alone ACKs the address it holds for the client
+    and NAKs another, with nothing in the lease backend."""
+    server = _NakServer()  # holds 10.0.0.10 for every client
+    for requested, expected in (
+        ("10.0.0.10", DHCPMessageType.DHCPACK),
+        ("10.0.0.99", DHCPMessageType.DHCPNAK),
+    ):
+        msg = _message(DHCPMessageType.DHCPREQUEST)
+        msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4(requested)  # no server id
+        transport = Mock()
+
+        server.handle(msg, _context(transport))
+
+        reply, _dest, _port = _sent(transport)
+        assert reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == expected
+    assert server.lease_backend.lookup(msg.get_client_id()) is None
 
 
 def test_init_reboot_from_a_known_client_is_answered() -> None:
@@ -409,7 +440,7 @@ def test_inform_does_not_create_a_lease() -> None:
 
     server = AllocatingServer()
     msg = _message(DHCPMessageType.DHCPINFORM)
-    msg.ciaddr = IPv4("10.0.0.77")
+    msg.ciaddr = IPv4("127.0.0.1")
     transport = Mock()
 
     server.handle(msg, _context(transport))
@@ -435,7 +466,7 @@ def test_inform_uses_the_documented_allocation_free_hook() -> None:
 
     server = InformServer()
     msg = _message(DHCPMessageType.DHCPINFORM)
-    msg.ciaddr = IPv4("10.0.0.77")
+    msg.ciaddr = IPv4("127.0.0.1")
     server.lease_backend.allocate(msg.get_client_id(), IPv4("10.0.0.10"), 3600)
     transport = Mock()
 

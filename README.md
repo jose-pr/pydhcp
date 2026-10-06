@@ -46,8 +46,9 @@ Closed is final. The library installs no signal handler: the `pydhcp` commands
 turn Ctrl-C into `shutdown()`, and an application that wants the same catches
 `KeyboardInterrupt` around `serve_forever()`.
 
-The built-in server intentionally keeps allocation policy small. It renews existing leases
-and responds to client-requested addresses, while applications can subclass `DHCPServer`
+The built-in server intentionally keeps allocation policy small. It offers the address a
+client asks for in its DISCOVER (holding it for `OFFER_HOLD_SECONDS`, two minutes, until the
+client's REQUEST commits it) and renews existing leases, while applications can subclass `DHCPServer`
 or provide a custom lease backend for pools, reservations, and site-specific options.
 
 You can also bind explicit endpoints or multiple ports when you do not want wildcard behavior.

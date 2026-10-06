@@ -297,7 +297,7 @@ def test_an_inform_is_answered_from_options_and_builds_no_lease(
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPINFORM
-    reply = _reply(Inform(), build_request(options=options))
+    reply = _reply(Inform(), build_request(options=options, ciaddr=IPv4("127.0.0.1")))
     assert reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == (
         DHCPMessageType.DHCPACK
     )
