@@ -13,6 +13,7 @@ import pytest
 
 EXPECTED_ROOT = [
     "AsyncDHCPCapture",
+    "AsyncDHCPClient",
     "AsyncDHCPListener",
     "AsyncDHCPRelay",
     "AsyncDHCPServer",
@@ -213,7 +214,7 @@ EXPECTED_OPTIONS = sorted(
     ]
 )
 
-EXPECTED_CLIENT = ["DHCPClient"]
+EXPECTED_CLIENT = ["AsyncDHCPClient", "DHCPClient"]
 
 EXPECTED_RELAY = [
     "AsyncDHCPRelay",

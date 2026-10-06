@@ -7,7 +7,7 @@ project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 private `_network` package and the `options` and `packet` subpackages have
 their own headers (they ship as `pydhcp/{_network,options,packet}/AGENTS.md`).
 
-**What the root holds** (`pydhcp.__all__`, 52 names, `__version__` among them:
+**What the root holds** (`pydhcp.__all__`, 53 names, `__version__` among them:
 the installed distribution's version, read from its metadata): the main
 classes of each role (`DHCPServer`, `DHCPClient`, `DHCPRelay`, `DHCPCapture`
 and their async twins, the listeners and transports), `DHCPMessage` and the
@@ -380,11 +380,14 @@ A test that patches a module global patches it in the private module that reads 
   `DHCPServer`, running on `AsyncDHCPListener`: `async with`, `await .aclose()`,
   `await .serve_forever()` and `.shutdown()` as there, and no `with` or `.close()`.
 
-## Client (`client.py`)
+## Client (`client/`)
 
 - **`DHCPClient(listen=None, *, poll_interval=None, max_packet_size=None,
   per_interface=None, reuse_address=None, receive_buffer_size=None)`** (`DHCPListener` subclass) — packet-level client for
-  tests/troubleshooting; does **not** configure OS network interfaces.
+  tests/troubleshooting; does **not** configure OS network interfaces. The
+  message builders, the reply matching and the retransmission schedule are one
+  private core (`client/_core.py`) shared with the asyncio client; `DHCPClient`
+  adds the socket, the receive thread and the blocking waits.
   - The five builders construct a message without sending it. `chaddr` is
     required positional bytes and `xid` defaults to a random 32-bit value on
     all five, but **the rest of the signature differs per message type** — they
@@ -461,11 +464,37 @@ A test that patches a module global patches it in the private module that reads 
     capped at the current delay, so a sub-second `timeout` in a test cannot be
     jittered negative.
 
+- **`AsyncDHCPClient(listen=None, *, max_packet_size=None, per_interface=None,
+  reuse_address=None, receive_buffer_size=None)`** (`AsyncDHCPListener`
+  subclass, **not** a subclass of `DHCPClient`) — the same client on an event
+  loop, over the same core: the same builders, matching, schedule and defaults.
+  - Lifecycle as on the other asyncio classes: `await .start()` /
+    `await .serve_forever()`, `.shutdown()`, `await .wait_closed(timeout=None)`,
+    `await .aclose()`, `async with` (which binds, and does not serve).
+  - `await .send(message, destination=..., port=...) -> int`,
+    `await .discover_offer(chaddr, *, ...) -> DHCPMessage | None` and
+    `await .dora(chaddr, *, ...) -> DHCPMessage | None` take the keywords of
+    the synchronous methods and return what they return. `send` works before
+    serving starts (it binds); an exchange needs the receive tasks running or it
+    times out. `await .next_reply(timeout=None)` waits for a queued reply and
+    returns `None` on timeout; `.drain_replies()` is not a coroutine, it never
+    waits.
+  - **Cancelling an exchange abandons it**: its transaction stops being
+    accepted and nothing stays behind. Any number of exchanges may be pending on
+    one client at once, each on its own `(xid, chaddr)`.
+  - **`handle()` and `.on_reply()` run on the event loop**, not on a worker
+    thread (the client has none): `.on_reply()` must not block. A server's hooks
+    run on the handler thread; this is the one asyncio role whose hook does not.
+  - Waiting is on loop-owned queues, one per exchange, with the same bound
+    (`MAX_QUEUED_REPLIES`) and the same oldest-first discard as the synchronous
+    client; the receive path is the listener's `arecv` loop, so netimps' rule of
+    one awaiting receive per endpoint holds.
+
 **Gotcha**: `.dora()`/`.discover_offer()` require the listener's receive loop
 to actually be running (`client.start()`, and `client.close()` when done) —
 replies only reach the internal queue via `.handle()`, which the background
-thread calls. A `DHCPClient` that's never started will always time out waiting
-for a reply.
+thread calls (the asyncio client's receive tasks, after `await start()`). A
+client that is never started will always time out waiting for a reply.
 
 ## Relay (`relay/`)
 

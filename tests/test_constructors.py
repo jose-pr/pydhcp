@@ -9,7 +9,7 @@ import typing as _ty
 
 import pytest
 
-from pydhcp import DHCPClient
+from pydhcp import AsyncDHCPClient, DHCPClient
 from pydhcp.capture import AsyncDHCPCapture, DHCPCapture
 from pydhcp.lease import FileLeaseBackend
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
@@ -27,6 +27,7 @@ POSITIONAL = {
     DHCPCapture: 1,
     AsyncDHCPCapture: 1,
     DHCPClient: 1,
+    AsyncDHCPClient: 1,
     FileLeaseBackend: 1,
 }
 LISTENERS = [cls for cls in POSITIONAL if cls is not FileLeaseBackend]

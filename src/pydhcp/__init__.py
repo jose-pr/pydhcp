@@ -54,7 +54,7 @@ from ._network import (
     NetworkInterface as NetworkInterface,
 )
 from .server import DHCPServer as DHCPServer, AsyncDHCPServer as AsyncDHCPServer
-from .client import DHCPClient as DHCPClient
+from .client import AsyncDHCPClient as AsyncDHCPClient, DHCPClient as DHCPClient
 from .relay import DHCPRelay as DHCPRelay, AsyncDHCPRelay as AsyncDHCPRelay
 from .capture import (
     CaptureEvent as CaptureEvent,
@@ -114,6 +114,7 @@ __all__ = [
     "DHCPServer",
     "AsyncDHCPServer",
     "DHCPClient",
+    "AsyncDHCPClient",
     "DHCPRelay",
     "AsyncDHCPRelay",
     "CaptureEvent",

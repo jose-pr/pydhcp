@@ -43,11 +43,6 @@ _LONG_MODULES = {
         "the standard option-code registry: one enum member per IANA code, each "
         "carrying the RFC text that defines it in its docstring"
     ),
-    "client.py": (
-        "one class, `DHCPClient`: the five message builders and the "
-        "discover/offer/request/ack exchange share its socket and queue state, "
-        "and docstrings are most of the lines past the limit"
-    ),
 }
 
 

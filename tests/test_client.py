@@ -140,7 +140,7 @@ def test_client_send_uses_bound_udp_transport(monkeypatch) -> None:
     client._sockets.append(socket)  # type: ignore[arg-type]
     transport = Mock()
     transport.send.return_value = 300
-    monkeypatch.setattr("pydhcp.client.UDPTransport", lambda sock: transport)
+    monkeypatch.setattr("pydhcp.client._sync.UDPTransport", lambda sock: transport)
 
     message = client.build_discover(CHADDR, xid=0xCAFEBABE)
 

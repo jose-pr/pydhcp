@@ -14,9 +14,11 @@ import pytest
 import pydhcp
 from pydhcp import (
     AsyncDHCPCapture,
+    AsyncDHCPClient,
     AsyncDHCPRelay,
     AsyncDHCPServer,
     DHCPCapture,
+    DHCPClient,
     DHCPRelay,
     DHCPServer,
 )
@@ -34,6 +36,7 @@ CORE_MODULES = [
     "relay/_core.py",
     "capture/_core.py",
     "capture/_events.py",
+    "client/_core.py",
 ]
 
 #: Calls that read a clock or wait on one.
@@ -106,6 +109,7 @@ def test_a_role_core_imports_no_driver(relative: str) -> None:
         (DHCPServer, AsyncDHCPServer),
         (DHCPRelay, AsyncDHCPRelay),
         (DHCPCapture, AsyncDHCPCapture),
+        (DHCPClient, AsyncDHCPClient),
     ],
 )
 def test_no_asyncio_role_is_a_subclass_of_a_synchronous_one(
@@ -122,9 +126,9 @@ def test_no_asyncio_role_is_a_subclass_of_a_synchronous_one(
 
 def test_no_role_class_carries_a_type_ignore_for_its_bases() -> None:
     offenders = []
-    roles = [SRC / "client.py"] + [
+    roles = [
         path
-        for package in ("capture", "listener", "relay", "server")
+        for package in ("capture", "client", "listener", "relay", "server")
         for path in (SRC / package).rglob("*.py")
     ]
     for path in roles:

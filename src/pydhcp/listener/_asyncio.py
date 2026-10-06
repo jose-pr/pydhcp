@@ -30,6 +30,11 @@ class AsyncDHCPListener(_ListenerCore):
     #: dropped.
     MAX_QUEUED_DATAGRAMS: int = 1024
 
+    #: Whether `handle()` runs on the one worker thread (a handler may block) or
+    #: on the event loop, where it must not. A role whose handler only moves a
+    #: reply into a loop-owned queue sets this to false and has no worker thread.
+    _HANDLE_ON_WORKER: bool = True
+
     #: Seconds between reports of dropped datagrams. A flood reaches the
     #: bound once per datagram, so logging each hands the sender the log.
     BACKLOG_LOG_INTERVAL_SECONDS: float = 60.0
@@ -145,7 +150,7 @@ class AsyncDHCPListener(_ListenerCore):
         `BACKLOG_LOG_INTERVAL_SECONDS`.
         """
         worker = self._worker
-        if worker is None:  # not started through start(); keep working anyway
+        if worker is None:  # on the loop: not started, or `_HANDLE_ON_WORKER` is off
             self._handle_datagram(data, client, sock, ifindex, local_ip)
             return
         with self._pending_lock:
@@ -213,7 +218,7 @@ class AsyncDHCPListener(_ListenerCore):
         if self._serving:
             raise RuntimeError(f"{type(self).__name__} is already serving")
         loop = _asyncio.get_running_loop()
-        if self._worker is None:
+        if self._worker is None and self._HANDLE_ON_WORKER:
             self._worker = _futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="pydhcp-async-handler"
             )
