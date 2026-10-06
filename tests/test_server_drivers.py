@@ -20,7 +20,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from conftest import CHADDR, build_request, running
+from conftest import CHADDR, build_request
+from driving import WAIT_SECONDS, driver_params, serve
 from pydhcp import (
     AsyncDHCPServer,
     DHCPLease,
@@ -37,12 +38,6 @@ from pydhcp.server._core import _ServerCore
 
 IPv4 = ipaddress.IPv4Address
 LOOPBACK = IPv4("127.0.0.1")
-WAIT_SECONDS = 3.0
-
-if sys.platform == "win32":
-    LOOPS = [asyncio.ProactorEventLoop, asyncio.SelectorEventLoop]  # type: ignore[attr-defined]
-else:
-    LOOPS = [asyncio.SelectorEventLoop]
 
 
 def test_the_drivers_are_siblings_over_one_core() -> None:
@@ -193,55 +188,7 @@ def _wait_for_calls(server: _ty.Any, expected: "set[str]") -> None:
     raise AssertionError(f"hooks never called: {missing}; saw {server.calls}")
 
 
-def _threads_settle(before: int) -> None:
-    deadline = time.monotonic() + WAIT_SECONDS
-    while threading.active_count() > before and time.monotonic() < deadline:
-        time.sleep(0.01)
-    assert threading.active_count() <= before, (
-        f"{threading.active_count() - before} thread(s) outlived the server: "
-        f"{[t.name for t in threading.enumerate()]}"
-    )
-
-
-def _serve(server: _ty.Any, exercise: _ty.Callable[[int], _ty.Any], loop_type: type):
-    """Run `exercise(port)` against `server` on its own driver; count what leaks."""
-    server.calls = []
-    threads_before = threading.active_count()
-    if isinstance(server, AsyncDHCPServer):
-
-        async def main() -> _ty.Any:
-            tasks_before = len(asyncio.all_tasks())
-            await server.start()
-            try:
-                port = server.bound_addresses[0].port
-                return await asyncio.get_event_loop().run_in_executor(
-                    None, exercise, port
-                )
-            finally:
-                server.stop()
-                await asyncio.wait_for(server.wait(), WAIT_SECONDS)
-                await asyncio.sleep(0)
-                assert len(asyncio.all_tasks()) <= tasks_before + 1, "a task leaked"
-
-        loop = loop_type()
-        try:
-            result = loop.run_until_complete(main())
-        finally:
-            loop.close()
-    else:
-        with running(server) as started:
-            result = exercise(started.bound_addresses[0].port)
-    _threads_settle(threads_before)
-    return result
-
-
-DRIVERS = [
-    pytest.param(_RecordingSync, None, id="sync"),
-    *[
-        pytest.param(_RecordingAsync, loop, id=f"async-{loop.__name__}")
-        for loop in LOOPS
-    ],
-]
+DRIVERS = driver_params(_RecordingSync, _RecordingAsync)
 
 
 @pytest.mark.parametrize("server_class, loop_type", DRIVERS)
@@ -249,6 +196,7 @@ def test_each_override_point_is_the_subclass_method_on_the_handler_thread(
     server_class: type, loop_type: _ty.Optional[type]
 ) -> None:
     server = server_class(listen=("127.0.0.1", 0))
+    server.calls = []
     server_id = LOOPBACK
 
     def exercise(port: int) -> "list[DHCPMessage]":
@@ -290,7 +238,7 @@ def test_each_override_point_is_the_subclass_method_on_the_handler_thread(
         )
         return replies
 
-    replies = _serve(server, exercise, loop_type or asyncio.SelectorEventLoop)
+    replies = serve(server, exercise, loop_type)
     kinds = [r.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) for r in replies]
     assert kinds == [
         DHCPMessageType.DHCPOFFER,
@@ -306,19 +254,13 @@ def test_each_override_point_is_the_subclass_method_on_the_handler_thread(
 
 
 @pytest.mark.parametrize(
-    "server_class, loop_type",
-    [
-        pytest.param(_BaseAllocationSync, None, id="sync"),
-        *[
-            pytest.param(_BaseAllocationAsync, loop, id=f"async-{loop.__name__}")
-            for loop in LOOPS
-        ],
-    ],
+    "server_class, loop_type", driver_params(_BaseAllocationSync, _BaseAllocationAsync)
 )
 def test_the_lease_policy_hook_is_called_by_the_base_allocator(
     server_class: type, loop_type: _ty.Optional[type]
 ) -> None:
     server = server_class(listen=("127.0.0.1", 0))
+    server.calls = []
 
     def exercise(port: int) -> None:
         _exchange(
@@ -328,7 +270,7 @@ def test_the_lease_policy_hook_is_called_by_the_base_allocator(
         )
         _wait_for_calls(server, {"lease_seconds"})
 
-    _serve(server, exercise, loop_type or asyncio.SelectorEventLoop)
+    serve(server, exercise, loop_type)
     assert server.metrics.leases_allocated == 1
 
 

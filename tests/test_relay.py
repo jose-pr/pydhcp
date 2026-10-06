@@ -510,7 +510,8 @@ def test_reply_is_pinned_to_the_interface_the_request_arrived_on(relay_class):
     from pydhcp.listener import PktInfoUDPTransport
 
     # the pending-client record is relay state, not exported
-    from pydhcp.relay import PendingClient
+    # `PendingClient` is not public; it is the record the pending table holds.
+    from pydhcp.relay._core import PendingClient
 
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     arrived_on_server_side = PktInfoUDPTransport(Mock())

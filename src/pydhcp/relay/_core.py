@@ -1,33 +1,30 @@
+"""The relay's rules: what to forward, to whom, and how a reply finds its client.
+
+No socket, thread or clock lives here. A listener driver (`_sync`, `_asyncio`)
+receives a datagram, stamps the context with the time it arrived and calls
+`handle()`; what the relay sends leaves through the transport the context
+carries.
+"""
+
 from __future__ import annotations
 
 import ipaddress as _ipaddress
 import logging as _logging
-import time as _time
 import typing as _ty
 
-from .packet._message import DHCPMessage
-from .listener._asyncio import AsyncDHCPListener as _AsyncBase
-from .listener._sync import DHCPListener as _Base
-from .listener._spec import ListenSpec
-from .listener._transport import (
+from .._clock import _Timed
+from .._metrics import DHCPMetrics
+from ..packet._message import DHCPMessage
+from ..listener._transport import (
     PktInfoUDPTransport as _PktInfoUDPTransport,
     DHCPTransport as _DHCPTransport,
     UDPTransport as _UDPTransport,
 )
-from .listener._receive import DHCPRequestContext
-from . import _constants as _const, _network as _net
-from .packet import _enums as _enum
-from .options._codes import DHCPOptionCode
-from .options import _codecs as _type
-from .listener._receive import _is_loopback
-
-__all__ = [
-    "AsyncDHCPRelay",
-    "DEFAULT_MAX_HOPS",
-    "DHCPRelay",
-    "RFC1542_MAX_HOPS",
-    "ServerAddress",
-]
+from ..listener._receive import DHCPRequestContext, _is_loopback
+from .. import _constants as _const, _network as _net
+from ..packet import _enums as _enum
+from ..options._codes import DHCPOptionCode
+from ..options import _codecs as _type
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -90,8 +87,8 @@ def _normalize_server_address(
         ) from None
 
 
-class DHCPRelay(_Base):
-    """RFC 1542 / RFC 2131 4.1 / RFC 3046 DHCP relay agent.
+class _RelayCore(_Timed):
+    """RFC 1542 / RFC 2131 4.1 / RFC 3046 DHCP relay agent, without its I/O.
 
     Forwards client broadcasts (received on port 67, same as a server) to one or
     more configured upstream DHCP servers, stamping `giaddr` and incrementing
@@ -107,7 +104,10 @@ class DHCPRelay(_Base):
     well-known client port 68, which is where a real client listens.
     """
 
-    DEFAULT_PORTS = (_enum.DHCPPort.SERVER,)
+    metrics: DHCPMetrics
+    _max_packet_size: int
+
+    DEFAULT_PORTS: _ty.Sequence[int] = (_enum.DHCPPort.SERVER,)
 
     #: Upper bound on in-flight `xid -> client address` entries.
     MAX_PENDING_CLIENTS = 1024
@@ -117,34 +117,6 @@ class DHCPRelay(_Base):
     #: popped on the first reply, because several configured servers each send
     #: one and they all go to the same client.
     PENDING_TTL_SECONDS = 60.0
-
-    def __init__(
-        self,
-        listen: ListenSpec = None,
-        server_addresses: _ty.Sequence[ServerAddress] = (),
-        max_hops: int = DEFAULT_MAX_HOPS,
-        insert_relay_agent_info: bool = False,
-        circuit_id: _ty.Optional[bytes] = None,
-        remote_id: _ty.Optional[bytes] = None,
-        trust_client_relay_agent_info: bool = False,
-        select_timeout: _ty.Optional[float] = None,
-        max_packet_size: _ty.Optional[int] = None,
-        per_interface: _ty.Optional[bool] = None,
-    ) -> None:
-        super().__init__(
-            listen=listen,
-            select_timeout=select_timeout,
-            max_packet_size=max_packet_size,
-            per_interface=per_interface,
-        )
-        self._init_relay_state(
-            server_addresses,
-            max_hops=max_hops,
-            insert_relay_agent_info=insert_relay_agent_info,
-            circuit_id=circuit_id,
-            remote_id=remote_id,
-            trust_client_relay_agent_info=trust_client_relay_agent_info,
-        )
 
     def _init_relay_state(
         self,
@@ -156,13 +128,10 @@ class DHCPRelay(_Base):
         remote_id: _ty.Optional[bytes] = None,
         trust_client_relay_agent_info: bool = False,
     ) -> None:
-        """Set up the state and validation every relay variant needs.
+        """Set up the state and validation every relay driver needs.
 
-        `AsyncDHCPRelay` cannot call this class's `__init__` (its own base takes
-        a different argument set), so without this it would have to re-implement
-        the body -- which is precisely how `AsyncDHCPServer` came to be missing
-        `_declined`, and how a `max_hops` range check would end up enforced on
-        one relay and not the other.
+        Each driver's constructor takes its own listener arguments and calls
+        this for the rest, so the two cannot drift apart.
         """
         if not server_addresses:
             raise ValueError("DHCPRelay requires at least one server address")
@@ -341,7 +310,7 @@ class DHCPRelay(_Base):
         address: that takeover is what this tracking has to survive.
         """
         key = self._pending_key(msg)
-        now = _time.monotonic()
+        now = self._instant(context).monotonic
         existing = self._pending_clients.get(key)
         if (
             existing is not None
@@ -359,15 +328,18 @@ class DHCPRelay(_Base):
         self._pending_clients.move_to_end(key)
         self._expire_pending(now)
 
-    def _lookup_pending(self, msg: DHCPMessage) -> _ty.Optional[PendingClient]:
+    def _lookup_pending(
+        self, msg: DHCPMessage, now: float
+    ) -> _ty.Optional[PendingClient]:
         """Find where this reply goes, leaving the entry for any further ones.
 
         Popping on the first reply meant that with more than one server
         configured, the second server's reply had lost the tracked port and fell
         back to 68 -- so which reply reached the client depended on which server
         answered first.
+
+        `now` is `time.monotonic()` seconds, the clock the table is kept on.
         """
-        now = _time.monotonic()
         self._expire_pending(now)
         return self._pending_clients.get(self._pending_key(msg))
 
@@ -393,7 +365,7 @@ class DHCPRelay(_Base):
             self.metrics.packets_dropped_untrusted += 1
             return
 
-        pending = self._lookup_pending(msg)
+        pending = self._lookup_pending(msg, self._instant(context).monotonic)
         client_port = (
             pending.client.port if pending is not None else int(_enum.DHCPPort.CLIENT)
         )
@@ -434,58 +406,3 @@ class DHCPRelay(_Base):
             data, dest, client_port, msg.chaddr
         )
         self.metrics.packets_sent += 1
-
-
-class AsyncDHCPRelay(_AsyncBase, DHCPRelay):  # type: ignore[misc]
-    """`DHCPRelay`'s forwarding policy on the asyncio listener.
-
-    Mixed the way `AsyncDHCPServer` is, and for the same reason: every line of
-    the receive path -- `_pktinfo_supported`, `_arrival`,
-    `_context_for`, `_bind_sockets` -- stays in `listener.py` where both
-    listeners reach it. The async half of this project has been written as a
-    *copy* once already, and a hardcoded `_pktinfo = False` then left it
-    receiving nothing at all on Linux while passing every unit test.
-
-    `_pending_clients` is unguarded, exactly as on `DHCPRelay`. What keeps it
-    safe here is that `AsyncDHCPListener` runs handlers on a single worker
-    thread, so `handle()` is still serialised and in arrival order.
-    """
-
-    #: Read off the sync class rather than repeated: `AsyncDHCPListener`'s
-    #: all-ports default comes first in the MRO and would otherwise win, so a
-    #: relay would also bind the client port 68.
-    DEFAULT_PORTS = DHCPRelay.DEFAULT_PORTS
-
-    def __init__(
-        self,
-        listen: ListenSpec = None,
-        server_addresses: _ty.Sequence[ServerAddress] = (),
-        max_hops: int = DEFAULT_MAX_HOPS,
-        insert_relay_agent_info: bool = False,
-        circuit_id: _ty.Optional[bytes] = None,
-        remote_id: _ty.Optional[bytes] = None,
-        trust_client_relay_agent_info: bool = False,
-        max_packet_size: _ty.Optional[int] = None,
-        per_interface: _ty.Optional[bool] = None,
-        max_queued: _ty.Optional[int] = None,
-    ) -> None:
-        _AsyncBase.__init__(
-            self,
-            listen=listen,
-            max_packet_size=max_packet_size,
-            per_interface=per_interface,
-            max_queued=max_queued,
-        )
-        self._init_relay_state(
-            server_addresses,
-            max_hops=max_hops,
-            insert_relay_agent_info=insert_relay_agent_info,
-            circuit_id=circuit_id,
-            remote_id=remote_id,
-            trust_client_relay_agent_info=trust_client_relay_agent_info,
-        )
-
-    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        # Both bases define handle() and AsyncDHCPListener's no-op comes first
-        # in the MRO; without this the relay would receive and forward nothing.
-        DHCPRelay.handle(self, msg, context)

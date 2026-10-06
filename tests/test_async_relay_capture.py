@@ -121,21 +121,28 @@ _RECEIVE_PATH = (
     "AsyncDHCPListener._close_endpoints",
 )
 
+#: The module holding each async class, and the module holding the core whose
+#: policy it inherits rather than restates.
+_CORE_MODULE = {
+    "relay/_asyncio.py": "relay/_core.py",
+    "capture.py": "capture.py",
+}
+
 #: The policy each async class inherits rather than restates.
 _POLICY = {
-    "relay.py": (
-        "DHCPRelay.handle",
-        "DHCPRelay._forward_to_servers",
-        "DHCPRelay._forward_to_client",
-        "DHCPRelay._init_relay_state",
-        "DHCPRelay._record_pending",
-        "DHCPRelay._lookup_pending",
-        "DHCPRelay._expire_pending",
-        "DHCPRelay._client_transport",
-        "DHCPRelay._routed_transport",
-        "DHCPRelay._encode_for_forward",
-        "DHCPRelay._insert_relay_agent_info",
-        "DHCPRelay._pending_key",
+    "relay/_asyncio.py": (
+        "_RelayCore.handle",
+        "_RelayCore._forward_to_servers",
+        "_RelayCore._forward_to_client",
+        "_RelayCore._init_relay_state",
+        "_RelayCore._record_pending",
+        "_RelayCore._lookup_pending",
+        "_RelayCore._expire_pending",
+        "_RelayCore._client_transport",
+        "_RelayCore._routed_transport",
+        "_RelayCore._encode_for_forward",
+        "_RelayCore._insert_relay_agent_info",
+        "_RelayCore._pending_key",
     ),
     "capture.py": (
         "DHCPCapture.handle",
@@ -160,7 +167,7 @@ def _shared_corpus(module: str) -> "set[str]":
     corpus: set[str] = set()
     for path in _RECEIVE_PATH:
         corpus |= _listener_code(path)
-    tree, lines = _module(module)
+    tree, lines = _module(_CORE_MODULE[module])
     for path in _POLICY[module]:
         corpus |= _code_lines(_node(tree, path), lines)
     return corpus
@@ -168,7 +175,7 @@ def _shared_corpus(module: str) -> "set[str]":
 
 @pytest.mark.parametrize(
     "module, async_class",
-    [("relay.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
+    [("relay/_asyncio.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
 )
 def test_the_async_class_copies_no_receive_path_or_policy_line(
     module: str, async_class: str
@@ -187,7 +194,7 @@ def test_the_async_class_copies_no_receive_path_or_policy_line(
 
 @pytest.mark.parametrize(
     "module, async_class",
-    [("relay.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
+    [("relay/_asyncio.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
 )
 def test_the_async_class_never_names_a_receive_path_helper(
     module: str, async_class: str
@@ -210,7 +217,7 @@ def test_the_async_class_never_names_a_receive_path_helper(
 @pytest.mark.parametrize(
     "module, async_class, state_init",
     [
-        ("relay.py", "AsyncDHCPRelay", "_init_relay_state"),
+        ("relay/_asyncio.py", "AsyncDHCPRelay", "_init_relay_state"),
         ("capture.py", "AsyncDHCPCapture", "_init_capture_state"),
     ],
 )
@@ -231,7 +238,9 @@ def test_the_async_class_is_only_a_constructor_and_a_handle(
         for n in node.body
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
-    assert methods == ["__init__", "handle"], methods
+    assert methods == (
+        ["__init__", "handle"] if module == "capture.py" else ["__init__"]
+    ), methods
 
     init = _ty.cast(ast.FunctionDef, _node(tree, f"{async_class}.__init__"))
     called = [

@@ -46,6 +46,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `handle_decline`, `handle_release`, `handle_inform`, `acquire_lease`,
   `release_lease`, `get_inform_options` and `lease_seconds`; each is an ordinary
   blocking method that runs on the one handler thread of either driver.
+- **Breaking: `AsyncDHCPRelay` is no longer a subclass of `DHCPRelay`.** Same
+  split as the server: one private core holds the forwarding rules, the
+  pending-client table and the hop and relay-agent-information checks, and the two
+  relays are sibling drivers over it. `isinstance(relay, DHCPRelay)` is false for
+  an asynchronous relay, which has lost the synchronous listener's `with`,
+  `close()` and `start(cancellation_token)` as the asynchronous server did. The
+  pending table ages on the monotonic time stamped on each context, and
+  `pydhcp.relay` is now a package (same import path and names; `PendingClient`
+  is private); the relay's records are logged by `pydhcp.relay._core`.
 - **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
   are gone** (they exported nothing); the layers are private modules of
   `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.

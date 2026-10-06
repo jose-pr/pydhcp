@@ -429,11 +429,12 @@ to actually be running (`client.start()`) — replies only reach the internal
 queue via `.handle()`, which the background thread calls. A `DHCPClient`
 that's never started will always time out waiting for a reply.
 
-## Relay (`relay.py`)
+## Relay (`relay/`)
 
 - **`DHCPRelay(listen=None, server_addresses=(), max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
-  select_timeout=None, max_packet_size=None, per_interface=None)`**
+  trust_client_relay_agent_info=False, select_timeout=None,
+  max_packet_size=None, per_interface=None)`**
   (`DHCPListener` subclass) — RFC 1542 / RFC 2131 §4.1 / RFC 3046 relay
   agent. `server_addresses` is required and non-empty (each entry an `IPv4`,
   a string, or a `(host, port)` tuple; bare entries default to port 67) —
@@ -453,13 +454,13 @@ that's never started will always time out waiting for a reply.
 - **`AsyncDHCPRelay(listen=None, server_addresses=(), max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
   trust_client_relay_agent_info=False, max_packet_size=None,
-  per_interface=None, max_queued=None)`** — the same forwarding policy running on
-  `AsyncDHCPListener`, the way `AsyncDHCPServer` relates to `DHCPServer`.
-  `isinstance(x, DHCPRelay)` holds. Identical arguments minus `select_timeout`
-  (the sync receive loop's poll interval, which asyncio has no use for), and
-  both constructors share `_init_relay_state()`, so the `server_addresses` and
-  `max_hops` validation cannot be enforced on one and not the other. Drive it
-  with `await .start()` / `await .wait()` / `.stop()`.
+  per_interface=None, max_queued=None)`** — the same forwarding rules running on
+  `AsyncDHCPListener`: a sibling of `DHCPRelay` over one private core, the way
+  `AsyncDHCPServer` relates to `DHCPServer`. Identical arguments minus
+  `select_timeout` (the sync receive loop's poll interval, which asyncio has no
+  use for), and both constructors share the core's state setup, so the
+  `server_addresses` and `max_hops` validation cannot be enforced on one and not
+  the other. Drive it with `await .start()` / `await .wait()` / `.stop()`.
   - `_pending_clients` is unguarded on both. What keeps it safe here is that
     `AsyncDHCPListener` runs handlers on **one** worker thread, so `handle()`
     is still serialised and in arrival order — the same guarantee the lease
