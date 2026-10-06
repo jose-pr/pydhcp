@@ -446,4 +446,6 @@ def test_a_socket_that_fails_to_close_is_logged_not_swallowed(caplog) -> None:
     endpoints = {}
     with caplog.at_level(logging.DEBUG, logger="pydhcp.listener._binding"):
         _close_socket(Stubborn(), endpoints)  # type: ignore[arg-type]
-    assert any("Closing a listening socket failed" in r.getMessage() for r in caplog.records)
+    assert any(
+        "Closing a listening socket failed" in r.getMessage() for r in caplog.records
+    )
