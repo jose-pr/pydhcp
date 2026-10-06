@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import HealthCheck, assume, event, given, settings, strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 
 from ipaddress import IPv4Address as IPv4
 
@@ -300,16 +300,37 @@ def _messages(draw) -> DHCPMessage:
 _OPTIONS_FIELD = 308
 
 
-def _needs_a_field_moved(message: DHCPMessage) -> bool:
-    """Whether the options only fit by moving an occupied `sname` or `file`.
+def _octets(length: int) -> int:
+    """What an option of `length` payload octets takes whole: each instance of
+    up to 255 octets has its own code and length octet (RFC 3396 section 6)."""
+    return length + 2 * max(1, -(-length // 255))
 
-    Counted from the wire form of the bag alone, never from `encode`: the
-    options overflow the options field, so the only room is in `sname` and
-    `file`, and an occupied one has to travel as option 66 or 67 first.
+
+def _cannot_be_laid_out(message: DHCPMessage) -> bool:
+    """Whether, by arithmetic, no way of overloading is certain to hold the message.
+
+    A layout that writes the options in order and splits the one crossing the end
+    of a field loses at most 2 octets at each of the two boundaries between
+    fields (a split costs one more instance, 2 octets, and a field with 1 or 2
+    octets left takes nothing) and 2 at the end of the last (an empty option
+    needs 3 octets of room there), so overloading holds the message whenever its
+    demand and 6 octets fit its room. Room is each field less its END. Demand is
+    every option whole, option 52, and each occupied name moved into option 66
+    or 67 for a field that carries options.
     """
-    return len(message.options.encode()) > _OPTIONS_FIELD and bool(
-        message.sname or message.file
-    )
+    base = sum(_octets(len(v)) for _, v in message.options.items(decoded=False))
+    sname, file = len(message.sname.encode()), len(message.file.encode())
+    for sname_field in (False, True):
+        for file_field in (False, True):
+            if not (sname_field or file_field):
+                continue
+            demand = base + 3
+            demand += (2 + sname) if sname_field and sname else 0
+            demand += (2 + file) if file_field and file else 0
+            room = 307 + (63 if sname_field else 0) + (127 if file_field else 0)
+            if demand + 6 <= room:
+                return False
+    return True
 
 
 def _tlv(code: int, payload: bytes) -> bytes:
@@ -384,43 +405,45 @@ def test_the_overload_example_fits_in_a_default_size_datagram() -> None:
     } == _PACKED_OPTIONS
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=OverflowError,
-    reason="encode lays the options out in order and does not search for a packing "
-    "that places a relocated name in the field with room for it",
-)
 def test_an_example_that_needs_both_fields_packed_tightly_encodes() -> None:
     message = _packed_example()
-    restored = DHCPMessage.decode(message.encode())
+    encoded = message.encode()
+    assert len(encoded) <= 548
+    restored = DHCPMessage.decode(encoded)
     assert restored.sname == _SNAME
     assert restored.file == _FILE
+    assert {
+        int(c): bytes(v) for c, v in restored.options.items(decoded=False)
+    } == _PACKED_OPTIONS
 
 
 @given(_messages())
 def test_dhcp_message_round_trip(message: DHCPMessage) -> None:
-    """A whole packet survives `encode()` -> `decode()` -> `encode()`.
+    """A whole packet survives `encode()` -> `decode()`.
 
-    Nothing in this module reached the message layer, so the fixed header, the
-    magic cookie, the `hlen` trim of `chaddr` and the NUL padding of
-    `sname`/`file` had no property coverage at all -- only the handful of
-    hand-written examples in test_message.py.
+    The fixed header, the magic cookie, the `hlen` trim of `chaddr`, the NUL
+    padding of `sname` and `file` and the placing of options in the three fields
+    that can hold them are all in the path. A message is refused only when the
+    arithmetic above says no overload is certain to hold it.
     """
-    # A message that overflows the options field and carries an occupied name
-    # is laid out only by a packing search `encode` does not do; the example
-    # above pins that case on its own, and the count shows how often it is drawn.
-    moved = _needs_a_field_moved(message)
-    event(f"needs an occupied field moved: {moved}")
-    assume(not moved)
-    encoded = message.encode()
+    try:
+        encoded = message.encode()
+    except OverflowError:
+        assert _cannot_be_laid_out(message)
+        return
     restored = DHCPMessage.decode(encoded)
 
     # The decoded view of every header field and every option.
     assert restored.to_mapping() == message.to_mapping()
-    # The raw option payloads, which `to_mapping` may render as hex.
-    assert list(restored.options.items(decoded=False)) == list(
-        message.options.items(decoded=False)
-    )
-    # And byte-for-byte idempotence: a decode that lost a field the mapping
-    # does not render would still show up here.
-    assert bytes(restored.encode()) == bytes(encoded)
+    # The raw option payloads: a mapping, so the order an overloaded message
+    # spreads them over three fields does not count.
+    assert {int(c): bytes(v) for c, v in restored.options.items(decoded=False)} == {
+        int(c): bytes(v) for c, v in message.options.items(decoded=False)
+    }
+    if len(message.options.encode()) <= _OPTIONS_FIELD:
+        # One field: the order is kept, and a decode loses nothing the mapping
+        # does not render -- the octets come back the same.
+        assert list(restored.options.items(decoded=False)) == list(
+            message.options.items(decoded=False)
+        )
+        assert bytes(restored.encode()) == bytes(encoded)

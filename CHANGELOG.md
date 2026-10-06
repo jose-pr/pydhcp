@@ -459,6 +459,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   realm built by hand is still upper-cased. A `DomainList` encoded past 16,383
   octets writes a name in full where a compression pointer could not reach the
   suffix it shares, and a summary names an unnamed hardware type `HTYPE_<n>`.
+- **`DHCPMessage.encode` lays the options out in one pass.** It no longer copies the
+  option bag and encodes it twice for a message that fits the options field, and
+  the overload layouts are tried only when it does not. A message that fits
+  encodes to the same octets as before, and so does one that needed `sname` or
+  `file` and fitted when the options were written in order (the recorded
+  conversations re-encode unchanged); `parse.encode_reply`, a twelve-option ACK,
+  joins `parse.encode_packet` in the benchmark suite.
+- **A message the encoder used to refuse now encodes when a layout exists.**
+  - A decoded message whose option 66 or 67 is longer than its field (a UEFI
+    HTTP boot URL in option 67, say) encodes again, and so does one with a
+    `sname` or `file` set that long: the name travels as option 66 or 67, the
+    field it would have filled carries options, and `decode` reads it back.
+  - A message whose options fit the three fields only with each option placed
+    whole (the round-trip property test's saved example needs 494 octets of 497)
+    encodes: when writing the options in order does not hold them, each is
+    placed in the field with room for it. Option 53 and then option 52 lead the
+    options field, then a relocated option 66 and 67, and every field keeps the
+    order the options were set in.
+- **`encode` at the smallest sizes.** `max_packetsize` is a datagram, so a message
+  is padded to 300 octets or to `max_packetsize - 28`, whichever is smaller:
+  `encode(280)` is 252 octets, where it was 280 and its datagram 308. Option 52
+  stays in the options field, so a receiver learns that `sname` holds options; a
+  message that cannot hold options 53 and 52 (a datagram under 275) is refused.
+  Between 269 and 271 an option that does not fit raises the `OverflowError` the
+  documentation names, where it raised a `ValueError` about a word size.
+- **A refusal names what did not fit.** The `OverflowError` says which option did
+  not fit and by how many octets the room is short. A `sname` or `file` that must
+  travel as option 66 or 67 while that option holds other octets raises
+  `DHCPValueError` naming both, where the name was dropped without a word.
+- **`encode` writes `SUBNET_MASK` before `ROUTER`** when both are set, whatever the
+  order they were set in (RFC 2132 section 3.3).
 - **Codecs refuse on write what the wire cannot hold, and name it.** A `TLVOption`
   (relay agent and encapsulated sub-options) with a code outside 0 to 255 or a
   value over 255 octets, and a `PCPServerList` entry of more than 63 addresses,

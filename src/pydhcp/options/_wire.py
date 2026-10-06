@@ -65,3 +65,32 @@ def partial_encode(
 
     field.extend(endbytes)
     return field, extra
+
+
+def option_octets(length: int) -> int:
+    """The octets an option of `length` payload octets takes whole: its instances.
+
+    Each instance carries at most 255 octets and its own code and length
+    octets (RFC 3396 section 6); an empty option is one instance.
+    """
+    return length + 2 * max(1, -(-length // 255))
+
+
+def write_items(
+    field: bytearray,
+    items: _ty.Iterable[tuple[int, _ty.Union[bytes, bytearray]]],
+) -> None:
+    """Append each `(code, payload)` whole to `field`, END not included."""
+    for code, payload in items:
+        length = len(payload)
+        if length <= 255:
+            field.append(code)
+            field.append(length)
+            field.extend(payload)
+            continue
+        view = memoryview(payload)
+        for start in range(0, length, 255):
+            chunk = view[start : start + 255]
+            field.append(code)
+            field.append(len(chunk))
+            field.extend(chunk)

@@ -358,8 +358,9 @@ def test_encoded_messages_meet_the_bootp_minimum():
     big = _discover_with(200, b"X" * 200)
     assert len(bytes(big.encode())) > 300
 
-    # And padding never exceeds an explicit limit below the minimum.
-    assert len(bytes(message.encode(280))) == 280
+    # And padding never exceeds an explicit limit below the minimum: the limit
+    # is the datagram, so the message is 28 octets (IPv4 and UDP) shorter.
+    assert len(bytes(message.encode(280))) == 280 - 28
 
 
 def test_min_legal_size_is_the_rfc2131_capability_floor():
@@ -515,39 +516,41 @@ def test_encode_refuses_a_size_it_cannot_honour_instead_of_substituting_576():
         assert "269" in str(excinfo.value), "the error must name the real floor"
         assert str(refused) in str(excinfo.value), "and the value it was given"
 
-    # No argument still means 576, and every size from the floor up that used to
-    # work still does -- including the sub-576 ones.
+    # No argument still means 576, and every size the options fit in still
+    # works, the sub-576 ones included. Below 275 the options field cannot hold
+    # option 53 and the overload option, and from 275 to 277 `sname` carries the
+    # server identifier; each of those is a datagram that fits its limit.
     assert len(bytes(message.encode())) == 300
-    for accepted in (272, 280, 299, 300, 312, 548, 575, 576, 1500):
-        assert len(bytes(message.encode(accepted))) <= accepted
+    for accepted in (275, 277, 278, 280, 299, 300, 312, 548, 575, 576, 1500):
+        assert len(bytes(message.encode(accepted))) <= accepted - 28
+    for too_small in (272, 273, 274):
+        with pytest.raises(OverflowError, match="did not fit"):
+            message.encode(too_small)
 
 
-def test_over_long_sname_and_file_are_refused_rather_than_truncated():
-    """Silent truncation is worse than the struct.error it sits next to.
+def test_over_long_sname_and_file_are_carried_rather_than_truncated():
+    """Silent truncation is worse than any refusal.
 
     `file` is the PXE boot filename: a truncated one sends the client to a TFTP
-    path that does not exist and nothing in the exchange says why. Measured
-    2026-09-20: a 100-character sname and a 200-character file both encoded
-    "successfully" at 300 octets, carrying only the first 64 and 128 octets.
+    path that does not exist and nothing in the exchange says why. A name too
+    long for its fixed field travels as option 66 or 67 (RFC 2132 s9.4, s9.5)
+    and is read back whole; `chaddr` has no such option and is refused.
     """
     message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
 
     message.sname = "s" * 65
-    with pytest.raises(ValueError, match="sname"):
-        message.encode()
+    assert DHCPMessage.decode(message.encode()).sname == "s" * 65
 
-    message.sname = "s" * 64  # exact fit still encodes
+    message.sname = "s" * 64  # exact fit stays in its field
     assert bytes(message.encode())[44:108] == b"s" * 64
 
     # Octets, not characters: a 33-character Latin-1 name is 66 octets.
-    message.sname = "é" * 33
-    with pytest.raises(ValueError, match="sname"):
-        message.encode()
+    message.sname = "\u00e9" * 33
+    assert DHCPMessage.decode(message.encode()).sname == "\u00e9" * 33
 
     message.sname = ""
     message.file = "f" * 129
-    with pytest.raises(ValueError, match="file"):
-        message.encode()
+    assert DHCPMessage.decode(message.encode()).file == "f" * 129
 
     message.file = "f" * 128
     assert bytes(message.encode())[108:236] == b"f" * 128

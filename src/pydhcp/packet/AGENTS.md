@@ -68,34 +68,53 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       plus the END octet), **including an explicit `0`** — it is not
       rewritten to the default. 576 is *not* a lower bound here: RFC 2132
       §9.10's minimum constrains the client's option 57, which `DHCPServer`
-      clamps on receipt, and `encode(280)` is a legitimate call. Carrying
-      any option at all needs 272.
+      clamps on receipt, and `encode(280)` is a legitimate call. Option 53
+      alone needs 272, and any overload 275 (the options field then holds
+      options 53 and 52).
     - **`DHCPValueError`** naming the field if `hops` (0–255), `hlen` (0–**16**,
       matching `.decode()`, since `chaddr` is a 16-octet field) or `xid`
       (0–2³²−1) is out of range — previously a bare `struct.error`, which
       names the format character rather than the field and is neither
       `ValueError` nor `TypeError`. `secs` is **clamped** to 0–65535 rather
       than rejected: it is elapsed time the client reports.
-    - **`DHCPValueError`** naming the field if `sname` (>64 octets encoded),
-      `file` (>128) or `chaddr` (>16) does not fit — these were **silently
-      truncated**, and a truncated `file` is a PXE boot filename that points
-      nowhere. Values the encoder legitimately *moves* into options 66/67
-      when overloading are unaffected; the check is on what is packed.
-    - **`OverflowError`** if options still don't fit after RFC 3396 overload
-      packing into `file`/`sname`.
-    - **Overload choice:** each option is *tried*, cheapest first, and the
-      first that packs completely is used — no overload; then overloading
-      fields that are empty (`sname`, then `file`, then both); then moving an
-      occupied `sname`/`file` into option 66/67. An occupied field is never
-      relocated when an empty one would do, since a PXE client reads the fixed
-      field more reliably than the option.
+    - **`DHCPValueError`** naming the field if `chaddr` (>16 octets) does not
+      fit; a value is never truncated.
+    - **`OverflowError`** if the options do not fit even with `sname` and `file`
+      carrying options. The message names the option that did not fit and the
+      shortfall: `option 119 (DOMAIN_SEARCH) did not fit; the options need 612
+      octets and the options, file and sname fields hold 497 besides each END,
+      115 octets short`. A message within 6 octets of that limit may be
+      refused although a split layout exists. A **`DHCPValueError`** instead
+      when a name has no way to travel: `sname` or `file` must move into option
+      66 or 67 and that option already holds other octets (the name is never
+      dropped).
+    - **A name too long for its field** (a decoded option 66 or 67 longer than
+      64 or 128 octets, or one set that long) is carried as option 66 or 67,
+      and the field it would have filled carries options, so `decode` reads it
+      back into `sname` or `file`.
+    - **Overload choice:** the layouts are *tried*, cheapest first, and the
+      first that holds everything is used — no overload, in one pass; then
+      overloading fields that are empty (`sname`, then `file`, then both);
+      then moving an occupied `sname`/`file` into option 66/67. An occupied
+      field is never relocated when an empty one would do, since a PXE client
+      reads the fixed field more reliably than the option. Each layout first
+      writes the options in order, splitting the one that crosses the end of a
+      field into instances of its code (RFC 3396); when no layout holds them
+      that way, each option is kept whole and placed in the field with room
+      for it (an exact search over the three fields, linear in the number of
+      options), so a message that fits only that way still encodes; the
+      layout written first that holds the message is the one used.
 
     `DHCP_MESSAGE_TYPE` is always the **first** TLV after the magic cookie,
-    overloading or not (and ahead of `OPTION_OVERLOAD`) — RFC 2131 §3 has
-    receivers read option 53 before parsing the rest. The result is padded
-    with PAD octets (after END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC
-    1542 §2.1 lets a relay agent require — never past a `max_packetsize`
-    smaller than that.
+    overloading or not, then `OPTION_OVERLOAD` when the message overloads, then a
+    relocated option 66 and 67 — RFC 2131 §3 has receivers read option 53 before
+    parsing the rest. `SUBNET_MASK` is written before `ROUTER` when both are set
+    (RFC 2132 §3.3), and every other option in the order it was set; within each
+    field of an overloaded message that order holds. Option 52 is decided here,
+    never carried over from a decoded message. The result is padded with PAD
+    octets (after END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC 1542 §2.1 lets
+    a relay agent require — never past `max_packetsize` less the 28 octets of
+    IPv4 and UDP header.
   - **`.to_mapping() -> dict[str, Any]`** / **`DHCPMessage.from_mapping(data:
     Mapping[str, Any]) -> DHCPMessage`** — structured round-trip to/from a
     plain dict. Option keys are the option's label when it has one, else its
