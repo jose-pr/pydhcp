@@ -36,6 +36,10 @@ class DHCPOptionType:
     def __json__(self) -> _ty.Any:
         return self
 
+    def _display_text(self) -> str:
+        """The text the message display and the capture formats show for this value."""
+        return repr(self)
+
     @classmethod
     def _dhcp_len_hint(cls) -> _ty.Optional[int]:
         return None
@@ -66,6 +70,26 @@ class DHCPOptionType:
                 "the payload carries trailing data the codec does not account for"
             )
         return decoded
+
+
+def display_of(value: _ty.Any) -> str:
+    """The display text of `value`, a codec value or one of the plain items inside one.
+
+    A list codec reads as a bracketed list of its items' texts; the message
+    display prints a decoded list one item per line instead (`option_text`).
+    """
+    if isinstance(value, list):
+        return "[" + ", ".join(display_of(item) for item in value) + "]"
+    if isinstance(value, DHCPOptionType):
+        return value._display_text()
+    return repr(value)
+
+
+def option_text(value: _ty.Any) -> str:
+    """The text the message display shows for a decoded option, one line per list item."""
+    if isinstance(value, list):
+        return "\n".join(display_of(item) for item in value)
+    return display_of(value)
 
 
 _T = _ty.TypeVar("_T", bound=DHCPOptionType)

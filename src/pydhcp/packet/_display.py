@@ -10,6 +10,7 @@ from .. import _nvt as _nvt
 from ..exceptions import NoClientIdentityError
 from ..options._codes import BaseDHCPOptionCode, DHCPOptionCode
 from ..options import _codecs as _type
+from ..options._codecs._base import option_text as _option_text
 from ._mapping import _MessageMapping
 
 if _ty.TYPE_CHECKING:
@@ -87,10 +88,7 @@ class _MessageDisplay(_MessageMapping):
             except Exception:
                 code = _code  # type: ignore[assignment]
                 opt_val = _type.Bytes(_raw)
-            if isinstance(opt_val, list):
-                decoded_str = "\n".join([repr(i) for i in opt_val])
-            else:
-                decoded_str = repr(opt_val)
+            decoded_str = _option_text(opt_val)
             decoded_lines = decoded_str.splitlines()
             SPACE = " " * 42
             if decoded_lines:
