@@ -7,12 +7,12 @@ header ships beside this one as `pydhcp/AGENTS.md`; for the project overview
 see <https://github.com/jose-pr/pydhcp>. That file is the
 top-level package header.
 
-## Message (`message.py`)
+## Message (`_message.py`)
 
 `DHCPMessage` is defined in layers, each a private module of `pydhcp.packet`
 subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
 `_encode`, `_mapping` and `_display`. Import `DHCPMessage` from
-`pydhcp.packet._message` (or `pydhcp.packet`) as before;
+`pydhcp.packet`;
 `decode`/`from_mapping` are typed to return the class they are called on.
 
 - **`DHCPMessage`** (dataclass) — the full DHCPv4 wire message. Fields:
@@ -122,7 +122,7 @@ used to hard-code `DHCPMessage(...)` while `from_mapping` already used `cls`.
 The annotation still says `-> DHCPMessage` on both; tightening them to `Self`
 is a separate typing decision.
 
-## Enums (`enums.py`)
+## Enums (`_enums.py`)
 
 - **`DHCPMessageType`** (`IntEnum` + `DHCPOptionType` codec) —
   `DHCPDISCOVER`..`DHCPTLS` (1–18); registered as the codec for
@@ -133,8 +133,8 @@ is a separate typing decision.
 - **`HardwareAddressType`** (`IntEnum`) — **defined in `pydhcp._network`** and
   re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
   the spelling to use for the `htype` header field. It lives one layer down
-  because `pydhcp.options._codecs` needs it too and this module imports
-  `pydhcp.options._codecs`. See `pydhcp/network/AGENTS.md` for the full entry.
+  because the option codecs need it too and this module imports them. See
+  `pydhcp/_network/AGENTS.md` for the full entry.
 
 ## Structured (de)serialization (`structured.py`)
 

@@ -1,10 +1,11 @@
-# `pydhcp._network` — public API header
+# `pydhcp._network` — header
 
 Header-file-style reference for `pydhcp._network`: pydhcp's own address and
 interface types. Nothing here is an alias of a `netimps` or `ipaddress` object:
 those are imported from `netimps` and `ipaddress`. `SocketAddress` and
-`NetworkInterface` are also re-exported from the top-level `pydhcp` package. The top-level package header ships beside this
-one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
+`NetworkInterface` are re-exported from the top-level `pydhcp` package, and
+`HardwareAddressType` from `pydhcp.packet`; the package itself is private. The
+top-level package header ships beside this one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
 of the installed package).
 
@@ -22,9 +23,9 @@ of the installed package).
     `repr(address)`.
   - Also re-exported as `pydhcp.packet.HardwareAddressType`, which is where
     the rest of the message-header enums live and the spelling most code
-    uses. It is *defined* here because `pydhcp.options._codecs` needs it to name a
-    client identifier's type octet and `pydhcp.packet._enums` imports
-    `pydhcp.options._codecs` — defining it there made that a cycle.
+    uses. It is *defined* here because the option codecs need it to name a client
+    identifier's type octet and `pydhcp.packet` imports the codecs — defining
+    it there made that a cycle.
 - **`SocketAddress(ip, port=None)`** (`NamedTuple[ip: IPv4Address, port: int]`) —
   `ip` may be a `str`, an `ipaddress.IPv4Address`, or a bound `socket.socket`
   (reads `getsockname()`, in which case `port` must be omitted); passing a

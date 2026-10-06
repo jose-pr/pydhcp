@@ -4,15 +4,15 @@ Header-file-style reference for the top-level `pydhcp` package: every
 `pydhcp/__init__.py` export with its signature, arguments, contract, and
 gotchas, so this module can be consumed without reading its source. For the
 project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
-`network`, `options`, and `packet` subpackages have their own headers
-(they ship as `pydhcp/{network,options,packet}/AGENTS.md`).
+private `_network` package and the `options` and `packet` subpackages have
+their own headers (they ship as `pydhcp/{_network,options,packet}/AGENTS.md`).
 
 **`pydhcp/__init__.py` re-exports much of those subpackages, but not all of
 them** — the previous wording said "everything", and 17 documented or
 subpackage names are not importable from `pydhcp`, among them `DHCPMetrics`,
 `ListenSpec`, `load_config`, `main`, `DHCPMessageType`, `DHCPPort`, `DHCPFlags`,
 `HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_V4`
-(the last now lives in `pydhcp._constants`).
+(the last is `pydhcp._constants.WILDCARD_V4`, in a private module).
 `from pydhcp import DHCPMessage` works; `from pydhcp import DHCPMessageType`
 does not. Import from the owning module when a name is not in `__all__`
 (83 names today, `__version__` among them: the installed distribution's
@@ -23,8 +23,8 @@ version, read from its metadata).
 not re-exported here. They are option **codecs** and a bare name would not say
 so; the address codec is `IPv4AddressOption` so that the bare name
 `IPv4Address` is only ever the address type, and `isinstance(interface.ip,
-pydhcp.options._codecs.IPv4AddressOption)` is **False**. Import them from
-**`pydhcp.options._codecs`**, which is where they have always lived. The stdlib
+pydhcp.options.IPv4AddressOption)` is **False**. Import them from
+**`pydhcp.options`**. The stdlib
 address type is **`pydhcp.IPv4`**.
 
 The other codecs stay re-exported, including `U8`/`U16`/`U32` and the
@@ -52,9 +52,9 @@ A caller's own mistake (a wrong argument type, a bad option code, a bad
 
 ## Listener / transport (`listener/`)
 
-A package split by responsibility (`transport`, `spec`, `interfaces`,
-`receive`, `binding`, `sync`, `aio`); import everything below from
-`pydhcp.listener` itself, as before.
+A package split by responsibility into private modules (`_transport`,
+`_spec`, `_interfaces`, `_receive`, `_binding`, `_sync`, `_asyncio`); import
+everything below from `pydhcp.listener` itself.
 
 
 - **`DHCPListener(listen=None, select_timeout=None, max_packet_size=None,
@@ -621,7 +621,7 @@ IPv6-only interface can break at runtime.
     crash — which an operator cannot see going wrong — for throughput they
     can already measure and that `MAX_LEASES` already bounds.
 
-## Metrics (`metrics.py`)
+## Metrics (`_metrics.py`)
 
 - **`DHCPMetrics()`** — plain counters, one instance per listener/server/
   client/relay/capture (`self.metrics`), never a module-level singleton.
@@ -644,9 +644,10 @@ IPv6-only interface can break at runtime.
     shutdowns. `releases_ignored` counts releases refused for naming an address
     the client does not hold.
 
-## Constants (`constants.py`)
+## Constants (`_constants.py`)
 
-Not re-exported from the top-level package — import from `pydhcp._constants`.
+Not importable from a public module: they live in the private
+`pydhcp._constants`.
 
 - **`WILDCARD_V4`** — `IPv4Address("0.0.0.0")`: the "every address" bind target, and
   the source of a client that has none yet. netimps has no such constant.
@@ -667,7 +668,7 @@ Not re-exported from the top-level package — import from `pydhcp._constants`.
   `max_packet_size`.
 - **`INFINITE_LEASE_TIME`** (`0xFFFFFFFF`) — RFC 2131's "infinite" lease.
 
-## NVT text (`nvt.py`)
+## NVT text (`_nvt.py`)
 
 The fields RFC 2131/2132 call NVT ASCII — `sname`, `file`, and the `String`
 options — carry other encodings in practice. Three helpers keep such a value
@@ -688,7 +689,7 @@ lossless on the wire and safe on a screen; use them rather than calling
 fails at write time. Anything rendering one must call `display()` first —
 `DHCPMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
 
-## Logging (`log.py`)
+## Logging (`_log.py`)
 
 - **`LOGGER`** — the package logger, `logging.getLogger("pydhcp")`. Every
   module logs through its own `getLogger(__name__)` child, so an embedder can
@@ -700,7 +701,7 @@ fails at write time. Anything rendering one must call `display()` first —
   and a `NullHandler` counts as a handler, so those lines go silent instead.
   Configure a handler to see them. The CLI is unaffected — it installs its own.
 
-## Config loading (`config.py`)
+## Config loading (`_config.py`)
 
 - **`load_config(filepath: str) -> dict[str, Any]`** — dispatches on the
   file extension: `.ini` (via `configparser`, one dict per section), `.yaml`/
@@ -711,9 +712,9 @@ fails at write time. Anything rendering one must call `display()` first —
 ## CLI (`cli/`)
 
 A package: `App` and `main()` are in `pydhcp.cli` itself, and each subcommand
-has its own module (`cli.interfaces`, `cli.server`, `cli.relay`, `cli.packet`,
-`cli.capture`, with `cli.capture_hook` for `--hook` loading and `cli._common`
-for the shared base). `from pydhcp.cli import ...` works for every name as
+has its own private module (`cli._interfaces`, `cli._server`, `cli._relay`,
+`cli._packet`, `cli._capture`, with `cli._capture_hook` for `--hook` loading and
+`cli._common` for the shared base). `from pydhcp.cli import ...` works for every name as
 before; patch a name where the command module looks it up
 (`pydhcp.cli._server.DHCPServer`, not `pydhcp.cli.DHCPServer`).
 

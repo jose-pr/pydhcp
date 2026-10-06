@@ -1,6 +1,6 @@
 """The lazy option-type registry: load ordering, retry, and who wins.
 
-`DHCPOptionCode.ensure_registered()` imports `options/registry.py` the first
+`DHCPOptionCode.ensure_registered()` imports `options/_registry.py` the first
 time a codec is looked up. The three properties pinned here are the ones the
 obvious implementation does not have, and all three were measured failing:
 
@@ -84,7 +84,7 @@ def test_a_failed_registry_import_is_retried(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_the_loaded_flag_is_not_published_while_the_registry_runs() -> None:
-    """Nothing may observe "loaded" until `registry.py` has finished.
+    """Nothing may observe "loaded" until `_registry.py` has finished.
 
     This is the race, made deterministic: every `register_type` call the
     registry makes is a moment when another thread could be inside
@@ -111,7 +111,7 @@ def test_the_loaded_flag_is_not_published_while_the_registry_runs() -> None:
         """)
     count, published_early, loaded_after = out.split()
     assert int(count) > 100, "the registry did not run: nothing was registered"
-    assert published_early == "False", "the flag was visible while registry.py ran"
+    assert published_early == "False", "the flag was visible while _registry.py ran"
     assert loaded_after == "True", "the flag was never set"
 
 
@@ -121,7 +121,7 @@ def test_a_registration_made_before_the_lazy_load_survives_it() -> None:
     `register_type` wrote straight into `_CODEMAP`. A caller who registered
     before anything triggered the lazy load therefore had their codec undone
     by it: the built-in `List[IPv4AddressOption]` was written over their class by
-    `registry.py` the moment the first `get_type()` fired, with no error and
+    `_registry.py` the moment the first `get_type()` fired, with no error and
     no warning. Registering the built-ins first makes the caller's write the
     later one.
     """

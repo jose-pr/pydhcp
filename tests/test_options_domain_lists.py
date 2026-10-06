@@ -125,7 +125,7 @@ def test_an_uncompressed_list_round_trips_the_root_name() -> None:
 
 
 def test_an_uncompressed_list_obeys_the_shared_name_limits() -> None:
-    """It routes through `type/domain.py`, so the 63/255 limits apply."""
+    """It routes through `_codecs/_domain.py`, so the 63/255 limits apply."""
     with pytest.raises(ValueError, match="63 octets"):
         UncompressedDomainList(["a" * 64 + ".example.com"])._dhcp_encode()
     with pytest.raises(ValueError, match="255 octets"):

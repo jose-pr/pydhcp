@@ -98,6 +98,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   like the limited broadcast (no local address is taken from it); only the limited
   broadcast and multicast were before.
 
+- **Breaking: every module that is not an import path of its own is private.**
+  `pydhcp.log`, `.config`, `.constants`, `.metrics`, `.nvt` and `.network` are
+  `pydhcp._log`, `._config`, `._constants`, `._metrics`, `._nvt` and `._network`;
+  `pydhcp.packet.enums` and `.message` are `pydhcp.packet._enums` and `._message`;
+  `pydhcp.options.code`, `.registry` and `.type` are `pydhcp.options._codes`,
+  `._registry` and `._codecs` (and `options/base.py` joined `_codes.py`), each codec
+  module under it with a leading underscore; the `pydhcp.listener` modules (`sync`,
+  `aio`, `binding`, `interfaces`, `receive`, `spec`, `transport`) are `_sync`,
+  `_asyncio`, `_binding`, `_interfaces`, `_receive`, `_spec` and `_transport`; the
+  `pydhcp.cli` command modules are `_capture`, `_capture_hook`, `_interfaces`,
+  `_packet`, `_relay` and `_server`. `pydhcp._utils` is split into `_generic` and
+  `_missing`. No module is left behind to re-export from its old path. Import a name
+  from `pydhcp`, `pydhcp.packet`, `pydhcp.options`, `pydhcp.listener` or the other
+  public modules; `pydhcp.log.LOGGER` is `logging.getLogger("pydhcp")`.
+- **A module's logger is named for its module,** so the records of a moved module
+  change name: `pydhcp.log`, `pydhcp.config` and `pydhcp.metrics` become
+  `pydhcp._log`, `pydhcp._config` and `pydhcp._metrics`, `pydhcp.listener.binding`
+  and the other listener modules `pydhcp.listener._binding` and so on, and
+  `pydhcp.cli.capture_hook` and the other command modules `pydhcp.cli._capture_hook`
+  and so on. A `--loglevel` or a filter naming one of them follows; one naming
+  `pydhcp` or `pydhcp.listener` is unaffected.
+
 ### Renamed
 
 **Breaking.** Every public class name spells its acronyms in capitals, and the

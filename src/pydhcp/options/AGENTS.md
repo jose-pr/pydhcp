@@ -2,10 +2,11 @@
 
 Header-file-style reference for `pydhcp.options`: the DHCP options
 container, the option-code registry, and the option payload codecs
-(`pydhcp.options._codecs`). Most exports are also re-exported from the top-level
+(private modules under `pydhcp.options._codecs`, exported from `pydhcp.options`).
+Most exports are also re-exported from the top-level
 `pydhcp` package -- **except `IPv4AddressOption`, `List`, `Bytes`, `String` and
 `Boolean`**, whose bare names did not say they were codecs; import those from
-`pydhcp.options._codecs`. The top-level package header ships beside this
+`pydhcp.options`. The top-level package header ships beside this
 one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
 of the installed package).
@@ -83,7 +84,7 @@ of the installed package).
   "default is `None`" lives in `pydhcp._generic`, not in `pydhcp._constants` — it
   is a Python idiom rather than a DHCP constant, and it is private.
 
-## Option codes (`code.py`, `base.py`)
+## Option codes (`_codes.py`)
 
 - **`DHCPOptionCode`** (`IntEnum` + `BaseDHCPOptionCode`) — the standard
   IANA option-code registry (`PAD`=0 … `END`=255 and everything in
@@ -93,17 +94,17 @@ of the installed package).
   type[DHCPOptionType]) -> None` binds a codec to a specific member;
   `.get_type() -> type[DHCPOptionType]` resolves it (calling
   `.ensure_registered()` first). `DHCPOptionCode.ensure_registered()` lazily
-  imports `options/registry.py`, which calls `.register_type(...)` for every
+  imports `options/_registry.py`, which calls `.register_type(...)` for every
   standard option — this runs automatically the first time a `DHCPOptions`
   keyed by `DHCPOptionCode` is constructed or a lookup is made, so
   application code never needs to call it directly. Unregistered codes
-  (`PAD`, `END`, and any code without a `registry.py` entry) fall back to
+  (`PAD`, `END`, and any code without a `_registry.py` entry) fall back to
   `Bytes` (opaque).
   **`.register_type()` loads the built-in registry first**, so *your*
   registration is always the later write and survives the lazy load —
   registering before anything triggered it used to be silently undone by it.
   The load is serialized and the "loaded" flag is published only once
-  `registry.py` has finished, so a concurrent `get_type()` never sees the
+  `_registry.py` has finished, so a concurrent `get_type()` never sees the
   `Bytes` placeholder for a code being registered, and an import that
   *raises* is retried on the next call instead of being remembered as done.
 - **`BaseDHCPOptionCode`** — protocol/base for a custom code enum:
@@ -130,7 +131,7 @@ automatic. Option 125 is enterprise-number records, not generic TLVs. The
 `DHCPOptionCode.SIXRD` is IANA option 212 (`OPTION_6RD`); `GRD` is an alias member
 of it, so `DHCPOptionCode(212).name` is `SIXRD`.
 
-## Option payload codecs (`pydhcp.options._codecs`)
+## Option payload codecs (`pydhcp.options`)
 
 Every codec implements the `DHCPOptionType` protocol: `_dhcp_read(option:
 memoryview) -> tuple[Self, int]` (classmethod decode + bytes consumed),
@@ -163,7 +164,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   ints, used for `PARAMETER_REQUEST_LIST`-style options; falls back to a
   plain `int` (≤255) when the code type can't construct the item.
 
-### Scalars (`scalar.py`)
+### Scalars (`_scalar.py`)
 
 - **`Bytes(src=None)`** — opaque byte payload; `src` a `str` (hex),
   bytes-like, or `None`. The default codec fallback for unregistered codes.
@@ -199,11 +200,11 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 - **`OptionOverload`** (`IntFlag`) — `NONE`/`FILE`/`SNAME`/`BOTH`; RFC 3396
   overload selector, single octet.
 
-### Network types (`addresses.py`, `domains.py`, `fqdn.py`, `servers.py`)
+### Network types (`_addresses.py`, `_domains.py`, `_fqdn.py`, `_servers.py`)
 
 Split by family: addresses and routes, domain-name lists and single names, the
 client FQDN, and server-locator/status codecs. Import every one of them from
-`pydhcp.options._codecs`.
+`pydhcp.options`.
 
 - **`IPv4AddressOption`** (`ipaddress.IPv4Address` subclass) — single 4-byte IPv4
   address.
@@ -240,7 +241,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   half a pointer, without a root label or a whole pointer is **discarded**
   (RFC 3397 §3) and the names before it are kept.
 - **`UncompressedDomainList`** (`DomainList` subclass) — the same container,
-  encoding through the shared `type/domain.py` name encoder so it never
+  encoding through the shared `_codecs/_domain.py` name encoder so it never
   emits a compression pointer. Registered for `BCMCS_DOMAIN_NAME_LIST` (88)
   and used for `RDNSSSelection.domains` (146), whose RFCs forbid
   compression: RFC 4280 §4.6 ("DNS name compression MUST NOT be used") and
@@ -286,7 +287,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   address list read that octet as address data. `PCPServerList(["192.0.2.1"])`
   is accepted as one entry.
 
-### Vendor / TLV containers (`vendor.py`)
+### Vendor / TLV containers (`_vendor.py`)
 
 - **`UserClass`** — RFC 3004 list of opaque length-prefixed byte entries;
   zero-length entries are rejected on both encode and decode. **Opt-in:**
@@ -311,7 +312,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   vendor-identifying vendor class (enterprise-number-keyed data / its list
   container).
 
-### Domain names (`type/domain.py`)
+### Domain names (`_codecs/_domain.py`)
 
 Internal, but the single source of truth for every option carrying an RFC 1035
 name — options 81, 120, 122, 139/140, 88/146 (via
@@ -331,7 +332,7 @@ it. `MAX_LABEL_OCTETS` (63) and `MAX_NAME_OCTETS` (255) are the limits.
 This module deliberately imports nothing from the package, so every codec
 carrying a name can reach it with no import-order constraint.
 
-### MoS records (`mos.py`, RFC 5678)
+### MoS records (`_mos.py`, RFC 5678)
 
 - **`MoSIPv4AddressRecord`** / **`MoSIPv4AddressList`** — Mobility Services
   IPv4-address record and its list container, shared by
@@ -340,7 +341,7 @@ carrying a name can reach it with no import-order constraint.
   (non-compressed domain labels) and its list container, shared by
   `IPV4_FQDN_MOS`.
 
-### CCC sub-options (`type/ccc.py`, RFC 3495 CableLabs Client Configuration)
+### CCC sub-options (`_codecs/_ccc.py`, RFC 3495 CableLabs Client Configuration)
 
 - **`CCCOption`** — the TLV sub-option container for **option 122**
   (RFC 3495). It is *not* "option-125-style": option 125 carries

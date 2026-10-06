@@ -762,7 +762,7 @@ def test_name_service_search_is_a_list_of_option_codes():
     assert options.get(DHCPOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
 
 
-# --- The shared uncompressed-name helpers (options/type/domain.py) ---
+# --- The shared uncompressed-name helpers (options/_codecs/_domain.py) ---
 #
 # These lived in three copies that had drifted: only one rejected a compression
 # pointer, only one enforced RFC 1035's 255-octet name limit. The same malformed

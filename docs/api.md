@@ -4,7 +4,7 @@ This section provides references for the primary classes in the `pydhcp` package
 
 ## DHCPMessage
 
-::: pydhcp.packet._message.DHCPMessage
+::: pydhcp.packet.DHCPMessage
     options:
       # Defined in layers in pydhcp.packet (fields, decode, encode, mapping,
       # display); without this the page would show nothing inherited.
@@ -116,9 +116,13 @@ instance — counters are per-instance, not global, so running multiple listener
 
 ::: pydhcp.packet
 
-## pydhcp._network
+## SocketAddress
 
-::: pydhcp._network
+::: pydhcp.SocketAddress
+
+## NetworkInterface
+
+::: pydhcp.NetworkInterface
 
 ## pydhcp.lease
 

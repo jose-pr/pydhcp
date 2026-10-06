@@ -11,7 +11,7 @@ option it arrived in.
 This module deliberately imports nothing from the package, so every codec that
 carries a name can reach it with no ordering constraint. It was written that way
 because `options.type` and `options.ccc` imported each other and worked only by
-statement order; that cycle is gone -- `ccc` is now `options/type/ccc.py` and
+statement order; that cycle is gone -- `ccc` is now `options/_codecs/_ccc.py` and
 imports its siblings directly -- and keeping this a leaf keeps it from coming back.
 """
 
@@ -34,7 +34,7 @@ def split_domain_name(
     """Validate `name` and return its labels.
 
     Split out from `encode_domain_name` because the compressed encoder in
-    `options.type.domains` cannot share the *encoding* -- it emits pointers, which
+    `options._codecs._domains` cannot share the *encoding* -- it emits pointers, which
     is a different algorithm -- but must share the *rules*. It did not, and so
     accepted labels longer than a length octet can express: the length prefix it
     then wrote set the compression-pointer flag bits, producing wire bytes its

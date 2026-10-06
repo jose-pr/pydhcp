@@ -97,13 +97,13 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
 
     @classmethod
     def ensure_registered(cls) -> None:
-        """Import `registry.py` once, and only report success once it is done.
+        """Import `_registry.py` once, and only report success once it is done.
 
         The flag is set **after** the import, under a lock, and that ordering is
         the whole point of this method:
 
         * Setting it first published "the registry is loaded" to every other
-          thread while `registry.py` was still executing, so a concurrent
+          thread while `_registry.py` was still executing, so a concurrent
           `get_type()` returned the `Bytes` placeholder for a code whose real
           codec was seconds away. Measured with the import artificially
           widened: the reader saw `Bytes`, the importer saw the real codec.
@@ -112,7 +112,7 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
           silently answered `Bytes` and never retried. Now a raising import
           leaves the flag `False` and the next call tries again.
 
-        `_REGISTRY_LOADING` is not redundant with the lock: `registry.py`
+        `_REGISTRY_LOADING` is not redundant with the lock: `_registry.py`
         calls `register_type`, which calls this, so the importing thread
         re-enters on a lock it already holds. Other threads block on the lock
         and only ever see the finished state.
@@ -136,7 +136,7 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
         The built-in registry is loaded first. Without that, a registration
         made before anything triggered the lazy load was silently *undone* by
         it: the user's codec landed in `_CODEMAP`, then the first `get_type()`
-        imported `registry.py`, which re-registered the built-in over it.
+        imported `_registry.py`, which re-registered the built-in over it.
         Measured in a pristine interpreter -- `_CODEMAP[6]` was the caller's
         codec until the lazy load turned it back into `List[IPv4AddressOption]`.
         Loading first makes the caller's registration the later write, which is

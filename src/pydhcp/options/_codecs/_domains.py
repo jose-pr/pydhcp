@@ -272,7 +272,7 @@ class UncompressedDomainList(DomainList):
     def _dhcp_write(self, data: bytearray) -> int:
         written = 0
         for domain in self:
-            # The shared encoder in `type/domain.py`, exactly as options 81,
+            # The shared encoder in `_codecs/_domain.py`, exactly as options 81,
             # 120, 122, 139 and 140 use it -- one set of name rules for the
             # whole package. `allow_root` keeps `DomainList`'s treatment of an
             # empty entry as the root name, a single zero octet.

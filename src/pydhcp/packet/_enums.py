@@ -7,8 +7,8 @@ from ..options._codecs._base import DHCPOptionType
 
 # `htype` is a message-header field, so this is its documented home and stays
 # part of `pydhcp.packet`'s surface -- but the enum itself lives in
-# `pydhcp._network`. `options.type.scalar` needs it to name
-# a client identifier's type octet, and this module imports `options.type`, so
+# `pydhcp._network`. `options._codecs._scalar` needs it to name
+# a client identifier's type octet, and this module imports `options._codecs`, so
 # defining it here forced that use to be a function-local import re-executed on
 # every `ClientIdentifier.__repr__`.
 from .._network import HardwareAddressType as HardwareAddressType

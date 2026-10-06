@@ -9,7 +9,7 @@ subpackage ships its own header beside its code:
 | [`src/pydhcp/AGENTS.md`](src/pydhcp/AGENTS.md) | listener, server, client, relay, capture, leases, metrics, NVT text, constants, CLI |
 | [`src/pydhcp/packet/AGENTS.md`](src/pydhcp/packet/AGENTS.md) | the wire message and structured (de)serialization |
 | [`src/pydhcp/options/AGENTS.md`](src/pydhcp/options/AGENTS.md) | the options container, code registry and payload codecs |
-| [`src/pydhcp/network/AGENTS.md`](src/pydhcp/network/AGENTS.md) | the hardware-type enum, interface and socket-address types |
+| [`src/pydhcp/_network/AGENTS.md`](src/pydhcp/_network/AGENTS.md) | the hardware-type enum, interface and socket-address types |
 
 Those headers are meant to be read *instead of* the source, so they are kept
 current with the code in the same commit that changes it.
@@ -19,10 +19,10 @@ current with the code in the same commit that changes it.
 ```
 src/pydhcp/        the package (src layout — an editable install or PYTHONPATH is needed)
   packet/          DHCPMessage, enums, structured formats
-  options/         DHCPOptions, DHCPOptionCode, type/ payload codecs (incl. ccc.py)
-  network/         hardware-type, interface and socket-address types
-  listener/        listeners and transports, one module per responsibility
-  cli/             the `pydhcp` command: App in __init__, one module per subcommand
+  options/         DHCPOptions, DHCPOptionCode (_codes.py), _codecs/ payload codecs
+  _network/        hardware-type, interface and socket-address types
+  listener/        listeners and transports, one private module per responsibility
+  cli/             the `pydhcp` command: App in __init__, one private module per subcommand
 tests/             pytest suite, including tests/integration (real sockets on loopback)
 examples/          runnable examples; tests/test_examples.py imports each one
 benchmarks/        run.py plus per-suite scripts, JSON output for comparison
@@ -104,13 +104,13 @@ send; keep it that way.
   lines. Split by responsibility into a package rather than letting one file
   grow, and keep the package's `__init__` re-exporting the names callers
   already import, so a split never moves a public import path. One deliberate
-  exception: `options/code.py` is the `DHCPOptionCode` enum, ~830 lines of
+  exception: `options/_codes.py` is the `DHCPOptionCode` enum, ~830 lines of
   RFC-documented members, and an `Enum`'s members cannot be split across
   modules. A class too big for one module becomes layers, each subclassing the
   last (see `server/` and `packet/_*.py`).
 
-- **Option codecs** live in `src/pydhcp/options/type/` and are bound to codes
-  in `registry.py`. A codec must match the wire form its RFC defines, and a
+- **Option codecs** live in `src/pydhcp/options/_codecs/` and are bound to codes
+  in `_registry.py`. A codec must match the wire form its RFC defines, and a
   new one wants an RFC wire vector in `tests/test_option_types.py` — several
   codecs were wrong for a long time behind tests that asserted the wrong shape.
 - **Names on the wire never get rewritten.** An unknown enum value becomes an

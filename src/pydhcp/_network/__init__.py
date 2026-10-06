@@ -18,10 +18,10 @@ class HardwareAddressType(_enum.IntEnum):
     use for DHCP; anything else in an octet becomes an unnamed pseudo-member
     rather than being rewritten (see `_missing_`).
 
-    Defined here rather than in `packet/enums.py` (which re-exports it, and is
+    Defined here rather than in `packet/_enums.py` (which re-exports it, and is
     where the rest of the message-header enums live) because it is what closes
     the `options` -> `packet` -> `options` import cycle: `ClientIdentifier`
-    names its leading type octet with this enum, and reaching `packet.enums`
+    names its leading type octet with this enum, and reaching `packet._enums`
     for it meant a function-local import re-executed on every `__repr__`. This
     module imports nothing from the package.
     """
