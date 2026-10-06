@@ -266,7 +266,7 @@ class _Replies(_LeasePolicy):
             dest_port = 67 if context.client.port == 68 else context.client.port
         elif msg.ciaddr != _const.WILDCARD_V4:
             dest = msg.ciaddr
-        elif msg.flags is _enum.DHCPFlags.BROADCAST:
+        elif msg.broadcast:
             dest = _ipaddress.IPv4Address("255.255.255.255")
         else:
             # The client has no address yet (ciaddr 0) and did not ask for a

@@ -214,7 +214,7 @@ class _MessageEncode(_MessageDecode):
             # client reports, an overlong one is not a caller error, and RFC
             # 2131 s4.4.1 only requires it to be monotonic within an exchange.
             min(0xFFFF, max(0, int(self.secs.total_seconds()))),
-            self.flags.value,
+            int(self.flags),
             int(self.ciaddr),
             int(self.yiaddr),
             int(self.siaddr),

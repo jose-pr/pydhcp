@@ -44,9 +44,12 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     DHCPMessage`** — parses a wire packet. Raises `DHCPDecodeError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
     a missing `0xFF` (END) options terminator, or an `op` that is neither
-    request nor reply. An `htype` with no IANA name
+    request nor reply (`op` 1 and 2 are the only values RFC 2131 defines, and
+    nothing else is forwarded). An `htype` with no IANA name
     is **preserved** as an unnamed `HardwareAddressType` member rather than
-    raising or being rewritten, so a relay forwards the type it received.
+    raising or being rewritten, so a relay forwards the type it received. The
+    `flags` field is preserved the same way: the reserved bits stay set, and
+    `encode` writes them back.
     `hlen = 0` is accepted: RFC 4390 requires it for IPoIB. There is **no
     minimum size check** — a message as short as 241 octets (fixed header +
     cookie + END) decodes, and neither `MIN_LEGAL_SIZE` (548) nor
@@ -109,10 +112,12 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       it cannot read back.
     Backs the JSON/YAML/TOML/INI helpers below.
   - **`.message_type -> DHCPMessageType | None`** (read-only property) — option
-    53 as its member; `None` when there is no option 53 or its payload is not a
-    message type this package decodes (the wrong length, or a number
-    `DHCPMessageType` has no member for). `DHCPServer`, `DHCPClient` and
-    `CaptureEvent` read it here.
+    53 as its member; `None` when there is no option 53 or its payload is not
+    one octet. A number `DHCPMessageType` has no name for is an unnamed member
+    carrying it (`.name` is `None`, `.label()` is `TYPE_<n>`), so a relay forwards
+    what it received. `DHCPServer`, `DHCPClient` and `CaptureEvent` read it here.
+  - **`.broadcast -> bool`** (read-only property) — whether the broadcast bit of
+    `flags` is set. `flags` holds all sixteen bits as they were received.
   - **`.get_client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
     `htype.value + chaddr`; returned as uppercase colon-hex. Raises
@@ -153,10 +158,15 @@ is a separate typing decision.
 
 - **`DHCPMessageType`** (`IntEnum` + `DHCPOptionType` codec) —
   `DHCPDISCOVER`..`DHCPTLS` (1–18); registered as the codec for
-  `DHCPOptionCode.DHCP_MESSAGE_TYPE`.
+  `DHCPOptionCode.DHCP_MESSAGE_TYPE`. Any other octet value is an unnamed
+  member (`DHCPMessageType(99)`: `.name` is `None`, `.label()` is `"TYPE_99"`,
+  one object per number); a number over 255 raises `ValueError`.
 - **`DHCPOpcode`** (`IntEnum`) — `BOOTREQUEST = 1`, `BOOTREPLY = 2`.
 - **`DHCPPort`** (`IntEnum`) — `SERVER = 67`, `CLIENT = 68`.
-- **`DHCPFlags`** (`Flag`) — `UNICAST = 0`, `BROADCAST = 1 << 15`.
+- **`DHCPFlags`** (`IntFlag`) — `UNICAST = 0`, `BROADCAST = 1 << 15`; the other
+  fifteen bits are reserved and a decoded value keeps them. `.label()` is
+  `"UNICAST"` or `"BROADCAST"`, then `|0x....` for reserved bits that are set.
+  Test the bit with `DHCPMessage.broadcast`, not by comparing the value.
 - **`HardwareAddressType`** (`IntEnum`) — **defined in `pydhcp._network`** and
   re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
   the spelling to use for the `htype` header field. It lives one layer down

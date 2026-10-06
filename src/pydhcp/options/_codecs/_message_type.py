@@ -18,6 +18,9 @@ __all__ = ["DHCPMessageType"]
 
 _DHCPMessageTypeT = _ty.TypeVar("_DHCPMessageTypeT", bound="DHCPMessageType")
 
+#: The unnamed members made so far, one per octet at most.
+_PSEUDO_MEMBERS: "dict[int, DHCPMessageType]" = {}
+
 
 class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
     """DHCP message types"""
@@ -44,14 +47,37 @@ class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
     def fixed_size(cls) -> _ty.Optional[int]:
         return 1
 
+    @classmethod
+    def _missing_(cls, value: object) -> "_ty.Optional[DHCPMessageType]":
+        """An unnamed member for any octet that no message type names.
+
+        A relay forwards the type it received and a server reports it, so an
+        assigned-by-someone-else number is carried, never refused or rewritten.
+        """
+        if not isinstance(value, int) or isinstance(value, bool):
+            return None
+        if not 0 <= value <= 255:
+            return None
+        pseudo = _PSEUDO_MEMBERS.get(value)
+        if pseudo is None:
+            pseudo = int.__new__(cls, value)
+            pseudo._name_ = None  # type: ignore[assignment]
+            pseudo._value_ = value
+            _PSEUDO_MEMBERS[value] = pseudo
+        return pseudo
+
+    def label(self) -> str:
+        """The member's name, or `TYPE_<n>` for a number that has none."""
+        return self._name_ or f"TYPE_{self.value}"
+
     def __repr__(self) -> str:
-        return f"{type(self).__name__}.{self.name}"
+        return f"{type(self).__name__}.{self.label()}"
 
     def __str__(self) -> str:
-        return self.name
+        return self.label()
 
     def display_text(self) -> str:
-        return self.name
+        return self.label()
 
     DHCPDISCOVER = 1
     """ Client broadcast to locate available servers."""

@@ -170,7 +170,13 @@ class _MessageMapping(_MessageEncode):
             "hops": self.hops,
             "xid": self.xid,
             "secs": int(self.secs.total_seconds()),
-            "flags": self.flags.name,
+            # The name when the field is one of the two assigned values, the
+            # number when a reserved bit is set (a name cannot carry it).
+            "flags": (
+                self.flags.label()
+                if int(self.flags) in (0, 0x8000)
+                else int(self.flags)
+            ),
             "ciaddr": str(self.ciaddr),
             "yiaddr": str(self.yiaddr),
             "siaddr": str(self.siaddr),

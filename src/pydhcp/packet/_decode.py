@@ -85,7 +85,8 @@ class _MessageDecode(_MessageFields):
         # packet, which let one client flood the log.
         htype = _enum.HardwareAddressType(htype)
         secs = _dt.timedelta(seconds=secs)
-        flags = _enum.DHCPFlags(flags & _enum.DHCPFlags.BROADCAST.value)
+        # The reserved bits are kept: a relay forwards what it received.
+        flags = _enum.DHCPFlags(flags)
         ciaddr = _ipaddress.IPv4Address(ciaddr)
         yiaddr = _ipaddress.IPv4Address(yiaddr)
         siaddr = _ipaddress.IPv4Address(siaddr)

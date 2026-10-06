@@ -65,7 +65,7 @@ class CaptureEvent:
         value = self.message.message_type
         if value is None:
             return "UNKNOWN"
-        return value.name if hasattr(value, "name") else str(value)
+        return value.label()
 
     @property
     def client_id(self) -> str:

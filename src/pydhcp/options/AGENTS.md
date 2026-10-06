@@ -98,7 +98,8 @@ of the installed package).
   write. Unregistered codes (`PAD`, `END`, and any code without a registry
   entry) fall back to `Bytes` (opaque). `DHCPMessageType`, the codec of option
   53, is defined in the options package and re-exported by `pydhcp.packet` and
-  the root.
+  the root; a number it has no name for is an unnamed member carrying it
+  (`.label()` is `TYPE_<n>`), never refused.
 - **`OptionCode`** — the `typing.Protocol` of a code enum (`get_type`, `label`,
   `int()`, and the classmethods `from_code`, `normalize`, `decode`), which
   `DHCPOptions(codemap=...)` takes; **`BaseDHCPOptionCode`** — its base class with

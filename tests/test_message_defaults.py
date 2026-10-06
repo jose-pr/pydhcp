@@ -149,13 +149,20 @@ def test_message_type_is_the_member_or_none() -> None:
     assert build_request(None).message_type is None
 
 
-@pytest.mark.parametrize("payload", [b"", b"\x01\x02", b"\x00", b"\x63"])
-def test_message_type_is_none_for_a_payload_that_is_not_a_known_type(
-    payload: bytes,
-) -> None:
+@pytest.mark.parametrize("payload", [b"", b"\x01\x02"])
+def test_message_type_is_none_for_a_payload_of_the_wrong_size(payload: bytes) -> None:
     message = DHCPMessage(DHCPOpcode.BOOTREQUEST)
     message.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = payload
     assert message.message_type is None
+
+
+@pytest.mark.parametrize("number", [0, 99])
+def test_message_type_is_an_unnamed_member_for_an_unassigned_number(
+    number: int,
+) -> None:
+    message = DHCPMessage(DHCPOpcode.BOOTREQUEST)
+    message.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytes([number])
+    assert message.message_type is DHCPMessageType(number)
 
 
 def test_message_type_is_read_only() -> None:

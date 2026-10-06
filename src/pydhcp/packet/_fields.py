@@ -239,6 +239,14 @@ class _MessageFields:
         except DHCPDecodeError:
             return None
 
+    @property
+    def broadcast(self) -> bool:
+        """Whether the broadcast bit of `flags` is set (RFC 2131 s2).
+
+        The reserved bits are carried in `flags` as they were received.
+        """
+        return bool(int(self.flags) & int(_enum.DHCPFlags.BROADCAST))
+
     #: Key marking an option written as raw hex because its decoded form does
     #: not reproduce the original octets. Round-trips through JSON, YAML, TOML
     #: and INI alike, and `from_mapping` reads it back.

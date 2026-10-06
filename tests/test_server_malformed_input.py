@@ -45,7 +45,17 @@ def test_an_unknown_message_type_does_not_escape_handle(caplog) -> None:
     # The whole point of the fix: the line identifies the packet.
     assert "deadbeef" in line.lower(), "log line carries no XID"
     assert "10.0.0.50" in line, "log line does not name the client"
-    assert "63" in line, "log line does not say what the bad value was"
+    assert "TYPE_99" in line, "log line does not say what the bad value was"
+
+
+def test_an_option_53_of_the_wrong_size_is_dropped_with_its_octets(caplog) -> None:
+    server = DHCPServer(lease_backend=InMemoryLeaseBackend())
+    message = _message_with_raw_type(1)
+    message.options._options[int(DHCPOptionCode.DHCP_MESSAGE_TYPE)] = bytearray()
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        server.handle(message, _context())
+    assert "unusable DHCP message type" in caplog.text
+    assert "<empty>" in caplog.text
 
 
 @pytest.mark.parametrize("raw", [0, 99, 128, 255])

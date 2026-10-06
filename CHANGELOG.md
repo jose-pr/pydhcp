@@ -397,7 +397,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ClientFQDN` is now that text.
 - **`DHCPMessage.message_type`** is option 53 read once: the
   `DHCPMessageType` member, or `None` when there is no option 53 or its payload is
-  not a message type. The server, the client's reply matching and
+  not one octet. The server, the client's reply matching and
   `CaptureEvent.message_type` read it there.
 - **Named aliases for what a function accepts**, exported and listed in the
   headers: `IPv4AddressLike` (`pydhcp`), `ListenLike` (`pydhcp.listener`, was
@@ -423,6 +423,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - Option 82 (`RelayAgentInformation`) reads sub-options 0 and 255 as codes
     (RFC 3046 section 2.0 defines no pad and no end); before, they ended or
     skipped the option.
+- **`DHCPMessageType` has an unnamed member for every octet** that names no
+  type: `DHCPMessageType(99)` has no `.name`, `.label()` is `TYPE_99`, and
+  `DHCPMessage.message_type` returns it, so a relay forwards what it received.
+  `message_type` is `None` only for an option 53 that is not one octet.
+  `CaptureEvent.message_type` is `TYPE_<n>` for one, where it was `UNKNOWN`, and
+  the server logs that name. A number over 255 still raises `ValueError`.
+- **The `flags` field keeps its reserved bits.** `DHCPFlags` is an `IntFlag`; a
+  decoded message holds the sixteen bits it received and `encode` writes them
+  back, where a decode cleared the fifteen reserved ones (a relay changed the
+  field it forwarded). `DHCPMessage.broadcast` tests the bit that is assigned,
+  `DHCPFlags.label()` names a value, and `to_mapping` writes a number for a value
+  with a reserved bit set. A comparison `message.flags is DHCPFlags.BROADCAST`
+  is true only when no other bit is set: use `broadcast`.
 
 ### Renamed
 

@@ -108,3 +108,43 @@ def test_a_message_dump_shows_the_option_text() -> None:
     assert ": 192.0.2.1\n" in dump
     assert ": DHCPACK" in dump
     assert ": 'host'" in dump
+
+
+def test_an_input_that_is_now_read_is_displayed_and_serialised() -> None:
+    """Values the codecs accept on receipt, each with its text and its JSON."""
+    import json
+
+    from pydhcp.options import RDNSSSelection, RelayAgentInformation, StaticRoute
+    from pydhcp.packet import DHCPFlags
+
+    addresses = bytes([192, 0, 2, 1, 192, 0, 2, 2])
+    cases = [
+        (
+            RDNSSSelection.unpack(
+                bytearray(b"\xfd" + addresses + b"\x07example\x03com\x00\x00")
+            ),
+            "RDNSSSelection(flags=1, primary=192.0.2.1, secondary=192.0.2.2, "
+            "domains=['example.com', ''])",
+            [1, "192.0.2.1", "192.0.2.2", ["example.com", ""]],
+        ),
+        (
+            StaticRoute.unpack(bytearray(bytes(4) + bytes([192, 0, 2, 1]))),
+            "(IPv4Address('0.0.0.0'), IPv4Address('192.0.2.1'))",
+            [["0.0.0.0", "192.0.2.1"]],
+        ),
+        (
+            RelayAgentInformation.unpack(bytearray(bytes([0, 1, 9, 255, 0]))),
+            "TLVOption(code=0, value=b'\\t')\nTLVOption(code=255, value=b'')",
+            [[0, "09"], [255, ""]],
+        ),
+        (DHCPMessageType(99), "TYPE_99", 99),
+    ]
+    for value, text, structured in cases:
+        assert _option_text(value) == text
+        encoded = json.loads(
+            json.dumps(getattr(value, "to_json", lambda: int(value))())
+        )
+        assert encoded == structured
+    message = DHCPMessage.decode(build_request().encode())
+    message.flags = DHCPFlags(0x8001)
+    assert "BROADCAST|0x0001" in message.summary()

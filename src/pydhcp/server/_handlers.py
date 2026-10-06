@@ -41,11 +41,10 @@ class _Handlers(_Replies):
             # every other such client shares.
             LOGGER.warning(f"[XID={msg.xid:08x}] Ignoring unidentifiable client: {e}")
             return
-        # Read once, guarded. `DHCPMessageType` has no pseudo-member for
-        # an unassigned value, so option 53 = 99 raised straight out of
-        # `handle()`. The listener's catch-all caught it, but its log line
-        # carries no XID, client or type -- so the one packet an operator would
-        # want to identify produced the one message that cannot identify it.
+        # Read once, guarded: `message_type` is `None` for an option 53 of the
+        # wrong size, and an unassigned number is an unnamed member that no
+        # handler below takes. Either way the line carries the XID and the
+        # client, which the listener's catch-all line does not.
         msg_ty = msg.message_type
         if msg_ty is None and DHCPOptionCode.DHCP_MESSAGE_TYPE in msg.options:
             raw = msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE, decode=False)
@@ -55,11 +54,7 @@ class _Handlers(_Replies):
                 f"type (option 53 = {bytes(raw).hex() if raw else '<empty>'})"
             )
             return
-        msg_ty_name = (
-            msg_ty.name
-            if (msg_ty is not None and hasattr(msg_ty, "name"))
-            else str(msg_ty)
-        )
+        msg_ty_name = msg_ty.label() if msg_ty is not None else str(msg_ty)
         # Lazy %-style rather than an f-string because this one runs for every
         # request, and an f-string is built whether or not DEBUG is enabled.
         # Measured with DEBUG off: 0.373 us eager against 0.157 us lazy, so

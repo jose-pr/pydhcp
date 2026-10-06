@@ -66,7 +66,7 @@ class _MessageDisplay(_MessageMapping):
             ("Time Since Boot", str(self.secs)),
             ("Hops", str(self.hops)),
             ("Transaction ID", str(self.xid)),
-            ("Flags", self.flags.name),
+            ("Flags", self.flags.label()),
             ("Client Current Address", str(self.ciaddr)),
             ("Allocated Address", str(self.yiaddr)),
             ("Gateway Address", str(self.giaddr)),

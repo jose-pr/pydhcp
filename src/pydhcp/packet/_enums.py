@@ -31,7 +31,22 @@ class DHCPPort(_enum.IntEnum):
     CLIENT = 68
 
 
-class DHCPFlags(_enum.Flag):
+class DHCPFlags(_enum.IntFlag):
+    """The 16-bit flags field of the header (RFC 2131 s2).
+
+    Only the broadcast bit is assigned; the other fifteen are reserved and a
+    decoded value keeps them, so a relay forwards the field it received. Test
+    the bit with `DHCPMessage.broadcast` or `flags & DHCPFlags.BROADCAST`, not
+    by comparing the whole value.
+    """
+
     UNICAST = 0
     BROADCAST = 1 << 15
     """Set by client that cant listen to unicast response as it doesnt have an ip yet"""
+
+    def label(self) -> str:
+        """`UNICAST` or `BROADCAST`, then `|0x....` for the reserved bits set."""
+        value = int(self)
+        named = "BROADCAST" if value & 0x8000 else "UNICAST"
+        reserved = value & 0x7FFF
+        return f"{named}|0x{reserved:04X}" if reserved else named

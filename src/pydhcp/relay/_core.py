@@ -370,7 +370,7 @@ class _RelayCore(_Timed):
         )
 
         dest: _ipaddress.IPv4Address
-        if msg.flags is _enum.DHCPFlags.BROADCAST:
+        if msg.broadcast:
             dest = _ipaddress.IPv4Address("255.255.255.255")
         elif msg.ciaddr != _const.WILDCARD_V4:
             dest = msg.ciaddr
