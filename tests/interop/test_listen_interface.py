@@ -1,8 +1,10 @@
 """A listener told to serve one interface, on a host with two.
 
-One wildcard socket hears a broadcast from every segment; the listener serves the
-named interface and drops what arrives on the other before decoding, and counts
-it. Judged by the offers each segment's wire carries and by the server's counters.
+One wildcard socket hears a broadcast from every segment. Where a socket can be
+bound to a device (Linux) the kernel delivers only the named interface's
+datagrams and the listener's count of drops stays 0; with the allow-list alone
+the listener drops what arrives on the other, before decoding, and counts it.
+Judged by the offers each segment's wire carries and by the server's counters.
 """
 
 from __future__ import annotations
@@ -10,6 +12,7 @@ from __future__ import annotations
 import json
 import time
 
+import netimps
 import pytest
 
 from ._topo import two_homed
@@ -22,11 +25,17 @@ def _offers(tap):
     return [f for f in tap.frames() if f.sport == 67 and f.type_name() == "DHCPOFFER"]
 
 
+@pytest.mark.parametrize("mechanism", ["device", "filter"])
 @pytest.mark.parametrize("flavour", ["sync", "async"])
 @pytest.mark.parametrize("listen", ["sa:67", "02:00:00:03:00:01"], ids=["name", "mac"])
 def test_a_listener_on_one_interface_answers_that_segment_and_not_the_other(
-    lab, flavour, listen
+    lab, flavour, listen, mechanism
 ):
+    """`device`: the socket is bound to the interface, so the other segment's
+    datagram never reaches it (0 dropped). `filter` is the control, forcing the
+    allow-list: the datagram arrives and is counted (1 dropped)."""
+    if mechanism == "device":
+        assert netimps.has_device_binding(), "Linux as root binds a socket to a device"
     net = two_homed(lab)
     tap_a = lab.tap(net.a, "a0", "segment-a")
     tap_b = lab.tap(net.b, "b0", "segment-b")
@@ -34,6 +43,8 @@ def test_a_listener_on_one_interface_answers_that_segment_and_not_the_other(
     arguments = ["--listen", listen, "--status", str(status)]
     if flavour == "async":
         arguments.append("--async")
+    if mechanism == "filter":
+        arguments.append("--no-device-binding")
     server = lab.python(net.srv, "pool_server.py", *arguments, name="server")
     assert server.wait_for_text("serving"), server.text()
 
@@ -49,7 +60,8 @@ def test_a_listener_on_one_interface_answers_that_segment_and_not_the_other(
 
     server.stop()
     counters = json.loads(status.read_text(encoding="utf-8"))
-    assert counters["packets_dropped_other_interface"] == 1, counters
+    dropped = 0 if mechanism == "device" else 1
+    assert counters["packets_dropped_other_interface"] == dropped, counters
     assert counters["packets_received"] == 1, counters
 
 

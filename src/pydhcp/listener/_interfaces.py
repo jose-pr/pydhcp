@@ -46,21 +46,19 @@ def _network_interface(
     )
 
 
-def _interface_indexes(
+def _interface_adapters(
     selectors: "_ty.Iterable[_ty.Union[_netimps.MACAddress, str, _netimps.Interface]]",
-) -> "frozenset[int]":
-    """The index of every adapter the selectors name, which must each name one.
+) -> "tuple[_netimps.Interface, ...]":
+    """The adapters the selectors name, once each by index, which must each name one.
 
     A MAC names every adapter carrying it (a bridge and its ports can share
     one); an adapter name names one; an `Interface` names itself. Raises
     `ValueError` for a selector that matches no adapter with an index.
     """
-    found: "set[int]" = set()
+    found: "dict[int, _netimps.Interface]" = {}
     for selector in selectors:
         matched = [
-            adapter.index
-            for adapter in _netimps.iter_interfaces(selector)
-            if adapter.index
+            adapter for adapter in _netimps.iter_interfaces(selector) if adapter.index
         ]
         if not matched:
             hint = (
@@ -70,8 +68,9 @@ def _interface_indexes(
                 else ""
             )
             raise ValueError(f"no interface matches {selector!r}{hint}")
-        found.update(matched)
-    return frozenset(found)
+        for adapter in matched:
+            found.setdefault(adapter.index, adapter)
+    return tuple(found.values())
 
 
 def _adapter_interface(

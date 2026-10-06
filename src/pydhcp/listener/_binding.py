@@ -113,6 +113,8 @@ def _bind_sockets(
     label: str = "",
     reuse_address: bool = False,
     receive_buffer: int = 0,
+    devices: "_ty.Optional[_ty.Mapping[_net.SocketAddress, _netimps.Interface]]" = None,
+    on_device_refused: "_ty.Optional[_ty.Callable[[_net.SocketAddress, _netimps.Interface, OSError], None]]" = None,
 ) -> None:
     """Bind one socket per listen address, reusing any already bound.
 
@@ -131,6 +133,15 @@ def _bind_sockets(
 
     ``receive_buffer`` grows each new socket's receive buffer to that many
     octets (0 leaves the OS default); see `_grow_receive_buffer`.
+
+    ``devices`` maps a wildcard address to the one adapter its socket is bound
+    to, so the kernel delivers only that interface's datagrams. A bind the
+    kernel refuses for the device (`DeviceBindingUnsupportedError`, or
+    `PermissionError` where the option needs a capability) is repeated without
+    it and reported to ``on_device_refused``: the socket then hears every
+    interface and the caller's allow-list drops the rest, which is what the
+    caller asked to hear. An error the repeat raises too (a port in use, or
+    one that needs privilege) is the real one and propagates.
 
     Binding is the moment the set of addresses served can change, so it drops
     netimps' interface-enumeration cache rather than leaving the next lookup
@@ -167,9 +178,8 @@ def _bind_sockets(
             # an earlier reply otherwise surfaces as ConnectionResetError on a
             # *later, unrelated* receive -- measured, one client that had gone
             # away logged a full ERROR traceback on the server.
-            sock = _netimps.bind(
-                str(address.ip),
-                address.port,
+            device = devices.get(address) if devices else None
+            options: "dict[str, _ty.Any]" = dict(
                 family=_socket.AF_INET,
                 kind=_socket.SOCK_DGRAM,
                 reuse_address=False,
@@ -177,6 +187,17 @@ def _bind_sockets(
                 broadcast=True,
                 connreset=False,
             )
+            if device is not None:
+                options["device"] = device
+            try:
+                sock = _netimps.bind(str(address.ip), address.port, **options)
+            except (_netimps.DeviceBindingUnsupportedError, PermissionError) as refused:
+                if device is None:
+                    raise
+                if on_device_refused is not None:
+                    on_device_refused(address, device, refused)
+                del options["device"]
+                sock = _netimps.bind(str(address.ip), address.port, **options)
         except OSError:
             _release(opened, sockets, endpoints)
             raise

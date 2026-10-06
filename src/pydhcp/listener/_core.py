@@ -19,7 +19,7 @@ from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from ._binding import _bind_sockets, _close_socket, _requested
-from ._interfaces import _interface_indexes
+from ._interfaces import _interface_adapters
 from ._limit import _brief, _LogLimit
 from ._receive import DHCPRequestContext, _Arrival, _context_for, _pktinfo_supported
 from ._spec import (
@@ -47,6 +47,12 @@ class _ListenerCore:
     #: powering up sends its DISCOVERs together. The kernel may grant less
     #: (Linux caps at net.core.rmem_max); a shortfall is logged at INFO.
     RECEIVE_BUFFER_SIZE: int = 1 << 20
+
+    #: Whether a socket serving one interface is bound to that device where the
+    #: host can (`netimps.has_device_binding()`: Linux), so the kernel delivers
+    #: nothing from another interface. Off, or elsewhere, the allow-list drops
+    #: it after the receive.
+    USE_DEVICE_BINDING: bool = True
 
     #: Said in the "Listening on" record, to tell the two drivers apart.
     _BIND_LABEL = ""
@@ -139,10 +145,22 @@ class _ListenerCore:
             raise RuntimeError(f"{type(self).__name__} is closed")
         # Before anything is opened: an interface that does not exist is an
         # error of the arguments, and leaves no socket behind.
-        allowed = {
-            address: _interface_indexes(selectors)
+        # One lookup serves both the allow-list and the device.
+        adapters = {
+            address: _interface_adapters(selectors)
             for address, selectors in self._limits.items()
         }
+        allowed = {
+            address: frozenset(adapter.index for adapter in found)
+            for address, found in adapters.items()
+        }
+        # A device is one adapter: a socket serving several (an `Interface` list,
+        # or a MAC that several adapters carry) is limited by the allow-list alone.
+        devices = (
+            {a: found[0] for a, found in adapters.items() if len(found) == 1}
+            if self.USE_DEVICE_BINDING and _netimps.has_device_binding()
+            else {}
+        )
         if allowed and not self._pktinfo:
             raise ValueError(
                 "listening on an interface needs packet info, which sockets on "
@@ -167,6 +185,8 @@ class _ListenerCore:
                 if self._receive_buffer_size is None
                 else self._receive_buffer_size
             ),
+            devices=devices,
+            on_device_refused=self._device_refused,
         )
         self._allowed = {
             sock: allowed[requested]
@@ -174,12 +194,30 @@ class _ListenerCore:
             if (requested := _requested(sock)) in allowed
         }
 
+    def _device_refused(
+        self, address: _net.SocketAddress, device: _netimps.Interface, error: OSError
+    ) -> None:
+        """Say that `address` is limited to its interface by the allow-list alone."""
+        self._log_limited(
+            LOGGER,
+            _logging.WARNING,
+            "device binding refused",
+            "Could not bind %s to the device %s (%s | %s): datagrams from other "
+            "interfaces are dropped after the receive instead.",
+            address,
+            device.name,
+            type(error).__name__,
+            _brief(error),
+        )
+
     def _admits(self, arrival: _Arrival, sock: _socket.socket) -> bool:
         """Whether a datagram arrived on an interface this socket serves.
 
         A socket told to serve some interfaces drops, before decoding, what
         arrives on any other, and counts it: one wildcard socket hears every
-        interface, which is the only way to hear a broadcast.
+        interface, which is the only way to hear a broadcast. Where the socket
+        is bound to its device the kernel delivers nothing from another
+        interface and the count stays 0; this check remains as the second line.
         """
         allowed = self._allowed.get(sock)
         if allowed is None or arrival.ifindex in allowed:

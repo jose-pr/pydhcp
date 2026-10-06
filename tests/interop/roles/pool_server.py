@@ -2,7 +2,7 @@
 
 Run: python pool_server.py [--async] [--relay-network CIDR] [--gate-chaddr HEX
          --gate-file PATH --ready-file PATH] [--status PATH] [--lease-seconds N]
-         [--listen SPEC]
+         [--listen SPEC] [--no-device-binding]
 
 Listens on the wildcard at port 67 (or on `--listen`) -- the path a real
 deployment uses. A stock
@@ -47,6 +47,11 @@ parser.add_argument("--status")
 parser.add_argument("--listen", default="*:67")
 parser.add_argument("--lease-seconds", type=int, default=600)
 parser.add_argument(
+    "--no-device-binding",
+    action="store_true",
+    help="serve an interface by the allow-list alone, even where a socket can be bound to a device",
+)
+parser.add_argument(
     "--private-store",
     action="store_true",
     help="keep leases in the server's own dict, not in the lease backend",
@@ -59,6 +64,8 @@ relay_network = (
 
 
 class Pool:
+    USE_DEVICE_BINDING = not args.no_device_binding
+
     def _options(self, network, router):
         options = DHCPOptions()
         options[DHCPOptionCode.SUBNET_MASK] = network.netmask

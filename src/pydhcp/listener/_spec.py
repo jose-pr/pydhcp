@@ -24,8 +24,9 @@ address or a MAC is given as a `netimps.Interface`. A port follows the last colo
 in a pair (`("aa:bb:cc:dd:ee:ff", 67)`), and an adapter name holding a colon is
 given as an `Interface`. Whether an interface exists is checked when the sockets
 are bound, not when the argument is read. An interface binding is one wildcard
-socket that drops what arrives on any other interface (a MAC names every adapter
-carrying it); `"*"` on the same port, or an address, takes precedence.
+socket limited to that interface (a MAC names every adapter carrying it): on Linux
+it is bound to the device, elsewhere it drops what arrives on any other interface
+after the receive. `"*"` on the same port, or an address, takes precedence.
 
 A `bool`, a bare number and any other type are refused; so is a port outside
 0-65535, a port written twice that disagrees (`("*:67", 68)`), an IPv6 address,

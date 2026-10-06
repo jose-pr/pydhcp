@@ -151,8 +151,11 @@ def _settle(listener: ty.Any, handled_at_least: int, quiet: float = 0.4) -> None
         time.sleep(0.02)
 
 
-def _serve_sync(spec: ty.Any, handled_at_least: int) -> _Counting:
+def _serve_sync(
+    spec: ty.Any, handled_at_least: int, device_binding: bool = True
+) -> _Counting:
     listener = _Counting(listen=spec, poll_interval=0.05)
+    listener.USE_DEVICE_BINDING = device_binding
     listener.bind()
     port = listener.bound_addresses[0].port
     thread = threading.Thread(target=listener.serve_forever, daemon=True)
@@ -167,8 +170,11 @@ def _serve_sync(spec: ty.Any, handled_at_least: int) -> _Counting:
     return listener
 
 
-def _serve_async(spec: ty.Any, handled_at_least: int, loop_type: type) -> ty.Any:
+def _serve_async(
+    spec: ty.Any, handled_at_least: int, loop_type: type, device_binding: bool = True
+) -> ty.Any:
     listener = _AsyncCounting(listen=spec)
+    listener.USE_DEVICE_BINDING = device_binding
 
     async def scenario() -> None:
         await listener.start()
@@ -187,31 +193,216 @@ def _serve_async(spec: ty.Any, handled_at_least: int, loop_type: type) -> ty.Any
     return listener
 
 
-def test_the_sync_listener_serves_its_interface_and_drops_the_others() -> None:
-    mine = _serve_sync((_loopback(), 0), handled_at_least=1)
+def _drops(device_binding: bool) -> int:
+    """What a listener on another adapter counts of a loopback datagram: with the
+    socket bound to its device the kernel delivers none (Linux), otherwise the
+    allow-list counts it."""
+    return 0 if device_binding and netimps.has_device_binding() else 1
+
+
+@pytest.mark.parametrize("device_binding", [True, False], ids=["device", "filter"])
+def test_the_sync_listener_serves_its_interface_and_drops_the_others(
+    device_binding: bool,
+) -> None:
+    mine = _serve_sync((_loopback(), 0), 1, device_binding)
     assert mine.handled == [_loopback().index]
     assert mine.metrics.packets_dropped_other_interface == 0
 
-    other = _serve_sync((_another_adapter(), 0), handled_at_least=0)
+    other = _serve_sync((_another_adapter(), 0), 0, device_binding)
     assert other.handled == []
-    assert other.metrics.packets_dropped_other_interface == 1
+    assert other.metrics.packets_dropped_other_interface == _drops(device_binding)
     assert other.metrics.packets_received == 0, "a dropped datagram was decoded"
 
 
+@pytest.mark.parametrize("device_binding", [True, False], ids=["device", "filter"])
 @pytest.mark.parametrize("loop_type", LOOPS, ids=lambda loop: loop.__name__)
 def test_the_async_listener_serves_its_interface_and_drops_the_others(
-    loop_type: type,
+    loop_type: type, device_binding: bool
 ) -> None:
-    mine = _serve_async((_loopback(), 0), 1, loop_type)
+    mine = _serve_async((_loopback(), 0), 1, loop_type, device_binding)
     assert mine.handled == [_loopback().index]
     assert mine.metrics.packets_dropped_other_interface == 0
 
-    other = _serve_async((_another_adapter(), 0), 0, loop_type)
+    other = _serve_async((_another_adapter(), 0), 0, loop_type, device_binding)
     assert other.handled == []
-    assert other.metrics.packets_dropped_other_interface == 1
+    assert other.metrics.packets_dropped_other_interface == _drops(device_binding)
     assert other.metrics.packets_received == 0
 
 
 def test_the_wildcard_beside_an_interface_hears_every_interface() -> None:
     listener = _serve_sync(["*:0", (_another_adapter(), 0)], handled_at_least=1)
     assert listener.handled == [_loopback().index]
+
+
+# -- binding the socket to the device ----------------------------------------------
+
+
+class _Netimps:
+    """Stands in for `netimps.bind`: records `device=`, and where the host cannot
+    bind to a device it passes the call on without one. `refuse` is raised in
+    place of a bind that names a device."""
+
+    def __init__(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        refuse: ty.Any = None,
+        always: bool = False,
+    ):
+        self.devices: list = []
+        self.calls = 0
+        self.resolved = 0
+        self._refuse = refuse
+        self._always = always
+        self._bind = netimps.bind
+        self._iter = netimps.iter_interfaces
+        monkeypatch.setattr(netimps, "bind", self.bind)
+        monkeypatch.setattr(netimps, "iter_interfaces", self.iter_interfaces)
+        monkeypatch.setattr(netimps, "has_device_binding", lambda: True)
+
+    def bind(self, *args: ty.Any, **kwargs: ty.Any) -> socket.socket:
+        self.calls += 1
+        device = kwargs.pop("device", None)
+        self.devices.append(device)
+        if self._refuse is not None and (device is not None or self._always):
+            raise self._refuse
+        return self._bind(*args, **kwargs)
+
+    def iter_interfaces(self, *args: ty.Any, **kwargs: ty.Any) -> ty.Any:
+        self.resolved += 1
+        return self._iter(*args, **kwargs)
+
+
+def test_nothing_is_bound_to_a_device_where_the_host_has_no_such_binding(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list = []
+    real = netimps.bind
+
+    def spy(*args: ty.Any, **kwargs: ty.Any) -> socket.socket:
+        seen.append(kwargs)
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(netimps, "bind", spy)
+    monkeypatch.setattr(netimps, "has_device_binding", lambda: False)
+    listener = DHCPListener(listen=(_loopback(), 0))
+    listener.bind()
+    try:
+        assert seen and all(kwargs.get("device") is None for kwargs in seen)
+        (sock,) = listener._sockets
+        assert listener._allowed[sock] == frozenset({_loopback().index})
+    finally:
+        listener.close()
+
+
+@pytest.mark.parametrize("driver", [DHCPListener, AsyncDHCPListener])
+def test_a_socket_is_bound_to_the_adapter_the_grammar_resolved(
+    driver: type, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = _Netimps(monkeypatch)
+    listener = driver(listen=(_loopback(), 0))
+    listener.bind()
+    try:
+        (device,) = fake.devices
+        assert isinstance(device, netimps.Interface)
+        assert device.index == _loopback().index
+        # The adapter was looked up once, for the allow-list and the device alike.
+        assert fake.resolved == 1
+        # The allow-list stays as a second check.
+        (sock,) = listener._sockets
+        assert not listener._admits(_arrival(_loopback().index + 100), sock)
+        assert listener.metrics.packets_dropped_other_interface == 1
+    finally:
+        if driver is DHCPListener:
+            listener.close()
+        else:
+            asyncio.run(listener.aclose())
+
+
+def test_the_class_attribute_forces_the_filter_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _Netimps(monkeypatch)
+
+    class Filtering(DHCPListener):
+        USE_DEVICE_BINDING = False
+
+    listener = Filtering(listen=(_loopback(), 0))
+    listener.bind()
+    try:
+        assert fake.devices == [None]
+    finally:
+        listener.close()
+
+
+def test_a_socket_serving_several_adapters_is_not_bound_to_one_of_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _Netimps(monkeypatch)
+    listener = DHCPListener(listen=[(_loopback(), 0), (_another_adapter(), 0)])
+    listener.bind()
+    try:
+        assert fake.devices == [None]
+        (sock,) = listener._sockets
+        assert len(listener._allowed[sock]) == 2
+    finally:
+        listener.close()
+
+
+def test_a_plain_wildcard_and_an_address_are_not_bound_to_a_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = _Netimps(monkeypatch)
+    listener = DHCPListener(listen=["*:0", "127.0.0.1:0"])
+    listener.bind()
+    try:
+        assert fake.devices and all(device is None for device in fake.devices)
+    finally:
+        listener.close()
+
+
+@pytest.mark.parametrize(
+    "refusal",
+    [
+        netimps.DeviceBindingUnsupportedError(92, "no device binding"),
+        PermissionError(1, "Operation not permitted"),
+    ],
+    ids=["unsupported", "permission"],
+)
+def test_a_refused_device_binding_falls_back_to_the_filter_and_says_so_once(
+    refusal: OSError, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Refused: the same socket is bound without the device, so it hears what the
+    allow-list admits and the filter does the rest. Failing the bind would leave
+    a listener that hears nothing it was asked to hear."""
+    import logging
+
+    fake = _Netimps(monkeypatch, refuse=refusal)
+    listener = DHCPListener(listen=(_loopback(), 0))
+    with caplog.at_level(logging.INFO, logger="pydhcp"):
+        listener.bind()
+    try:
+        assert len(fake.devices) == 2 and fake.devices[0] is not None
+        assert fake.devices[1] is None
+        (sock,) = listener._sockets
+        assert listener._allowed[sock] == frozenset({_loopback().index})
+        assert listener._admits(_arrival(_loopback().index), sock)
+        assert not listener._admits(_arrival(_loopback().index + 100), sock)
+        assert listener.metrics.packets_dropped_other_interface == 1
+        said = [r for r in caplog.records if "device" in r.getMessage()]
+        assert len(said) == 1, [r.getMessage() for r in caplog.records]
+    finally:
+        listener.close()
+
+
+def test_a_bind_that_fails_for_another_reason_is_not_mistaken_for_a_refused_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    taken = netimps.AddressInUseError(98, "Address already in use")
+    fake = _Netimps(monkeypatch, refuse=taken, always=True)
+    listener = DHCPListener(listen=(_loopback(), 0))
+    with pytest.raises(netimps.AddressInUseError):
+        listener.bind()
+    assert listener._sockets == [] and listener.bound_addresses == ()
+    # Not a refusal of the device: no second attempt, the error is the caller's.
+    assert len(fake.devices) == 1 and fake.calls == 1
