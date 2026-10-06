@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`DHCPConfigError`** (`pydhcp.exceptions`, re-exported at the root): a configuration
+  file that cannot be used. It carries `path`, `lineno`, `colno` and `msg`, is also a
+  `ValueError`, and `str()` is one line, `path:line:col: msg`, with no text from the
+  document.
+- **`pydhcp interfaces --format text|json`**: `text` is one tab-separated line per
+  address (name, address, MAC or `-`, network) and no banner; `json` is one array of
+  objects.
 - **`pydhcp.exceptions`**, re-exported at the root: `DHCPError` (the base),
   `DHCPDecodeError` and `DHCPValueError` (each also a `ValueError`) and
   `NoClientIdentityError`. Every decoder raises `DHCPDecodeError` and nothing
@@ -93,6 +100,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`pydhcp.cli.main(argv=None) -> int`** takes the argument vector and returns the exit
+  status instead of reading `sys.argv` and exiting; `python -m pydhcp` and the console
+  script exit with it. **Breaking** for a caller that relied on `SystemExit`. The status
+  is 0 for success (including `--help`, `--version` and Ctrl-C), 1 for a run that failed
+  and 2 for a wrong invocation: a malformed `--listen`, `relay` without `--server`, a
+  bad option, `packet --encode --format summary`. All of these exited 1 or with a
+  traceback before. An error is one line, `pydhcp: error: ...`, on stderr; a closed
+  stdout ends a command quietly. Nothing is logged as "starting" before the arguments
+  are accepted.
+- **`pydhcp relay --server` is required** at the parser, and takes several addresses
+  separated by commas as well as a repeated option.
+- **`pydhcp interfaces`** prints no banner and one line per address (see Added);
+  **`pydhcp packet --format summary`** opens with `OP XID=...` and no longer prints a
+  `Src: capture Dst: decoded` that was never true. A packet that cannot be read or decoded
+  is reported as `pydhcp: error: cannot process the packet: ...`.
+- **`PYDHCP_MCP=stdio` no longer serves the commands as tools**: the root sets
+  `_mcp_ = False`, so the variable is not read. `server`, `relay` and `capture` never
+  return, which makes them poor tools.
+- **Every option has a help line**: `packet --decode`, `--encode` and `capture --format`
+  had none, and `capture --filter` showed the field name `PACKET_FILTER`.
 - **The relay follows RFC 3046 section 2.1 on the request side.** It adds option 82 only to
   a request that arrives with `giaddr` 0 (a request another relay already stamped is
   forwarded as it is, where it used to be given a second option), drops a request whose

@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 import pytest
 
-from pydhcp.cli import Server
+from pydhcp.cli import Server, main
 from pydhcp.lease import FileLeaseBackend, InMemoryLeaseBackend
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
@@ -28,7 +28,7 @@ def test_without_the_flag_the_backend_is_still_the_default(mock_server) -> None:
 @patch("pydhcp.cli._server.DHCPServer")
 def test_the_flag_selects_a_file_backend(mock_server, tmp_path) -> None:
     path = tmp_path / "leases.json"
-    Server(config=None, listen="127.0.0.1:6767", lease_file=str(path))()
+    Server(config=None, listen="127.0.0.1:6767", lease_file=path)()
 
     backend = mock_server.call_args.kwargs["lease_backend"]
     assert isinstance(backend, FileLeaseBackend)
@@ -43,7 +43,7 @@ def test_the_config_file_can_set_it_too(mock_server, tmp_path) -> None:
         json.dumps({"server": {"lease_file": str(leases)}}), encoding="utf-8"
     )
 
-    Server(config=str(cfg), listen="127.0.0.1:6767")()
+    assert main(["server", "--config", str(cfg), "--listen", "127.0.0.1:6767"]) == 0
 
     backend = mock_server.call_args.kwargs["lease_backend"]
     assert isinstance(backend, FileLeaseBackend)
@@ -60,7 +60,18 @@ def test_an_explicit_flag_beats_the_config_file(mock_server, tmp_path) -> None:
     )
     wanted = tmp_path / "from-flag.json"
 
-    Server(config=str(cfg), listen="127.0.0.1:6767", lease_file=str(wanted))()
+    status = main(
+        [
+            "server",
+            "--config",
+            str(cfg),
+            "--listen",
+            "127.0.0.1:6767",
+            "--lease-file",
+            str(wanted),
+        ]
+    )
+    assert status == 0
 
     assert mock_server.call_args.kwargs["lease_backend"].filepath == str(wanted)
 
@@ -74,7 +85,7 @@ def test_lease_file_is_not_reported_as_an_unsupported_config_key(
         json.dumps({"server": {"lease_file": str(tmp_path / "l.json")}}),
         encoding="utf-8",
     )
-    Server(config=str(cfg), listen="127.0.0.1:6767")()
+    assert main(["server", "--config", str(cfg), "--listen", "127.0.0.1:6767"]) == 0
     assert "unsupported key" not in caplog.text.lower()
 
 

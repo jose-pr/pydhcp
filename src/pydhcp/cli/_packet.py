@@ -9,7 +9,7 @@ import typing as _ty
 from duho import Meta
 
 from ..packet._message import DHCPMessage
-from ._common import PACKET_FORMATS, _Command
+from ._common import PACKET_FORMATS, _Command, _Failed, write_line
 
 
 class Packet(_Command):
@@ -27,6 +27,7 @@ class Packet(_Command):
             kwargs={"dest": "mode"},
         ),
     ] = False
+    "Read the message as hexadecimal text and print it in --format"
     ("--decode",)
 
     encode: _ty.Annotated[
@@ -39,26 +40,35 @@ class Packet(_Command):
             kwargs={"dest": "mode"},
         ),
     ] = False
+    "Read the message as a --format document and print it as hexadecimal text"
     ("--encode",)
 
-    input: str = "-"
+    input: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_PACKET_INPUT")] = pathlib.Path(
+        "-"
+    )
     "Input file path, or '-' for stdin"
     ("--input", "-i")
 
-    output: str = "-"
+    output: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_PACKET_OUTPUT")] = (
+        pathlib.Path("-")
+    )
     "Output file path, or '-' for stdout"
     ("--output", "-o")
 
-    packet_format: _ty.Annotated[str, Meta(choices=PACKET_FORMATS)] = "json"
+    packet_format: _ty.Annotated[
+        str, Meta(choices=PACKET_FORMATS, env="PYDHCP_PACKET_FORMAT")
+    ] = "json"
     "Packet text format; 'summary' is decode-only"
     ("--format", "-f")
 
     def __call__(self) -> None:
+        if self.mode is not True and self.packet_format == "summary":
+            raise ValueError("--format summary is only supported with --decode")
         try:
-            if self.input == "-":
+            if str(self.input) == "-":
                 payload_text = sys.stdin.read()
             else:
-                payload_text = pathlib.Path(self.input).read_text(encoding="utf-8")
+                payload_text = self.input.read_text(encoding="utf-8")
 
             if self.mode:
                 packet = DHCPMessage.decode(
@@ -67,23 +77,18 @@ class Packet(_Command):
                     )
                 )
                 if self.packet_format == "summary":
-                    output = packet.log_str("capture", "decoded")
+                    output = (
+                        f"{packet.op.name} XID={packet.xid:08X}\n{packet.summary()}"
+                    )
                 else:
                     output = packet.to_text(self.packet_format)
             else:
-                if self.packet_format == "summary":
-                    raise ValueError(
-                        "summary output is only supported when decoding packets"
-                    )
                 packet = DHCPMessage.from_text(payload_text, self.packet_format)
                 output = packet.encode().hex()
+        except (ValueError, OSError) as error:
+            raise _Failed(f"cannot process the packet: {error}") from None
 
-            if self.output == "-":
-                sys.stdout.write(output)
-                if not output.endswith("\n"):
-                    sys.stdout.write("\n")
-            else:
-                pathlib.Path(self.output).write_text(output, encoding="utf-8")
-        except Exception as e:
-            print(f"Error processing packet: {e}", file=sys.stderr)
-            sys.exit(1)
+        if str(self.output) == "-":
+            write_line(output)
+        else:
+            self.output.write_text(output, encoding="utf-8")

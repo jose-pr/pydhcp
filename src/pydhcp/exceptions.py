@@ -16,6 +16,7 @@ __all__ = [
     "DHCPError",
     "DHCPDecodeError",
     "DHCPValueError",
+    "DHCPConfigError",
     "NoClientIdentityError",
     "DHCPTimeoutError",
     "DHCPRefusedError",
@@ -41,6 +42,44 @@ class DHCPValueError(DHCPError, ValueError):
     octet's length, an empty list where the RFC requires an entry, a prefix
     past 32. Also a `ValueError`.
     """
+
+
+class DHCPConfigError(DHCPError, ValueError):
+    """A configuration file that cannot be used.
+
+    Raised for a document that does not parse, whose top level is not a
+    mapping, that names a section or key the command does not have, or whose
+    format cannot be told. `path` is the file as it was named (`<stdin>` for
+    standard input, `None` when unknown), `lineno` and `colno` are 1-based and
+    `None` when the parser gave none, and `msg` is the problem in the words of
+    this package. The message, the attributes and the exception chain carry no
+    text from the document, which may hold secrets. Also a `ValueError`.
+    `str()` is one line: `path:line:col: msg`.
+    """
+
+    def __init__(
+        self,
+        msg: str,
+        path: _ty.Optional[str] = None,
+        lineno: _ty.Optional[int] = None,
+        colno: _ty.Optional[int] = None,
+    ) -> None:
+        super().__init__(msg)
+        self.msg = msg
+        self.path = path
+        self.lineno = lineno
+        self.colno = colno
+
+    def __str__(self) -> str:
+        where = "" if self.path is None else self.path
+        if self.lineno is not None:
+            where += f":{self.lineno}"
+            if self.colno is not None:
+                where += f":{self.colno}"
+        return f"{where}: {self.msg}" if where else self.msg
+
+    def __reduce__(self) -> _ty.Any:
+        return (type(self), (self.msg, self.path, self.lineno, self.colno))
 
 
 class NoClientIdentityError(DHCPError, ValueError):

@@ -45,6 +45,11 @@ constants are in private modules and are not importable from a public one.
 - **`DHCPValueError(DHCPError, ValueError)`** — a value a codec or message
   field cannot represent (an entry past 255 octets, a header field out of
   range).
+- **`DHCPConfigError(msg, path=None, lineno=None, colno=None)`** (a `DHCPError` and a
+  `ValueError`) — a configuration file that cannot be used: it does not parse, its
+  top level is not a mapping, it names a section or key the command does not
+  have, or its format cannot be told. `str()` is one line, `path:line:col: msg`,
+  with no text from the document.
 - **`NoClientIdentityError(DHCPError, ValueError)`** — `DHCPMessage.get_client_id()`
   on a message with neither option 61 nor a hardware address.
 - **`DHCPTimeoutError(DHCPError, TimeoutError)`** — a client exchange (`dora()`,
@@ -1162,7 +1167,7 @@ name where the command module looks it up (`pydhcp.cli._server.DHCPServer`).
 
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both
-reach `cli.main()`, and both report themselves as `pydhcp` in usage and error
+reach `cli.main()` and exit with its status, and both report themselves as `pydhcp` in usage and error
 lines. The program name comes from `App._parsername_`, not the class name,
 which duho would otherwise use.
 
@@ -1181,25 +1186,41 @@ resolves the logger on the *parsed* instance, so setting it only on `App` left
 `-v` raising the level of a logger named after the subcommand while `pydhcp`
 stayed at the root level and the library's output never appeared.
 
-- **`main() -> None`** — the `pydhcp` console-script entry point
-  (`[project.scripts]` in `pyproject.toml`); calls `duho.main(App)`. Subcommands:
-  `interfaces`, `server` (`--config`, `--listen`), `relay` (`--listen`,
-  `--server` repeatable, `--max-hops`, `--insert-relay-agent-info`,
-  `--circuit-id`, `--remote-id`), `packet` (`--decode`/`--encode` mutually
-  exclusive+required, `--input`/`--output` accepting `-` for stdio, `--format
-  json|yaml|toml|ini|summary`), `capture` (`--listen`, `--filter`,
-  `--format`, `--output` file/pattern/`-`, `--output-mode
+- **`main(argv: Sequence[str] | None = None) -> int`** — the `pydhcp`
+  console-script entry point (`[project.scripts]` in `pyproject.toml`);
+  `argv` is the arguments after the program name (default `sys.argv[1:]`).
+  It never exits by itself and returns the **exit status**: **0** success
+  (including `--help`, `--version` and a run ended with Ctrl-C), **1** a run
+  that failed (an address in use, a file that cannot be written, a hook that
+  failed under `--hook-fail-fast`, a packet that does not decode), **2** a wrong
+  invocation (a bad option, a malformed `--listen`, `relay` without `--server`,
+  a configuration file that cannot be used). An error is one line on stderr,
+  `pydhcp: error: ...`; results go to stdout and logging to stderr. A closed
+  stdout ends the command quietly, with status 1. Nothing is logged as
+  "starting" before the arguments are accepted. The root sets `_mcp_ = False`:
+  `PYDHCP_MCP` is not read and no command is served as a tool.
+  Subcommands:
+  `interfaces` (`--format text|json`: text is one tab-separated line per
+  address, name, address, MAC or `-`, network; json is one array of objects
+  `name`, `ip`, `mac`, `network`), `server` (`--config`, `--listen`,
+  `--per-interface`, `--lease-file`), `relay` (`--listen`,
+  `--server` repeatable or comma-separated and **required**, `--max-hops`,
+  `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`), `packet`
+  (`--decode`/`--encode` mutually exclusive+required, `--input`/`--output`
+  accepting `-` for stdio, `--format json|yaml|toml|ini|summary`; `summary` is
+  decode-only, its first line is the op and XID), `capture` (`--listen`,
+  `--filter`, `--format`, `--output` file/pattern/`-`, `--output-mode
   stream|single|per-capture`, `--count`, `--hook` `module:function` or an
   executable (a name with a directory is that file, resolved against the working
   directory when the capture starts and run by its absolute path; a bare name is
   looked up on `PATH`; a non-executable file is refused at start-up), `--hook-fail-fast`, `--per-interface`). Also gets
   `--version` (via `App._version_ = duho.AUTO`, resolved from installed
-  package metadata) for free. Not designed to be imported and called with
-  custom `argv` — it parses `sys.argv` directly.
-- `Relay.server` has no CLI-level `required=True`: an empty/omitted
-  `--server` simply reaches `DHCPRelay(...)`, which already raises
-  `ValueError("DHCPRelay requires at least one server address")` — no need
-  to duplicate that validation at the argparse layer.
+  package metadata) for free. Every option has one line of help, with its
+  default.
+- A `Cmd` returns `None` (status 0) or a status; a wrong invocation is a
+  `ValueError` out of `__call__`, a failed run is an `OSError` or the private
+  `_Failed`, and `main` is the one place that prints and maps them. Tests drive a
+  command through `main([...])` against sockets on port 0.
 - Each `--server` value is split by **`listener._split_host_port`**, the same
   parser the `--listen` specs go through, and reaches `DHCPRelay` as a
   `(host, port)` tuple with port 67 supplied when the argument names none.

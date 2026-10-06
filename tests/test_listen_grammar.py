@@ -16,7 +16,7 @@ import pytest
 
 from pydhcp import AsyncDHCPListener, DHCPListener, SocketAddress
 from pydhcp._config import load_config
-from pydhcp.cli import Server, main
+from pydhcp.cli import main
 from pydhcp.server import DHCPServer
 
 # the listen-argument parser is not public
@@ -266,11 +266,9 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> "list[list[SocketAddress]]":
     return _Recorded.seen
 
 
-def _command(listen: ty.Any = None, config: ty.Optional[str] = None) -> Server:
-    command = Server()
-    command.listen = listen
-    command.config = config
-    return command
+def _serve(*argv: str) -> int:
+    """`pydhcp server ...`, through the real parser, on the recording server."""
+    return main(["server", *argv])
 
 
 @pytest.mark.parametrize(
@@ -281,7 +279,7 @@ def _command(listen: ty.Any = None, config: ty.Optional[str] = None) -> Server:
 def test_the_listen_flag_reads_the_same_text(
     spec: str, expected: "list[SocketAddress]", recorded: "list[list[SocketAddress]]"
 ) -> None:
-    _command(listen=spec)()
+    assert _serve(f"--listen={spec}") == 0
     assert set(expected) <= set(recorded[0])
 
 
@@ -291,8 +289,7 @@ def test_the_listen_flag_reads_the_same_text(
 def test_the_listen_flag_refuses_the_same_text(
     spec: str, recorded: "list[list[SocketAddress]]"
 ) -> None:
-    with pytest.raises((TypeError, ValueError)):
-        _command(listen=spec)()
+    assert _serve(f"--listen={spec}") == 2
     assert recorded == []
 
 
@@ -302,10 +299,7 @@ def test_an_empty_listen_flag_is_an_error_not_the_wildcard(
     recorded: "list[list[SocketAddress]]",
 ) -> None:
     monkeypatch.delenv("PYDHCP_TRACEBACK", raising=False)
-    monkeypatch.setattr("sys.argv", ["pydhcp", "server", "--listen", ""])
-    with pytest.raises(SystemExit) as exit_info:
-        main()
-    assert exit_info.value.code == 1
+    assert _serve("--listen", "") == 2
     err = capsys.readouterr().err
     assert err.startswith("pydhcp: error:") and "names no address" in err
     assert "Traceback" not in err
@@ -435,7 +429,7 @@ def test_a_configuration_file_listen_reaches_the_listener_as_the_table_says(
     path = _write(tmp_path, name, text)
     # What the loader returns is what the command hands the constructor.
     assert load_config(path)["server"]["listen"] is not None
-    _command(config=path)()
+    assert _serve("--config", path) == 0
     assert set(expected) <= set(recorded[0])
 
 
@@ -449,8 +443,7 @@ def test_a_configuration_file_with_a_refused_listen_fails_before_binding(
 ) -> None:
     _skip_without_the_format(name)
     path = _write(tmp_path, name, text)
-    with pytest.raises((TypeError, ValueError)):
-        _command(config=path)()
+    assert _serve("--config", path) == 2
     assert recorded == []
 
 
@@ -460,7 +453,7 @@ def test_the_flag_beats_a_list_in_the_file(
     path = _write(
         tmp_path, "c.json", json.dumps({"server": {"listen": ["127.0.0.1", 6767]}})
     )
-    _command(listen="127.0.0.2:6768", config=path)()
+    assert _serve("--listen", "127.0.0.2:6768", "--config", path) == 0
     assert recorded[0] == _addresses(("127.0.0.2", 6768))
 
 

@@ -5,6 +5,7 @@ import io
 import json
 import logging
 import os
+import pathlib
 import sys
 import ipaddress
 from unittest.mock import MagicMock, patch
@@ -59,18 +60,11 @@ def test_cmd_interfaces(capsys, monkeypatch) -> None:
         ),
     )
 
-    Interfaces()()
+    assert main(["interfaces"]) == 0
 
     assert capsys.readouterr().out.splitlines() == [
-        "Available Network Interfaces:",
-        "Name: eth0",
-        "  IP:   10.0.0.5",
-        "  MAC:  00-11-22-33-44-55",
-        "  Net:  10.0.0.0/24",
-        "Name: lo",
-        "  IP:   127.0.0.1",
-        "  MAC:  None",
-        "  Net:  127.0.0.0/8",
+        "eth0\t10.0.0.5\t00-11-22-33-44-55\t10.0.0.0/24",
+        "lo\t127.0.0.1\t-\t127.0.0.0/8",
     ]
 
 
@@ -94,7 +88,12 @@ def _capture_event() -> CaptureEvent:
 
 def test_cmd_packet_decode_from_stdin_json(capsys, monkeypatch) -> None:
     packet = _sample_packet()
-    cmd = Packet(mode=True, packet_format="json", input="-", output="-")
+    cmd = Packet(
+        mode=True,
+        packet_format="json",
+        input=pathlib.Path("-"),
+        output=pathlib.Path("-"),
+    )
     monkeypatch.setattr("sys.stdin", io.StringIO(packet.encode().hex()))
 
     cmd()
@@ -104,25 +103,30 @@ def test_cmd_packet_decode_from_stdin_json(capsys, monkeypatch) -> None:
 
 def test_cmd_packet_decode_summary(capsys, monkeypatch) -> None:
     packet = _sample_packet()
-    cmd = Packet(mode=True, packet_format="summary", input="-", output="-")
+    cmd = Packet(
+        mode=True,
+        packet_format="summary",
+        input=pathlib.Path("-"),
+        output=pathlib.Path("-"),
+    )
     monkeypatch.setattr("sys.stdin", io.StringIO(packet.encode().hex()))
 
     cmd()
 
     output = capsys.readouterr().out
-    assert "BOOTREQUEST XID=12345678 Src: capture Dst: decoded" in output
+    assert output.startswith("BOOTREQUEST XID=12345678\n")
+    assert "Src:" not in output and "Dst:" not in output
     assert "OPTIONS:" in output
 
 
 def test_cmd_packet_malformed_exits_with_error(capsys, monkeypatch) -> None:
-    cmd = Packet(mode=True, packet_format="json", input="-", output="-")
     monkeypatch.setattr("sys.stdin", io.StringIO("00"))
 
-    with pytest.raises(SystemExit) as exc_info:
-        cmd()
+    assert main(["packet", "--decode"]) == 1
 
-    assert exc_info.value.code == 1
-    assert "too short for DHCP fixed header" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert err.startswith("pydhcp: error: cannot process the packet: ")
+    assert "too short for DHCP fixed header" in err
 
 
 def test_cmd_packet_encode_from_file(tmp_path) -> None:
@@ -130,9 +134,7 @@ def test_cmd_packet_encode_from_file(tmp_path) -> None:
     source = tmp_path / "packet.json"
     source.write_text(packet.to_text("json"), encoding="utf-8")
     output = tmp_path / "packet.hex"
-    cmd = Packet(
-        mode=False, packet_format="json", input=str(source), output=str(output)
-    )
+    cmd = Packet(mode=False, packet_format="json", input=source, output=output)
 
     cmd()
 
@@ -141,16 +143,11 @@ def test_cmd_packet_encode_from_file(tmp_path) -> None:
 
 def test_packet_cli_main_encode_from_stdin(monkeypatch, capsys) -> None:
     packet = _sample_packet()
-    monkeypatch.setattr(
-        "sys.argv",
-        ["pydhcp", "packet", "--encode", "--input", "-", "--format", "json"],
-    )
     monkeypatch.setattr("sys.stdin", io.StringIO(packet.to_text("json")))
 
-    with pytest.raises(SystemExit) as exc_info:
-        main()
+    status = main(["packet", "--encode", "--input", "-", "--format", "json"])
 
-    assert exc_info.value.code == 0
+    assert status == 0
     assert capsys.readouterr().out.strip() == packet.encode().hex()
 
 
@@ -450,24 +447,15 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
     assert captures[0].delivered == [0xAAAA0001, 0xAAAA0002]
 
 
-def test_capture_cli_main_help_lists_capture(monkeypatch, capsys) -> None:
-    monkeypatch.setattr("sys.argv", ["pydhcp", "--help"])
-
-    with pytest.raises(SystemExit) as exc_info:
-        main()
-
-    assert exc_info.value.code == 0
+def test_capture_cli_main_help_lists_capture(capsys) -> None:
+    assert main(["--help"]) == 0
     assert "capture" in capsys.readouterr().out
 
 
-def test_capture_cli_main_capture_help(monkeypatch, capsys) -> None:
-    monkeypatch.setattr("sys.argv", ["pydhcp", "capture", "--help"])
-
-    with pytest.raises(SystemExit) as exc_info:
-        main()
+def test_capture_cli_main_capture_help(capsys) -> None:
+    assert main(["capture", "--help"]) == 0
 
     output = capsys.readouterr().out
-    assert exc_info.value.code == 0
     assert "--filter" in output
     assert "--output" in output
     assert "--hook" in output
@@ -594,16 +582,12 @@ def test_cmd_relay(mock_dhcp_relay_cls):
     assert mock_relay.serve_forever.called
 
 
-def test_relay_cli_relay_help(monkeypatch, capsys) -> None:
-    monkeypatch.setattr(sys, "argv", ["pydhcp", "relay", "--help"])
-    with pytest.raises(SystemExit) as exc_info:
-        main()
-    captured = capsys.readouterr()
-    # `--help` exits 0. Without this the test passed on the exit code argparse
+def test_relay_cli_relay_help(capsys) -> None:
+    # `--help` is status 0. Without this the test passed on the exit code argparse
     # uses for a *usage error* too, so a `relay` subcommand that refused to
     # parse and printed its usage to stdout looked identical to a working one.
-    # Its sibling `test_capture_cli_main_capture_help` has always checked it.
-    assert exc_info.value.code == 0
+    assert main(["relay", "--help"]) == 0
+    captured = capsys.readouterr()
     assert "--server" in captured.out
     assert "--max-hops" in captured.out
 
@@ -637,12 +621,12 @@ def test_relay_server_default_is_not_shared_between_instances() -> None:
 @pytest.mark.parametrize(
     "argv, expected",
     [
-        ([], ()),
         (["--server", "192.0.2.1"], ("192.0.2.1",)),
         (["-s", "192.0.2.1", "-s", "192.0.2.2"], ("192.0.2.1", "192.0.2.2")),
+        (["-s", "192.0.2.1,192.0.2.2:6768"], ("192.0.2.1", "192.0.2.2:6768")),
     ],
 )
-def test_relay_server_flag_collects_zero_one_or_many(argv, expected) -> None:
+def test_relay_server_flag_collects_one_or_many(argv, expected) -> None:
     parser = App._parser_()
     instance = parser.parse_args(["relay", *argv])
     assert tuple(instance.server) == expected
@@ -658,9 +642,10 @@ def test_per_interface_is_reachable_from_every_listening_subcommand(
     only on `server`, so relay had no second route either.
     """
     parser = App._parser_()
-    instance = parser.parse_args([subcommand, "--per-interface"])
+    needed = ["--server", "192.0.2.1"] if subcommand == "relay" else []
+    instance = parser.parse_args([subcommand, "--per-interface", *needed])
     assert instance.per_interface is True
-    assert parser.parse_args([subcommand]).per_interface is False
+    assert parser.parse_args([subcommand, *needed]).per_interface is False
 
 
 @patch("pydhcp.cli._server.DHCPServer")
@@ -724,18 +709,12 @@ def test_relay_refuses_the_insert_flag_without_an_id() -> None:
 
 
 def test_relay_id_misuse_is_reported_as_a_clean_cli_error(monkeypatch, capsys) -> None:
-    """main() already renders a ValueError as `pydhcp: error:`, not a traceback."""
+    """main() renders a ValueError as `pydhcp: error:`, status 2, not a traceback."""
     monkeypatch.delenv("PYDHCP_TRACEBACK", raising=False)
-    monkeypatch.setattr(
-        sys,
-        "argv",
-        ["pydhcp", "relay", "-s", "192.0.2.1", "--circuit-id", "0a01"],
-    )
 
-    with pytest.raises(SystemExit) as exit_info:
-        main()
+    status = main(["relay", "-s", "192.0.2.1", "--circuit-id", "0a01"])
 
-    assert exit_info.value.code == 1
+    assert status == 2
     err = capsys.readouterr().err
     assert err.startswith("pydhcp: error:")
     assert "--circuit-id" in err and "--insert-relay-agent-info" in err
@@ -786,11 +765,12 @@ def test_capture_rejects_toml_and_ini_for_multi_record_output(capsys) -> None:
         command.packet_format = fmt
         command.output = pathlib.Path("caps." + fmt)
         command.output_mode = "single"
-        with pytest.raises(SystemExit) as exit_info:
+        with pytest.raises(ValueError) as error:
             command()
-        assert exit_info.value.code == 1
-        message = capsys.readouterr().err
+        message = str(error.value)
         assert "per-capture" in message and fmt in message
+        assert main(["capture", "--format", fmt, "--output", "caps." + fmt]) == 2
+        assert "per-capture" in capsys.readouterr().err
 
 
 def test_capture_allows_toml_per_capture(tmp_path) -> None:
@@ -851,7 +831,7 @@ def test_verbosity_flags_reach_the_library_logger() -> None:
     """
     for argv in (
         ["server", "-v"],
-        ["relay", "-v"],
+        ["relay", "-v", "-s", "192.0.2.1"],
         ["capture", "-v"],
         ["interfaces", "-v"],
         ["packet", "-v", "--decode"],
@@ -885,19 +865,13 @@ def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr("pydhcp.cli._server.DHCPServer", FakeServer)
 
-    command = Server()
-    command.config = str(config)
-    command.listen = "127.0.0.1:47002"
-    command()
+    assert main(["server", "--config", str(config), "--listen", "127.0.0.1:47002"]) == 0
     assert (
         captured["listen"] == "127.0.0.1:47002"
     ), "the config overrode an explicit flag"
 
     # and without the flag the config is still used
-    command = Server()
-    command.config = str(config)
-    command.listen = None
-    command()
+    assert main(["server", "--config", str(config)]) == 0
     assert captured["listen"] == "127.0.0.1:47001"
 
 
@@ -985,17 +959,15 @@ def test_user_errors_do_not_print_a_traceback(monkeypatch, capsys) -> None:
     the command, so these arrived as tracebacks -- including the privileged-port
     hint the listener carefully builds."""
     monkeypatch.delenv("PYDHCP_TRACEBACK", raising=False)
-    monkeypatch.setattr(
-        "sys.argv", ["pydhcp", "server", "--listen", "127.0.0.1:notaport"]
-    )
+    status = main(["server", "--listen", "127.0.0.1:notaport"])
 
-    with pytest.raises(SystemExit) as exit_info:
-        main()
-
-    assert exit_info.value.code == 1
+    # A malformed `--listen` is a wrong invocation, and is refused before the
+    # command announces that it is starting.
+    assert status == 2
     err = capsys.readouterr().err
     assert err.startswith("pydhcp: error:")
     assert "Traceback" not in err
+    assert "Starting" not in err
 
 
 # --- the program has to call itself what the user typed ---

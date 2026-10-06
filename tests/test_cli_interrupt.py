@@ -38,7 +38,7 @@ if sys.platform == "win32":
 sys.argv[0] = "pydhcp"
 from pydhcp.cli import main
 
-main()
+raise SystemExit(main())
 """
 
 COMMANDS = {

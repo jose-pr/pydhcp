@@ -23,7 +23,7 @@ from pydhcp.capture import (
     UNIQUE_FILENAME_FIELDS,
     validate_filename_pattern,
 )
-from pydhcp.cli import Capture
+from pydhcp.cli import Capture, main
 
 # the capture command's helpers are not public
 from pydhcp.cli._capture import _write_capture_record
@@ -120,12 +120,17 @@ def test_capture_rejects_a_bad_pattern_before_binding(tmp_path, capsys) -> None:
     """It must fail here rather than after opening sockets: without the check
     this call binds and then captures nothing at all, which is why the
     assertion is on the exit path and not on a recorded file."""
-    command = _capture(tmp_path / "cap_{mac}.{format}")
+    status = main(
+        [
+            "capture",
+            "--output",
+            str(tmp_path / "cap_{mac}.{format}"),
+            "--output-mode",
+            "per-capture",
+        ]
+    )
 
-    with pytest.raises(SystemExit) as info:
-        command()
-
-    assert info.value.code == 1
+    assert status == 2
     err = capsys.readouterr().err
     assert "{mac}" in err and "not a capture field" in err
 

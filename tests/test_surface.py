@@ -22,6 +22,7 @@ EXPECTED_ROOT = [
     "ClientIdentifier",
     "DHCPCapture",
     "DHCPClient",
+    "DHCPConfigError",
     "DHCPDecodeError",
     "DHCPError",
     "DHCPFlags",
@@ -85,6 +86,7 @@ EXPECTED_CLI = [
 ]
 
 EXPECTED_EXCEPTIONS = [
+    "DHCPConfigError",
     "DHCPDecodeError",
     "DHCPError",
     "DHCPRefusedError",

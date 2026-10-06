@@ -15,7 +15,8 @@ from ..capture._events import (
     validate_filename_pattern,
 )
 from ..capture._sync import DHCPCapture
-from ._common import CAPTURE_FORMATS, _Command
+from ._common import CAPTURE_FORMATS, _arguments, _Configured, _Failed
+from ._settings import listen_value
 from ._capture_hook import _load_capture_hook, _serialize_capture_event
 
 LOGGER = _logging.getLogger(__name__)
@@ -141,102 +142,116 @@ def _write_capture_record(
     return payload
 
 
-class Capture(_Command):
+class Capture(_Configured):
     """Capture DHCP packets"""
 
     _parsername_ = "capture"
 
-    listen: _ty.Optional[str] = None
-    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff')"
+    listen: _ty.Annotated[
+        _ty.Optional[str], Meta(env="PYDHCP_CAPTURE_LISTEN", type=listen_value)
+    ] = None
+    "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff'). Default: every address, port 67"
     ("--listen", "-l")
 
-    packet_filter: _ty.Optional[str] = None
-    "Capture filter expression"
+    packet_filter: _ty.Annotated[
+        _ty.Optional[str], Meta(env="PYDHCP_CAPTURE_FILTER", metavar="EXPRESSION")
+    ] = None
+    "Capture filter expression, for example 'msg_type=DHCPDISCOVER'. Default: every packet"
     ("--filter",)
 
-    packet_format: _ty.Annotated[_ty.Optional[str], Meta(choices=CAPTURE_FORMATS)] = (
-        None
-    )
+    packet_format: _ty.Annotated[
+        _ty.Optional[str], Meta(choices=CAPTURE_FORMATS, env="PYDHCP_CAPTURE_FORMAT")
+    ] = None
+    "Record format. Default: from the --output extension, else json"
     ("--format", "-f")
 
-    output: pathlib.Path = pathlib.Path("-")
+    output: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_CAPTURE_OUTPUT")] = (
+        pathlib.Path("-")
+    )
     "Capture output path, filename pattern, or '-' for stdout"
     ("--output", "-o")
 
     output_mode: _ty.Annotated[
-        _ty.Optional[str], Meta(choices=("stream", "single", "per-capture"))
+        _ty.Optional[str],
+        Meta(
+            choices=("stream", "single", "per-capture"),
+            env="PYDHCP_CAPTURE_OUTPUT_MODE",
+        ),
     ] = None
-    "Write a stream, one combined file, or one file per captured packet"
+    "Write a stream, one combined file, or one file per captured packet. Default: stream for '-', else single"
     ("--output-mode",)
 
-    count: _ty.Optional[int] = None
-    "Stop after N accepted packets"
+    count: _ty.Annotated[_ty.Optional[int], Meta(env="PYDHCP_CAPTURE_COUNT")] = None
+    "Stop after N accepted packets. Default: run until interrupted"
     ("--count", "-c")
 
-    hook: _ty.Optional[str] = None
-    "Python hook module:function, or an external command: a name with a directory (./hook, /opt/hook) is that file, found relative to the working directory at start-up; a bare name (hook) is looked up on PATH"
+    hook: _ty.Annotated[_ty.Optional[str], Meta(env="PYDHCP_CAPTURE_HOOK")] = None
+    "Python hook module:function, or an external command: a name with a directory (./hook, /opt/hook) is that file, found relative to the working directory at start-up; a bare name (hook) is looked up on PATH. Default: none"
     ("--hook",)
 
-    hook_fail_fast: bool = False
+    hook_fail_fast: _ty.Annotated[bool, Meta(env="PYDHCP_CAPTURE_HOOK_FAIL_FAST")] = (
+        False
+    )
     "Stop capturing and exit non-zero on the first hook failure"
     ("--hook-fail-fast",)
 
-    per_interface: bool = False
+    per_interface: _ty.Annotated[bool, Meta(env="PYDHCP_CAPTURE_PER_INTERFACE")] = False
     "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
     ("--per-interface",)
 
     def __call__(self) -> None:
-        try:
-            output = self.output if self.output is not None else pathlib.Path("-")
-            output_mode = _infer_output_mode(output, self.output_mode)
-            if output_mode == "per-capture":
-                if str(output) == "-":
-                    raise ValueError(
-                        "--output-mode per-capture requires --output to be a "
-                        "filename pattern"
-                    )
-                # Both checks run before binding, for the same reason the
-                # capture filter is compiled eagerly: the pattern is only ever
-                # expanded inside the receive handler, so a mistake there costs
-                # one message per packet and no recording at all.
-                used_fields = validate_filename_pattern(str(output))
-                if not used_fields & UNIQUE_FILENAME_FIELDS:
-                    self._logger_.warning(
-                        "--output pattern %s names neither {timestamp} nor {xid}, "
-                        "so any two packets agreeing on the rest of it resolve to "
-                        "the same file and only the last one is kept",
-                        output,
-                    )
-            packet_format = _infer_capture_format(output, self.packet_format)
-            if packet_format in ("toml", "ini") and output_mode != "per-capture":
-                # Concatenating records produces a file no parser will read: TOML
-                # has no document separator, and a second [message] section is a
-                # DuplicateSectionError to configparser. One record per file is
-                # the only shape these formats have for this. Raised before
-                # binding, so it fails immediately rather than after capturing.
+        self._begin()
+        output = self.output
+        output_mode = _infer_output_mode(output, self.output_mode)
+        if output_mode == "per-capture":
+            if str(output) == "-":
                 raise ValueError(
-                    f"--format {packet_format} cannot hold more than one packet in a "
-                    f"single file; use --output-mode per-capture with a filename "
-                    f"pattern, or --format json (newline-delimited) or yaml "
-                    f"(multi-document). Note the format is inferred from the "
-                    f"--output extension when --format is not given."
+                    "--output-mode per-capture requires --output to be a "
+                    "filename pattern"
                 )
-            state: "dict[str, _ty.Any]" = {"first": True, "count": 0}
-            capture: DHCPCapture
-
-            def sink(event: CaptureEvent) -> None:
-                _write_capture_record(
-                    event,
-                    output=output,
-                    output_mode=output_mode,
-                    packet_format=packet_format,
-                    state=state,
+            # Both checks run before binding, for the same reason the
+            # capture filter is compiled eagerly: the pattern is only ever
+            # expanded inside the receive handler, so a mistake there costs
+            # one message per packet and no recording at all.
+            used_fields = validate_filename_pattern(str(output))
+            if not used_fields & UNIQUE_FILENAME_FIELDS:
+                self._logger_.warning(
+                    "--output pattern %s names neither {timestamp} nor {xid}, "
+                    "so any two packets agreeing on the rest of it resolve to "
+                    "the same file and only the last one is kept",
+                    output,
                 )
-                state["count"] += 1
-                if self.count is not None and state["count"] >= self.count:
-                    capture.shutdown()
+        packet_format = _infer_capture_format(output, self.packet_format)
+        if packet_format in ("toml", "ini") and output_mode != "per-capture":
+            # Concatenating records produces a file no parser will read: TOML
+            # has no document separator, and a second [message] section is a
+            # DuplicateSectionError to configparser. One record per file is
+            # the only shape these formats have for this. Raised before
+            # binding, so it fails immediately rather than after capturing.
+            raise ValueError(
+                f"--format {packet_format} cannot hold more than one packet in a "
+                f"single file; use --output-mode per-capture with a filename "
+                f"pattern, or --format json (newline-delimited) or yaml "
+                f"(multi-document). Note the format is inferred from the "
+                f"--output extension when --format is not given."
+            )
+        state: "dict[str, _ty.Any]" = {"first": True, "count": 0}
+        capture: DHCPCapture
 
-            hook = _load_capture_hook(self.hook, packet_format, self.hook_fail_fast)
+        def sink(event: CaptureEvent) -> None:
+            _write_capture_record(
+                event,
+                output=output,
+                output_mode=output_mode,
+                packet_format=packet_format,
+                state=state,
+            )
+            state["count"] += 1
+            if self.count is not None and state["count"] >= self.count:
+                capture.shutdown()
+
+        hook = _load_capture_hook(self.hook, packet_format, self.hook_fail_fast)
+        with _arguments():
             capture = DHCPCapture(
                 listen="*" if self.listen is None else self.listen,
                 packet_filter=self.packet_filter,
@@ -245,19 +260,12 @@ class Capture(_Command):
                 hook_fail_fast=self.hook_fail_fast,
                 per_interface=self.per_interface,
             )
-            try:
-                with capture:
-                    capture.serve_forever()
-            except KeyboardInterrupt:
-                self._logger_.info("Stopped listening due to Ctrl-C")
-            if capture.hook_error is not None:
-                # --hook-fail-fast asked for this: say why it stopped, and do
-                # not report success.
-                print(
-                    f"Capture stopped: hook failed ({capture.hook_error})",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
-        except Exception as e:
-            print(f"Error capturing packets: {e}", file=sys.stderr)
-            sys.exit(1)
+        try:
+            with capture:
+                capture.serve_forever()
+        except KeyboardInterrupt:
+            self._logger_.info("Stopped listening due to Ctrl-C")
+        if capture.hook_error is not None:
+            # --hook-fail-fast asked for this: say why it stopped, and do
+            # not report success.
+            raise _Failed(f"capture stopped: hook failed ({capture.hook_error})")
