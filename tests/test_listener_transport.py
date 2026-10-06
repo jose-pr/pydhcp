@@ -454,6 +454,19 @@ def _serve_one(listener, sender, target, port):
         listener.close()
 
 
+def _refused_an_unassigned_pin(caplog) -> bool:
+    """Windows Server refused the pin to 127.0.0.2, which binds there but is not assigned.
+
+    WSAEADDRNOTAVAIL (10049) when the pin also names the interface index,
+    WSAEINVAL (10022) when it names the address alone; Windows 11 accepts both.
+    """
+    return any(
+        "Pinned send from 127.0.0.2" in r.getMessage()
+        and ("WinError 10049" in r.getMessage() or "WinError 10022" in r.getMessage())
+        for r in caplog.records
+    )
+
+
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE, reason="127.0.0.2 is not usable on this host"
 )
@@ -486,7 +499,7 @@ def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
     assert loopback is not None
     assert context.interface.ip != IPv4("127.0.0.2")
     assert context.interface.ip in [entry.ip for entry in loopback.ipv4]
-    if any("WinError 10049" in r.getMessage() for r in caplog.records):
+    if _refused_an_unassigned_pin(caplog):
         pytest.skip("this Windows build refuses a pin to an unassigned 127.0.0.2")
     assert source == "127.0.0.2"
 
@@ -1034,7 +1047,7 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
         sender.close()
         receiver.close()
 
-    if any("WinError 10049" in r.getMessage() for r in caplog.records):
+    if _refused_an_unassigned_pin(caplog):
         pytest.skip("this Windows build refuses a pin to an unassigned 127.0.0.2")
     assert source == "127.0.0.2"
 
