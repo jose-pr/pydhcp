@@ -21,11 +21,11 @@ QUALIFIED = HOST_EXAMPLE + b"\x00"
 
 
 def _decode(wire: bytes) -> ClientFQDN:
-    return ClientFQDN._dhcp_decode(bytearray(wire))
+    return ClientFQDN.unpack(bytearray(wire))
 
 
 def _encode(value: ClientFQDN) -> bytes:
-    return bytes(value._dhcp_encode())
+    return bytes(value.pack())
 
 
 def test_a_fully_qualified_name_carries_the_terminating_label() -> None:
@@ -94,7 +94,7 @@ def test_the_ascii_form_has_no_partial_name() -> None:
 
 def test_the_json_form_round_trips_a_partial_name() -> None:
     value = ClientFQDN("host", flags=E, partial=True)
-    assert ClientFQDN(value.__json__()) == value
+    assert ClientFQDN(value.to_json()) == value
 
 
 def test_a_message_option_with_a_partial_name_decodes() -> None:

@@ -98,14 +98,14 @@ def test_the_rfc_3397_example_is_decoded_from_its_three_instances() -> None:
 @pytest.mark.parametrize("codec,prefix", CODECS)
 def test_a_pointer_to_an_earlier_name_resolves(codec, prefix) -> None:
     payload = b"\x07example\x03com\x00\x03sub\xc0\x00"
-    decoded = codec._dhcp_decode(bytearray(prefix + payload))
+    decoded = codec.unpack(bytearray(prefix + payload))
     assert list(_names(decoded)) == ["example.com", "sub.example.com"]
 
 
 def test_a_long_valid_search_list_spans_several_option_instances() -> None:
     """RFC 3396: more than 255 octets of list arrive as several instances."""
     domains = [f"host{n}.dept{n % 7}.example.com" for n in range(40)]
-    payload = bytes(DomainList(domains)._dhcp_encode())
+    payload = bytes(DomainList(domains).pack())
     assert len(payload) > 255
     wire = _wire(119, payload)
     options = DHCPOptions.decode(memoryview(bytearray(wire)))
@@ -117,7 +117,7 @@ def test_the_longest_legal_name_is_accepted() -> None:
     name = ".".join(["a" * 63] * 3 + ["b" * 61])
     payload = _label("a" * 63) * 3 + _label("b" * 61) + b"\x00"
     assert len(payload) == 255
-    assert list(DomainList._dhcp_decode(bytearray(payload))) == [name]
+    assert list(DomainList.unpack(bytearray(payload))) == [name]
 
 
 # --- the bounds ---------------------------------------------------------------
@@ -128,7 +128,7 @@ def test_a_name_over_255_octets_is_refused(codec, prefix) -> None:
     # Five 63-octet labels reached through pointers: 5 * 64 + 1 = 321 octets.
     payload = _chain(5)
     with pytest.raises(ValueError, match="255 octets"):
-        codec._dhcp_decode(bytearray(prefix + payload))
+        codec.unpack(bytearray(prefix + payload))
 
 
 @pytest.mark.parametrize("code,prefix", CODES)
@@ -147,18 +147,18 @@ def test_chained_names_are_refused_where_they_would_outgrow_the_limit() -> None:
     to 19,000 characters; the refusal comes at the fifth.
     """
     with pytest.raises(ValueError, match="255 octets"):
-        DomainList._dhcp_decode(bytearray(_chain(300)))
+        DomainList.unpack(bytearray(_chain(300)))
 
 
 def test_a_name_may_follow_as_many_pointers_as_the_limit_allows() -> None:
     names = _pointer_chain(MAX_POINTER_HOPS)
-    decoded = DomainList._dhcp_decode(bytearray(names))
+    decoded = DomainList.unpack(bytearray(names))
     assert list(decoded) == [""] * (MAX_POINTER_HOPS + 1)
 
 
 def test_a_name_that_follows_more_pointers_than_a_name_can_need_is_refused() -> None:
     with pytest.raises(ValueError, match="more than 127 compression pointers"):
-        DomainList._dhcp_decode(bytearray(_pointer_chain(MAX_POINTER_HOPS + 1)))
+        DomainList.unpack(bytearray(_pointer_chain(MAX_POINTER_HOPS + 1)))
 
 
 @pytest.mark.parametrize(
@@ -177,7 +177,7 @@ def test_a_pointer_that_does_not_point_backwards_to_a_component_is_refused(
     codec, prefix, payload
 ) -> None:
     with pytest.raises(ValueError):
-        codec._dhcp_decode(bytearray(prefix + payload))
+        codec.unpack(bytearray(prefix + payload))
 
 
 # --- a name that runs off the end ----------------------------------------------
@@ -196,10 +196,10 @@ def test_a_pointer_that_does_not_point_backwards_to_a_component_is_refused(
 @pytest.mark.parametrize("codec", [DomainList, UncompressedDomainList])
 def test_the_partial_last_name_is_discarded(codec, payload, kept) -> None:
     """RFC 3397 s3: a name unfinished at the end of the block MUST be discarded."""
-    assert list(codec._dhcp_decode(bytearray(payload))) == kept
+    assert list(codec.unpack(bytearray(payload))) == kept
 
 
 @pytest.mark.parametrize("codec", [DomainList, UncompressedDomainList])
 def test_a_label_that_declares_more_than_remains_is_refused(codec) -> None:
     with pytest.raises(ValueError, match="truncated"):
-        codec._dhcp_decode(bytearray(b"\x03foo\x00\x05ba"))
+        codec.unpack(bytearray(b"\x03foo\x00\x05ba"))

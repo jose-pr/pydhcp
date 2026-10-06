@@ -359,6 +359,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `Bytes(value=None)` is built from bytes only (its keyword was `src`); hex
     text goes through `Bytes.parse(text)`. A structured document still writes
     and reads octets as hex.
+- **Breaking: the contracts a caller implements are `typing.Protocol`s, and the
+  codec contract has public names.**
+  - `OptionCodec` (`pydhcp.options`) is the protocol of an option payload codec;
+    `DHCPOptionType` is the base class that supplies its defaults. A codec writes
+    its constructor, `unpack_from(option) -> (value, octets taken)` and
+    `pack_into(buffer) -> octets written`, and may set `fixed_size()`, `to_json()`
+    and `display_text()`; `Codec.unpack(data)` and `value.pack()` are built on
+    those. The old spellings are gone: `_dhcp_read`, `_dhcp_write`,
+    `_dhcp_len_hint`, `_dhcp_decode`, `_dhcp_encode`, `__json__` (now `to_json`)
+    and the display hook `_display_text` (now `display_text`). The contract is
+    `pack`/`unpack` and not `encode`/`decode` because `Bytes` is a `bytes` and
+    `String` a `str`, which already have `decode` and `encode`.
+  - `register_type` accepts any class with the methods of `OptionCodec`, not
+    only a `DHCPOptionType` subclass, and `options[code] = value` builds the
+    codec of the code from `value` as before.
+  - `DHCPTransport` is a protocol: anything with `send(data, dst, *, port,
+    client_mac)` is a transport (it was a class whose `send` raised
+    `NotImplementedError`). `OptionCode` is the protocol of a code enum
+    (`DHCPOptions(codemap=...)`); `BaseDHCPOptionCode` is its base class.
 - **Text a value type accepts is `Type.parse(text)`** (and `Type.try_parse(text,
   default=None)`, which answers `default` for text that does not parse): on
   `SocketAddress` (`"192.0.2.1:67"`, what `str()` writes), `ClasslessRoute`
@@ -461,6 +480,8 @@ importable. Replace each name in the left column with the one beside it.
 | `ServerAddress` | `ServerAddressLike` |
 | `send(..., destination=...)`, `DHCPTransport.send(..., dest, ...)` | `dst` |
 | `Bytes(src=...)` | `Bytes(value=...)` |
+| `_dhcp_read`, `_dhcp_write`, `_dhcp_len_hint`, `_dhcp_decode`, `_dhcp_encode` | `unpack_from`, `pack_into`, `fixed_size`, `unpack`, `pack` |
+| `__json__`, `_display_text` | `to_json`, `display_text` |
 
 ### Fixed
 

@@ -29,7 +29,7 @@ def test_classless_route():
     route = ClasslessRoute(gw, net)
 
     # Encode
-    encoded = route._dhcp_encode()
+    encoded = route.pack()
     # Expect 1 byte mask (24), 3 bytes prefix (192.168.1), 4 bytes router (192.168.1.1)
     assert len(encoded) == 8
     assert encoded[0] == 24
@@ -37,6 +37,6 @@ def test_classless_route():
     assert encoded[4:] == b"\xc0\xa8\x01\x01"  # 192.168.1.1
 
     # Decode
-    decoded = ClasslessRoute._dhcp_decode(encoded)
+    decoded = ClasslessRoute.unpack(encoded)
     assert decoded.network == net
     assert decoded.gateway == gw

@@ -10,48 +10,103 @@ if _ty.TYPE_CHECKING:
 
 
 _DHCPOptionTypeT = _ty.TypeVar("_DHCPOptionTypeT", bound="DHCPOptionType")
+_OptionCodecT = _ty.TypeVar("_OptionCodecT", bound="OptionCodec")
+
+
+@_ty.runtime_checkable
+class OptionCodec(_ty.Protocol):
+    """What an option payload codec is: a value that reads and writes its octets.
+
+    A codec is built from one value (`Codec(value)`), reads itself from the
+    octets of an option (`unpack`, `unpack_from`), writes itself back (`pack`,
+    `pack_into`) and renders itself for a structured document (`to_json`) and
+    for the message display (`display_text`). `DHCPOptionType` is the base class
+    that supplies everything but `unpack_from`, `pack_into` and the
+    constructor; subclassing it is the way to get a codec the registry accepts.
+    `isinstance(x, OptionCodec)` checks that the methods exist, not their
+    signatures.
+    """
+
+    def __init__(self, value: _ty.Any, /) -> None: ...
+
+    @classmethod
+    def unpack(
+        cls: type[_OptionCodecT], data: _ty.Union[memoryview, bytes, bytearray]
+    ) -> _OptionCodecT:
+        """The value held by all of `data`; `DHCPDecodeError` if it is not one."""
+        ...
+
+    @classmethod
+    def unpack_from(
+        cls: type[_OptionCodecT], option: memoryview
+    ) -> tuple[_OptionCodecT, int]:
+        """The value at the start of `option`, and how many octets it took."""
+        ...
+
+    @classmethod
+    def fixed_size(cls) -> _ty.Optional[int]:
+        """The payload length every value has, or `None` when it varies."""
+        ...
+
+    def pack(self) -> bytes:
+        """The octets of the payload."""
+        ...
+
+    def pack_into(self, buffer: bytearray) -> int:
+        """Append the octets of the payload to `buffer`; how many were written."""
+        ...
+
+    def to_json(self) -> _ty.Any:
+        """The value as plain data for a JSON, YAML, TOML or INI document."""
+        ...
+
+    def display_text(self) -> str:
+        """The text the message display shows for the value."""
+        ...
 
 
 class DHCPOptionType:
-    """Protocol for DHCP option payload codecs.
+    """The base class of the option payload codecs: the defaults of `OptionCodec`.
 
-    Implementations decode with `_dhcp_read`, encode with `_dhcp_write`, and may
-    advertise a fixed size with `_dhcp_len_hint`. The encode/decode pair should
-    round-trip the same Python value.
+    A subclass implements `unpack_from` and `pack_into` (and its constructor),
+    may set `fixed_size`, and may override `to_json` and `display_text`. `unpack`
+    and `pack` are built on those: `unpack` refuses a payload of the wrong size
+    or with octets left over, and `pack` collects what `pack_into` writes. The
+    pair should round-trip the same Python value.
     """
 
     __slots__ = ()
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_DHCPOptionTypeT], option: memoryview
     ) -> tuple[_DHCPOptionTypeT, int]:
         raise NotImplementedError()
 
-    def _dhcp_write(self, buffer: bytearray) -> int:
+    def pack_into(self, buffer: bytearray) -> int:
         raise NotImplementedError()
 
-    def _dhcp_encode(self) -> bytes:
+    def pack(self) -> bytes:
         encoded = bytearray()
-        self._dhcp_write(encoded)
+        self.pack_into(encoded)
         return bytes(encoded)
 
-    def __json__(self) -> _ty.Any:
+    def to_json(self) -> _ty.Any:
         return self
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         """The text the message display and the capture formats show for this value."""
         return repr(self)
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return None
 
     @classmethod
-    def _dhcp_decode(
+    def unpack(
         cls: type[_DHCPOptionTypeT], option: _ty.Union[memoryview, bytes, bytearray]
     ) -> _DHCPOptionTypeT:
-        hint = cls._dhcp_len_hint()
+        hint = cls.fixed_size()
         todecode = len(option)
         option = memoryview(option) if not isinstance(option, memoryview) else option
         # `is not None`, not truthiness: a hint of 0 is a real constraint (a
@@ -63,7 +118,7 @@ class DHCPOptionType:
                     f"{cls.__name__} payload must be exactly {hint} octets, got {todecode}"
                 )
         try:
-            decoded, read = cls._dhcp_read(option)
+            decoded, read = cls.unpack_from(option)
         except DHCPValueError as exc:
             # A constructor refusing the octets it was built from.
             raise DHCPDecodeError(str(exc)) from exc
@@ -75,6 +130,18 @@ class DHCPOptionType:
         return decoded
 
 
+def is_codec(value: _ty.Any) -> bool:
+    """Whether `value` is an option codec: a `DHCPOptionType`, or anything shaped like one."""
+    return isinstance(value, (DHCPOptionType, OptionCodec))
+
+
+def is_codec_class(value: _ty.Any) -> bool:
+    """Whether `value` is a codec class: a `DHCPOptionType` subclass, or shaped like one."""
+    return isinstance(value, type) and (
+        issubclass(value, DHCPOptionType) or issubclass(value, OptionCodec)
+    )
+
+
 def display_of(value: _ty.Any) -> str:
     """The display text of `value`, a codec value or one of the plain items inside one.
 
@@ -83,8 +150,8 @@ def display_of(value: _ty.Any) -> str:
     """
     if isinstance(value, list):
         return "[" + ", ".join(display_of(item) for item in value) + "]"
-    if isinstance(value, DHCPOptionType):
-        return value._display_text()
+    if is_codec(value):
+        return str(value.display_text())
     if isinstance(value, (_ipaddress.IPv4Address, _ipaddress.IPv4Network)):
         return str(value)
     return repr(value)
@@ -196,7 +263,7 @@ class _Record(DHCPOptionType):
         )
         return f"{type(self).__name__}({fields})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         fields = ", ".join(
             f"{name}={display_of(value)}"
             for name, value in zip(self._FIELDS, self._args())
@@ -345,24 +412,24 @@ class List(_NormalizedList[_T], metaclass=GenericMeta):
         return _ty.cast(_T, _ty.cast(_ty.Any, ty)(item))
 
     @classmethod
-    def _dhcp_read(cls: type[_ListT], option: memoryview) -> tuple[_ListT, int]:
+    def unpack_from(cls: type[_ListT], option: memoryview) -> tuple[_ListT, int]:
         _l = len(option)
         self = cls()
         ty = self._args_[0]
         while option:
-            item, l = ty._dhcp_read(option)
+            item, l = ty.unpack_from(option)
             list.append(self, item)
             option = option[l:]
         return self, _l
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         written = 0
         for item in self:
-            written += item._dhcp_write(data)
+            written += item.pack_into(data)
         return written
 
-    def __json__(self) -> list[_ty.Any]:
-        return [item.__json__() for item in self]
+    def to_json(self) -> list[_ty.Any]:
+        return [item.to_json() for item in self]
 
 
 class RecordList(List[_T]):
@@ -378,7 +445,7 @@ class RecordList(List[_T]):
 
     Subclass a subscripted form (`class X(RecordList[SomeRecord])`) rather than
     setting a `_RECORD_TYPE` attribute -- `_args_[0]` is the same information and
-    `_dhcp_read`/`_normalize` already read it.
+    `unpack_from`/`_normalize` already read it.
     """
 
     def __init__(self, *items: _ty.Any):
@@ -420,12 +487,12 @@ class DHCPOptionCodes(List[_C]):  # type: ignore[type-var]
         return item_int
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_DHCPOptionCodesT], option: memoryview
     ) -> tuple[_DHCPOptionCodesT, int]:
         return cls(option.tolist()), len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.extend(_ty.cast(_ty.Iterable[int], self))
         return len(self)
 

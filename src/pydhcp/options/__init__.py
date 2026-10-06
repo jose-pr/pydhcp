@@ -3,8 +3,13 @@ from __future__ import annotations
 import logging as _logging
 import typing as _ty
 import builtins as _builtins
-from ._codes import BaseDHCPOptionCode as BaseDHCPOptionCode, DHCPOption as DHCPOption
-from ._codecs import DHCPOptionType as DHCPOptionType
+from ._codes import (
+    BaseDHCPOptionCode as BaseDHCPOptionCode,
+    DHCPOption as DHCPOption,
+    OptionCode as OptionCode,
+)
+from ._codecs import DHCPOptionType as DHCPOptionType, OptionCodec as OptionCodec
+from ._codecs._base import is_codec, is_codec_class
 from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
 from .. import _constants as _const
@@ -14,7 +19,7 @@ from math import inf as _inf
 LOGGER = _logging.getLogger(__name__)
 
 _T = _ty.TypeVar("_T", bound=DHCPOptionType)
-_C = _ty.TypeVar("_C", bound=BaseDHCPOptionCode)
+_C = _ty.TypeVar("_C", bound=OptionCode)
 _R = _ty.TypeVar("_R")
 _OptionsT = _ty.TypeVar("_OptionsT", bound="DHCPOptions")
 
@@ -74,6 +79,8 @@ __all__ = [
     "MoSIPv4AddressList",
     "MoSIPv4AddressRecord",
     "OctetString",
+    "OptionCode",
+    "OptionCodec",
     "OptionOverload",
     "PCPServerList",
     "PolicyFilter",
@@ -156,7 +163,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     """
 
     def __init__(
-        self, codemap: _ty.Optional[_builtins.type[BaseDHCPOptionCode]] = None
+        self, codemap: _ty.Optional[_builtins.type[OptionCode]] = None
     ) -> None:
         if codemap is None:
             codemap = DHCPOptionCode
@@ -171,7 +178,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         cls: "_builtins.type[_OptionsT]",
         data: _ty.Union[bytes, bytearray, memoryview],
         *,
-        codemap: _ty.Optional[_builtins.type[BaseDHCPOptionCode]] = None,
+        codemap: _ty.Optional[_builtins.type[OptionCode]] = None,
     ) -> _OptionsT:
         """Parse a TLV options buffer into a new bag.
 
@@ -380,10 +387,12 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
             else:
                 target_decoder = decode
 
-            if isinstance(target_decoder, _builtins.type) and issubclass(
-                target_decoder, DHCPOptionType
+            if isinstance(target_decoder, _builtins.type) and is_codec_class(
+                target_decoder
             ):
-                return target_decoder._dhcp_decode(value)
+                return _ty.cast(_builtins.type[OptionCodec], target_decoder).unpack(
+                    value
+                )
             return _ty.cast(_ty.Callable[[bytearray], _ty.Any], target_decoder)(value)
         else:
             return value
@@ -398,7 +407,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     def append(self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
         code = _check_code(int(opt.code))
-        opt.value._dhcp_write(self._options.setdefault(code, bytearray()))
+        opt.value.pack_into(self._options.setdefault(code, bytearray()))
 
     def replace(self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
@@ -410,7 +419,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         Two properties the obvious implementation does not have:
 
         * **Atomic.** The old code did `setdefault(key, bytearray()).clear()`
-          and then `_dhcp_write` into that same buffer, so a codec that raised
+          and then `pack_into` into that same buffer, so a codec that raised
           part-way left the option *emptied* -- or, for a key that was not
           there before, newly present and empty. A zero-length option is legal
           on the wire (RFC 4039's RAPID_COMMIT is one), so the wreckage encodes
@@ -434,11 +443,13 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         receiver.
         """
         key = _check_code(__key)
-        if not isinstance(__value, (bytes, memoryview, bytearray, DHCPOptionType)):
-            __value = self._codemap.from_code(key).get_type()(__value)  # type: ignore[call-arg]
+        if not isinstance(__value, (bytes, memoryview, bytearray)) and not is_codec(
+            __value
+        ):
+            __value = self._codemap.from_code(key).get_type()(__value)
         data = bytearray()
-        if isinstance(__value, DHCPOptionType):
-            __value._dhcp_write(data)
+        if is_codec(__value):
+            __value.pack_into(data)
         else:
             data.extend(__value)
         self._options[key] = data
@@ -470,7 +481,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     def items(self, decoded: _builtins.type[_C]) -> list[DHCPOption]: ...
 
     def items(
-        self, decoded: _ty.Union[bool, _builtins.type[BaseDHCPOptionCode]] = True
+        self, decoded: _ty.Union[bool, _builtins.type[OptionCode]] = True
     ) -> _ty.Union[list[DHCPOption], _ty.ItemsView[int, bytearray]]:
         raw = self._options.items()
         if not decoded:

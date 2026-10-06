@@ -42,21 +42,21 @@ class Bytes(DHCPOptionType, _TextForm, bytes):
     def __repr__(self) -> str:
         return f"{type(self).__name__}({bytes.__repr__(self)})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return bytes.__repr__(self)
 
     def __str__(self) -> str:
         return self.hex().upper()
 
     @classmethod
-    def _dhcp_read(cls: type[_BytesT], option: memoryview) -> tuple[_BytesT, int]:
+    def unpack_from(cls: type[_BytesT], option: memoryview) -> tuple[_BytesT, int]:
         return cls(option), len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.extend(self)
         return len(self)
 
-    def __json__(self) -> str:
+    def to_json(self) -> str:
         return self.hex()
 
 
@@ -91,7 +91,7 @@ class URIList(_NormalizedList[str]):
         return str(item)
 
     @classmethod
-    def _dhcp_read(cls: type[_URIListT], option: memoryview) -> tuple[_URIListT, int]:
+    def unpack_from(cls: type[_URIListT], option: memoryview) -> tuple[_URIListT, int]:
         self = cls()
         idx = 0
         size = len(option)
@@ -113,7 +113,7 @@ class URIList(_NormalizedList[str]):
             idx += length
         return self, size
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         written = 0
         for item in self:
             encoded = item.encode("utf-8")
@@ -124,7 +124,7 @@ class URIList(_NormalizedList[str]):
             written += len(encoded) + 2
         return written
 
-    def __json__(self) -> list[str]:
+    def to_json(self) -> list[str]:
         return list(self)
 
 
@@ -136,26 +136,26 @@ class String(DHCPOptionType, str):
 
     Octets that are not valid UTF-8 are preserved rather than replaced, so a
     hostname or boot filename in another encoding survives a decode/encode round
-    trip intact; `__json__` renders the display form. See `pydhcp._nvt`.
+    trip intact; `to_json` renders the display form. See `pydhcp._nvt`.
     """
 
     @classmethod
-    def _dhcp_read(cls: type[_StringT], option: memoryview) -> tuple[_StringT, int]:
+    def unpack_from(cls: type[_StringT], option: memoryview) -> tuple[_StringT, int]:
         text, _, _ = option.tobytes().partition(b"\x00")
         return cls(_nvt.decode(text, "Option string")), len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         text = _nvt.encode(self)
         data.extend(text)
         return len(text)
 
-    def __json__(self) -> str:
+    def to_json(self) -> str:
         return _nvt.display(self)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({str.__repr__(self)})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return str.__repr__(self)
 
 
@@ -173,7 +173,7 @@ class OctetString(String):
     """
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_OctetStringT], option: memoryview
     ) -> tuple[_OctetStringT, int]:
         return cls(_nvt.decode(option.tobytes(), "Option octet string")), len(option)
@@ -193,24 +193,24 @@ class Boolean(DHCPOptionType, int):
         return super().__new__(cls, val)
 
     @classmethod
-    def _dhcp_read(cls: type[_BooleanT], option: memoryview) -> tuple[_BooleanT, int]:
+    def unpack_from(cls: type[_BooleanT], option: memoryview) -> tuple[_BooleanT, int]:
         return cls(option[0]), 1
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.append(self)
         return 1
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return 1
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({bool(self)!r})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return f"Boolean({bool(self)!r})"
 
-    def __json__(self) -> bool:
+    def to_json(self) -> bool:
         return self.__bool__()
 
 
@@ -239,14 +239,14 @@ class Flag(DHCPOptionType):
             )
 
     @classmethod
-    def _dhcp_read(cls: type[_FlagT], option: memoryview) -> tuple[_FlagT, int]:
+    def unpack_from(cls: type[_FlagT], option: memoryview) -> tuple[_FlagT, int]:
         return cls(), 0
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         return 0
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return 0
 
     def __bool__(self) -> bool:
@@ -260,7 +260,7 @@ class Flag(DHCPOptionType):
     def __hash__(self) -> int:
         return hash(type(self))
 
-    def __json__(self) -> bool:
+    def to_json(self) -> bool:
         return True
 
     def __repr__(self) -> str:
@@ -277,7 +277,7 @@ class BaseFixedLengthInteger(DHCPOptionType, int):
     SIGNED: bool = False
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_BaseFixedLengthIntegerT], option: memoryview
     ) -> tuple[_BaseFixedLengthIntegerT, int]:
         option_part = option[: cls.NUMBER_OF_BYTES]
@@ -291,13 +291,13 @@ class BaseFixedLengthInteger(DHCPOptionType, int):
             cls.NUMBER_OF_BYTES,
         )
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         self._validate()
         data.extend(self.to_bytes(self.NUMBER_OF_BYTES, "big", signed=self.SIGNED))
         return self.NUMBER_OF_BYTES
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return cls.NUMBER_OF_BYTES
 
     def _validate(self) -> None:
@@ -309,10 +309,10 @@ class BaseFixedLengthInteger(DHCPOptionType, int):
     def __repr__(self) -> str:
         return f"{type(self).__name__}({int(self)!r})"
 
-    def __json__(self) -> int:
+    def to_json(self) -> int:
         """A plain `int`, not this subclass.
 
-        The base `__json__` returns `self`, and `self` is a `U16`/`U32`. JSON
+        The base `to_json` returns `self`, and `self` is a `U16`/`U32`. JSON
         tolerates an int subclass; YAML refuses to represent it and TOML writes
         something it cannot read back, so a packet carrying any integer option
         -- which is most real packets, via option 57 or 51 -- could not survive
@@ -366,16 +366,16 @@ class ClientIdentifier(Bytes):
     """RFC 2132 client identifier."""
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_ClientIdentifierT], option: memoryview
     ) -> tuple[_ClientIdentifierT, int]:
         if len(option) < 2:
             raise DHCPDecodeError(
                 f"{cls.__name__} option is truncated: needs a type octet and an identifier"
             )
-        return super()._dhcp_read(option)
+        return super().unpack_from(option)
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         if not self:
             return ""
         ty_val = self[0]
@@ -409,11 +409,11 @@ class OptionOverload(DHCPOptionType, _enum.IntFlag):
             return f"{type(self).__name__}({int(self)})"
         return f"{type(self).__name__}.{self.name}"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return _enum.IntFlag.__repr__(self)
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_OptionOverloadT], option: memoryview
     ) -> tuple[_OptionOverloadT, int]:
         option_part = option[:1]
@@ -423,10 +423,10 @@ class OptionOverload(DHCPOptionType, _enum.IntFlag):
             )
         return cls(option_part[0]), 1
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.append(self.value)
         return 1
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return 1

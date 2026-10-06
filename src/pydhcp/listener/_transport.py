@@ -18,7 +18,15 @@ LOGGER = _logging.getLogger(__name__)
 BROADCAST_ADDRESS = "255.255.255.255"
 
 
-class DHCPTransport:
+class DHCPTransport(_ty.Protocol):
+    """How a reply leaves: anything with a `send` of this shape.
+
+    `UDPTransport` is the one that sends on a socket. A role calls `send` from
+    inside a `handle_*` hook, on the handler thread; it returns the octets sent
+    and raises `OSError` for a send that failed. `client_mac` is the client's
+    hardware address, for a transport that addresses by it.
+    """
+
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
@@ -26,8 +34,7 @@ class DHCPTransport:
         *,
         port: int,
         client_mac: bytes,
-    ) -> int:
-        raise NotImplementedError()
+    ) -> int: ...
 
 
 def _dest_string(dst: _ipaddress.IPv4Address) -> str:

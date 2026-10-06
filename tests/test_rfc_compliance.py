@@ -114,7 +114,7 @@ def test_u16_overflow_validation():
     """Bug 7: U16 rejects an out-of-range value at construction *and* on write.
 
     Both halves in one `pytest.raises` block tested only the first: `U16(65536)`
-    raises on its own, so `_dhcp_write` -- the thing the test was named for and
+    raises on its own, so `pack_into` -- the thing the test was named for and
     the only one that matters for a value built any other way -- was never
     reached. Separated, and the write path is fed through `int.__new__` to skip
     the constructor, exactly as the `U32` test below already does.
@@ -124,11 +124,11 @@ def test_u16_overflow_validation():
 
     unchecked = int.__new__(U16, 65536)
     with pytest.raises(ValueError, match="Number is too big"):
-        unchecked._dhcp_write(bytearray())
+        unchecked.pack_into(bytearray())
 
     # And the largest legal value still encodes, in two octets.
     buf = bytearray()
-    assert U16(65535)._dhcp_write(buf) == 2
+    assert U16(65535).pack_into(buf) == 2
     assert bytes(buf) == b"\xff\xff"
 
 
@@ -136,12 +136,12 @@ def test_u32_validation_on_encode():
     """Bug 7: U32 validation passes for valid bounds and raises for invalid."""
     u = U32(4294967295)
     buf = bytearray()
-    u._dhcp_write(buf)
+    u.pack_into(buf)
     assert len(buf) == 4
 
     u_invalid = int.__new__(U32, 4294967296)
     with pytest.raises(ValueError):
-        u_invalid._dhcp_write(bytearray())
+        u_invalid.pack_into(bytearray())
 
 
 def test_string_invalid_utf8():
@@ -152,15 +152,15 @@ def test_string_invalid_utf8():
     the value and shown as U+FFFD only where it is rendered.
     """
     data = memoryview(b"\xff\xfe\x00padding")
-    s, length = String._dhcp_read(data)
+    s, length = String.unpack_from(data)
     assert isinstance(s, str)
     assert len(s) > 0
 
     # the wire bytes survive a round trip
     buf = bytearray()
-    s._dhcp_write(buf)
+    s.pack_into(buf)
     assert bytes(buf) == b"\xff\xfe"
 
     # and the rendered form is safe to print or serialize
-    assert "\ufffd" in s.__json__()
-    s.__json__().encode("utf-8")
+    assert "\ufffd" in s.to_json()
+    s.to_json().encode("utf-8")

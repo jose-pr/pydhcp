@@ -33,7 +33,7 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
         return item_bytes
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_LengthPrefixedOpaqueListT], option: memoryview
     ) -> tuple[_LengthPrefixedOpaqueListT, int]:
         self = cls()
@@ -52,7 +52,7 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
             idx += length
         return self, size
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         written = 0
         for item in self:
             if not len(item):
@@ -64,8 +64,8 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
             written += len(item) + 1
         return written
 
-    def __json__(self) -> list[str]:
-        return [item.__json__() for item in self]
+    def to_json(self) -> list[str]:
+        return [item.to_json() for item in self]
 
 
 class UserClass(_LengthPrefixedOpaqueList):
@@ -85,10 +85,10 @@ class TLVOption(_Record):
         _set(self, "code", int(code))
         _set(self, "value", _octets(value))
 
-    def __json__(self) -> list[_ty.Any]:
-        return [self.code, self.value.__json__()]
+    def to_json(self) -> list[_ty.Any]:
+        return [self.code, self.value.to_json()]
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.append(self.code)
         data.append(len(self.value))
         data.extend(self.value)
@@ -105,9 +105,9 @@ class EncapsulatedOptions(RecordList[TLVOption]):
 
     # Only the *read* framing is its own: unlike a plain record list this one
     # honours the PAD (0) and END (255) markers that appear inside an
-    # encapsulated options field, so it cannot share `List._dhcp_read`.
+    # encapsulated options field, so it cannot share `List.unpack_from`.
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_EncapsulatedOptionsT], option: memoryview
     ) -> tuple[_EncapsulatedOptionsT, int]:
         self = cls()
@@ -161,11 +161,11 @@ class VIVendorSpecificInformationRecord(_Record):
         _set(self, "enterprise_number", int(enterprise_number))
         _set(self, "value", _octets(value))
 
-    def __json__(self) -> list[_ty.Any]:
-        return [self.enterprise_number, self.value.__json__()]
+    def to_json(self) -> list[_ty.Any]:
+        return [self.enterprise_number, self.value.to_json()]
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_VIVendorSpecificInformationRecordT], option: memoryview
     ) -> tuple[_VIVendorSpecificInformationRecordT, int]:
         if len(option) < 5:
@@ -176,7 +176,7 @@ class VIVendorSpecificInformationRecord(_Record):
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return cls(enterprise_number, option[5 : 5 + length]), 5 + length
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
             raise DHCPValueError(
                 f"{type(self).__name__} enterprise_number must fit in 32 bits"
@@ -213,11 +213,11 @@ class VIVendorClassRecord(_Record):
             frozen(value if isinstance(value, UserClass) else UserClass(value)),
         )
 
-    def __json__(self) -> list[_ty.Any]:
-        return [self.enterprise_number, self.value.__json__()]
+    def to_json(self) -> list[_ty.Any]:
+        return [self.enterprise_number, self.value.to_json()]
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_VIVendorClassRecordT], option: memoryview
     ) -> tuple[_VIVendorClassRecordT, int]:
         if len(option) < 5:
@@ -226,18 +226,18 @@ class VIVendorClassRecord(_Record):
         length = option[4]
         if len(option) < 5 + length:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
-        payload, read = UserClass._dhcp_read(option[5 : 5 + length])
+        payload, read = UserClass.unpack_from(option[5 : 5 + length])
         if read != length:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return cls(enterprise_number, payload), 5 + length
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         if self.enterprise_number < 0 or self.enterprise_number > 0xFFFFFFFF:
             raise DHCPValueError(
                 f"{type(self).__name__} enterprise_number must fit in 32 bits"
             )
         payload = bytearray()
-        payload_len = self.value._dhcp_write(payload)
+        payload_len = self.value.pack_into(payload)
         if payload_len > 255:
             raise DHCPValueError(f"{type(self).__name__} entry exceeds 255 bytes")
         data.extend(self.enterprise_number.to_bytes(4, "big"))

@@ -46,7 +46,7 @@ class DomainList(_NormalizedList[str]):
         return item
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_DomainListT], option: memoryview
     ) -> tuple[_DomainListT, int]:
         """Decode a compressed search list (RFC 1035 s4.1.4, RFC 3397 s3).
@@ -179,7 +179,7 @@ class DomainList(_NormalizedList[str]):
             self.append(".".join(get_dn(domain)))
         return self, len(option)
 
-    def _dhcp_write(self, _data: bytearray) -> int:
+    def pack_into(self, _data: bytearray) -> int:
         components: list[tuple[list[str], int]] = []
         data = bytearray()
         for domain_str in self:
@@ -259,7 +259,7 @@ class UncompressedDomainList(DomainList):
     constrain what is sent, and that is what changes here.
     """
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         written = 0
         for domain in self:
             # The shared encoder in `_codecs/_domain.py`, exactly as options 81,
@@ -285,22 +285,22 @@ class DomainName(DHCPOptionType, str):
     """
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_DomainNameT], option: memoryview
     ) -> tuple[_DomainNameT, int]:
         name, read = decode_domain_name(option, 0, cls.__name__)
         return cls(name), read
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         encoded = encode_domain_name(str(self), type(self).__name__, allow_root=True)
         data.extend(encoded)
         return len(encoded)
 
-    def __json__(self) -> str:
+    def to_json(self) -> str:
         return str(self)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({str.__repr__(self)})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return str.__repr__(self)

@@ -15,7 +15,7 @@ from ..listener._receive import DHCPRequestContext
 from ..options._codes import DHCPOptionCode
 from ..exceptions import NoClientIdentityError
 from ..packet._message import DHCPMessage
-from ..options._codecs._base import DHCPOptionType
+from ..options._codecs._base import is_codec
 
 #: The placeholders `CaptureEvent.format_filename` fills in, and so the only
 #: ones a `--output-mode per-capture` filename pattern may name.
@@ -268,6 +268,6 @@ def _option_value(message: DHCPMessage, key: str) -> _ty.Optional[str]:
         return None
     if isinstance(value, _enum_base.Enum):
         return value.name
-    if isinstance(value, DHCPOptionType):
-        return str(value.__json__())
+    if is_codec(value):
+        return str(value.to_json())
     return str(value)

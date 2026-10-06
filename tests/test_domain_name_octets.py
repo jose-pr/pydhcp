@@ -30,8 +30,8 @@ UMLAUT = "bücher.example"
     ],
 )
 def test_domain_lists_round_trip_exactly(names) -> None:
-    raw = bytes(DomainList(names)._dhcp_encode())
-    decoded, _read = DomainList._dhcp_read(memoryview(raw))
+    raw = bytes(DomainList(names).pack())
+    decoded, _read = DomainList.unpack_from(memoryview(raw))
     assert list(decoded) == names
 
 
@@ -42,7 +42,7 @@ def test_the_length_octet_counts_octets_not_characters() -> None:
     or -- worse -- decoded as different labels entirely: `['éé.x.com',
     'y.x.com']` came back as three names, one of them a replacement character.
     """
-    raw = bytes(DomainList([UMLAUT])._dhcp_encode())
+    raw = bytes(DomainList([UMLAUT]).pack())
     first_label = UMLAUT.split(".")[0]
     assert raw[0] == len(first_label.encode("utf-8")) == 7
     assert raw[0] != len(first_label)
@@ -66,7 +66,7 @@ def test_a_label_containing_a_dot_is_refused_not_silently_resplit(payload) -> No
     arrived. Refusing says so; accepting silently rewrote it.
     """
     with pytest.raises(ValueError, match=r"label containing"):
-        DomainList._dhcp_read(memoryview(payload))
+        DomainList.unpack_from(memoryview(payload))
     with pytest.raises(ValueError, match=r"label containing"):
         decode_domain_name(memoryview(payload))
 
@@ -74,4 +74,4 @@ def test_a_label_containing_a_dot_is_refused_not_silently_resplit(payload) -> No
 def test_a_truncated_label_says_so() -> None:
     """The bare `raise ValueError()` this path used to carry printed nothing."""
     with pytest.raises(ValueError, match=r"truncated"):
-        DomainList._dhcp_read(memoryview(b"\x09short"))
+        DomainList.unpack_from(memoryview(b"\x09short"))

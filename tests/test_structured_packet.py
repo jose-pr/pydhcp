@@ -101,7 +101,7 @@ def test_structured_round_trip_preserves_option_octets(code, payload, why, fmt):
 
 @pytest.mark.parametrize("fmt", ["json", "yaml", "toml", "ini"])
 def test_integer_options_serialize_as_plain_integers(fmt):
-    """`__json__` returned the U16/U32 subclass, not an int.
+    """`to_json` returned the U16/U32 subclass, not an int.
 
     JSON tolerates an int subclass; YAML refuses to represent it and TOML wrote
     something it could not read back -- so any packet carrying option 57 or 51,

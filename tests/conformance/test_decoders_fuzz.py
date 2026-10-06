@@ -66,7 +66,7 @@ INPUTS = _inputs()
 def test_a_decoder_raises_only_value_error(codec: _ty.Any) -> None:
     for data in INPUTS:
         try:
-            codec._dhcp_decode(data)
+            codec.unpack(data)
         except ValueError:
             pass
         except Exception as error:  # noqa: BLE001

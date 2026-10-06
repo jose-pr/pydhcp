@@ -240,8 +240,10 @@ everything below from `pydhcp.listener` itself.
     without an error.
     Serving ends by cancelling those tasks *before* the sockets are closed, the
     order netimps documents for a clean shutdown.
-- **`DHCPTransport`** — abstract `.send(data, dst: IPv4, *, port: int, client_mac:
-  bytes) -> int`; base raises `NotImplementedError`.
+- **`DHCPTransport`** (`typing.Protocol`) — `.send(data, dst: IPv4, *, port: int,
+  client_mac: bytes) -> int`, which returns the octets sent and raises `OSError`
+  when the send failed. Anything with that method is a transport; `UDPTransport`
+  is the one that sends on a socket.
 - **`UDPTransport(socket)`** — plain UDP send. It does not own the socket and
   never closes it: the listener that bound the socket closes it. A destination of `0.0.0.0`
   ("this client has no address yet") is sent to `255.255.255.255`, per
@@ -801,7 +803,7 @@ lossless on the wire and safe on a screen; use them rather than calling
 **Gotcha**: a string from `decode()` may hold surrogates, so
 `str.encode("utf-8")` on it raises and `json.dumps(..., ensure_ascii=False)`
 fails at write time. Anything rendering one must call `display()` first —
-`DHCPMessage.summary()`, `.to_mapping()` and `String.__json__()` already do.
+`DHCPMessage.summary()`, `.to_mapping()` and `String.to_json()` already do.
 
 ## Logging
 

@@ -113,4 +113,4 @@ def test_an_unknown_op_is_a_decode_error() -> None:
 
 def test_a_codec_decode_error_names_the_codec() -> None:
     with pytest.raises(DHCPDecodeError, match="IPv4AddressOption"):
-        IPv4AddressOption._dhcp_decode(memoryview(b"\x01\x02"))
+        IPv4AddressOption.unpack(memoryview(b"\x01\x02"))

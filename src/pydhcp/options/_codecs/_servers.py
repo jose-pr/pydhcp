@@ -56,7 +56,7 @@ class RDNSSSelection(_Record):
         return normalized
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_RDNSSSelectionT], option: memoryview
     ) -> tuple[_RDNSSSelectionT, int]:
         if len(option) < 9:
@@ -64,23 +64,23 @@ class RDNSSSelection(_Record):
         flags = option[0]
         primary = _IP(option[1:5].tobytes())
         secondary = _IP(option[5:9].tobytes())
-        domains, read = UncompressedDomainList._dhcp_read(option[9:])
+        domains, read = UncompressedDomainList.unpack_from(option[9:])
         return cls(flags, primary, secondary, domains), 9 + read
 
-    def _dhcp_write(self, data: bytearray) -> int:
-        encoded = self.domains._dhcp_encode()
+    def pack_into(self, data: bytearray) -> int:
+        encoded = self.domains.pack()
         data.append(self.flags)
         data.extend(self.primary.packed)
         data.extend(self.secondary.packed)
         data.extend(encoded)
         return 9 + len(encoded)
 
-    def __json__(self) -> list[_ty.Any]:
+    def to_json(self) -> list[_ty.Any]:
         return [
             self.flags,
             str(self.primary),
             str(self.secondary),
-            self.domains.__json__(),
+            self.domains.to_json(),
         ]
 
 
@@ -142,7 +142,7 @@ class SIPServers(_Record):
         _set(self, "values", tuple(items))
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_SIPServersT], option: memoryview
     ) -> tuple[_SIPServersT, int]:
         if len(option) < 1:
@@ -171,7 +171,7 @@ class SIPServers(_Record):
             raise DHCPDecodeError(f"SIPServers encoding must be 0 or 1, got {encoding}")
         return cls(values, encoding), len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         start = len(data)
         data.append(self.encoding)
         if self.encoding == self.ENCODING_ADDRESS:
@@ -182,11 +182,11 @@ class SIPServers(_Record):
                 data.extend(encode_domain_name(value, "SIPServers name"))
         return len(data) - start
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         kind = "address" if self.encoding == self.ENCODING_ADDRESS else "domain"
         return f"SIPServers({kind}, {list(self.values)!r})"
 
-    def __json__(self) -> dict[str, _ty.Any]:
+    def to_json(self) -> dict[str, _ty.Any]:
         return {
             "encoding": (
                 "address" if self.encoding == self.ENCODING_ADDRESS else "domain"
@@ -244,7 +244,7 @@ class StatusCode(_Record, _TextForm):
         return cls(int(digits), message)
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_StatusCodeT], option: memoryview
     ) -> tuple[_StatusCodeT, int]:
         if len(option) < 1:
@@ -252,13 +252,13 @@ class StatusCode(_Record, _TextForm):
         message = _nvt.decode(option[1:].tobytes(), "StatusCode message")
         return cls(option[0], message), len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         encoded = _nvt.encode(self.message)
         data.append(self.code)
         data.extend(encoded)
         return 1 + len(encoded)
 
-    def __json__(self) -> dict[str, _ty.Any]:
+    def to_json(self) -> dict[str, _ty.Any]:
         return {"code": self.code, "message": _nvt.display(self.message)}
 
 
@@ -297,7 +297,7 @@ class PCPServerList(_NormalizedList[list[str]]):
         return addresses
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_PCPServerListT], option: memoryview
     ) -> tuple[_PCPServerListT, int]:
         self = cls()
@@ -323,7 +323,7 @@ class PCPServerList(_NormalizedList[list[str]]):
             raise DHCPDecodeError("PCPServerList option is empty")
         return self, len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         written = 0
         for entry in self:
             data.append(len(entry) * 4)
@@ -333,5 +333,5 @@ class PCPServerList(_NormalizedList[list[str]]):
                 written += 4
         return written
 
-    def __json__(self) -> list[list[str]]:
+    def to_json(self) -> list[list[str]]:
         return [list(entry) for entry in self]

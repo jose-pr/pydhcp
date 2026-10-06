@@ -9,7 +9,7 @@ import typing as _ty
 
 from . import _enums as _enum
 from .. import _nvt as _nvt
-from ..options._codes import BaseDHCPOptionCode
+from ..options._codes import OptionCode
 from ..options import DHCPOptions
 from ..options import _codecs as _type
 from ._encode import _MessageEncode
@@ -87,7 +87,7 @@ def _coerce_bootp_text(value: _ty.Any, field: str) -> str:
 
 
 def _coerce_option_value(
-    option_type: type[_type.DHCPOptionType],
+    option_type: type[_type.OptionCodec],
     value: _ty.Any,
 ) -> _ty.Any:
     if isinstance(value, str) and issubclass(option_type, _enum_base.Enum):
@@ -98,7 +98,7 @@ def _coerce_option_value(
     return value
 
 
-def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDHCPOptionCode]) -> int:
+def _coerce_option_code(raw_code: _ty.Any, codemap: type[OptionCode]) -> int:
     if isinstance(raw_code, int):
         return raw_code
     if isinstance(raw_code, str):
@@ -141,12 +141,8 @@ class _MessageMapping(_MessageEncode):
                     else str(int(code))
                 )
                 option_type = code_obj.get_type()
-                decoded = option_type._dhcp_decode(value)
-                option_value = _enum_name(
-                    decoded.__json__()
-                    if isinstance(decoded, _type.DHCPOptionType)
-                    else decoded
-                )
+                decoded = option_type.unpack(value)
+                option_value = _enum_name(decoded.to_json())
                 if not self._survives_round_trip(code, option_value, value):
                     # The readable form would come back as different octets --
                     # text holding a byte that is not valid UTF-8, a payload the

@@ -4,14 +4,47 @@ import typing as _ty
 import enum as _enum
 
 from ._codecs._scalar import Bytes
-from ._codecs._base import DHCPOptionType
+from ._codecs._base import OptionCodec, is_codec_class
 
-_CODEMAP: list[type[DHCPOptionType]] = [Bytes] * 256
+_CODEMAP: list[type[OptionCodec]] = [Bytes] * 256
 _PSEUDO_MEMBERS: dict[int, "DHCPOptionCode"] = {}
 
 
+@_ty.runtime_checkable
+class OptionCode(_ty.Protocol):
+    """What a code enum a `DHCPOptions` bag resolves option codes with provides.
+
+    A member names an option and knows its codec (`get_type`) and its name
+    (`label`), and converts to the octet it is sent as (`int()`); the class
+    builds a member from a number (`from_code`) and builds or decodes a whole
+    option (`normalize`, `decode`). `BaseDHCPOptionCode` is the base class with
+    the defaults for these; `DHCPOptionCode` is the IANA registry.
+    """
+
+    def get_type(self) -> "type[OptionCodec]": ...
+
+    def label(self) -> str: ...
+
+    def __int__(self) -> int: ...
+
+    @classmethod
+    def from_code(cls, code: int) -> "OptionCode": ...
+
+    @classmethod
+    def normalize(cls, code: int, value: object) -> "DHCPOption": ...
+
+    @classmethod
+    def decode(cls, code: int, value: bytearray) -> "DHCPOption": ...
+
+
 class BaseDHCPOptionCode:
-    def get_type(self) -> "type[DHCPOptionType]":
+    """The base class of a code enum: the defaults of `OptionCode`.
+
+    A subclass that is an `int` or has an int `value` (an `IntEnum`) needs only
+    to override `get_type` and `label` for the codes it names.
+    """
+
+    def get_type(self) -> "type[OptionCodec]":
         return Bytes
 
     def label(self) -> str:
@@ -39,7 +72,7 @@ class BaseDHCPOptionCode:
             "int `value` (an IntEnum member does) or make it an `int` subclass"
         )
 
-    def __json__(self) -> int:
+    def to_json(self) -> int:
         return int(self)
 
     def __repr__(self) -> str:
@@ -52,17 +85,17 @@ class BaseDHCPOptionCode:
     @classmethod
     def normalize(cls, code: int, value: object) -> DHCPOption:
         _code = cls.from_code(code)
-        return DHCPOption(_code, _code.get_type()(value))  # type: ignore[call-arg]
+        return DHCPOption(_code, _code.get_type()(value))
 
     @classmethod
     def decode(cls, code: int, value: bytearray) -> DHCPOption:
         _code = cls.from_code(code)
-        return DHCPOption(_code, _code.get_type()._dhcp_decode(value))
+        return DHCPOption(_code, _code.get_type().unpack(value))
 
 
 class DHCPOption(_ty.NamedTuple):
-    code: _ty.Union[int, "BaseDHCPOptionCode"]
-    value: "DHCPOptionType"
+    code: _ty.Union[int, "OptionCode"]
+    value: "OptionCodec"
 
 
 class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
@@ -89,19 +122,20 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
             _PSEUDO_MEMBERS[value] = pseudo
         return pseudo
 
-    def register_type(self, optiontype: type[DHCPOptionType]) -> None:
+    def register_type(self, optiontype: type[OptionCodec]) -> None:
         """Bind `optiontype` as this code's codec, permanently.
 
         The built-in registry is loaded with this module, so a registration made
         after import is always the later write.
         """
-        if not isinstance(optiontype, type) or not issubclass(
-            optiontype, DHCPOptionType
-        ):
-            raise TypeError("optiontype must be a DHCPOptionType subclass")
+        if not is_codec_class(optiontype):
+            raise TypeError(
+                "optiontype must be a DHCPOptionType subclass or have the methods "
+                "of OptionCodec"
+            )
         _CODEMAP[self] = optiontype
 
-    def get_type(self) -> type[DHCPOptionType]:
+    def get_type(self) -> type[OptionCodec]:
         return _CODEMAP[self]
 
     def label(self) -> str:

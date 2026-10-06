@@ -8,7 +8,7 @@ import typing as _ty
 
 from .. import _nvt as _nvt
 from ..exceptions import NoClientIdentityError
-from ..options._codes import BaseDHCPOptionCode, DHCPOptionCode
+from ..options._codes import DHCPOptionCode, OptionCode
 from ..options import _codecs as _type
 from ..options._codecs._base import option_text as _option_text
 from ._mapping import _MessageMapping
@@ -53,7 +53,7 @@ class _MessageDisplay(_MessageMapping):
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()
 
-    def summary(self, codemap: _ty.Optional[type[BaseDHCPOptionCode]] = None) -> str:
+    def summary(self, codemap: _ty.Optional[type[OptionCode]] = None) -> str:
         """A human-readable multi-line summary: header fields, then each option.
 
         What `log`/`log_str` and the CLI's ``--format summary`` print. Text fields go
@@ -87,7 +87,7 @@ class _MessageDisplay(_MessageMapping):
             # Same fallback `to_mapping` uses.
             try:
                 code = _codemap.from_code(_code)
-                opt_val: _ty.Any = code.get_type()._dhcp_decode(_raw)
+                opt_val: _ty.Any = code.get_type().unpack(_raw)
             except Exception:
                 code = _code  # type: ignore[assignment]
                 opt_val = _type.Bytes(_raw)

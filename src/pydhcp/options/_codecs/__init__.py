@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from ._base import (
     DHCPOptionType as DHCPOptionType,
+    OptionCodec as OptionCodec,
     List as List,
     RecordList as RecordList,
     DHCPOptionCodes as DHCPOptionCodes,
@@ -91,6 +92,7 @@ from ._vendor import (
 
 __all__ = [
     "DHCPOptionType",
+    "OptionCodec",
     "List",
     "RecordList",
     "DHCPOptionCodes",

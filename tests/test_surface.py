@@ -146,6 +146,7 @@ EXPECTED_OPTIONS_TYPE = [
     "MoSIPv4AddressList",
     "MoSIPv4AddressRecord",
     "OctetString",
+    "OptionCodec",
     "OptionOverload",
     "PCPServerList",
     "PolicyFilter",
@@ -205,6 +206,7 @@ EXPECTED_OPTIONS = sorted(
         "DHCPOptions",
         "MAX_OPTION_CODE",
         "MIN_OPTION_CODE",
+        "OptionCode",
     ]
 )
 

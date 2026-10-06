@@ -21,7 +21,7 @@ class IPv4AddressOption(DHCPOptionType, _IP):
     """A single IPv4 address carried in network byte order."""
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_IPv4AddressOptionT], option: memoryview
     ) -> tuple[_IPv4AddressOptionT, int]:
         if len(option) < 4:
@@ -30,21 +30,21 @@ class IPv4AddressOption(DHCPOptionType, _IP):
             )
         return cls(option[:4].tobytes()), 4
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.extend(self.packed)
         return 4
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return 4
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({str(self)!r})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return str(self)
 
-    def __json__(self) -> str:
+    def to_json(self) -> str:
         return str(self)
 
 
@@ -106,7 +106,7 @@ class ClasslessRoute(_Record, _TextForm):
             raise DHCPValueError(f"not a route, {text!r}: {exc}") from exc
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_ClasslessRouteT], option: memoryview
     ) -> tuple[_ClasslessRouteT, int]:
         if len(option) < 1:
@@ -129,7 +129,7 @@ class ClasslessRoute(_Record, _TextForm):
         gateway = _IP(option[last : last + 4].tobytes())
         return cls(gateway, network), last + 4
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         cidr = self.network.prefixlen
         last = (cidr + 7) // 8
         network = self.network.network_address.packed[:last]
@@ -138,7 +138,7 @@ class ClasslessRoute(_Record, _TextForm):
         data.extend(self.gateway.packed)
         return last + 5
 
-    def __json__(self) -> list[_ty.Any]:
+    def to_json(self) -> list[_ty.Any]:
         return [str(self.gateway), str(self.network)]
 
 
@@ -161,7 +161,7 @@ class _IPv4PairList(_NormalizedList[tuple[_IP, _IP]]):
         return _IP(left), _IP(right)
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_IPv4PairListT], option: memoryview
     ) -> tuple[_IPv4PairListT, int]:
         if len(option) % 8:
@@ -175,13 +175,13 @@ class _IPv4PairList(_NormalizedList[tuple[_IP, _IP]]):
             self.append((left, right))
         return self, len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         for left, right in self:
             data.extend(left.packed)
             data.extend(right.packed)
         return len(self) * 8
 
-    def __json__(self) -> list[list[str]]:
+    def to_json(self) -> list[list[str]]:
         return [[str(left), str(right)] for left, right in self]
 
 

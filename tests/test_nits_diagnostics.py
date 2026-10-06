@@ -60,32 +60,32 @@ def test_option_code_over_one_octet_names_the_value() -> None:
 def test_domain_list_reserved_length_prefix_names_the_octet() -> None:
     # 0x80 sets one high bit: neither a label (00) nor a pointer (11).
     with pytest.raises(ValueError) as exc:
-        DomainList._dhcp_decode(bytes([0x80, 0x00]))
+        DomainList.unpack(bytes([0x80, 0x00]))
     assert "0x80" in _message_of(exc)
 
 
 def test_fixed_length_integer_names_its_width() -> None:
     with pytest.raises(ValueError) as exc:
-        U32._dhcp_read(memoryview(bytes(2)))
+        U32.unpack_from(memoryview(bytes(2)))
     assert "4" in _message_of(exc) and "2" in _message_of(exc)
 
 
 def test_option_overload_empty_payload_is_described() -> None:
     with pytest.raises(ValueError) as exc:
-        OptionOverload._dhcp_read(memoryview(b""))
+        OptionOverload.unpack_from(memoryview(b""))
     assert _message_of(exc).strip() != ""
 
 
 def test_message_type_empty_payload_is_described() -> None:
     with pytest.raises(ValueError) as exc:
-        DHCPMessageType._dhcp_read(memoryview(b""))
+        DHCPMessageType.unpack_from(memoryview(b""))
     assert _message_of(exc).strip() != ""
 
 
 def test_wrong_option_size_names_the_codec_and_both_lengths() -> None:
     # Was the context-free "Wrong option size".
     with pytest.raises(ValueError) as exc:
-        U32._dhcp_decode(bytes(3))
+        U32.unpack(bytes(3))
     text = _message_of(exc)
     assert "U32" in text and "4" in text and "3" in text
 
@@ -93,7 +93,7 @@ def test_wrong_option_size_names_the_codec_and_both_lengths() -> None:
 def test_trailing_octets_message_is_spelled_correctly() -> None:
     # Was the misspelled "Couldnt decode whole option".
     with pytest.raises(ValueError) as exc:
-        IPv4AddressOption._dhcp_decode(bytes(5))
+        IPv4AddressOption.unpack(bytes(5))
     text = _message_of(exc)
     assert "Couldnt" not in text
     assert "IPv4AddressOption" in text

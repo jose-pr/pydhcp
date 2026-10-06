@@ -117,18 +117,18 @@ def test_a_compressed_payload_is_still_accepted_on_receive() -> None:
 
 def test_an_uncompressed_list_round_trips_the_root_name() -> None:
     """An empty entry is the root name: one zero octet, as for `DomainList`."""
-    payload = bytes(UncompressedDomainList([""])._dhcp_encode())
+    payload = bytes(UncompressedDomainList([""]).pack())
     assert payload == b"\x00"
-    decoded, _read = UncompressedDomainList._dhcp_read(memoryview(payload))
+    decoded, _read = UncompressedDomainList.unpack_from(memoryview(payload))
     assert list(decoded) == [""]
 
 
 def test_an_uncompressed_list_obeys_the_shared_name_limits() -> None:
     """It routes through `_codecs/_domain.py`, so the 63/255 limits apply."""
     with pytest.raises(ValueError, match="63 octets"):
-        UncompressedDomainList(["a" * 64 + ".example.com"])._dhcp_encode()
+        UncompressedDomainList(["a" * 64 + ".example.com"]).pack()
     with pytest.raises(ValueError, match="255 octets"):
-        UncompressedDomainList([".".join(["label"] * 50)])._dhcp_encode()
+        UncompressedDomainList([".".join(["label"] * 50)]).pack()
 
 
 # --- a bare string is one name --------------------------------------------

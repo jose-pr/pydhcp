@@ -7,6 +7,7 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 
 from ._base import (
     DHCPOptionType,
+    OptionCodec,
     List,
     RecordList,
     _Record,
@@ -41,24 +42,24 @@ class _CCCDomainText(DHCPOptionType, str):
         return str.__new__(cls, text)
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_CCCDomainTextT], option: memoryview
     ) -> tuple[_CCCDomainTextT, int]:
         text, read = _decode_no_compression_domain(option)
         return cls(text), read
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         encoded = _encode_no_compression_domain(str(self))
         data.extend(encoded)
         return len(encoded)
 
-    def __json__(self) -> str:
+    def to_json(self) -> str:
         return str(self)
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({str.__repr__(self)})"
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return str.__repr__(self)
 
 
@@ -154,33 +155,33 @@ class CCCProvisioningServerAddress(_Record):
         )
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls, option: memoryview
     ) -> tuple["CCCProvisioningServerAddress", int]:
         return cls._read_payload(option), len(option)
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.append(1 if self.kind == "ipv4" else 0)
         if self.kind == "ipv4":
             ipv4_payload = _ty.cast(IPv4AddressOption, self.value)
             data.extend(ipv4_payload.packed)
             return 5
         fqdn_payload = _ty.cast(CCCProvisioningServerFQDN, self.value)
-        encoded = fqdn_payload._dhcp_encode()
+        encoded = fqdn_payload.pack()
         data.extend(encoded)
         return len(encoded) + 1
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return (
             f"{type(self).__name__}(kind={self.kind!r}, "
             f"value={display_of(self.value)})"
         )
 
-    def __json__(self) -> list[_ty.Any]:
+    def to_json(self) -> list[_ty.Any]:
         return [
             self.kind,
             (
-                self.value.__json__()
+                self.value.to_json()
                 if isinstance(self.value, DHCPOptionType)
                 else str(self.value)
             ),
@@ -219,7 +220,7 @@ class CCCASBackoffRetry(_Record):
         _set(self, "maximum_retry_count", int(maximum_retry_count))
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_CCCASBackoffRetryT], option: memoryview
     ) -> tuple[_CCCASBackoffRetryT, int]:
         if len(option) != 12:
@@ -233,13 +234,13 @@ class CCCASBackoffRetry(_Record):
             12,
         )
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.extend(self.initial_timeout.to_bytes(4, "big"))
         data.extend(self.maximum_timeout.to_bytes(4, "big"))
         data.extend(self.maximum_retry_count.to_bytes(4, "big"))
         return 12
 
-    def __json__(self) -> list[int]:
+    def to_json(self) -> list[int]:
         return [self.initial_timeout, self.maximum_timeout, self.maximum_retry_count]
 
 
@@ -269,14 +270,14 @@ class CCCSecurityTicketControl(DHCPOptionType, int):
         return int.__new__(cls, int(value))
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_CCCSecurityTicketControlT], option: memoryview
     ) -> tuple[_CCCSecurityTicketControlT, int]:
         if len(option) != 2:
             raise DHCPDecodeError(f"{cls.__name__} option must contain 2 bytes")
         return cls(int.from_bytes(option, "big")), 2
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         if self < 0 or self > 0xFFFF:
             raise DHCPValueError(f"{type(self).__name__} mask must fit in 16 bits")
         if int(self) & ~0x0003:
@@ -289,7 +290,7 @@ class CCCSecurityTicketControl(DHCPOptionType, int):
     def __repr__(self) -> str:
         return f"{type(self).__name__}({int(self)!r})"
 
-    def __json__(self) -> int:
+    def to_json(self) -> int:
         return int(self)
 
 
@@ -308,7 +309,7 @@ class CCCSubOption(_Record):
 
     code: int
     value: _ty.Any
-    _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
+    _PAYLOAD_TYPE: type[OptionCodec] = Bytes
 
     def __init__(self, code: int, value: _ty.Any) -> None:
         _set(self, "code", int(code))
@@ -327,7 +328,7 @@ class CCCSubOption(_Record):
     def _write_payload(self, data: bytearray) -> int:
         payload = self.value
         if isinstance(payload, DHCPOptionType):
-            return payload._dhcp_write(data)
+            return payload.pack_into(data)
         payload_bytes = _octets(payload)
         data.extend(payload_bytes)
         return len(payload_bytes)
@@ -338,7 +339,7 @@ class CCCSubOption(_Record):
     ) -> _CCCSubOptionT:
         return cls(code, cls._read_payload(payload))
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         payload = bytearray()
         payload_len = self._write_payload(payload)
         if payload_len > 255:
@@ -348,17 +349,17 @@ class CCCSubOption(_Record):
         data.extend(payload)
         return payload_len + 2
 
-    def __json__(self) -> list[_ty.Any]:
+    def to_json(self) -> list[_ty.Any]:
         value = self.value
         if isinstance(value, DHCPOptionType):
-            value = value.__json__()
+            value = value.to_json()
         else:
-            value = _octets(value).__json__()
+            value = _octets(value).to_json()
         return [self.code, value]
 
 
 class _CCCFixedPayloadSubOption(CCCSubOption):
-    _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
+    _PAYLOAD_TYPE: type[OptionCodec] = Bytes
 
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
@@ -366,14 +367,14 @@ class _CCCFixedPayloadSubOption(CCCSubOption):
             return value
         if isinstance(value, (list, tuple)):
             return cls._PAYLOAD_TYPE(*value)
-        return cls._PAYLOAD_TYPE(value)  # type: ignore[call-arg]
+        return cls._PAYLOAD_TYPE(value)
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
-        return cls._PAYLOAD_TYPE._dhcp_decode(payload)
+        return cls._PAYLOAD_TYPE.unpack(payload)
 
     def _write_payload(self, data: bytearray) -> int:
-        return _ty.cast(DHCPOptionType, self.value)._dhcp_write(data)
+        return _ty.cast(DHCPOptionType, self.value).pack_into(data)
 
 
 class CCCPrimaryDHCPServerAddressSubOption(_CCCFixedPayloadSubOption):
@@ -393,10 +394,10 @@ class CCCProvisioningServerAddressSubOption(CCCSubOption):
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
-        return CCCProvisioningServerAddress._dhcp_decode(payload)
+        return CCCProvisioningServerAddress.unpack(payload)
 
     def _write_payload(self, data: bytearray) -> int:
-        return _ty.cast(CCCProvisioningServerAddress, self.value)._dhcp_write(data)
+        return _ty.cast(CCCProvisioningServerAddress, self.value).pack_into(data)
 
 
 class CCCASBackoffRetrySubOption(_CCCFixedPayloadSubOption):
@@ -471,7 +472,7 @@ class CCCOption(RecordList[CCCSubOption]):
         return record_type._from_payload(code, payload), 2 + length
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_CCCOptionT], option: memoryview
     ) -> tuple[_CCCOptionT, int]:
         # Its own, because each record's class comes from `_read_record`'s code

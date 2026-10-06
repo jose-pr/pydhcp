@@ -49,9 +49,9 @@ def _round_trip(value):
     decoded to a constant would still re-encode to the same octets. Callers
     must assert the decoded *value*, which for the integer types they did not.
     """
-    encoded = value._dhcp_encode()
-    decoded = type(value)._dhcp_decode(encoded)
-    reencoded = decoded._dhcp_encode()
+    encoded = value.pack()
+    decoded = type(value).unpack(encoded)
+    reencoded = decoded.pack()
     assert encoded == reencoded
     assert type(decoded) is type(value)
     return decoded
@@ -180,15 +180,15 @@ def _domains(draw):
 )
 def test_domain_list_round_trip(domains: list[str]) -> None:
     value = DomainList(domains)
-    encoded = value._dhcp_encode()
-    decoded = DomainList._dhcp_decode(encoded)
+    encoded = value.pack()
+    decoded = DomainList.unpack(encoded)
     assert list(decoded) == domains
     # Repeated names are where RFC 1035 compression pointers get emitted, and a
     # pointer that terminates an entry used to drop every name after it. The
     # count is the assertion that catches a recurrence -- comparing only the
     # contents would pass while entries went missing.
     assert len(list(decoded)) == len(domains)
-    assert DomainList._dhcp_decode(decoded._dhcp_encode()) == decoded
+    assert DomainList.unpack(decoded.pack()) == decoded
 
 
 @given(_ADDRESS, _ADDRESS, st.integers(0, 32))
@@ -206,7 +206,7 @@ def test_classless_route_round_trip(gateway: str, address: str, prefixlen: int) 
 
 # --- and the same values through the containers a packet actually uses -------
 #
-# Everything above goes straight to `_dhcp_encode`/`_dhcp_decode`. That skips
+# Everything above goes straight to `pack`/`unpack`. That skips
 # the option bag (code and length octets, RFC 3396 splitting, option order) and
 # the message (the fixed header, the magic cookie, sname/file overloading) --
 # i.e. everything between a codec and a packet on the wire.

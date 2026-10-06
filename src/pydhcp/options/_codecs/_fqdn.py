@@ -134,7 +134,7 @@ class ClientFQDN(_Record, _TextForm):
         return bool(self.flags & self.FLAG_E)
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_ClientFQDNT], option: memoryview
     ) -> tuple[_ClientFQDNT, int]:
         if len(option) < 3:
@@ -175,7 +175,7 @@ class ClientFQDN(_Record, _TextForm):
             raise DHCPDecodeError("ClientFQDN has trailing data after the name")
         return name, False
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         start = len(data)
         data.append(self.flags)
         data.append(self.rcode1)
@@ -189,14 +189,14 @@ class ClientFQDN(_Record, _TextForm):
             data.extend(self.name.encode("utf-8"))
         return len(data) - start
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return (
             f"ClientFQDN(name={self.name!r}, flags={self.flags:#04x}, "
             f"rcode1={self.rcode1}, rcode2={self.rcode2}"
             + (", partial=True)" if self.partial else ")")
         )
 
-    def __json__(self) -> dict[str, _ty.Any]:
+    def to_json(self) -> dict[str, _ty.Any]:
         return {
             "name": self.name,
             "flags": self.flags,

@@ -23,7 +23,7 @@ class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
     """DHCP message types"""
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_DHCPMessageTypeT], option: memoryview
     ) -> tuple[_DHCPMessageTypeT, int]:
         option_part = option[:1]
@@ -36,12 +36,12 @@ class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
         except ValueError as exc:
             raise DHCPDecodeError(str(exc)) from exc
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         data.append(self.value)
         return 1
 
     @classmethod
-    def _dhcp_len_hint(cls) -> _ty.Optional[int]:
+    def fixed_size(cls) -> _ty.Optional[int]:
         return 1
 
     def __repr__(self) -> str:
@@ -50,7 +50,7 @@ class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
     def __str__(self) -> str:
         return self.name
 
-    def _display_text(self) -> str:
+    def display_text(self) -> str:
         return self.name
 
     DHCPDISCOVER = 1

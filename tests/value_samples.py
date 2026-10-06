@@ -98,6 +98,7 @@ SAMPLES: dict[type, tuple[tuple[_ty.Any, ...], tuple[_ty.Any, ...]]] = {
 #: Exported classes that are contracts or bases, not values.
 NOT_VALUES = {
     "DHCPOptionType",
+    "OptionCodec",
     "List",
     "RecordList",
     "DHCPOptionCodes",

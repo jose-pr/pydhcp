@@ -99,7 +99,10 @@ of the installed package).
   entry) fall back to `Bytes` (opaque). `DHCPMessageType`, the codec of option
   53, is defined in the options package and re-exported by `pydhcp.packet` and
   the root.
-- **`BaseDHCPOptionCode`** — protocol/base for a custom code enum:
+- **`OptionCode`** — the `typing.Protocol` of a code enum (`get_type`, `label`,
+  `int()`, and the classmethods `from_code`, `normalize`, `decode`), which
+  `DHCPOptions(codemap=...)` takes; **`BaseDHCPOptionCode`** — its base class with
+  the defaults, for a custom code enum:
   `.get_type()`, `.label()`, `.from_code(code: int)` (classmethod,
   constructs/looks up a code value), `.normalize(code, value) -> DHCPOption`,
   `.decode(code, value: bytearray) -> DHCPOption`. Subclass this (instead of
@@ -125,12 +128,51 @@ of it, so `DHCPOptionCode(212).name` is `SIXRD`.
 
 ## Option payload codecs (`pydhcp.options`)
 
-Every codec implements the `DHCPOptionType` protocol: `_dhcp_read(option:
-memoryview) -> tuple[Self, int]` (classmethod decode + bytes consumed),
-`_dhcp_write(buffer: bytearray) -> int` (encode + bytes written), optional
-`_dhcp_len_hint() -> int | None` (fixed-size codecs only), and `__json__()`
-for structured (JSON/YAML/TOML/INI) round-tripping. `_dhcp_decode(bytes) ->
-Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
+### Writing a codec (`OptionCodec`)
+
+`OptionCodec` is the `typing.Protocol` a codec satisfies; `isinstance(x,
+OptionCodec)` is a run-time check that the methods exist (names only, not
+signatures). `DHCPOptionType` is the base class that supplies all of it but
+the three things a codec writes itself:
+
+- **the constructor `Codec(value)`** — one argument: a value, or what a
+  document holds (what `to_json()` returned). Validate here and raise
+  `DHCPValueError` for a value the option cannot carry.
+- **`unpack_from(cls, option: memoryview) -> tuple[Codec, int]`** (classmethod)
+  — read one value from the start of `option`; return it and the number of
+  octets it took. Raise `DHCPDecodeError` for octets that are not a value. A
+  list codec calls it repeatedly on the rest of the payload.
+- **`pack_into(self, buffer: bytearray) -> int`** — append the payload's octets
+  to `buffer`; return how many.
+
+and may override these, each with a default:
+
+- **`fixed_size(cls) -> int | None`** (classmethod) — the exact payload length
+  of every value; `unpack` refuses any other length. Default `None`.
+- **`to_json(self) -> Any`** — the value as plain data (`str`, `int`, `bool`,
+  `list`, `dict`) for a JSON, YAML, TOML or INI document. Default: the value
+  itself. `Codec(value.to_json())` must equal `value`: `from_text` and
+  `from_mapping` rebuild a value that way.
+- **`display_text(self) -> str`** — what `message.summary()`, the log and the
+  capture formats show. Default: `repr(value)`.
+
+What the base adds: **`Codec.unpack(data) -> Codec`** (classmethod) reads the
+whole payload — `fixed_size` is checked, octets `unpack_from` did not take are
+an error, and a `DHCPValueError` the constructor raises becomes a
+`DHCPDecodeError` — and **`value.pack() -> bytes`** returns the payload.
+
+*Registering.* `DHCPOptionCode(code).register_type(Codec)` binds the codec to
+an option code, a name the enum lacks (`DHCPOptionCode(224)`) as much as a
+member, for the rest of the process; `register_type(Bytes)` puts the opaque
+default back. After that `options[code] = value` (or any value `Codec(...)`
+accepts), `options.get(code)`, `DHCPMessage.decode`/`.encode`,
+`message.summary()` and `from_text`/`to_text` in all four formats use it. A
+class that is not a `DHCPOptionType` but has the methods of `OptionCodec`
+registers too.
+
+*Names.* The contract is `pack`/`unpack`, not `encode`/`decode`, because the
+codecs that subclass a builtin keep its methods: `Bytes.decode` is
+`bytes.decode` and `String.encode` is `str.encode`.
 
 **Values.** Every codec is a value: it copies, deep-copies and pickles to an
 equal value of the same class (the classes `List[...]` builds pickle too, in
@@ -160,7 +202,7 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
   `String("a") == "a"`, `address in network`. That is documented and kept;
   `Boolean(1) == U8(1)` follows from it.
 
-- **`DHCPOptionType`** — the base protocol above.
+- **`DHCPOptionType`** — the base class above; **`OptionCodec`** — its protocol.
 - **`List[T]`** (generic, subscript with a `DHCPOptionType`, e.g.
   `List[IPv4AddressOption]`) — a homogeneous repeated-record list; items are
   normalized through `T(...)` on every operation that adds an item.
@@ -195,7 +237,7 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
   Octets that are not valid UTF-8 are **preserved**, not replaced (logged), so
   the value re-encodes to exactly what arrived — a hostname or boot filename in
   another encoding survives being forwarded. They are held as surrogates, so
-  such a value cannot go to a strict encoder: `__json__()` returns the display
+  such a value cannot go to a strict encoder: `to_json()` returns the display
   form, with U+FFFD, and is what structured output uses. See `pydhcp._nvt`.
 - **`OctetString`** (`String` subclass) — text that is the **whole** payload:
   no NUL terminator, no truncation. RFC 2132 §9.13 defines option 60 as "a
@@ -375,7 +417,7 @@ carrying a name can reach it with no import-order constraint.
   enterprise-number records, as this header says a few sections up, and the
   two are different shapes. **`CCCSubOption`** — the sub-option TLV record base.
 - Typed sub-option payloads, each a thin wrapper with its own
-  `_dhcp_read`/`_dhcp_write`: **`CCCPrimaryDHCPServerAddress`** /
+  `unpack_from`/`pack_into`: **`CCCPrimaryDHCPServerAddress`** /
   **`CCCSecondaryDHCPServerAddress`** (`IPv4AddressOption`-backed);
   **`CCCProvisioningServerAddress`**, which is **not** `IPv4AddressOption`-backed but
   a *tagged union* — a leading type octet selects an IPv4 address (1) or an

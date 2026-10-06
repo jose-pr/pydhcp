@@ -46,7 +46,7 @@ class _MoSLabelList(_NormalizedList[str]):
         return normalized
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_MoSLabelListT], option: memoryview
     ) -> tuple[_MoSLabelListT, int]:
         self = cls()
@@ -58,7 +58,7 @@ class _MoSLabelList(_NormalizedList[str]):
             idx += read
         return self, size
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         written = 0
         for item in self:
             encoded = self._encode_domain(item)
@@ -66,7 +66,7 @@ class _MoSLabelList(_NormalizedList[str]):
             written += len(encoded)
         return written
 
-    def __json__(self) -> list[str]:
+    def to_json(self) -> list[str]:
         return list(self)
 
 
@@ -95,7 +95,7 @@ class _MoSSubOption(_Record):
     def _write_payload(self, data: bytearray) -> int:
         payload = self.value
         if isinstance(payload, DHCPOptionType):
-            return payload._dhcp_write(data)
+            return payload.pack_into(data)
         payload_bytes = _octets(payload)
         data.extend(payload_bytes)
         return len(payload_bytes)
@@ -106,7 +106,7 @@ class _MoSSubOption(_Record):
     ) -> _MoSSubOptionT:
         return cls(code, cls._read_payload(payload))
 
-    def _dhcp_write(self, data: bytearray) -> int:
+    def pack_into(self, data: bytearray) -> int:
         payload = bytearray()
         payload_len = self._write_payload(payload)
         if payload_len > 255:
@@ -117,7 +117,7 @@ class _MoSSubOption(_Record):
         return payload_len + 2
 
     @classmethod
-    def _dhcp_read(
+    def unpack_from(
         cls: type[_MoSSubOptionT], option: memoryview
     ) -> tuple[_MoSSubOptionT, int]:
         if len(option) < 2:
@@ -128,10 +128,10 @@ class _MoSSubOption(_Record):
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         return cls._from_payload(code, option[2 : 2 + length]), 2 + length
 
-    def __json__(self) -> list[_ty.Any]:
+    def to_json(self) -> list[_ty.Any]:
         value = self.value
         if isinstance(value, DHCPOptionType):
-            value = value.__json__()
+            value = value.to_json()
         return [self.code, value]
 
 
@@ -169,9 +169,9 @@ class _MoSIPv4AddressSubOption(_MoSSubOption):
 
     def _write_payload(self, data: bytearray) -> int:
         if self.code not in self._KNOWN_CODES:
-            return _octets(self.value)._dhcp_write(data)
+            return _octets(self.value).pack_into(data)
         payload = _ty.cast(DHCPOptionType, self.value)
-        return payload._dhcp_write(data)
+        return payload.pack_into(data)
 
 
 _MoSFQDNSubOptionT = _ty.TypeVar("_MoSFQDNSubOptionT", bound="_MoSFQDNSubOption")
@@ -190,7 +190,7 @@ class _MoSFQDNSubOption(_MoSSubOption):
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
-        return _MoSLabelList._dhcp_read(payload)[0]
+        return _MoSLabelList.unpack_from(payload)[0]
 
     @classmethod
     def _from_payload(
@@ -202,9 +202,9 @@ class _MoSFQDNSubOption(_MoSSubOption):
 
     def _write_payload(self, data: bytearray) -> int:
         if self.code not in self._KNOWN_CODES:
-            return _octets(self.value)._dhcp_write(data)
+            return _octets(self.value).pack_into(data)
         payload = _ty.cast(DHCPOptionType, self.value)
-        return payload._dhcp_write(data)
+        return payload.pack_into(data)
 
 
 class MoSIPv4AddressRecord(_MoSIPv4AddressSubOption):
