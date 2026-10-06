@@ -9,8 +9,11 @@ plus whatever the test passes.
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 import sys
+import threading
+import time
 import typing as _ty
 
 import pydhcp
@@ -77,3 +80,83 @@ def run_cli(
         cwd=cwd,
         timeout=timeout,
     )
+
+
+def free_port() -> int:
+    """A UDP port on 127.0.0.1 nothing holds right now."""
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+class Running:
+    """`pydhcp argv...` started and left running.
+
+    Start it with `-v` and `--listen 127.0.0.1:<free_port()>`: the listener
+    announces that it is binding, and `listening()` waits for that line (and a
+    moment for the bind that follows it). `finish()` waits for the command to
+    end by itself and returns its status, killing it, and failing the caller's
+    check, when it does not.
+    """
+
+    def __init__(
+        self,
+        *argv: str,
+        env: "_ty.Optional[_ty.Mapping[str, str]]" = None,
+        cwd: "_ty.Optional[_ty.Union[str, os.PathLike[str]]]" = None,
+    ) -> None:
+        self.process = subprocess.Popen(
+            [sys.executable, "-m", "pydhcp", *argv],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            env=environment(env),
+            cwd=cwd,
+        )
+        self.stdout: "list[str]" = []
+        self.stderr: "list[str]" = []
+        self._listening = threading.Event()
+        assert self.process.stdout is not None and self.process.stderr is not None
+        self._threads = [
+            threading.Thread(
+                target=self._read, args=(self.process.stdout, self.stdout), daemon=True
+            ),
+            threading.Thread(
+                target=self._read, args=(self.process.stderr, self.stderr), daemon=True
+            ),
+        ]
+        for thread in self._threads:
+            thread.start()
+
+    def _read(self, stream: "_ty.IO[str]", into: "list[str]") -> None:
+        for line in stream:
+            into.append(line.rstrip("\r\n"))
+            if "Listening on" in line:
+                self._listening.set()
+
+    def listening(self, timeout: float = 30.0) -> None:
+        """Wait until the command has announced and made its bind."""
+        if not self._listening.wait(timeout):
+            self.kill()
+            raise AssertionError("the command did not bind:\n" + "\n".join(self.stderr))
+        time.sleep(0.3)
+
+    def finish(self, timeout: float = 30.0) -> int:
+        try:
+            status = self.process.wait(timeout)
+        except subprocess.TimeoutExpired:
+            self.kill()
+            raise AssertionError(
+                "the command did not end by itself:\n" + "\n".join(self.stderr)
+            ) from None
+        for thread in self._threads:
+            thread.join(10)
+        return status
+
+    def kill(self) -> None:
+        if self.process.poll() is None:
+            self.process.kill()
+            self.process.wait()

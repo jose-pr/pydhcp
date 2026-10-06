@@ -134,6 +134,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`PYDHCP_TRACEBACK` is a boolean**: `0`, `false`, `no` and `off` no longer enable
   tracebacks; any text that is neither a true nor a false word is an error naming the
   variable.
+- **`pydhcp capture` ends, with status 1 and a last line, when it cannot keep a record**: a
+  record that needs a file past `--max-files` (new, default 1000, the old `MAX_PER_CAPTURE_FILES`)
+  says how many records were refused, and a record that cannot be written (a directory the pattern
+  names is a file, a full disk) says which path and why. Both used to leave the capture running,
+  recording nothing and exiting 0 or never exiting, with a traceback per packet. A single output
+  file that is a directory or read-only is refused before the capture binds, status 2.
+- **A value interpolated into a capture filename is at most 64 characters**: a longer one (a client
+  identifier is up to 255 octets, 765 characters as text) is cut and ends in a hash of the whole,
+  so two long values still name two files. It used to make every write fail.
 - **Every option has a help line**: `packet --decode`, `--encode` and `capture --format`
   had none, and `capture --filter` showed the field name `PACKET_FILTER`.
 - **The relay follows RFC 3046 section 2.1 on the request side.** It adds option 82 only to

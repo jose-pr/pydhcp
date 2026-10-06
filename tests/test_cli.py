@@ -1075,22 +1075,23 @@ def _capture_event_with_client_id(client_id: bytes):
     return CaptureEvent(message, context, _dt.datetime.now(tz=_dt.timezone.utc))
 
 
-def test_per_capture_file_count_is_bounded(tmp_path, caplog):
+def test_per_capture_file_count_is_bounded(tmp_path):
     """The filename pattern interpolates values the client chooses.
 
     Measured before the cap: 5,000 forged client identifiers produced 5,000
     files. An unauthenticated sender decided how much of the operator's disk to
-    use, and `capture` is exactly what an operator leaves running.
+    use, and `capture` is exactly what an operator leaves running. The record
+    that needs a file past the bound is refused, and counted.
     """
-    import logging
-
     from pydhcp import cli
+    from pydhcp.cli._capture import _BudgetFull
 
     pattern = str(tmp_path / "{client_id}.{format}")
-    state: dict = {"first": True}
+    state: dict = {"first": True, "max_files": 20}
 
-    with caplog.at_level(logging.WARNING, logger="pydhcp"):
-        for index in range(cli.MAX_PER_CAPTURE_FILES + 50):
+    refused = 0
+    for index in range(20 + 5):
+        try:
             _write_capture_record(
                 _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
                 output=pattern,
@@ -1098,13 +1099,12 @@ def test_per_capture_file_count_is_bounded(tmp_path, caplog):
                 packet_format="json",
                 state=state,
             )
+        except _BudgetFull:
+            refused += 1
 
-    assert len(list(tmp_path.iterdir())) == cli.MAX_PER_CAPTURE_FILES
-    assert state["per_capture_refused"] == 50
-    # reported once, not once per refused packet -- the thing filling the disk
-    # is a flood, so a line each would hand over the log as a second target
-    reports = [r for r in caplog.records if "per-capture files" in r.getMessage()]
-    assert len(reports) == 1, len(reports)
+    assert len(list(tmp_path.iterdir())) == 20
+    assert refused == state["per_capture_refused"] == 5
+    assert cli.MAX_PER_CAPTURE_FILES == 1000
 
 
 def test_a_pattern_the_client_cannot_influence_is_not_limited(tmp_path):

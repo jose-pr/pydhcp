@@ -1220,7 +1220,7 @@ stayed at the root level and the library's output never appeared.
   accepting `-` for stdio, `--format json|yaml|toml|ini|summary`; `summary` is
   decode-only, its first line is the op and XID), `capture` (`--listen`,
   `--filter`, `--format`, `--output` file/pattern/`-`, `--output-mode
-  stream|single|per-capture`, `--count`, `--hook` `module:function` or an
+  stream|single|per-capture`, `--max-files`, `--count`, `--hook` `module:function` or an
   executable (a name with a directory is that file, resolved against the working
   directory when the capture starts and run by its absolute path; a bare name is
   looked up on `PATH`; a non-executable file is refused at start-up), `--hook-fail-fast`, `--per-interface`). Also gets
@@ -1275,15 +1275,27 @@ stayed at the root level and the library's output never appeared.
   `--output "cap_{mac}.json"` recorded nothing while logging once per packet.
   The overwrite case is a **warning, not an error, deliberately** — see
   `MAX_PER_CAPTURE_FILES` next.
-- **`MAX_PER_CAPTURE_FILES`** (1000) — how many *distinct* files one
-  `per-capture` run may create. The pattern interpolates values the client
-  chooses, so without a bound one unauthenticated sender decides how much of
-  the operator's disk to use (measured: 5,000 forged identifiers, 5,000
-  files). Past the cap, new paths are refused, with the reason logged once.
-  Rewriting an already-seen path is always free, which is what leaves a
-  pattern the client cannot influence unlimited — so the overwrite case above
-  must stay a warning: refusing it, or minting a suffixed new path per packet,
-  would make a long run reach the cap and silently stop recording.
+- **`MAX_PER_CAPTURE_FILES`** (1000; `--max-files N` sets the bound) — how many
+  *distinct* files one `per-capture` run may create. The pattern interpolates
+  values the client chooses, so without a bound one unauthenticated sender
+  decides how much of the operator's disk to use (measured: 5,000 forged
+  identifiers, 5,000 files). **A record that needs a file past the bound ends the
+  capture**: status 1 and a last line, `pydhcp: error: capture stopped: N files
+  written, the limit of --max-files; M records refused ...`. Rewriting an
+  already-seen path is always free, which is what leaves a pattern the client
+  cannot influence unlimited. `--max-files` with any other `--output-mode`, or
+  below 1, is a wrong invocation (status 2). Each value interpolated into a
+  filename is at most 64 characters: a longer one is cut and ends in an
+  eight-digit hash of the whole, so two long client identifiers still name two
+  files.
+- **A record that cannot be written ends the capture**: the first one that
+  fails (a directory the pattern names is a file, a full or read-only disk, a
+  path that is a directory) stops the capture with status 1 and one line,
+  `pydhcp: error: capture stopped: cannot write <path>: <reason>`, as
+  `--hook-fail-fast` does for a hook. A single output file is opened for append
+  **before anything is bound** (and created when absent), and a target that
+  cannot be written, such as a directory or a read-only file, is a wrong
+  invocation (status 2).
 
 **Gotchas (duho field declarations, Python 3.9 target)**:
 - A **class-body field annotation** (not a bare function annotation) is
@@ -1338,7 +1350,7 @@ variable (status 2).
 | `PYDHCP_MCP` | not read: the root disables the tool server, and the variable is left untouched |
 | `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE` | `server --listen`, `--per-interface`, `--lease-file` |
 | `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
-| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_OUTPUT_MODE`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--output-mode`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
+| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_OUTPUT_MODE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--output-mode`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
 | `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` (`--decode` and `--encode` choose a mode and are not settings) |
 | `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
 | `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input |

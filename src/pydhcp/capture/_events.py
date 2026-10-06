@@ -6,6 +6,7 @@ import ipaddress as _ipaddress
 import dataclasses as _data
 import datetime as _dt
 import enum as _enum_base
+import hashlib as _hashlib
 import re as _re
 import string as _string
 import typing as _ty
@@ -181,8 +182,23 @@ def compile_capture_filter(text: _ty.Optional[str]) -> CapturePredicate:
     return predicate
 
 
+#: The longest a value interpolated into a filename may be, in characters. A
+#: client identifier is up to 255 octets, which renders as 765 characters, and
+#: no filesystem takes a path component that long.
+MAX_FILENAME_VALUE = 64
+
+
 def _sanitize_filename_value(value: str) -> str:
-    return _SAFE_FILENAME_RE.sub("_", value).strip("._") or "unknown"
+    """`value` as one safe path component of at most `MAX_FILENAME_VALUE` characters.
+
+    A longer value is cut and ends in a hash of the whole, so two long values
+    that agree at the start still name two files.
+    """
+    cleaned = _SAFE_FILENAME_RE.sub("_", value).strip("._") or "unknown"
+    if len(cleaned) <= MAX_FILENAME_VALUE:
+        return cleaned
+    digest = _hashlib.sha256(value.encode("utf-8", "surrogatepass")).hexdigest()[:8]
+    return f"{cleaned[: MAX_FILENAME_VALUE - 9].rstrip('._')}-{digest}"
 
 
 def _compile_clause(key: str, value: str) -> CapturePredicate:

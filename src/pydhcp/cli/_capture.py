@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging as _logging
 import pathlib
-import sys
 import typing as _ty
 
 from duho import Meta
@@ -15,7 +14,7 @@ from ..capture._events import (
     validate_filename_pattern,
 )
 from ..capture._sync import DHCPCapture
-from ._common import CAPTURE_FORMATS, _arguments, _Configured, _Failed
+from ._common import CAPTURE_FORMATS, _arguments, _Configured, _Failed, write_line
 from ._settings import listen_value
 from ._capture_hook import _load_capture_hook, _serialize_capture_event
 
@@ -67,12 +66,16 @@ def _stream_separator(packet_format: str, first: bool) -> str:
     return "---\n"
 
 
-#: How many distinct files one `--output-mode per-capture` run may create.
-#: The filename pattern interpolates values the *client* chooses -- the client
-#: identifier above all -- so without a bound, one unauthenticated sender
-#: decides how many files land on the operator's disk. Measured: 5,000 forged
-#: identifiers produced 5,000 files.
+#: How many distinct files one `--output-mode per-capture` run may create, unless
+#: `--max-files` says otherwise. The filename pattern interpolates values the
+#: *client* chooses -- the client identifier above all -- so without a bound,
+#: one unauthenticated sender decides how many files land on the operator's
+#: disk. Measured: 5,000 forged identifiers produced 5,000 files.
 MAX_PER_CAPTURE_FILES = 1000
+
+
+class _BudgetFull(Exception):
+    """The per-capture file budget is spent and this record needs a new file."""
 
 
 def _per_capture_budget(state: "dict[str, _ty.Any]", path: pathlib.Path) -> bool:
@@ -85,17 +88,9 @@ def _per_capture_budget(state: "dict[str, _ty.Any]", path: pathlib.Path) -> bool
     seen = state.setdefault("per_capture_files", set())
     if path in seen:
         return True
-    if len(seen) < MAX_PER_CAPTURE_FILES:
+    if len(seen) < state.get("max_files", MAX_PER_CAPTURE_FILES):
         seen.add(path)
         return True
-    if not state.get("per_capture_full_reported"):
-        state["per_capture_full_reported"] = True
-        LOGGER.warning(
-            f"Reached {MAX_PER_CAPTURE_FILES} per-capture files; not creating more. "
-            "The filename pattern includes a value the client chooses, so a flood "
-            "of forged identifiers would otherwise fill the disk. Raise "
-            "MAX_PER_CAPTURE_FILES, or use a pattern without {client_id}."
-        )
     state["per_capture_refused"] = state.get("per_capture_refused", 0) + 1
     return False
 
@@ -108,6 +103,10 @@ def _write_capture_record(
     packet_format: str,
     state: "dict[str, _ty.Any]",
 ) -> str:
+    """Write one record where `output` says; `_BudgetFull` when it needs a file past the budget.
+
+    An `OSError` is a record that could not be written.
+    """
     payload = _serialize_capture_event(event, packet_format)
     target = "-" if output is None else str(output)
     if output_mode == "per-capture":
@@ -115,31 +114,40 @@ def _write_capture_record(
             raise ValueError("--output-mode per-capture requires a filename pattern")
         path = pathlib.Path(event.format_filename(target, packet_format))
         if not _per_capture_budget(state, path):
-            return payload
+            raise _BudgetFull
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(payload, encoding="utf-8")
+        path.write_text(payload, encoding="utf-8", errors="backslashreplace")
         return payload
 
     prefix = _stream_separator(packet_format, bool(state.get("first", True)))
     state["first"] = False
     record = prefix + payload
     if target == "-":
-        sys.stdout.write(record)
-        if not record.endswith("\n"):
-            sys.stdout.write("\n")
-        # Flush per record: piped into `jq` or `tee`, stdout is block-buffered,
-        # so a live capture showed nothing for ~8 KB or until it exited -- and
-        # lost whatever was still buffered if it was killed.
-        sys.stdout.flush()
+        write_line(record)
         return payload
 
     path = pathlib.Path(target)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
+    with path.open("a", encoding="utf-8", errors="backslashreplace") as handle:
         handle.write(record)
         if not record.endswith("\n"):
             handle.write("\n")
     return payload
+
+
+def _probe(path: pathlib.Path) -> None:
+    """Refuse an output file that cannot be appended to, before anything is bound.
+
+    The file is created when it is absent, as the first record would create it.
+    """
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8"):
+            pass
+    except OSError as error:
+        raise ValueError(
+            f"--output {path} cannot be written: {error.strerror or error}"
+        ) from None
 
 
 class Capture(_Configured):
@@ -196,6 +204,12 @@ class Capture(_Configured):
     "Stop capturing and exit non-zero on the first hook failure"
     ("--hook-fail-fast",)
 
+    max_files: _ty.Annotated[
+        _ty.Optional[int], Meta(env="PYDHCP_CAPTURE_MAX_FILES")
+    ] = None
+    "With --output-mode per-capture: end the capture, status 1, when a record needs more than this many distinct files. Default: 1000"
+    ("--max-files",)
+
     per_interface: _ty.Annotated[bool, Meta(env="PYDHCP_CAPTURE_PER_INTERFACE")] = False
     "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
     ("--per-interface",)
@@ -203,6 +217,11 @@ class Capture(_Configured):
     def __call__(self) -> None:
         output = self.output
         output_mode = _infer_output_mode(output, self.output_mode)
+        max_files = MAX_PER_CAPTURE_FILES if self.max_files is None else self.max_files
+        if self.max_files is not None and output_mode != "per-capture":
+            raise ValueError("--max-files only applies to --output-mode per-capture")
+        if max_files < 1:
+            raise ValueError(f"--max-files must be at least 1, got {max_files}")
         if output_mode == "per-capture":
             if str(output) == "-":
                 raise ValueError(
@@ -235,19 +254,43 @@ class Capture(_Configured):
                 f"(multi-document). Note the format is inferred from the "
                 f"--output extension when --format is not given."
             )
-        state: "dict[str, _ty.Any]" = {"first": True, "count": 0}
+        if output_mode != "per-capture" and str(output) != "-":
+            _probe(output)
+
+        state: "dict[str, _ty.Any]" = {
+            "first": True,
+            "count": 0,
+            "max_files": max_files,
+        }
         capture: DHCPCapture
 
         def sink(event: CaptureEvent) -> None:
-            _write_capture_record(
-                event,
-                output=output,
-                output_mode=output_mode,
-                packet_format=packet_format,
-                state=state,
-            )
+            # The listener logs what a sink raises and carries on, so a record
+            # that cannot be kept has to end the capture from here.
+            if state.get("stopped"):
+                if state.get("budget_full"):
+                    state["per_capture_refused"] += 1
+                return
+            try:
+                _write_capture_record(
+                    event,
+                    output=output,
+                    output_mode=output_mode,
+                    packet_format=packet_format,
+                    state=state,
+                )
+            except _BudgetFull:
+                state["stopped"] = state["budget_full"] = True
+                capture.shutdown()
+                return
+            except (OSError, ValueError) as error:
+                state["stopped"] = True
+                state["failure"] = error
+                capture.shutdown()
+                return
             state["count"] += 1
             if self.count is not None and state["count"] >= self.count:
+                state["stopped"] = True
                 capture.shutdown()
 
         hook = _load_capture_hook(self.hook, packet_format, self.hook_fail_fast)
@@ -265,6 +308,21 @@ class Capture(_Configured):
                 capture.serve_forever()
         except KeyboardInterrupt:
             self._logger_.info("Stopped listening due to Ctrl-C")
+        failure = state.get("failure")
+        if isinstance(failure, BrokenPipeError):
+            raise failure
+        if failure is not None:
+            reason = getattr(failure, "strerror", None) or failure
+            where = getattr(failure, "filename", None) or output
+            raise _Failed(f"capture stopped: cannot write {where}: {reason}")
+        if state.get("budget_full"):
+            raise _Failed(
+                f"capture stopped: {max_files} files written, the limit of "
+                f"--max-files; {state['per_capture_refused']} records refused. "
+                "The filename pattern includes a value the client chooses, so a "
+                "flood of forged identifiers would otherwise fill the disk: raise "
+                "--max-files, or use a pattern without {client_id}"
+            )
         if capture.hook_error is not None:
             # --hook-fail-fast asked for this: say why it stopped, and do
             # not report success.

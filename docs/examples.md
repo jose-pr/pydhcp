@@ -264,6 +264,14 @@ Write one file per accepted packet:
 pydhcp capture --listen 127.0.0.1:6767 --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --output-mode per-capture
 ```
 
+The filename pattern uses values the client chooses, so one run creates at most `--max-files`
+distinct files (1000 by default). The packet that needs one more ends the capture with status 1
+and a last line saying how many records were refused; raise the limit, or use a pattern without
+`{client_id}`. A value in a filename is cut at 64 characters and ends in a hash, so a long client
+identifier still gets its own file. A record that cannot be written (the directory is a file, the
+disk is full) ends the capture the same way, with one line naming the path, and a single output
+file that cannot be appended to is refused before the capture binds.
+
 Hooks can be trusted Python callables or commands. Command hooks receive the serialized
 packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables. A command with a
 directory in its name (`./on-dhcp-capture`, `/opt/hooks/export`) is that file, found relative
