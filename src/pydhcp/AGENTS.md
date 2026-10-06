@@ -937,24 +937,37 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
   - The file maps each client identifier to `{"ip", "expires", "state",
     "options"}` (option payloads as hex). `state` is `"offered"` or `"bound"`;
     an entry with no `state`, as older files hold, is bound. `expires` is an
-    ISO-8601 time with an offset, or `"inf"` for no expiry. A time without an
-    offset, as older files hold, is read as local time of the same instant; an
+    ISO-8601 instant with an offset (written in UTC, `+00:00`: an expiry is an
+    instant, so a clock change or a different time zone does not move it), or
+    `"inf"` for no expiry. The file is UTF-8 with LF line endings on every
+    platform. A time without an offset, as older files hold, is read as local
+    time of the same instant, once, on load, and written back in UTC; an
     entry with no `ip` is skipped with a warning. An offer is not saved by
     itself (it is short and means nothing after a restart, and a rewrite per
     forged DISCOVER would cost what the sender chooses): the next save writes
     the offers still held, and one that has lapsed by the time the file is read
     is gone.
-  - A missing file starts empty and says nothing. An **unreadable** one is
-    logged at ERROR and moved aside to `<filepath>.corrupt` — it is the only
-    copy of that state, so it is kept for recovery rather than overwritten by
-    the next save.
+  - A missing file starts empty and says nothing. **A file is read whole or not
+    at all**: a bad entry (a malformed address, an unknown `state`, bad option
+    hex), an address held by two clients, or more live leases than `MAX_LEASES`
+    leaves the store **empty** and is logged at ERROR (the count and the bound,
+    for the last). The file is moved aside to `<filepath>.corrupt`, or
+    `.corrupt.1`, `.corrupt.2`, … when that name is taken — it is the only copy
+    of that state, so it is kept byte for byte, never overwritten, and never
+    replaced by a save of a half-loaded store. A lease that has run out when the
+    file is read is not loaded and does not count toward `MAX_LEASES`.
   - A save that fails is logged at ERROR and does **not** raise: a lease store
     that cannot be written must not take the server down mid-exchange. So it
     is best-effort persistence — but no longer a silent one.
   - **`SAVE_INTERVAL_SECONDS`** (class var, `0.0`) — `0` writes on every
-    mutation, which is the default. Above zero, writes are coalesced to at
-    most one per interval; **`.flush()`** forces a pending write and
-    **`.close()`** flushes (the backend is also a context manager). Measured
+    mutation, which is the default, and starts no thread. Above zero, writes are
+    coalesced to at most one per interval: a change after a quiet interval is
+    written at once, and one that comes sooner is written by **a daemon timer
+    thread** (`pydhcp-lease-save`) at the end of the interval, so **a change is on
+    disk within `SAVE_INTERVAL_SECONDS` of being made**, with no further change or
+    call needed. **`.flush()`** writes a pending change now and cancels the timer;
+    **`.close()`** flushes (the backend is also a context manager). A server does
+    not close a backend it was given: call `.close()` yourself on the way out. Measured
     over 4,000 allocations: 115.76 s at the default, 0.02 s at a one-second
     interval. It is opt-in because it trades up to an interval of leases on a
     crash — which an operator cannot see going wrong — for throughput they

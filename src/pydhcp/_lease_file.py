@@ -8,6 +8,7 @@ import ipaddress as _ipaddress
 import json as _json
 import os as _os
 import tempfile as _tempfile
+import threading as _threading
 import time as _time
 import typing as _ty
 
@@ -24,9 +25,12 @@ class FileLeaseBackend(InMemoryLeaseBackend):
     """Leases persisted to JSON.
 
     Every mutation writes the whole file by default, which is O(store) each
-    time. `SAVE_INTERVAL_SECONDS` above zero coalesces instead: a mutation marks
-    the store dirty and the file is rewritten at most that often, with
-    `flush()` and `close()` forcing one.
+    time. `SAVE_INTERVAL_SECONDS` above zero coalesces instead: the file is
+    rewritten at most that often. A change after a quiet interval is written at
+    once; one that comes sooner is written by a daemon timer thread at the end of
+    the interval, so a change reaches the disk within `SAVE_INTERVAL_SECONDS` of
+    being made and no later. `flush()` and `close()` write at once and cancel the
+    timer.
 
     Off by default deliberately. Coalescing trades a property the operator
     cannot see going wrong -- up to an interval of leases lost on a crash -- for
@@ -46,6 +50,8 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         self.filepath = filepath
         self._dirty = False
         self._last_save = float("-inf")
+        #: The pending write of a coalescing store, if one is armed.
+        self._timer: _ty.Optional[_threading.Timer] = None
 
     @property
     def _leases(self) -> _ty.Dict[str, DHCPLease]:
@@ -60,9 +66,11 @@ class FileLeaseBackend(InMemoryLeaseBackend):
     def open(self) -> None:
         """Read the lease file, once. A missing file is an empty store.
 
-        An unreadable file is moved aside as `<path>.corrupt`, as before, and the
-        store starts empty. Called by the first lease operation if the caller
-        has not, and by `with`.
+        The file is read whole or not at all: a bad entry, a duplicated address
+        or more live leases than `MAX_LEASES` leaves the store empty and moves the
+        file aside as `<path>.corrupt` (`.corrupt.1`, `.corrupt.2`, ... when that
+        name is taken). Called by the first lease operation if the caller has
+        not, and by `with`.
         """
         with self._lock:
             if self._loaded:
@@ -88,45 +96,18 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         self.close()
 
     def _load(self) -> None:
+        """Read the file whole or not at all.
+
+        Every entry is parsed into a dict of its own first; only when all of
+        them are good, and there are no more than `MAX_LEASES`, is the store
+        filled. Anything else leaves the store empty and the file set aside.
+        """
         if not _os.path.exists(self.filepath):
             return
         try:
             with open(self.filepath, "r", encoding="utf-8") as f:
                 data = _json.load(f)
-            for client_id, lease_data in data.items():
-                ip_str = lease_data.get("ip")
-                if not ip_str:
-                    LOGGER.warning(
-                        f"Skipping the lease of {client_id} in {self.filepath}: "
-                        "it has no address"
-                    )
-                    continue
-                state = lease_data.get("state", "bound")
-                if state not in ("offered", "bound"):
-                    raise ValueError(f"unknown lease state {state!r}")
-                exp_str = lease_data.get("expires")
-                expires: _ty.Optional[_dt.datetime] = None
-                if exp_str and exp_str != "inf":
-                    expires = _dt.datetime.fromisoformat(exp_str)
-                    if expires.utcoffset() is None:
-                        # Written as naive local time; the same instant.
-                        expires = expires.astimezone()
-
-                opts = DHCPOptions()
-                opts_data = lease_data.get("options", {})
-                for code_str, val_hex in opts_data.items():
-                    code = int(code_str)
-                    opts[code] = bytearray.fromhex(val_hex)
-
-                self._put(
-                    client_id,
-                    DHCPLease(
-                        ip=_ipaddress.IPv4Address(ip_str),
-                        expires=expires,
-                        options=opts,
-                        offered=state == "offered",
-                    ),
-                )
+            loaded = self._parse(data)
         except Exception as e:
             # Swallowing this started the server with an empty store and then
             # overwrote the file on the next save, so a truncated lease file
@@ -137,9 +118,72 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                 f"{e.__class__.__name__} | {e}"
             )
             self._quarantine_unreadable_file()
+            return
+        for client_id, lease in loaded.items():
+            self._put(client_id, lease)
+
+    def _parse(self, data: _ty.Any) -> _ty.Dict[str, DHCPLease]:
+        """The live leases `data` holds; `ValueError` or the like for a bad one."""
+        now = self._now()
+        loaded: _ty.Dict[str, DHCPLease] = {}
+        holders: _ty.Dict[_ipaddress.IPv4Address, str] = {}
+        for client_id, lease_data in data.items():
+            ip_str = lease_data.get("ip")
+            if not ip_str:
+                LOGGER.warning(
+                    f"Skipping the lease of {client_id} in {self.filepath}: "
+                    "it has no address"
+                )
+                continue
+            state = lease_data.get("state", "bound")
+            if state not in ("offered", "bound"):
+                raise ValueError(f"unknown lease state {state!r}")
+            exp_str = lease_data.get("expires")
+            expires: _ty.Optional[_dt.datetime] = None
+            if exp_str and exp_str != "inf":
+                expires = _dt.datetime.fromisoformat(exp_str)
+                if expires.utcoffset() is None:
+                    # Written as naive local time, once, by an older version:
+                    # read as the local time it was, the same instant.
+                    expires = expires.astimezone()
+
+            opts = DHCPOptions()
+            for code_str, val_hex in lease_data.get("options", {}).items():
+                opts[int(code_str)] = bytearray.fromhex(val_hex)
+            address = _ipaddress.IPv4Address(ip_str)
+            if address in holders:
+                raise ValueError(
+                    f"{address} is held by both {holders[address]} and {client_id}"
+                )
+            lease = DHCPLease(
+                ip=address,
+                expires=expires,
+                options=opts,
+                offered=state == "offered",
+            )
+            holders[address] = client_id
+            # A lease that has run out is absent by contract, so it neither
+            # loads nor counts toward the bound.
+            if lease.expires is None or lease.expires > now:
+                loaded[client_id] = lease
+        if len(loaded) > self.MAX_LEASES:
+            raise ValueError(
+                f"the file holds {len(loaded)} leases, more than MAX_LEASES "
+                f"({self.MAX_LEASES})"
+            )
+        return loaded
 
     def _quarantine_unreadable_file(self) -> None:
+        """Move the file to `<path>.corrupt`, or `.corrupt.1`, `.corrupt.2`, ... when taken.
+
+        An earlier set-aside copy is never overwritten: each is the only copy
+        of the state it held.
+        """
         damaged = f"{self.filepath}.corrupt"
+        attempt = 0
+        while _os.path.exists(damaged):
+            attempt += 1
+            damaged = f"{self.filepath}.corrupt.{attempt}"
         try:
             _os.replace(self.filepath, damaged)
         except Exception as e:  # pragma: no cover - unreadable and unmovable
@@ -154,17 +198,34 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         )
 
     def _save(self) -> None:
-        """Record that the store changed, and write if a write is due."""
+        """Record that the store changed, and write now or arm the timer."""
         with self._lock:
             self._dirty = True
             if self.SAVE_INTERVAL_SECONDS <= 0:
                 self._write_now()
                 return
-            if _time.monotonic() - self._last_save >= self.SAVE_INTERVAL_SECONDS:
+            wait = self._last_save + self.SAVE_INTERVAL_SECONDS - _time.monotonic()
+            if wait <= 0:
+                self._write_now()
+            elif self._timer is None:
+                timer = _threading.Timer(wait, self._write_when_due)
+                timer.daemon = True
+                timer.name = "pydhcp-lease-save"
+                self._timer = timer
+                timer.start()
+
+    def _write_when_due(self) -> None:
+        """The timer's call: write what changed since the last write."""
+        with self._lock:
+            self._timer = None
+            if self._dirty:
                 self._write_now()
 
     def _write_now(self) -> None:
         with self._lock:
+            if self._timer is not None:
+                self._timer.cancel()
+                self._timer = None
             self._dirty = False
             self._last_save = _time.monotonic()
             # First clean up expired leases
@@ -223,7 +284,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
             fd, temp_path = _tempfile.mkstemp(
                 dir=directory, prefix=".leases-", suffix=".tmp"
             )
-            handle = _os.fdopen(fd, "w", encoding="utf-8")
+            handle = _os.fdopen(fd, "w", encoding="utf-8", newline="\n")
             _json.dump(data, handle, indent=2)
             handle.flush()
             _os.fsync(handle.fileno())

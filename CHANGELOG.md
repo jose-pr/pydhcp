@@ -761,6 +761,21 @@ importable. Replace each name in the left column with the one beside it.
 - **`acquire_lease`, DHCPRELEASE, DHCPDECLINE and the withdrawal of an offer ask
   `lookup_lease`**, so a server that keeps its leases elsewhere overrides one method
   to answer them.
+- **A lease file is read whole or not at all.** A file with one bad entry loaded
+  the entries before it, logged "starting with no leases", and the next save wrote
+  the partial store over it. A bad entry, an address held by two clients, or more
+  live leases than `MAX_LEASES` (which was not applied on load) now leaves the store
+  empty and moves the file aside; the error names the count and the bound.
+- **A lease file set aside is never overwritten.** An unreadable file was moved to
+  `<path>.corrupt`, replacing an earlier one; it is now `.corrupt.1`, `.corrupt.2`,
+  ... when the name is taken.
+- **With `SAVE_INTERVAL_SECONDS` set, a change reaches the disk within the interval.**
+  A change inside the interval stayed unwritten until the next change, `flush()` or
+  `close()`, which `DHCPServer.close()` did not call. A daemon timer thread
+  (`pydhcp-lease-save`, started only when the interval is above zero) now writes it
+  at the end of the interval; `flush()` and `close()` write at once and cancel it.
+- **The lease file is written with LF line endings on every platform** (Windows wrote
+  CRLF). A file of either form loads.
 - **A wrong-length option 50, 51, 54 or 57 no longer raises out of `handle()`.**
   The options the server acts on are decoded once, at the top of `handle()`. A
   message whose option 50 or 54 is unusable is dropped (counted in
