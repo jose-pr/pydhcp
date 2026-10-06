@@ -26,7 +26,7 @@ is imported from the module that owns it:
 | `ServerAddressLike`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
 | `ClientIdentifierLike` | `pydhcp.client` |
 | `PacketFilterLike` | `pydhcp.capture` |
-| `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook` | `pydhcp.capture` |
+| `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook`, `DHCPLayer`, `dissect_dhcp`, `register_dhcp_dissector` | `pydhcp.capture` |
 | `main`, `App` | `pydhcp.cli` |
 
 A name outside a module's `__all__` is not API. The address and MAC types are
@@ -911,6 +911,24 @@ exchange has an entry in the pending table.
     files land on the disk (measured: 5,000 forged identifiers, 5,000 files).
   - `write`'s `OSError` (a full disk, a directory that is a file) is let through
     as it is, so a sink that must not raise catches it.
+- **`dissect_dhcp(data: bytes) -> pktcap.Dissected`**, **`DHCPLayer`** and
+  **`register_dhcp_dissector(registry=None) -> None`** — DHCP as a layer of
+  pktcap's dissection, so a capture file read with `pktcap.read_dissected`
+  carries a `DHCPLayer` on each frame that holds a message. `DHCPLayer` is a named
+  tuple of plain values: `op` (`BOOTREQUEST`), `xid` (an `int`), `message_type`
+  (`DHCPDISCOVER`; `UNKNOWN` without option 53), `client_id` (colon-separated
+  upper-case hex: option 61, else the hardware type and address) and `message`
+  (`DHCPMessage.to_mapping()`; a mapping, so the layer is not hashable).
+  `dissect_dhcp` decodes with `DHCPMessage.decode` and returns the layer with an
+  empty payload and nothing after it; octets that are not a message are a
+  `pktcap.DissectError` (a `ValueError`) whose text is the fixed `not a DHCP
+  message`, quoting none of them. It keeps the contract `pktcap.check_dissector`
+  checks. `register_dhcp_dissector` registers it on UDP ports 67 and 68 in
+  `registry`, or in `pktcap.default_registry()` (process-wide) when none is given;
+  **nothing registers on import**, and a port that already has a dissector is a
+  `ValueError` with nothing registered by the call. With it registered,
+  `pktcap.compile_capture_filter("proto=dhcp", pktcap.frame_filter)` selects the
+  frames that carry a message.
 - **`FILENAME_FIELDS`** — `("client_id", "timestamp", "msg_type", "xid",
   "format", "index")`, the placeholders a `per_capture` pattern may name.
 - **`UNIQUE_FILENAME_FIELDS`** — `{"timestamp", "xid", "index"}`, the subset that

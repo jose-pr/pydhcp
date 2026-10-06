@@ -14,6 +14,22 @@ from ..exceptions import NoClientIdentityError
 from ..packet._message import DHCPMessage
 
 
+def message_type_text(message: DHCPMessage) -> str:
+    """The name of the message's type, `UNKNOWN` when it has no option 53."""
+    value = message.message_type
+    return "UNKNOWN" if value is None else value.label()
+
+
+def client_id_text(message: DHCPMessage) -> str:
+    """The client identifier as colon-separated upper-case hex, `UNKNOWN` when there is none to give."""
+    try:
+        return message.get_client_id()
+    except NoClientIdentityError:
+        # A capture reports what arrived; a client with no identity is
+        # exactly the sort of packet someone runs a capture to look at.
+        return "UNKNOWN"
+
+
 @_data.dataclass(frozen=True)
 class CaptureEvent:
     message: DHCPMessage
@@ -55,19 +71,11 @@ class CaptureEvent:
 
     @property
     def message_type(self) -> str:
-        value = self.message.message_type
-        if value is None:
-            return "UNKNOWN"
-        return value.label()
+        return message_type_text(self.message)
 
     @property
     def client_id(self) -> str:
-        try:
-            return self.message.get_client_id()
-        except NoClientIdentityError:
-            # A capture reports what arrived; a client with no identity is
-            # exactly the sort of packet someone runs a capture to look at.
-            return "UNKNOWN"
+        return client_id_text(self.message)
 
     @property
     def xid(self) -> str:

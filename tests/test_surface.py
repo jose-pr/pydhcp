@@ -234,6 +234,7 @@ EXPECTED_CAPTURE = [
     "CaptureSink",
     "DHCPCapture",
     "DHCPCaptureWriter",
+    "DHCPLayer",
     "FILENAME_FIELDS",
     "HOOK_TIMEOUT_SECONDS",
     "MAX_CAPTURE_FILES",
@@ -241,6 +242,8 @@ EXPECTED_CAPTURE = [
     "UNIQUE_FILENAME_FIELDS",
     "command_hook",
     "compile_capture_filter",
+    "dissect_dhcp",
+    "register_dhcp_dissector",
 ]
 
 EXPECTED_LEASE = [

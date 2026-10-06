@@ -303,6 +303,22 @@ identifier still gets its own file. A record that cannot be written (the directo
 disk is full) ends the capture the same way, with one line naming the path, and a single output
 file that cannot be appended to is refused before the capture binds.
 
+A capture file is also read with pktcap, with DHCP dissected as a layer. Register the dissector
+in a registry of your own (or in pktcap's process-wide one by passing none):
+
+```python
+import pktcap
+from pydhcp.capture import DHCPLayer, register_dhcp_dissector
+
+registry = pktcap.DissectorRegistry()
+register_dhcp_dissector(registry)  # UDP ports 67 and 68
+dissector = pktcap.FrameDissector(registry)
+for frame in pktcap.read_dissected("heard.pcap", dissector=dissector):
+    layer = frame.layer(DHCPLayer)
+    if layer is not None:
+        print(layer.message_type, layer.client_id, hex(layer.xid))
+```
+
 Hooks can be trusted Python callables or commands. Command hooks receive the serialized
 packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables
 (`PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and

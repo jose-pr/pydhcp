@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pydhcp.capture.dissect_dhcp`, `DHCPLayer` and `register_dhcp_dissector(registry=None)`**:
+  DHCP as a pktcap dissector on UDP ports 67 and 68, so a pcap or pcapng capture read with
+  `pktcap.read_dissected` carries a `DHCPLayer` (`op`, `xid`, `message_type`, `client_id`, and
+  `message`, the `to_mapping()` of the message) on each frame that holds a message, and
+  `proto=dhcp` selects them. Nothing registers on import. Octets that are not a message are a
+  `pktcap.DissectError` with a fixed text that quotes none of them.
 - **`pydhcp capture --format pcap|pcapng`** and `DHCPCaptureWriter` with a `pcap` or `pcapng`
   format: the datagrams a capture heard, as the clients sent them, in a file tcpdump and
   Wireshark open (and `pktcap.read_datagrams` reads back octet for octet). The ending of `--output`

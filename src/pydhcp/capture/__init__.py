@@ -12,6 +12,7 @@ from ._events import (
 )
 from ._filter import compile_capture_filter
 from ._command import HOOK_TIMEOUT_SECONDS, command_hook
+from ._dissector import DHCPLayer, dissect_dhcp, register_dhcp_dissector
 from ._sync import DHCPCapture
 from ._writer import (
     FILENAME_FIELDS,
@@ -28,6 +29,7 @@ __all__ = [
     "CaptureSink",
     "DHCPCapture",
     "DHCPCaptureWriter",
+    "DHCPLayer",
     "PacketFilterLike",
     "FILENAME_FIELDS",
     "HOOK_TIMEOUT_SECONDS",
@@ -35,4 +37,6 @@ __all__ = [
     "UNIQUE_FILENAME_FIELDS",
     "command_hook",
     "compile_capture_filter",
+    "dissect_dhcp",
+    "register_dhcp_dissector",
 ]
