@@ -57,8 +57,15 @@ def unavailable() -> _ty.Optional[str]:
 
 
 def _links() -> _ty.List[str]:
+    """The veth links of the default namespace: the only kind the lab makes.
+
+    Every other link is the host's own, and a host adds one when it likes (a
+    cloud runner attached a second network card in the middle of a run).
+    """
     out = subprocess.run(
-        [which("ip") or "ip", "-o", "link", "show"], capture_output=True, text=True
+        [which("ip") or "ip", "-o", "link", "show", "type", "veth"],
+        capture_output=True,
+        text=True,
     ).stdout
     return sorted(line.split(":")[1].strip().split("@")[0] for line in out.splitlines())
 
@@ -373,7 +380,7 @@ class Lab:
             problems.append(f"namespaces left behind: {leftovers}")
         if after != self._links_before:
             problems.append(
-                f"links changed: before {self._links_before}, after {after}"
+                f"veth links changed: before {self._links_before}, after {after}"
             )
         if _resolv_digest() != self._resolv_before:
             problems.append("/etc/resolv.conf changed")
