@@ -42,7 +42,7 @@ _WITHOUT_ALL = [
     "pydhcp.lease",
     "pydhcp._log",
     "pydhcp._metrics",
-    "pydhcp.network",
+    "pydhcp._network",
     "pydhcp._nvt",
     "pydhcp.options",
     "pydhcp.options.base",

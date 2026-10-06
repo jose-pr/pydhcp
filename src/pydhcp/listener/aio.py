@@ -13,7 +13,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import _constants as _const, network as _net
+from .. import _constants as _const, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import enums as _enum
 from ..packet.message import DHCPMessage

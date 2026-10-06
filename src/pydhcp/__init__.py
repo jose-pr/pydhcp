@@ -80,7 +80,7 @@ from ipaddress import (
     IPv4Network as IPv4Network,
 )
 from netimps import MACAddress as MACAddress
-from .network import (
+from ._network import (
     SocketAddress as SocketAddress,
     NetworkInterface as NetworkInterface,
 )

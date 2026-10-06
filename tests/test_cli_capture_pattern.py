@@ -25,7 +25,7 @@ from pydhcp.capture import (
 )
 from pydhcp.cli import Capture, _write_capture_record
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.packet import DHCPMessageType
 
 from conftest import build_request

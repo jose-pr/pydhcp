@@ -1,6 +1,6 @@
 import pytest
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 
 
 def test_link_local_network_is_the_rfc_3927_range():

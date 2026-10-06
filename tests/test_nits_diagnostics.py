@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from pydhcp import _config as config
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.options.type import DomainList, OptionOverload
 from pydhcp.options.type.base import DHCPOptionCodes

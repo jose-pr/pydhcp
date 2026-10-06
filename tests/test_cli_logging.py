@@ -21,7 +21,7 @@ import pydhcp.cli as cli_module
 from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
 from pydhcp._log import LOGGER
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.packet import DHCPMessageType
 
 from conftest import build_request

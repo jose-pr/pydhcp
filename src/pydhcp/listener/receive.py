@@ -9,7 +9,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import network as _net
+from .. import _network as _net
 from .interfaces import _resolve_interface
 from .spec import ListenSpec, _listen_uses_wildcard
 from .transport import (

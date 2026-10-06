@@ -4,7 +4,7 @@ import pytest
 
 from pydhcp.listener import DHCPListener, _parselisteners
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import NetworkInterface, SocketAddress
+from pydhcp import NetworkInterface, SocketAddress
 from pydhcp.server import AsyncDHCPServer, DHCPServer
 
 
@@ -30,7 +30,7 @@ def test_parse_wildcard_expands_ipv4_interfaces(monkeypatch) -> None:
         NetworkInterface("eth0", ipaddress.IPv4Interface("192.0.2.10/24")),
         NetworkInterface("eth1", ipaddress.IPv4Interface("198.51.100.10/24")),
     ]
-    monkeypatch.setattr("pydhcp.network.host_ip_interfaces", lambda: iter(interfaces))
+    monkeypatch.setattr("pydhcp._network.host_ip_interfaces", lambda: iter(interfaces))
 
     assert _parselisteners("*", (67,)) == [
         SocketAddress("192.0.2.10", 67),

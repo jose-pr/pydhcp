@@ -16,7 +16,7 @@ from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPO
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options.type import RelayAgentInformation, TLVOption
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 

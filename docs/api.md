@@ -116,9 +116,9 @@ instance — counters are per-instance, not global, so running multiple listener
 
 ::: pydhcp.packet
 
-## pydhcp.network
+## pydhcp._network
 
-::: pydhcp.network
+::: pydhcp._network
 
 ## pydhcp.lease
 

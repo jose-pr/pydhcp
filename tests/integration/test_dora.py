@@ -13,7 +13,7 @@ from pydhcp import (
 from pydhcp.packet import DHCPMessageType, DHCPFlags, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from conftest import FixedLeaseServer, build_request, running
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"

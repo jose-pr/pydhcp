@@ -10,7 +10,7 @@ import weakref as _weakref
 
 import netimps as _netimps
 
-from .. import _constants as _const, network as _net
+from .. import _constants as _const, _network as _net
 
 LOGGER = _logging.getLogger(__name__)
 

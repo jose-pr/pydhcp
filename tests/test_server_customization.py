@@ -14,7 +14,7 @@ from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPO
 from pydhcp.options import DHCPOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.server import DHCPServer
 from conftest import build_request
 
@@ -787,7 +787,9 @@ def _servable_interface():
     on the server side.
     """
     from netimps import LINK_LOCAL_V4
-    from pydhcp.network import host_ip_interfaces
+    from pydhcp._network import (
+        host_ip_interfaces,
+    )  # the host-interface enumeration is not public
 
     for interface in host_ip_interfaces(
         lambda i: not i.ip.is_loopback and i.ip not in LINK_LOCAL_V4

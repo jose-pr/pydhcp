@@ -9,7 +9,7 @@ import re as _re
 import string as _string
 import typing as _ty
 
-from . import network as _net
+from . import _network as _net
 from .listener import AsyncDHCPListener, DHCPListener, ListenSpec, DHCPRequestContext
 from .options import DHCPOptionCode
 from .exceptions import NoClientIdentityError

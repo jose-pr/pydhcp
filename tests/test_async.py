@@ -5,7 +5,7 @@ from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPLease, DHCPOptions
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 
 

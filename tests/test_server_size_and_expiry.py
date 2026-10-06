@@ -10,7 +10,7 @@ from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContex
 from pydhcp import _constants as const
 from pydhcp.lease import DHCPLease, InMemoryLeaseBackend
 from ipaddress import IPv4Address as IPv4
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from pydhcp.server import DHCPServer

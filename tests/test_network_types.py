@@ -1,4 +1,4 @@
-"""What `pydhcp.network` keeps: pydhcp's own types, and nothing of netimps' or
+"""What `pydhcp._network` keeps: pydhcp's own types, and nothing of netimps' or
 the standard library's under another door."""
 
 from __future__ import annotations
@@ -7,8 +7,8 @@ import ipaddress
 
 import netimps
 
-from pydhcp import network
-from pydhcp.network import NetworkInterface, SocketAddress
+from pydhcp import _network as network  # the module's own surface is what is tested
+from pydhcp import NetworkInterface, SocketAddress
 from pydhcp.listener.interfaces import _network_interface
 
 

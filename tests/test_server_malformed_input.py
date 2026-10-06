@@ -8,7 +8,7 @@ import pytest
 
 from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContext
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.server import DHCPServer
 from conftest import build_request

@@ -4,7 +4,7 @@ import typing as _ty
 import enum as _enum
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _nvt as _nvt
-from ...network import HardwareAddressType as _HardwareAddressType
+from ..._network import HardwareAddressType as _HardwareAddressType
 
 
 from .base import DHCPOptionType

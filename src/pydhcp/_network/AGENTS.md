@@ -1,6 +1,6 @@
-# `pydhcp.network` — public API header
+# `pydhcp._network` — public API header
 
-Header-file-style reference for `pydhcp.network`: pydhcp's own address and
+Header-file-style reference for `pydhcp._network`: pydhcp's own address and
 interface types. Nothing here is an alias of a `netimps` or `ipaddress` object:
 those are imported from `netimps` and `ipaddress`. `SocketAddress` and
 `NetworkInterface` are also re-exported from the top-level `pydhcp` package. The top-level package header ships beside this

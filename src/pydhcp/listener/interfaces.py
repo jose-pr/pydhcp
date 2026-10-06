@@ -10,7 +10,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import network as _net
+from .. import _network as _net
 
 LOGGER = _logging.getLogger(__name__)
 

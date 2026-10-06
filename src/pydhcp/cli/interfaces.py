@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-from ..network import host_ip_interfaces
+from .._network import host_ip_interfaces
 from ._common import _Command
 
 

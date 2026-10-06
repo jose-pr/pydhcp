@@ -18,7 +18,7 @@ import pytest
 
 from pydhcp import NetworkInterface, DHCPRequestContext
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.network import SocketAddress
+from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options import type as T
 from pydhcp.packet.message import DHCPMessage

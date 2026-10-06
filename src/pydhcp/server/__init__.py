@@ -6,7 +6,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import network as _net
+from .. import _network as _net
 from ..lease import DHCPLease, LeaseBackend
 from ..listener import AsyncDHCPListener as _AsyncBase, ListenSpec, DHCPRequestContext
 from ..packet import enums as _enum
