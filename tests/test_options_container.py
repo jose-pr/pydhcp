@@ -263,3 +263,33 @@ def test_a_snapshot_refuses_every_write_a_bag_makes() -> None:
         snapshot.append((15, "example"))
     assert bytes(snapshot.setdefault(12, "other")) == b"host"
     assert 15 not in snapshot
+
+
+# --- retain: keep only some codes ----------------------------------------------
+
+
+def test_retain_keeps_only_the_named_codes_in_their_order() -> None:
+    bag = _bag(o12=b"h", o1=b"\xff\xff\xff\x00", o3=b"\x0a\x00\x00\x01", o6=b"\x08")
+    bag.retain([3, 12, 99])
+    assert list(bag) == [12, 3]
+    assert bag[12] == bytearray(b"h")
+
+
+def test_retain_of_nothing_empties_the_bag_and_of_everything_changes_nothing() -> None:
+    bag = _bag(o1=b"\xff\xff\xff\x00", o3=b"\x0a\x00\x00\x01")
+    bag.retain(iter([1, 3]))
+    assert list(bag) == [1, 3]
+    bag.retain([])
+    assert len(bag) == 0
+
+
+def test_retain_takes_option_codes_as_well_as_integers() -> None:
+    bag = _bag(o1=b"\xff\xff\xff\x00", o3=b"\x0a\x00\x00\x01")
+    bag.retain([DHCPOptionCode.ROUTER])
+    assert list(bag) == [3]
+
+
+def test_a_frozen_bag_refuses_retain_even_when_nothing_would_go() -> None:
+    frozen = FrozenDHCPOptions(_bag(o1=b"\xff\xff\xff\x00"))
+    with pytest.raises(TypeError):
+        frozen.retain([1])

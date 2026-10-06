@@ -86,6 +86,9 @@ of the installed package).
     options bag to code that mutates it (a response pipeline, an encoder);
     a plain assignment aliases the container *and* its payload buffers, so
     the mutations write straight back into the source.
+  - **`.retain(codes) -> None`** — keep only the options whose code is in `codes`
+    (any iterable of integers or option codes), in their present order; the
+    rest are deleted. A read-only bag raises `TypeError`, even when nothing would go.
 
 - The `MISSING` sentinel this module uses to tell "no default given" from
   "default is `None`" lives in `pydhcp._generic`, not in `pydhcp._constants` — it

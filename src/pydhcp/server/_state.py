@@ -104,8 +104,21 @@ class _ServerState(_Timed):
         """
         from ..lease import InMemoryLeaseBackend
 
+        # `is None`, not truthiness: a backend that reports its size through
+        # `__len__` is falsy while it is empty, and is still the caller's.
         if lease_backend is not None:
             _check_backend(lease_backend)
-        self.lease_backend = lease_backend or InMemoryLeaseBackend()
+        self._owns_backend = lease_backend is None
+        self.lease_backend = (
+            InMemoryLeaseBackend() if lease_backend is None else lease_backend
+        )
         #: Address -> the `time.monotonic()` second its quarantine ends.
         self._declined: _ty.Dict[_ipaddress.IPv4Address, float] = {}
+
+    def _close_owned_backend(self) -> None:
+        """Close the backend this server created; one it was given is the caller's."""
+        if not self._owns_backend:
+            return
+        close = getattr(self.lease_backend, "close", None)
+        if callable(close):
+            close()

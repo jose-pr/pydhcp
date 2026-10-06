@@ -73,6 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   returns. `lookup_lease` is the override point for what the server holds for a
   client (default: `lease_backend.lookup`), asked by DHCPDECLINE, DHCPRELEASE and a
   REQUEST naming another server.
+- **`DHCPOptions.retain(codes)`**: keep only the options whose code is in `codes`.
 - **Four counters in `DHCPMetrics`**: `packets_dropped_malformed_option`,
   `options_ignored_malformed`, `declines_ignored` and `quarantines_refused`.
 
@@ -746,6 +747,20 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **A lease backend that is falsy when empty is no longer replaced.** `lease_backend`
+  was tested for truthiness, so a backend defining `__len__` was discarded while
+  empty and the server used a private store; it is now tested with `is None`.
+- **`close()` does not close a backend the caller passed in.** The caller owns it
+  (flush or close it yourself); a backend the server created is closed with the
+  server, by `close()` and `aclose()`.
+- **`release_lease(client_id, server_id, msg)` is always told this server's own
+  address.** After a REQUEST naming another server it was told that server's address
+  from the packet; that address is in `msg`.
+- **A reply is no longer decoded again after it is built unless DEBUG is on**, and a
+  DHCPNAK no longer assigns `siaddr`, `sname` and `file` twice.
+- **`acquire_lease`, DHCPRELEASE, DHCPDECLINE and the withdrawal of an offer ask
+  `lookup_lease`**, so a server that keeps its leases elsewhere overrides one method
+  to answer them.
 - **A wrong-length option 50, 51, 54 or 57 no longer raises out of `handle()`.**
   The options the server acts on are decoded once, at the top of `handle()`. A
   message whose option 50 or 54 is unusable is dropped (counted in

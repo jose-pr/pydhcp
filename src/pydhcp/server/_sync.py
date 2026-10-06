@@ -39,3 +39,12 @@ class DHCPServer(_ServerCore, DHCPListener):
             receive_buffer_size=receive_buffer_size,
         )
         self._init_server_state(lease_backend)
+
+    def close(self) -> None:
+        """Shut down and release every socket, as `DHCPListener.close`.
+
+        A lease backend the server was given is not closed: it is the caller's.
+        One the server created itself is closed here.
+        """
+        DHCPListener.close(self)
+        self._close_owned_backend()

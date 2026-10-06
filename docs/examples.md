@@ -72,6 +72,19 @@ DHCPDISCOVER makes one call with `commit=False`, and a DHCPREQUEST makes two, `c
 to decide and `commit=True` to commit the ACK. An override that writes to a store of its
 own, or that extends a binding, does that only when `commit` is true.
 
+A server that keeps its leases in a store of its own (as above, where nothing is stored) is
+asked about a client in four places: INIT-REBOOT, RELEASE, DECLINE and a REQUEST that
+names another server. The first goes through `acquire_lease()`; the others ask
+`lookup_lease(client_id)`, which reads `lease_backend` unless you override it, and a
+release reaches your store through `release_lease()`. Override those two when the leases
+are not in `lease_backend`. A DHCPDECLINE quarantines an address only when `lookup_lease()`
+says the sender holds it. When you do store leases in `lease_backend`, answer a
+`commit=False` call with `offer` and a `commit=True` call with `commit`, so that an address
+offered to a client that never accepts is given back.
+
+A backend you pass in is yours: `close()` leaves it open (flush a `FileLeaseBackend`
+yourself, or use it as a context manager); a backend the server made is closed with it.
+
 For DHCPINFORM-only customization, override `get_inform_options()` so clients can receive
 configuration options without allocating an address.
 

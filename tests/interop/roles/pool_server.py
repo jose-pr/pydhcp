@@ -89,6 +89,17 @@ class Pool:
                 break
         return lease
 
+    def lookup_lease(self, client_id):
+        if args.private_store:
+            return self.__dict__.get("_store", {}).get(client_id)
+        return super().lookup_lease(client_id)
+
+    def release_lease(self, client_id, server_id, msg):
+        if args.private_store:
+            store = self.__dict__.setdefault("_store", {})
+            return store.pop(client_id, None) is not None
+        return super().release_lease(client_id, server_id, msg)
+
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         if msg.giaddr != IPv4("0.0.0.0"):
             if relay_network is None:

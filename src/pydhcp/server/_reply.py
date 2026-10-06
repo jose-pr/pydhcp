@@ -160,9 +160,6 @@ class _Replies(_LeasePolicy):
             # like an offer of the very address being refused.
             resp.yiaddr = _const.WILDCARD_V4
             resp.ciaddr = _const.WILDCARD_V4
-            resp.siaddr = _const.WILDCARD_V4
-            resp.sname = ""
-            resp.file = ""
         elif lease is None:
             resp.yiaddr = _const.WILDCARD_V4
         else:
@@ -260,12 +257,7 @@ class _Replies(_LeasePolicy):
             ]
         if requests_params:
 
-            def _paramfilter(opt: tuple[int, bytearray]) -> bool:
-                return opt[0] in requests_params
-
-            resp.options._options = _ty.OrderedDict(
-                filter(_paramfilter, resp.options.items(decoded=False))
-            )
+            resp.options.retain(requests_params)
         resp.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
         # RFC 3046 s2.2: the echoed relay agent information goes last.
         relay_info = resp.options.get(
@@ -379,9 +371,10 @@ class _Replies(_LeasePolicy):
         resp.log(
             context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.INFO
         )
-        if __debug__:
-            # Diagnostic only: a reply we cannot re-decode is a real bug, but it must be
-            # reported, never allowed to suppress the send.
+        if LOGGER.isEnabledFor(_logging.DEBUG):
+            # Diagnostic only, paid only when DEBUG is on: a reply that does not
+            # decode is a real bug, but it must be reported, never allowed to
+            # suppress the send.
             try:
                 _check = DHCPMessage.decode(memoryview(data))
             except Exception:

@@ -195,7 +195,7 @@ class _LeasePolicy(_InputGuard):
 
         backend = self.lease_backend
         ttl = self.get_lease_seconds(msg)
-        existing = backend.lookup(client_id)
+        existing = self.lookup_lease(client_id)
         if existing:
             if not commit:
                 return existing

@@ -39,3 +39,11 @@ class AsyncDHCPServer(_ServerCore, AsyncDHCPListener):
             max_queued=max_queued,
         )
         self._init_server_state(lease_backend)
+
+    async def _close(self) -> None:
+        # A lease backend the server was given is not closed: it is the caller's.
+        # One the server created itself is closed here.
+        try:
+            await AsyncDHCPListener._close(self)
+        finally:
+            self._close_owned_backend()

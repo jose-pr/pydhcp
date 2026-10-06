@@ -379,8 +379,38 @@ A test that patches a module global patches it in the private module that reads 
 - **`DHCPServer(listen=None, *, poll_interval=None, max_packet_size=None,
   lease_backend=None, per_interface=None, reuse_address=None,
   receive_buffer_size=None)`** (`DHCPListener` subclass) —
-  `lease_backend` defaults to a fresh `InMemoryLeaseBackend()`.
-  - `.acquire_lease(client_id, server_id, msg, *, commit=True) -> DHCPLease | None` —
+  `lease_backend` defaults, when it is `None`, to a fresh `InMemoryLeaseBackend()`.
+  A backend that is falsy when empty (one that defines `__len__`) is kept: the test
+  is `is None`. **The caller owns a backend it passed in**: `close()` (and
+  `aclose()`) leave it open, so flush or close it yourself; a backend the server
+  created is closed with the server.
+  - **Hook contract.** Every hook below is an ordinary method, called on the one
+    handler thread (the receive thread of `DHCPServer`, the single worker thread
+    of `AsyncDHCPServer`), so hooks of one server never run at the same time and
+    are never called from the event loop. A hook may block, but while it does
+    that thread handles nothing else: datagrams wait (the async server drops past
+    `max_queued`). A `handle_*` hook replies with `context.transport.send`; the
+    others return a value and send nothing. A hook that raises answers nothing and
+    is logged with its traceback by the listener (counted in
+    `packets_dropped_error`); the next datagram is handled. What each is told:
+    `handle(msg, context)` and the five `handle_*(msg, context)` get the decoded
+    message and the arrival context (`handle` is where the guards run, so an
+    override of one `handle_*` sees only messages that passed them);
+    `acquire_lease(client_id, server_id, msg, *, commit=True)` gets the receiving
+    interface''s address as `server_id`; `lookup_lease(client_id)` the identity;
+    `release_lease(client_id, server_id, msg)` **always this server''s address** as
+    `server_id` (another server named in option 54 is in `msg`);
+    `get_inform_options(server_id, msg)`; `get_lease_seconds(msg)`;
+    `quarantine_address(ip, *, now=None)` and `is_quarantined(ip, *, now=None)`
+    (`now` is `time.monotonic()` seconds, omitted when the caller has none).
+    **An override that stores leases must `offer` when `commit=False` and
+    `commit` (or `allocate`) when `commit=True`**: a bound lease stored on the
+    probe call lets a client that never accepts the OFFER keep the address. The
+    options of a lease it returns are read-only. An override that keeps leases
+    elsewhere also overrides `lookup_lease` and, if the release must reach its
+    store, `release_lease`: INIT-REBOOT (through `acquire_lease`), RELEASE,
+    DECLINE and a REQUEST naming another server learn what the sender holds from
+    those and from nothing else.  - `.acquire_lease(client_id, server_id, msg, *, commit=True) -> DHCPLease | None` —
     override point. **Runs on the server itself** (not a copy), on the handler
     thread (the one worker thread on the async server), so an attribute an
     override keeps — a counter for the next free host — is the server's own.
@@ -462,7 +492,8 @@ A test that patches a module global patches it in the private module that reads 
     message, so every reader sees it absent (`options_ignored_malformed`). Each is
     logged once per interval with the XID and the client, never raised.
   - `.release_lease(client_id, server_id, msg) -> bool` — override point,
-    releases via the lease backend; returns whether a binding actually went
+    releases via the lease backend; `server_id` is **always this server's own
+    address** (the receiving interface's), on every path; returns whether a binding actually went
     away. It does **not** touch metrics: an orderly `DHCPRELEASE`, a
     `DHCPDECLINE` reporting an address conflict, and a reclaim after the client
     chose another server all arrive here, and only the caller knows which, so

@@ -285,6 +285,12 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         )
         return copied
 
+    def retain(self, codes: _ty.Iterable[int]) -> None:
+        """Keep only the options whose code is in `codes`; the order of the rest is kept."""
+        keep = {int(code) for code in codes}
+        for code in [code for code in self._options if code not in keep]:
+            del self[code]
+
     def __getitem__(self, _key: int) -> bytearray:
         return self._options[_key]
 

@@ -106,7 +106,7 @@ class _Handlers(_Replies):
                 if (
                     held is not None
                     and held.offered
-                    and self.release_lease(client_id, server_id, msg)
+                    and self.release_lease(client_id, actual_server_id, msg)
                 ):
                     self.metrics.offers_withdrawn += 1
             else:
