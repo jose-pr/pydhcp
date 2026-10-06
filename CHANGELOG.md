@@ -112,6 +112,10 @@ importable. Replace each name in the left column with the one beside it.
 | `ClientFqdn` | `ClientFQDN` |
 | `SipServers` | `SIPServers` |
 | `PcpServerList` | `PCPServerList` |
+| `ViVendorClass` | `VIVendorClass` |
+| `ViVendorClassRecord` | `VIVendorClassRecord` |
+| `ViVendorSpecificInformation` | `VIVendorSpecificInformation` |
+| `ViVendorSpecificInformationRecord` | `VIVendorSpecificInformationRecord` |
 
 ### Fixed
 

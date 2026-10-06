@@ -17,10 +17,10 @@ from pydhcp.options.type import (
     TLVOption,
     VendorSpecificInformation,
     RelayAgentInformation,
-    ViVendorSpecificInformationRecord,
-    ViVendorSpecificInformation,
-    ViVendorClassRecord,
-    ViVendorClass,
+    VIVendorSpecificInformationRecord,
+    VIVendorSpecificInformation,
+    VIVendorClassRecord,
+    VIVendorClass,
     RDNSSSelection,
     URIList,
     I32,
@@ -279,10 +279,10 @@ def test_vendor_specific_information_preserves_opaque_bytes():
 
 
 def test_vi_vendor_specific_information_uses_enterprise_records():
-    value = ViVendorSpecificInformation(
+    value = VIVendorSpecificInformation(
         [
             (32473, b"alpha"),
-            ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+            VIVendorSpecificInformationRecord(65537, b"\x00\xff"),
         ]
     )
     buf = bytearray()
@@ -293,7 +293,7 @@ def test_vi_vendor_specific_information_uses_enterprise_records():
         + (65537).to_bytes(4, "big")
         + b"\x02\x00\xff"
     )
-    decoded, length = ViVendorSpecificInformation._dhcp_read(memoryview(buf))
+    decoded, length = VIVendorSpecificInformation._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == 17
     assert decoded[0].enterprise_number == 32473
@@ -302,25 +302,25 @@ def test_vi_vendor_specific_information_uses_enterprise_records():
     assert decoded[1].value == b"\x00\xff"
 
     with pytest.raises(ValueError, match="truncated"):
-        ViVendorSpecificInformation._dhcp_read(memoryview(b"\x00\x00\x00\x01"))
+        VIVendorSpecificInformation._dhcp_read(memoryview(b"\x00\x00\x00\x01"))
 
     with pytest.raises(ValueError, match="32 bits"):
-        ViVendorSpecificInformationRecord(-1, b"a")._dhcp_encode()
+        VIVendorSpecificInformationRecord(-1, b"a")._dhcp_encode()
 
     with pytest.raises(ValueError, match="32 bits"):
-        ViVendorSpecificInformationRecord(0x1_0000_0000, b"a")._dhcp_encode()
+        VIVendorSpecificInformationRecord(0x1_0000_0000, b"a")._dhcp_encode()
 
 
 def test_vi_vendor_class_uses_enterprise_records_with_opaque_items():
-    value = ViVendorClass(
+    value = VIVendorClass(
         [
             (32473, [b"docsis", b"eRouter"]),
-            ViVendorClassRecord(65537, [b"usp", b"agent"]),
+            VIVendorClassRecord(65537, [b"usp", b"agent"]),
         ]
     )
     buf = bytearray()
     assert value._dhcp_write(buf) == 35
-    decoded, length = ViVendorClass._dhcp_read(memoryview(buf))
+    decoded, length = VIVendorClass._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == 35
     assert decoded[0].enterprise_number == 32473
@@ -329,7 +329,7 @@ def test_vi_vendor_class_uses_enterprise_records_with_opaque_items():
     assert decoded[1].value == UserClass([b"usp", b"agent"])
 
     with pytest.raises(ValueError, match="truncated"):
-        ViVendorClass._dhcp_read(memoryview(b"\x00\x00\x00\x01\x05\x03ab"))
+        VIVendorClass._dhcp_read(memoryview(b"\x00\x00\x00\x01\x05\x03ab"))
 
 
 def test_rdnss_selection_round_trip():
@@ -1067,12 +1067,12 @@ def test_record_codecs_are_hashable_and_lists_are_not():
 def test_hash_agrees_with_eq_for_records_holding_a_list_payload():
     """The cases a naive `hash((a, b))` would have raised on.
 
-    `ViVendorClassRecord.value` is a `UserClass` and a MoS record's value is a
+    `VIVendorClassRecord.value` is a `UserClass` and a MoS record's value is a
     label/address list -- both `list` subclasses, and both compared element-wise
     by the `__eq__` beside the hash.
     """
-    a = ViVendorClassRecord(3561, [b"alpha", b"beta"])
-    b = ViVendorClassRecord(3561, [b"alpha", b"beta"])
+    a = VIVendorClassRecord(3561, [b"alpha", b"beta"])
+    b = VIVendorClassRecord(3561, [b"alpha", b"beta"])
     assert a == b and hash(a) == hash(b)
     assert len({a, b}) == 1
 

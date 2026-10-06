@@ -88,11 +88,11 @@ EXPECTED_ROOT = [
     "URIList",
     "UncompressedDomainList",
     "UserClass",
+    "VIVendorClass",
+    "VIVendorClassRecord",
+    "VIVendorSpecificInformation",
+    "VIVendorSpecificInformationRecord",
     "VendorSpecificInformation",
-    "ViVendorClass",
-    "ViVendorClassRecord",
-    "ViVendorSpecificInformation",
-    "ViVendorSpecificInformationRecord",
     "__version__",
     "compile_capture_filter",
 ]
@@ -195,11 +195,11 @@ EXPECTED_OPTIONS_TYPE = [
     "URIList",
     "UncompressedDomainList",
     "UserClass",
+    "VIVendorClass",
+    "VIVendorClassRecord",
+    "VIVendorSpecificInformation",
+    "VIVendorSpecificInformationRecord",
     "VendorSpecificInformation",
-    "ViVendorClass",
-    "ViVendorClassRecord",
-    "ViVendorSpecificInformation",
-    "ViVendorSpecificInformationRecord",
 ]
 
 EXPECTED_PACKET = [

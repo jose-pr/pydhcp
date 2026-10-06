@@ -153,12 +153,12 @@ class RelayAgentInformation(EncapsulatedOptions):
     """RFC 3046 relay-agent sub-options."""
 
 
-_ViVendorSpecificInformationRecordT = _ty.TypeVar(
-    "_ViVendorSpecificInformationRecordT", bound="ViVendorSpecificInformationRecord"
+_VIVendorSpecificInformationRecordT = _ty.TypeVar(
+    "_VIVendorSpecificInformationRecordT", bound="VIVendorSpecificInformationRecord"
 )
 
 
-class ViVendorSpecificInformationRecord(DHCPOptionType):
+class VIVendorSpecificInformationRecord(DHCPOptionType):
     def __init__(
         self,
         enterprise_number: int,
@@ -174,7 +174,7 @@ class ViVendorSpecificInformationRecord(DHCPOptionType):
         )
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ViVendorSpecificInformationRecord):
+        if not isinstance(other, VIVendorSpecificInformationRecord):
             return NotImplemented
         return (self.enterprise_number, self.value) == (
             other.enterprise_number,
@@ -189,8 +189,8 @@ class ViVendorSpecificInformationRecord(DHCPOptionType):
 
     @classmethod
     def _dhcp_read(
-        cls: type[_ViVendorSpecificInformationRecordT], option: memoryview
-    ) -> tuple[_ViVendorSpecificInformationRecordT, int]:
+        cls: type[_VIVendorSpecificInformationRecordT], option: memoryview
+    ) -> tuple[_VIVendorSpecificInformationRecordT, int]:
         if len(option) < 5:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         enterprise_number = int.from_bytes(option[:4], "big")
@@ -212,16 +212,16 @@ class ViVendorSpecificInformationRecord(DHCPOptionType):
         return 5 + len(self.value)
 
 
-class ViVendorSpecificInformation(RecordList[ViVendorSpecificInformationRecord]):
+class VIVendorSpecificInformation(RecordList[VIVendorSpecificInformationRecord]):
     """RFC 3925 vendor-identifying vendor-specific information records."""
 
 
-_ViVendorClassRecordT = _ty.TypeVar(
-    "_ViVendorClassRecordT", bound="ViVendorClassRecord"
+_VIVendorClassRecordT = _ty.TypeVar(
+    "_VIVendorClassRecordT", bound="VIVendorClassRecord"
 )
 
 
-class ViVendorClassRecord(DHCPOptionType):
+class VIVendorClassRecord(DHCPOptionType):
     def __init__(self, enterprise_number: int, value: _ty.Any) -> None:
         self.enterprise_number = int(enterprise_number)
         if isinstance(value, UserClass):
@@ -236,7 +236,7 @@ class ViVendorClassRecord(DHCPOptionType):
         )
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ViVendorClassRecord):
+        if not isinstance(other, VIVendorClassRecord):
             return NotImplemented
         return (self.enterprise_number, self.value) == (
             other.enterprise_number,
@@ -251,8 +251,8 @@ class ViVendorClassRecord(DHCPOptionType):
 
     @classmethod
     def _dhcp_read(
-        cls: type[_ViVendorClassRecordT], option: memoryview
-    ) -> tuple[_ViVendorClassRecordT, int]:
+        cls: type[_VIVendorClassRecordT], option: memoryview
+    ) -> tuple[_VIVendorClassRecordT, int]:
         if len(option) < 5:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         enterprise_number = int.from_bytes(option[:4], "big")
@@ -279,5 +279,5 @@ class ViVendorClassRecord(DHCPOptionType):
         return 5 + payload_len
 
 
-class ViVendorClass(RecordList[ViVendorClassRecord]):
+class VIVendorClass(RecordList[VIVendorClassRecord]):
     """RFC 3925 vendor-identifying vendor class records."""

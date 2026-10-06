@@ -18,10 +18,10 @@ from pydhcp.options.type import (
     UserClass,
     VendorSpecificInformation,
     RelayAgentInformation,
-    ViVendorSpecificInformationRecord,
-    ViVendorSpecificInformation,
-    ViVendorClassRecord,
-    ViVendorClass,
+    VIVendorSpecificInformationRecord,
+    VIVendorSpecificInformation,
+    VIVendorClassRecord,
+    VIVendorClass,
     RDNSSSelection,
     MoSIpv4AddressList,
     MoSFqdnList,
@@ -188,7 +188,7 @@ def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.NETINFO_TAG.get_type() is String
     assert DHCPOptionCode.DHCP_CAPTIVE_PORTAL.get_type() is String
     assert DHCPOptionCode.AUTO_CONFIG.get_type() is Boolean
-    assert DHCPOptionCode.VI_VENDOR_CLASS.get_type() is ViVendorClass
+    assert DHCPOptionCode.VI_VENDOR_CLASS.get_type() is VIVendorClass
     assert DHCPOptionCode.CAPWAP_AC_V4.get_type()._args_[0] is IPv4AddressOption
     assert (
         DHCPOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS.get_type().__name__ == "DomainList"
@@ -230,7 +230,7 @@ def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.RELAY_AGENT_INFORMATION.get_type() is RelayAgentInformation
     assert (
         DHCPOptionCode.VI_VENDOR_SPECIFIC_INFORMATION.get_type()
-        is ViVendorSpecificInformation
+        is VIVendorSpecificInformation
     )
     # RFC 2937 s3: 16-bit name service option codes, not domain names.
     assert DHCPOptionCode.NAME_SERVICE_SEARCH.get_type()._args_[0].__name__ == "U16"
@@ -255,7 +255,7 @@ def test_typed_registrations_and_aliases():
     opts[DHCPOptionCode.NETINFO_TAG] = "lab-a"
     opts[DHCPOptionCode.DHCP_CAPTIVE_PORTAL] = "https://portal.example/login"
     opts[DHCPOptionCode.VI_VENDOR_CLASS] = [
-        ViVendorClassRecord(32473, [b"docsis", b"eRouter"]),
+        VIVendorClassRecord(32473, [b"docsis", b"eRouter"]),
         (65537, [b"usp", b"agent"]),
     ]
     opts[DHCPOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
@@ -315,7 +315,7 @@ def test_typed_registrations_and_aliases():
         opts.get(DHCPOptionCode.DHCP_CAPTIVE_PORTAL, decode=String)
         == "https://portal.example/login"
     )
-    assert opts.get(DHCPOptionCode.VI_VENDOR_CLASS) == ViVendorClass(
+    assert opts.get(DHCPOptionCode.VI_VENDOR_CLASS) == VIVendorClass(
         [
             (32473, [b"docsis", b"eRouter"]),
             (65537, [b"usp", b"agent"]),
@@ -385,10 +385,10 @@ def test_typed_registrations_and_aliases():
         b"\x00\xff\x02vendor\x10"
     )
     opts[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([(9, b"\x02")])
-    opts[DHCPOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation(
+    opts[DHCPOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = VIVendorSpecificInformation(
         [
             (32473, b"alpha"),
-            ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+            VIVendorSpecificInformationRecord(65537, b"\x00\xff"),
         ]
     )
     opts[DHCPOptionCode.NAME_SERVICE_SEARCH] = [6, 44]  # DNS, then NetBIOS name server
@@ -461,7 +461,7 @@ def test_registered_option_code_round_trips():
     opts[DHCPOptionCode.DHCP_CAPTIVE_PORTAL] = "https://portal.example/login"
     opts[DHCPOptionCode.AUTO_CONFIG] = True
     opts[DHCPOptionCode.VI_VENDOR_CLASS] = [
-        ViVendorClassRecord(32473, [b"docsis", b"eRouter"]),
+        VIVendorClassRecord(32473, [b"docsis", b"eRouter"]),
         (65537, [b"usp", b"agent"]),
     ]
     opts[DHCPOptionCode.CAPWAP_AC_V4] = ["192.0.2.30", "192.0.2.31"]
@@ -499,10 +499,10 @@ def test_registered_option_code_round_trips():
         b"\x00\xff\x02vendor\x10"
     )
     opts[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation([(9, b"\x02")])
-    opts[DHCPOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = ViVendorSpecificInformation(
+    opts[DHCPOptionCode.VI_VENDOR_SPECIFIC_INFORMATION] = VIVendorSpecificInformation(
         [
             (32473, b"alpha"),
-            ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+            VIVendorSpecificInformationRecord(65537, b"\x00\xff"),
         ]
     )
     opts[DHCPOptionCode.NAME_SERVICE_SEARCH] = [6, 44]  # DNS, then NetBIOS name server
@@ -553,7 +553,7 @@ def test_registered_option_code_round_trips():
         == "https://portal.example/login"
     )
     assert decoded.get(DHCPOptionCode.AUTO_CONFIG) == Boolean(1)
-    assert decoded.get(DHCPOptionCode.VI_VENDOR_CLASS) == ViVendorClass(
+    assert decoded.get(DHCPOptionCode.VI_VENDOR_CLASS) == VIVendorClass(
         [
             (32473, [b"docsis", b"eRouter"]),
             (65537, [b"usp", b"agent"]),
@@ -668,10 +668,10 @@ def test_raw_wire_decoding_for_opaque_and_enterprise_specific_options():
     ) == VendorSpecificInformation(vendor_payload)
     assert decoded.get(
         DHCPOptionCode.VI_VENDOR_SPECIFIC_INFORMATION
-    ) == ViVendorSpecificInformation(
+    ) == VIVendorSpecificInformation(
         [
             (32473, b"alpha"),
-            ViVendorSpecificInformationRecord(65537, b"\x00\xff"),
+            VIVendorSpecificInformationRecord(65537, b"\x00\xff"),
         ]
     )
     assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
@@ -763,7 +763,7 @@ def test_raw_wire_decoding_for_vi_vendor_class_registration():
     decoded = DHCPOptions()
     decoded.decode(memoryview(encoded))
 
-    assert decoded.get(DHCPOptionCode.VI_VENDOR_CLASS) == ViVendorClass(
+    assert decoded.get(DHCPOptionCode.VI_VENDOR_CLASS) == VIVendorClass(
         [
             (32473, [b"docsis", b"eRouter"]),
             (65537, [b"usp", b"agent"]),

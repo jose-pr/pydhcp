@@ -155,7 +155,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   from `List` only in normalization: a `tuple` argument is one record, not a
   sequence of items, so `EncapsulatedOptions((1, b"ab"))` is a single TLV;
   a `list` argument is several records. `EncapsulatedOptions`,
-  `ViVendorSpecificInformation`, `ViVendorClass`, `MoSIpv4AddressList`,
+  `VIVendorSpecificInformation`, `VIVendorClass`, `MoSIpv4AddressList`,
   `MoSFqdnList` and `CccOption` are all `RecordList` subclasses. Subclass a
   subscripted form — `class MyOption(RecordList[MyRecord])`.
 - **`DHCPOptionCodes[C]`** (`List[C]` subclass) — a list of raw option-code
@@ -303,10 +303,10 @@ client FQDN, and server-locator/status codecs. Import every one of them from
 - **`RelayAgentInformation`** — option 82 payload; constructed from a list
   of `(sub-code: int, value: bytes)` tuples (see `DHCPRelay`'s
   `insert_relay_agent_info`).
-- **`ViVendorSpecificInformationRecord`** / **`ViVendorSpecificInformation`**
+- **`VIVendorSpecificInformationRecord`** / **`VIVendorSpecificInformation`**
   — RFC 3925 vendor-identifying vendor-specific info (enterprise-number-
   keyed TLV records / their list container).
-- **`ViVendorClassRecord`** / **`ViVendorClass`** — RFC 3925
+- **`VIVendorClassRecord`** / **`VIVendorClass`** — RFC 3925
   vendor-identifying vendor class (enterprise-number-keyed data / its list
   container).
 
