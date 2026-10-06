@@ -16,6 +16,9 @@ from ._domain import (
 #: name that needs more pointers than that is not one a message needs.
 MAX_POINTER_HOPS = 127
 
+#: The largest offset a compression pointer can hold (14 bits, RFC 1035 s4.1.4).
+_MAX_POINTER_OFFSET = 0x3FFF
+
 
 def read_names(
     view: memoryview, what: str = "search list", base: int = 0
@@ -224,6 +227,10 @@ class DomainList(_NormalizedList[str]):
                         # wrong byte.
                         cidx += 1 + len(n.encode())
 
+                    if cidx > _MAX_POINTER_OFFSET:
+                        # A pointer holds 14 bits: a name this far in cannot be
+                        # pointed at, so it is written out in full.
+                        continue
                     parent = cidx, pair
                     unique = domain[:-pair]
 

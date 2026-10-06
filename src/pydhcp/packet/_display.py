@@ -72,7 +72,7 @@ class _MessageDisplay(_MessageMapping):
             ("Gateway Address", str(self.giaddr)),
             (
                 "Hardware Address",
-                f"{self.htype.name}({self.htype.format_address(self.chaddr)})",
+                f"{self.htype.label()}({self.htype.format_address(self.chaddr)})",
             ),
             ("Next Server (siaddr)", str(self.siaddr)),
             ("Server Host Name", _nvt.display(self.sname)),

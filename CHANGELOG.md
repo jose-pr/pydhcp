@@ -436,6 +436,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `DHCPFlags.label()` names a value, and `to_mapping` writes a number for a value
   with a reserved bit set. A comparison `message.flags is DHCPFlags.BROADCAST`
   is true only when no other bit is set: use `broadcast`.
+- **`DHCPOptions` compares raw payloads.** `==` is true for the same codes with
+  the same octets in any order, and nothing is decoded: it no longer raises for a
+  truncated payload, two decodes of one datagram are equal (so are two
+  `DHCPMessage`s), and octets that read alike (`b"abc\x00junk"` and `b"abc"` under
+  option 12) are different. Against another type, a `dict(bag)` included, it is
+  `NotImplemented`; a lease's frozen bag compares the same way.
+- **`DHCPOptions.append` is atomic**, as `__setitem__` is: a value its codec
+  refuses leaves the bag as it was, where an absent code was left present and
+  empty. `setdefault` answers the stored `bytearray` whether or not the code was
+  there. A refused value now says which option and what kind of value
+  (`option 12 (HOSTNAME) cannot hold a NoneType: ...`), with the same exception
+  class.
+- **Breaking: a text option takes text.** `String(None)`, `String(5)` and
+  `options[12] = ["a"]` raise `TypeError`, where `str()` of the value was stored
+  (`b"None"`); octets are read as text. Delete an option to leave it out.
+- **Breaking: integer codecs hold exactly their range and whole numbers.**
+  `I32(2**31)` raises `DHCPValueError` when built, where it was built and failed
+  at `encode()` with `OverflowError`; `U8(1.9)` raises `TypeError`, where it was
+  `U8(1)`.
+- **`CCCKerberosRealmName` read from the wire keeps the case it arrived in**; a
+  realm built by hand is still upper-cased. A `DomainList` encoded past 16,383
+  octets writes a name in full where a compression pointer could not reach the
+  suffix it shares, and a summary names an unnamed hardware type `HTYPE_<n>`.
 
 ### Renamed
 

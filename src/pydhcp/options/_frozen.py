@@ -51,14 +51,7 @@ class FrozenDHCPOptions(DHCPOptions):
     ) -> _ty.Any:
         return cls(DHCPOptions.decode(data, codemap=codemap))
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, DHCPOptions):
-            return NotImplemented
-        return {code: bytes(value) for code, value in self._options.items()} == {
-            code: bytes(value) for code, value in other._options.items()
-        }
-
-    def __hash__(self) -> int:
+    def __hash__(self) -> int:  # type: ignore[override]
         return hash(frozenset((code, bytes(v)) for code, v in self._options.items()))
 
     def __repr__(self) -> str:

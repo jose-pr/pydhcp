@@ -80,6 +80,14 @@ class CCCKerberosRealmName(_CCCDomainText):
     ) -> _CCCKerberosRealmNameT:
         return super().__new__(cls, str(value).upper())
 
+    @classmethod
+    def unpack_from(
+        cls: type[_CCCKerberosRealmNameT], option: memoryview
+    ) -> tuple[_CCCKerberosRealmNameT, int]:
+        # The name as it arrived; only a value built by hand is upper-cased.
+        text, read = _decode_no_compression_domain(option)
+        return str.__new__(cls, text), read
+
 
 class CCCProvisioningServerAddress(_Record):
     """CCC sub-option 3 tagged union for IPv4 address or FQDN."""

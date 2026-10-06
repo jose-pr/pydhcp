@@ -21,23 +21,30 @@ of the installed package).
     `__getitem__`, so `dict(options)`, `.values()`, `.pop()`, `.setdefault()`
     and `.popitem()` all yield **raw `bytearray`s**, like `[]` and not like
     `.get()`. Write `get(code, decode=False)` when you want the bytes.
-    `.items()` is the other deviation: see below. `codemap` defaults to
+    `.items()` is the other deviation: see below. `.setdefault(code, value)`
+    stores `value` when the code is absent and answers the raw `bytearray`
+    either way. `codemap` defaults to
   `DHCPOptionCode`; pass a custom `BaseDHCPOptionCode` subclass to change
   code→type resolution. `__setitem__`/`__getitem__` key on the raw `int`
   code; values may be set as a `DHCPOptionType`, `bytes`/`bytearray`/
   `memoryview`, or any value the registered codec's constructor accepts.
-  `__setitem__` is **atomic** — a codec that raises leaves the previous
-  value (or the key's absence) untouched rather than an emptied option —
-  and **copies** what it is given, so a `bytearray` the caller keeps and
-  mutates afterwards does not write through into the stored option.
+  `__setitem__` and `.append()` are **atomic** — a codec that raises leaves
+  the previous value (or the key's absence) untouched rather than an emptied
+  option — and `__setitem__` **copies** what it is given, so a `bytearray` the
+  caller keeps and mutates afterwards does not write through into the stored
+  option. A value its codec refuses raises the codec's own exception class
+  (`TypeError` or `ValueError`) with the message starting `option 12
+  (HOSTNAME) cannot hold a NoneType:`. **`==` compares raw payloads** (the same
+  codes and octets, in any order; nothing is decoded, so it never raises) and
+  is `NotImplemented` against anything but another `DHCPOptions`, a `dict`
+  included; a bag is unhashable.
   Re-assigning an existing code keeps its position; order is wire-visible.
   `__setitem__` and `.append()` **check the code**: it must be an `int`
   (`bool` is refused) in `MIN_OPTION_CODE`..`MAX_OPTION_CODE` (**1..254**,
   both exported from `pydhcp.options`). `0` (PAD) and `255` (END) raise
-  `ValueError` — they are wire framing, not options, and storing under them
-  used to emit `00 02 ..` / `ff 02 ..` TLVs that a receiver reads as padding
-  and as end-of-options. A code above 255 raises here too, rather than at
-  `encode()` with `byte must be in range(0, 256)`. `.decode()` is
+  `ValueError` — they are wire framing, not options: stored, they would be
+  sent as `00 02 ..` / `ff 02 ..` TLVs that a receiver reads as padding and as
+  end-of-options. A code above 255 raises here too. `.decode()` is
   deliberately **not** checked: receive stays liberal and already treats 0
   and 255 as framing.
   - **`.get(key, default=None, *, decode=True) -> Any`** — `decode=True`
@@ -230,7 +237,9 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
   back; a structured document writes octets as hex text and `from_text` /
   `from_mapping` read it with `parse`. The default codec fallback for
   unregistered codes.
-- **`String`** — RFC 2132 NVT-ASCII text. **Not** null-terminated: the
+- **`String(value="")`** — RFC 2132 NVT-ASCII text; `value` is text or octets
+  (read as text), anything else is a `TypeError`: `None` is not an empty
+  string, delete the option instead. **Not** null-terminated: the
   length octet delimits it, so a trailing NUL would be part of the value.
   Measured, `String("abc")` encodes to `b"abc"`. (Some senders do append
   one; `decode` keeps whatever arrived rather than stripping it, because
@@ -255,8 +264,9 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
 - **`BaseFixedLengthInteger`** / **`FixedLengthInteger`** — abstract fixed-
   width big-endian integer base; subclasses set `NUMBER_OF_BYTES`/`SIGNED`.
   **`U8`**/**`U16`**/**`U32`** (unsigned, 1/2/4 bytes), **`I32`** (signed,
-  4 bytes) are the concrete codecs; encode raises `DHCPValueError` on overflow
-  or (for unsigned types) a negative value.
+  4 bytes) are the concrete codecs. The constructor takes a whole number (or
+  its text) and raises `DHCPValueError` outside the type's range
+  (`I32`: -2147483648 to 2147483647) and `TypeError` for a float or other type.
 - **`ClientIdentifier`** (`Bytes` subclass) — RFC 2132 client identifier
   (leading type octet + address bytes); requires ≥2 bytes on decode.
 - **`OptionOverload`** (`IntFlag`) — `NONE`/`FILE`/`SNAME`/`BOTH`; RFC 3396
@@ -443,7 +453,8 @@ carrying a name can reach it with no import-order constraint.
   a *tagged union* — a leading type octet selects an IPv4 address (1) or an
   FQDN (0), so it carries whichever the sender used;
   **`CCCProvisioningServerFQDN`** / **`CCCKerberosRealmName`**
-  (no-DNS-compression domain text); **`CCCASBackoffRetry`** /
+  (no-DNS-compression domain text; a realm built by hand is upper-cased, one
+  read from the wire keeps the case it arrived in); **`CCCASBackoffRetry`** /
   **`CCCAPBackoffRetry`** / **`CCCProvisioningTimer`** (integer
   backoff/timer values); **`CCCTicketGrantingServerUtilization`**, a
   `Boolean`; **`CCCSecurityTicketControl`**, a **16-bit integer mask** and not

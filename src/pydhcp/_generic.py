@@ -12,7 +12,7 @@ else:
 
     def _type_name(arg: _ty.Any) -> str:
         """A type argument as a reader writes it: `U8`, not its module path."""
-        return arg.__name__ if isinstance(arg, type) else _ty._type_repr(arg)
+        return arg.__name__ if isinstance(arg, type) else repr(arg)
 
     class GenericMeta(type):
         # https://stackoverflow.com/questions/60985221/how-can-i-access-t-from-a-generict-instance-early-in-its-lifecycle

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib as _contextlib
 import logging as _logging
 import typing as _ty
 import builtins as _builtins
@@ -13,8 +14,8 @@ from ._codecs._base import is_codec, is_codec_class
 from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
 from .. import _constants as _const
+from . import _wire
 from .._missing import MISSING as _MISSING
-from math import inf as _inf
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -109,13 +110,10 @@ __all__ = [
 def _check_code(key: _ty.Any) -> int:
     """Return `key` as a storable option code, or raise.
 
-    Stores used to accept anything: `options[0]` and `options[255]` encoded as
-    real `00 02 ..` / `ff 02 ..` TLVs, which a receiver reads as padding and as
-    end-of-options -- the first silently discards the payload, the second makes
-    every option after it disappear. `options[300]` was accepted too and only
-    failed at `encode()`, with `byte must be in range(0, 256)` naming neither
-    the option nor the code. `decode()` deliberately does not come through
-    here: receive stays liberal, and it already handles 0 and 255 as framing.
+    Code 0 stored as an option would be read back as padding and code 255 as the
+    end of the options, so a store refuses both and anything outside 1 to 254.
+    `decode()` does not come through here: receive is liberal and treats 0 and
+    255 as the framing they are.
     """
     if isinstance(key, bool) or not isinstance(key, int):
         # `_builtins.type`: importing `.type` binds the submodule as this
@@ -160,6 +158,13 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     satisfy the ABC would trade a real API for a formal one. It is pinned by
     `tests/test_options.py::test_get_decodes_and_getitem_does_not`, which fails
     if anyone "fixes" it the other way.
+
+    **Equality is on the raw payloads.** Two bags are equal when they hold the
+    same codes with the same octets, in any order (a mapping has none to keep),
+    whatever their code maps; nothing is decoded, so comparing never raises on
+    a malformed payload and octets that read alike are still different. A bag
+    is unequal to anything that is not a `DHCPOptions`, a `dict` of its own
+    items included.
     """
 
     def __init__(
@@ -216,15 +221,9 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
             length = options[1]
             remaining = len(options) - 2
             if length > remaining:
-                # Keep what arrived only if there is something to keep. A
-                # trailing option that declares a length and supplies *nothing*
-                # used to be stored with an empty payload, which is worse than
-                # dropping it: the option reads as present and then raises the
-                # moment anything decodes it, moving the failure out of this
-                # deliberately lenient decoder and into whatever handler touches
-                # the value. Measured -- a DHCPREQUEST ending in the two bytes
-                # `50 04` made `DHCPServer.handle` raise "IPv4AddressOption payload
-                # must be exactly 4 octets, got 0", from any sender.
+                # Keep what arrived only if there is something to keep: an
+                # option that declares a length and supplies nothing would read
+                # as present and then fail in whatever handler decodes it.
                 LOGGER.warning(
                     f"Option {code} at offset {offset} claims {length} bytes but only {remaining} available"
                 )
@@ -246,73 +245,20 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     ) -> tuple[bytearray, _ty.Optional["DHCPOptions"]]:
         """Encode up to `maxsize` octets, returning the bytes and the leftovers.
 
+        An option that does not fit whole is split into instances of its code
+        (RFC 3396), and what is not written comes back as a bag of its own.
         `word_size` pads the END marker out to a multiple of that many octets,
         so the options field finishes on a word boundary: at 4, END is
         `ff 00 00 00` rather than a bare `ff`. It also reserves that much room
-        rather than one octet when deciding what still fits.
-
-        Nothing in this package passes anything but 1, which has twice made it
-        look like dead code worth deleting. It is not dead — it is *unused
-        here*. The padding exists for callers writing into a fixed-layout buffer
-        that a receiver reads word-aligned, which is a property of the consumer,
-        not of DHCP; RFC 2131 itself requires no alignment. Removing it would
-        take away a documented public parameter, which pre-1.0 is a MINOR bump
-        under this project's versioning policy, for no measured benefit.
+        rather than one octet when deciding what still fits. DHCP itself needs
+        no alignment; the padding is for a caller filling a word-aligned buffer.
         """
-        if maxsize is None:
-            maxsize = _inf
-
-        if word_size <= 0:
-            raise ValueError(
-                f"Invalid options word size {word_size}: must be a positive number of octets"
-            )
-
-        endbytes = b"\xff" + b"\x00" * (word_size - 1)
-
-        if maxsize < max(word_size * 2, 4):
-            raise ValueError(
-                f"Invalid options max size {maxsize}: needs at least "
-                f"{max(word_size * 2, 4)} octets for a word size of {word_size}"
-            )
-
-        tofill = maxsize - word_size
-        options = bytearray()
-        _extraoptions: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
-
-        for code, option in self._options.items():
-            opt_view = memoryview(option)
-            written = False
-
-            # Every fragment is a complete code/length/data instance. RFC 3396 s4
-            # requires a long option to be split into multiple instances of the *same
-            # code*, each with its own length octet -- writing the code once leaves the
-            # receiver reading continuation data as new options. A zero-length option
-            # (e.g. RAPID_COMMIT, RFC 4039) still gets its length octet, or the next
-            # option's code byte is read as this option's length and everything after
-            # it is swallowed. Both octets are charged against `tofill`.
-            while tofill >= 3:
-                take = int(min(255, tofill - 2))
-                chunk = opt_view[:take]
-                _len = len(chunk)
-                options.append(int(code))
-                options.append(_len)
-                options.extend(chunk)
-                tofill -= 2 + _len
-                opt_view = opt_view[_len:]
-                written = True
-                if not opt_view:
-                    break
-
-            if opt_view or not written:
-                _extraoptions[code] = bytearray(opt_view)
-
-        options.extend(endbytes)
-        if _extraoptions:
-            leftover = DHCPOptions(self._codemap)
-            leftover._options = _extraoptions
-        else:
-            leftover = None
-        return options, leftover
+        written, extra = _wire.partial_encode(self._options, maxsize, word_size)
+        if not extra:
+            return written, None
+        leftover = DHCPOptions(self._codemap)
+        leftover._options = extra
+        return written, leftover
 
     def encode(self, word_size: int = 1) -> bytearray:
         encoded, _ = self.partial_encode(None, word_size)
@@ -404,10 +350,45 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
             return option
         return self._codemap.normalize(*option)
 
+    def _describe(self, code: int) -> str:
+        """`option 12 (HOSTNAME)`, or `option 230` for a code with no name."""
+        try:
+            label = self._codemap.from_code(code).label()
+        except Exception:
+            label = "UNKNOWN"
+        return f"option {code}" if label == "UNKNOWN" else f"option {code} ({label})"
+
+    @_contextlib.contextmanager
+    def _naming(self, code: int, value: _ty.Any) -> _ty.Iterator[None]:
+        """Say which option and which kind of value a refusal was about.
+
+        The exception keeps its class, so a caller's `except` still catches it.
+        """
+        try:
+            yield
+        except (TypeError, ValueError) as exc:
+            message = (
+                f"{self._describe(code)} cannot hold a "
+                f"{_builtins.type(value).__name__}: {exc}"
+            )
+            try:
+                renamed = _builtins.type(exc)(message)
+            except Exception:
+                raise exc from None
+            raise renamed from exc
+
     def append(self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]) -> None:
-        opt = self._ensuretype(option)
-        code = _check_code(int(opt.code))
-        opt.value.pack_into(self._options.setdefault(code, bytearray()))
+        """Add `option`'s octets after those already stored under its code.
+
+        All or nothing: the payload is built first, so an option that is
+        refused leaves the bag as it was, a code that was absent still absent.
+        """
+        raw_code, value = option
+        code = _check_code(int(raw_code))
+        with self._naming(code, value):
+            payload = bytearray()
+            self._ensuretype(option).value.pack_into(payload)
+        self._options.setdefault(code, bytearray()).extend(payload)
 
     def replace(self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
@@ -416,43 +397,35 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     def __setitem__(self, __key: int, __value: _ty.Any) -> None:
         """Store an option, building the payload before it is visible.
 
-        Two properties the obvious implementation does not have:
+        * **Atomic.** The payload is built in a scratch buffer and stored only
+          on success, so a codec that raises part-way leaves the previous value,
+          or no key. A zero-length option is legal on the wire (RFC 4039's
+          RAPID_COMMIT), so a half-built one would encode and send cleanly as
+          an option meaning something else.
+        * **Non-aliasing.** A `bytearray` argument is copied, never kept: the
+          caller's later writes to their buffer do not reach the stored option.
 
-        * **Atomic.** The old code did `setdefault(key, bytearray()).clear()`
-          and then `pack_into` into that same buffer, so a codec that raised
-          part-way left the option *emptied* -- or, for a key that was not
-          there before, newly present and empty. A zero-length option is legal
-          on the wire (RFC 4039's RAPID_COMMIT is one), so the wreckage encodes
-          and sends cleanly: the failed set becomes a valid option meaning
-          something else. Building into a scratch buffer and assigning only on
-          success leaves the previous value untouched instead.
-        * **Non-aliasing.** A `bytearray` argument used to be stored by
-          reference, so the caller kept a live handle on the stored option and
-          later mutations of their own buffer silently rewrote it. Every other
-          accepted type was already copied, which made the exception invisible
-          until a `bytearray` happened to be reused. `DHCPOptions.copy()` exists
-          because that same aliasing bit the server's lease path.
-
-        Assigning an existing key keeps its position: `OrderedDict` only
-        reorders on insert, and the options order is wire-visible (`encode`
-        puts DHCP_MESSAGE_TYPE first).
-
-        The key is checked first -- see `_check_code`. PAD (0) and END (255)
-        are framing, not options, and a code outside 0-255 has no wire form at
-        all; all three used to be stored and only noticed, if ever, by the
-        receiver.
+        Assigning an existing key keeps its position; the options order is
+        wire-visible. The key is checked first (`_check_code`).
         """
         key = _check_code(__key)
-        if not isinstance(__value, (bytes, memoryview, bytearray)) and not is_codec(
-            __value
-        ):
-            __value = self._codemap.from_code(key).get_type()(__value)
-        data = bytearray()
-        if is_codec(__value):
-            __value.pack_into(data)
-        else:
-            data.extend(__value)
+        with self._naming(key, __value):
+            if not isinstance(__value, (bytes, memoryview, bytearray)) and not is_codec(
+                __value
+            ):
+                __value = self._codemap.from_code(key).get_type()(__value)
+            data = bytearray()
+            if is_codec(__value):
+                __value.pack_into(data)
+            else:
+                data.extend(__value)
         self._options[key] = data
+
+    def setdefault(self, key: int, default: _ty.Any = None) -> bytearray:
+        """The raw payload under `key`; `default` is stored first when absent."""
+        if key not in self._options:
+            self[key] = default
+        return self._options[key]
 
     def __delitem__(self, __key: int) -> None:
         return self._options.__delitem__(__key)
@@ -491,3 +464,13 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
 
     def __contains__(self, __key: object) -> bool:
         return self._options.__contains__(__key)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, DHCPOptions):
+            return NotImplemented
+        mine, theirs = self._options, other._options
+        return len(mine) == len(theirs) and all(
+            code in theirs and theirs[code] == payload for code, payload in mine.items()
+        )
+
+    __hash__ = None  # type: ignore[assignment]

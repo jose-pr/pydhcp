@@ -1,6 +1,7 @@
 from __future__ import annotations
 import typing as _ty
 import enum as _enum
+import operator as _operator
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _nvt as _nvt
 from ..._network import HardwareAddressType as _HardwareAddressType
@@ -138,6 +139,20 @@ class String(DHCPOptionType, str):
     hostname or boot filename in another encoding survives a decode/encode round
     trip intact; `to_json` renders the display form. See `pydhcp._nvt`.
     """
+
+    def __new__(cls: type[_StringT], value: _ty.Any = "") -> _StringT:
+        """Text, or octets read as text; anything else is a `TypeError`.
+
+        `None` is not an empty string: an option with nothing to say is deleted
+        from the bag, not stored.
+        """
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            value = _nvt.decode(bytes(value), "Option string")
+        elif not isinstance(value, str):
+            raise TypeError(
+                f"{cls.__name__} is built from text, not {type(value).__name__}"
+            )
+        return str.__new__(cls, value)
 
     @classmethod
     def unpack_from(cls: type[_StringT], option: memoryview) -> tuple[_StringT, int]:
@@ -301,10 +316,20 @@ class BaseFixedLengthInteger(DHCPOptionType, int):
         return cls.NUMBER_OF_BYTES
 
     def _validate(self) -> None:
-        if self.bit_length() > self.NUMBER_OF_BYTES * 8:
-            raise DHCPValueError("Number is too big")
-        if not self.SIGNED and self < 0:
-            raise DHCPValueError("Value must not be signed")
+        bits = self.NUMBER_OF_BYTES * 8
+        if self.SIGNED:
+            low, high = -(1 << (bits - 1)), (1 << (bits - 1)) - 1
+        else:
+            low, high = 0, (1 << bits) - 1
+        if low <= self <= high:
+            return
+        if self > high:
+            what = "Number is too big"
+        else:
+            what = "Number is too small" if self.SIGNED else "Value must not be signed"
+        raise DHCPValueError(
+            f"{what}: {type(self).__name__} holds {low} to {high}, not {int(self)}"
+        )
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({int(self)!r})"
@@ -326,6 +351,16 @@ _FixedLengthIntegerT = _ty.TypeVar("_FixedLengthIntegerT", bound="FixedLengthInt
 
 class FixedLengthInteger(BaseFixedLengthInteger):
     def __new__(cls: type[_FixedLengthIntegerT], val: _ty.Any) -> _FixedLengthIntegerT:
+        # Text is a number as a document writes it; anything else must be a
+        # whole number already, so 1.9 is refused and not cut to 1.
+        if not isinstance(val, str):
+            try:
+                val = _operator.index(val)
+            except TypeError:
+                raise TypeError(
+                    f"{cls.__name__} is built from a whole number, "
+                    f"not {type(val).__name__}"
+                ) from None
         val_obj = int.__new__(cls, val)
         val_obj._validate()
         return val_obj
@@ -382,7 +417,7 @@ class ClientIdentifier(Bytes):
         addr = self[1:]
         ty_str = str(ty_val)
         try:
-            ty_str = _HardwareAddressType(ty_val).name
+            ty_str = _HardwareAddressType(ty_val).label()
         except ValueError:
             ...
         maybe = f"{ty_str}({addr.hex(':').upper()})"
