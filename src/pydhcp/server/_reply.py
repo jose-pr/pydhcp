@@ -176,9 +176,13 @@ class _Replies(_LeasePolicy):
                 expires = _const.INFINITE_LEASE_TIME
             else:
                 assert now is not None
-                # Round up, not down. Truncating sent a 3600-second lease as
-                # 3599 -- a different number than the one granted, every time.
-                expires = _math.ceil((lease.expires - now).total_seconds())
+                # To the nearest second, not down: truncating sent a 3600-second
+                # lease as 3599. Not up either: `now` is when the datagram
+                # arrived, so a lease made while it was handled has a few
+                # milliseconds more than its lease time left. A lease with time
+                # left is never advertised as none.
+                remaining = (lease.expires - now).total_seconds()
+                expires = max(1, round(remaining)) if remaining > 0 else 0
                 expires = min(expires, _const.INFINITE_LEASE_TIME)
             if expires > 0:
                 resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = expires

@@ -787,6 +787,9 @@ importable. Replace each name in the left column with the one beside it.
   at the end of the interval; `flush()` and `close()` write at once and cancel it.
 - **The lease file is written with LF line endings on every platform** (Windows wrote
   CRLF). A file of either form loads.
+- **A lease time is advertised as the nearest second to the time left.** It was
+  rounded up from the time left since the datagram arrived, so a lease made while the
+  datagram was handled (a pool granting 600 seconds) was advertised as 601.
 - **A wrong-length option 50, 51, 54 or 57 no longer raises out of `handle()`.**
   The options the server acts on are decoded once, at the top of `handle()`. A
   message whose option 50 or 54 is unusable is dropped (counted in

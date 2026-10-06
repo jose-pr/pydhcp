@@ -95,13 +95,40 @@ def test_a_large_advertised_size_is_left_alone() -> None:
     assert _sent(transport)
 
 
-def test_lease_time_is_rounded_up_not_truncated() -> None:
+def test_lease_time_is_not_truncated() -> None:
     """A 3600-second lease went out as 3599 -- a different number than granted."""
     server = _FixedLeaseServer(datetime.now(timezone.utc) + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
     offer = DHCPMessage.decode(bytearray(_sent(transport)))
     assert int(offer.options.get(DHCPOptionCode.IP_ADDRESS_LEASE_TIME)) == 3600
+
+
+@pytest.mark.parametrize(
+    "remaining, advertised",
+    [
+        (3600.004, 3600),  # made a few milliseconds after the datagram arrived
+        (3599.9999, 3600),  # read a few microseconds after it was made
+        (3599.4, 3599),
+        (0.4, 1),  # still has time left: never advertised as none
+    ],
+)
+def test_lease_time_is_the_nearest_second_to_the_time_left(
+    remaining: float, advertised: int
+) -> None:
+    """The clock the core reads is the datagram's arrival, so a lease made while
+    the datagram was handled has a little more than its lease time left. Rounding
+    up advertised 601 for the 600 seconds a pool granted."""
+    now = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
+    server = _FixedLeaseServer(now + timedelta(seconds=remaining))
+    reply = server._create_response(
+        _message(DHCPMessageType.DHCPREQUEST),
+        DHCPLease(IPv4("10.0.0.50"), now + timedelta(seconds=remaining)),
+        IPv4("10.0.0.1"),
+        DHCPMessageType.DHCPACK,
+        now=now,
+    )
+    assert int(reply.options.get(DHCPOptionCode.IP_ADDRESS_LEASE_TIME)) == advertised
 
 
 def test_an_expired_lease_produces_no_offer() -> None:
