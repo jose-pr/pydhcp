@@ -23,6 +23,8 @@ import netimps
 from pydhcp.listener import DHCPListener, PktInfoUDPTransport, UDPTransport
 
 # the receive path is not public
+# Private: the limiter a transport writes its warnings through.
+from pydhcp.listener._limit import _LogLimit
 from pydhcp.listener._receive import _arrival, _TruncatedDatagram
 from ipaddress import IPv4Address as IPv4
 
@@ -598,6 +600,9 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
             pytest.skip("no source pinning on this platform")
         transport.ifindex = loopback.index
         transport.local_ip = IPv4("127.0.0.2")
+        # Its own limiter: the shared one may already have written this
+        # reason's first line for another test, and the skip below reads it.
+        transport.limit = _LogLimit()
         with caplog.at_level(logging.WARNING, logger="pydhcp"):
             transport.send(
                 b"x" * 20,
