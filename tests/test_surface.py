@@ -266,9 +266,6 @@ SURFACE = {
     "pydhcp.packet.structured": EXPECTED_STRUCTURED,
     "pydhcp.relay": EXPECTED_RELAY,
     "pydhcp.server": EXPECTED_SERVER,
-    "pydhcp.server.handlers": [],
-    "pydhcp.server.policy": [],
-    "pydhcp.server.reply": [],
 }
 
 

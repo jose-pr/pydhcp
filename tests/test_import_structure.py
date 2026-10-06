@@ -17,9 +17,7 @@ import pydhcp
 _SRC = Path(pydhcp.__file__).resolve().parent
 _ROOT = _SRC.parent
 
-#: Every public module path. `pydhcp.server.handlers`, `.policy` and `.reply`
-#: are public until the server is split into private modules; they export
-#: nothing.
+#: Every public module path.
 PUBLIC_MODULES = [
     "pydhcp",
     "pydhcp.capture",
@@ -33,9 +31,6 @@ PUBLIC_MODULES = [
     "pydhcp.packet.structured",
     "pydhcp.relay",
     "pydhcp.server",
-    "pydhcp.server.handlers",
-    "pydhcp.server.policy",
-    "pydhcp.server.reply",
 ]
 
 #: The most lines a module may have. A module is a unit someone reviews in one

@@ -231,7 +231,12 @@ everything below from `pydhcp.listener` itself.
   here; the error propagates instead.
 - **`DHCPRequestContext`** (`NamedTuple`) — `transport: DHCPTransport`, `interface:
   NetworkInterface`, `client: SocketAddress`, `client_mac: bytes`,
-  `ifindex: int | None = None`, `local_ip: IPv4 | None = None`. Handlers use
+  `ifindex: int | None = None`, `local_ip: IPv4 | None = None`,
+  `received_at: datetime | None = None` (timezone-aware UTC) and
+  `received_monotonic: float | None = None` (`time.monotonic()` seconds): the
+  listener stamps both when the datagram arrives, and the server, relay and
+  capture read the time of an exchange from them. A context built by hand has
+  `None` for both and the hooks use the driver's clock instead. Handlers use
   `context.transport`/`context.interface` to reply out the same interface a
   request arrived on.
 - **`ListenSpec`** — type alias for the `listen` argument accepted above.
@@ -244,14 +249,14 @@ client build helpers below to keep the exchange unicast.
 
 ## Server (`server/`)
 
-A package. `DHCPServer` is composed of layers, each subclassing the last and
-each in its own module: `_state` (the constants below and per-instance state),
-`policy` (`acquire_lease`, `lease_seconds`, `release_lease`,
-`quarantine_address`, `get_inform_options`), `reply` (building and delivering
-the reply) and `handlers` (`handle` and the `handle_*` methods). Import from
-`pydhcp.server` and override on your subclass exactly as before; a test patching
-a module global patches it in the layer that reads it (`pydhcp.server.policy`).
-
+A package. The server's rules live in a private core that owns no socket,
+thread or clock; `DHCPServer` (thread-based) and `AsyncDHCPServer` (asyncio) are
+two sibling drivers composing that core with their own listener, and neither is a
+subclass of the other. Import from `pydhcp.server` and override on your subclass
+of either driver: **every hook below is an ordinary blocking method that runs on
+the one handler thread** — the receive thread of `DHCPServer`, the single worker
+thread of `AsyncDHCPServer` — so handlers are serialised and in arrival order.
+A test that patches a module global patches it in the private module that reads it.
 
 - **`DHCPServer(listen=None, select_timeout=None, max_packet_size=None,
   lease_backend=None, per_interface=None)`** (`DHCPListener` subclass) —
@@ -288,6 +293,10 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     a finite 136-year lease. Override the method or the four attributes; this
     is the base allocator's policy only, so an `.acquire_lease()` override
     that builds its own lease is unaffected.
+  - `.quarantine_address(ip, *, now=None)` — stops offering `ip` for
+    `DECLINE_QUARANTINE_SECONDS`; `now` is `time.monotonic()` seconds, and when
+    omitted (as `handle_decline` calls it, so an override taking only `ip` keeps
+    working) the driver's reading is used.
   - `.release_lease(client_id, server_id, msg) -> bool` — override point,
     releases via the lease backend; returns whether a binding actually went
     away. It does **not** touch metrics: an orderly `DHCPRELEASE`, a
@@ -330,8 +339,9 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     `.acquire_lease()` override returning a lease whose options it also keeps
     a reference to is therefore safe.
 - **`AsyncDHCPServer(listen=None, max_packet_size=None, lease_backend=None,
-  per_interface=None, max_queued=None)`** — same allocation logic as `DHCPServer`, running on
-  `AsyncDHCPListener`.
+  per_interface=None, max_queued=None)`** — the same rules and hooks as
+  `DHCPServer`, running on `AsyncDHCPListener`. It has no `__enter__`,
+  `__exit__` or `close()`.
 
 ## Client (`client.py`)
 

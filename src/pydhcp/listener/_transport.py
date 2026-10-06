@@ -166,3 +166,12 @@ class PktInfoUDPTransport(UDPTransport):
                 )
                 return self._send_to(data, dest_str, port)
         return super().send(data, dest, port, client_mac)
+
+
+class _Datagram(_ty.NamedTuple):
+    """One datagram a protocol core wants sent, and to whom."""
+
+    data: _ty.Union[bytes, bytearray]
+    dst: _ipaddress.IPv4Address
+    port: int
+    client_mac: bytes

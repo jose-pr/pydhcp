@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
+import datetime as _datetime
 import ipaddress as _ipaddress
 import logging as _logging
-import datetime as _dt
 import netimps as _netimps
-import time as _time
 import typing as _ty
 
 from .. import _constants as _const, _network as _net
@@ -173,7 +172,7 @@ class _LeasePolicy(_ServerState):
         return bool(_netimps.is_local_address(server_id, cache=True))
 
     @staticmethod
-    def _has_time_left(lease: DHCPLease) -> bool:
+    def _has_time_left(lease: DHCPLease, now: "_datetime.datetime") -> bool:
         """Whether `lease` still has a lease time worth advertising.
 
         `_create_response` sets yiaddr and option 51 only when the remaining
@@ -185,13 +184,15 @@ class _LeasePolicy(_ServerState):
         `lease_seconds` enforces MIN_LEASE_SECONDS, so the base server cannot
         reach this. An overriding `acquire_lease` can, which is exactly why the
         check lives on the reply path rather than in the allocator.
+
+        `now` is wall-clock time, the clock `DHCPLease.expires` is recorded on.
         """
         expires = lease.expires
         if expires is None:
             return False
-        if expires == _inf or not isinstance(expires, _dt.datetime):
+        if expires == _inf or not isinstance(expires, _datetime.datetime):
             return True
-        return (expires - _dt.datetime.now()).total_seconds() > 0
+        return (expires - now).total_seconds() > 0
 
     def acquire_lease(
         self,
@@ -290,8 +291,15 @@ class _LeasePolicy(_ServerState):
         ip: _ipaddress.IPv4Address,
         interface: _net.NetworkInterface,
         client_id: str,
+        *,
+        now: _ty.Optional[float] = None,
     ) -> _ty.Optional[str]:
         """Say why `ip` must not be handed to `client_id`, or None if it may be.
+
+        `now` is `time.monotonic()` seconds, the clock the quarantine runs on;
+        omitted, the driver's reading is used, which is the case whenever this
+        is reached from `acquire_lease`: its documented signature carries no
+        time.
 
         The base allocator takes the client's requested address, and took it on
         trust: any client could claim the server's own address, the broadcast
@@ -313,7 +321,7 @@ class _LeasePolicy(_ServerState):
 
         declined_until = self._declined.get(ip)
         if declined_until is not None:
-            if declined_until > _time.monotonic():
+            if declined_until > (self._read_clock().monotonic if now is None else now):
                 return "address is quarantined after a DHCPDECLINE"
             del self._declined[ip]
 
@@ -324,7 +332,9 @@ class _LeasePolicy(_ServerState):
                 return f"already leased to {holder}"
         return None
 
-    def quarantine_address(self, ip: _ipaddress.IPv4Address) -> None:
+    def quarantine_address(
+        self, ip: _ipaddress.IPv4Address, *, now: _ty.Optional[float] = None
+    ) -> None:
         """Stop offering `ip` for `DECLINE_QUARANTINE_SECONDS`.
 
         RFC 2131 4.3.3: a DHCPDECLINE says the client found the address already
@@ -333,8 +343,13 @@ class _LeasePolicy(_ServerState):
         would collide with whatever is really using it. The map is bounded, and
         entries expire, so a DECLINE flood cannot exhaust memory or permanently
         consume a pool.
+
+        `now` is `time.monotonic()` seconds; omitted, the driver's reading is
+        used, so an override that takes only `ip` keeps working.
         """
-        self._declined[ip] = _time.monotonic() + self.DECLINE_QUARANTINE_SECONDS
+        if now is None:
+            now = self._read_clock().monotonic
+        self._declined[ip] = now + self.DECLINE_QUARANTINE_SECONDS
         self._declined.move_to_end(ip)
         while len(self._declined) > self.MAX_DECLINED_ADDRESSES:
             self._declined.popitem(last=False)

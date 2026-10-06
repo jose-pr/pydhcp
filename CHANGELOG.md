@@ -35,6 +35,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   address (`per_interface=True`, or no packet info) lists the host's interfaces
   when `bind()` runs, not when it is constructed. The async listener's
   error record for a failing handler now reads like the sync one's.
+- **Breaking: `AsyncDHCPServer` is no longer a subclass of `DHCPServer`.** The two
+  are sibling drivers over one private core that holds the lease policy, the
+  reply building and one handler per message type, and owns no socket, thread or
+  clock. `isinstance(server, DHCPServer)` is false for an asynchronous server,
+  and the methods it used to pick up from the synchronous listener are gone:
+  `with AsyncDHCPServer(...)`, `.close()` (both raised `AttributeError` after
+  closing the sockets) and `.start(cancellation_token)`. Subclass either driver
+  and override the same hooks as before: `handle_discover`, `handle_request`,
+  `handle_decline`, `handle_release`, `handle_inform`, `acquire_lease`,
+  `release_lease`, `get_inform_options` and `lease_seconds`; each is an ordinary
+  blocking method that runs on the one handler thread of either driver.
+- **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
+  are gone** (they exported nothing); the layers are private modules of
+  `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.
+- **`DHCPRequestContext` carries the time its datagram arrived**: two new
+  trailing fields, `received_at` (timezone-aware UTC) and `received_monotonic`
+  (`time.monotonic()` seconds), stamped by the listener. A context built by hand
+  has `None` for both and a hook then reads the driver's clock, so a test that
+  builds contexts keeps working. `quarantine_address(ip, *, now=None)` accepts the
+  monotonic time; called with `ip` alone, as before, it reads the driver's clock.
 - **`DHCPClient.discover_offer()` and `.dora()` name the keywords they
   forward** (`xid`, `client_identifier`, `parameter_request_list` and, for
   `discover_offer`, `broadcast`) instead of taking `**discover_kwargs`. The same

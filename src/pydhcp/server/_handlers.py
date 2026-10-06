@@ -15,7 +15,7 @@ from ..options import _codecs as _type
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from math import inf as _inf
-from .reply import _Replies
+from ._reply import _Replies
 
 __all__: list[str] = []
 
@@ -116,13 +116,14 @@ class _Handlers(_Replies):
         # A DISCOVER is a probe, so it may look and reserve but must not extend
         # an existing binding -- see `_NonExtendingBackend`.
         lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
-        if not lease or not self._has_time_left(lease):
+        now = self._instant(context).wall
+        if not lease or not self._has_time_left(lease, now):
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
             )
             return
         resp = self._create_response(
-            msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPOFFER
+            msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPOFFER, now=now
         )
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPOFFER)
 
@@ -171,7 +172,8 @@ class _Handlers(_Replies):
         )
         if not ip_req:
             ip_req = msg.ciaddr
-        if ip_req == lease.ip and self._has_time_left(lease):
+        now = self._instant(context).wall
+        if ip_req == lease.ip and self._has_time_left(lease, now):
             resp_ty = _enum.DHCPMessageType.DHCPACK
             # Only now is anything agreed, so this is where the lease time the
             # ACK advertises is actually committed.
@@ -185,7 +187,7 @@ class _Handlers(_Replies):
             # client is told to start over, which is recoverable, instead of
             # being handed an ACK with no address in it.
             resp_ty = _enum.DHCPMessageType.DHCPNAK
-        resp = self._create_response(msg, lease, actual_server_id, resp_ty)
+        resp = self._create_response(msg, lease, actual_server_id, resp_ty, now=now)
         self._filter_and_send(msg, resp, context, resp_ty)
 
     def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
@@ -254,7 +256,11 @@ class _Handlers(_Replies):
             self.get_inform_options(actual_server_id, msg),
         )
         resp = self._create_response(
-            msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPACK
+            msg,
+            lease,
+            actual_server_id,
+            _enum.DHCPMessageType.DHCPACK,
+            now=self._instant(context).wall,
         )
         if DHCPOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
             del resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME]

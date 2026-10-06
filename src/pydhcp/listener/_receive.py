@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import logging as _logging
 import ipaddress as _ipaddress
 import socket as _socket
@@ -10,6 +11,7 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import _network as _net
+from .._clock import _Instant
 from ._interfaces import _resolve_interface
 from ._spec import ListenSpec, _listen_uses_wildcard
 from ._transport import PktInfoUDPTransport, DHCPTransport, UDPTransport
@@ -33,6 +35,26 @@ class DHCPRequestContext(_ty.NamedTuple):
     client_mac: bytes
     ifindex: _ty.Optional[int] = None
     local_ip: _ty.Optional[_ipaddress.IPv4Address] = None
+    #: When the datagram arrived: timezone-aware UTC wall-clock time, and
+    #: `time.monotonic()` seconds. Stamped by the listener that received it;
+    #: `None` on a context built by hand.
+    received_at: _ty.Optional[_dt.datetime] = None
+    received_monotonic: _ty.Optional[float] = None
+
+
+def _is_loopback(context: DHCPRequestContext) -> bool:
+    """Whether this exchange is happening over loopback.
+
+    Loopback inverts both halves of the unicast/broadcast trade-off: there is no
+    ARP, so a unicast to an address the client has not configured still arrives,
+    and POSIX refuses a broadcast from a socket bound to 127.0.0.1 outright
+    (Windows allows it, which is how a loopback harness can pass on one platform
+    and hang on the other).
+    """
+    for candidate in (context.local_ip, context.interface.ip, context.client.ip):
+        if candidate is not None:
+            return bool(candidate.is_loopback)
+    return False
 
 
 def _pktinfo_supported(listen: ListenSpec, per_interface: "_ty.Optional[bool]") -> bool:
@@ -135,12 +157,14 @@ def _context_for(
     ifindex: "_ty.Optional[int]" = None,
     local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
+    received: "_ty.Optional[_Instant]" = None,
 ) -> DHCPRequestContext:
     """Build the context for one received datagram.
 
     Shared by both listeners: duplicating it is what let the async half miss
     every fix the sync half gained. ``endpoint`` is the one the datagram was
-    received through, reused for the pinned reply.
+    received through, reused for the pinned reply. ``received`` is the time the
+    driver read when the datagram arrived.
     """
     transport: DHCPTransport
     if ifindex is not None or local_ip is not None:
@@ -157,4 +181,6 @@ def _context_for(
         client_mac=client_mac,
         ifindex=ifindex,
         local_ip=local_ip,
+        received_at=received.utc if received is not None else None,
+        received_monotonic=received.monotonic if received is not None else None,
     )

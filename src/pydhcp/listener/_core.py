@@ -14,7 +14,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import _constants as _const, _network as _net
+from .. import _clock, _constants as _const, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
@@ -102,6 +102,9 @@ class _ListenerCore:
             receive_buffer=self.RECEIVE_BUFFER_SIZE,
         )
 
+    def _read_clock(self) -> _clock._Instant:
+        return _clock._read()
+
     def _close_sockets(self) -> None:
         for sock in self._sockets:
             _close_socket(sock, self._endpoints)
@@ -133,7 +136,13 @@ class _ListenerCore:
         try:
             self.metrics.packets_received += 1
             context = _context_for(
-                sock, client, msg.chaddr, ifindex, local_ip, self._endpoints.get(sock)
+                sock,
+                client,
+                msg.chaddr,
+                ifindex,
+                local_ip,
+                self._endpoints.get(sock),
+                self._read_clock(),
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
                 msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)

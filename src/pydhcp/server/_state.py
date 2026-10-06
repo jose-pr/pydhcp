@@ -6,21 +6,26 @@ import ipaddress as _ipaddress
 import typing as _ty
 
 
+from .._clock import _Timed
+from .._metrics import DHCPMetrics
 from ..lease import LeaseBackend
-from ..listener._sync import DHCPListener as _Base
 from ..packet import _enums as _enum
 
 
-class _ServerState(_Base):
+class _ServerState(_Timed):
     """Constants and per-instance state shared by the server layers.
 
-    `DHCPServer` is composed of layers, each subclassing the last --
+    The server's rules are composed of layers, each subclassing the last --
     `_ServerState`, `_LeasePolicy`, `_Replies`, `_Handlers` -- so each is
     type-checked against exactly what it uses. A subclass overriding a
-    constant or a method does so on `DHCPServer` as before.
+    constant or a method does so on `DHCPServer` as before. None of them owns
+    a socket, a thread or a clock: the listener driver the server is composed
+    with supplies `metrics`, the contexts and the time.
     """
 
-    DEFAULT_PORTS = (_enum.DHCPPort.SERVER,)
+    metrics: DHCPMetrics
+
+    DEFAULT_PORTS: _ty.Sequence[int] = (_enum.DHCPPort.SERVER,)
 
     #: How long a DHCPDECLINEd address stays out of the pool.
     DECLINE_QUARANTINE_SECONDS: float = 600.0
@@ -62,13 +67,10 @@ class _ServerState(_Base):
     def _init_server_state(
         self, lease_backend: _ty.Optional[LeaseBackend] = None
     ) -> None:
-        """Set up the state every server variant needs.
+        """Set up the state every server driver needs.
 
-        AsyncDHCPServer cannot call this class's `__init__` (its own base takes a
-        different argument set), so it re-implemented the body -- and then drifted
-        from it: `_declined` was added here and not there, which made every
-        DHCPDECLINE an AttributeError on the async server. One method both
-        constructors call is what keeps that from happening again.
+        Each driver's constructor takes its own listener arguments and calls
+        this for the rest, so the two cannot drift apart.
         """
         from ..lease import InMemoryLeaseBackend
 

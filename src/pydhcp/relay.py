@@ -19,7 +19,7 @@ from . import _constants as _const, _network as _net
 from .packet import _enums as _enum
 from .options._codes import DHCPOptionCode
 from .options import _codecs as _type
-from .server.reply import _is_loopback
+from .listener._receive import _is_loopback
 
 __all__ = [
     "AsyncDHCPRelay",

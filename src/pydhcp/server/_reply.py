@@ -10,32 +10,18 @@ import typing as _ty
 
 from .. import _constants as _const, _network as _net
 from ..lease import DHCPLease
-from ..listener._receive import DHCPRequestContext
+from ..listener._receive import DHCPRequestContext, _is_loopback
+from ..listener._transport import _Datagram
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from math import inf as _inf
-from .policy import _LeasePolicy
+from ._policy import _LeasePolicy
 
 __all__: list[str] = []
 
 LOGGER = _logging.getLogger(__name__)
-
-
-def _is_loopback(context: DHCPRequestContext) -> bool:
-    """Whether this exchange is happening over loopback.
-
-    Loopback inverts both halves of the unicast/broadcast trade-off: there is no
-    ARP, so a unicast to an address the client has not configured still arrives,
-    and POSIX refuses a broadcast from a socket bound to 127.0.0.1 outright
-    (Windows allows it, which is how a loopback harness can pass on one platform
-    and hang on the other).
-    """
-    for candidate in (context.local_ip, context.interface.ip, context.client.ip):
-        if candidate is not None:
-            return bool(candidate.is_loopback)
-    return False
 
 
 class _Replies(_LeasePolicy):
@@ -47,7 +33,16 @@ class _Replies(_LeasePolicy):
         lease: DHCPLease,
         actual_server_id: _ipaddress.IPv4Address,
         resp_ty: _enum.DHCPMessageType,
+        *,
+        now: "_ty.Optional[_dt.datetime]" = None,
     ) -> DHCPMessage:
+        """The reply to `msg`, cloned from it.
+
+        `now` is wall-clock time, the clock `lease.expires` is recorded on;
+        omitted, the driver's reading is used.
+        """
+        if now is None:
+            now = self._read_clock().wall
         resp = DHCPMessage(**msg.__dict__.copy())
         # Never alias the stored lease's options: the response pipeline injects
         # bookkeeping options and PARAMETER_REQUEST_LIST filtering deletes
@@ -99,9 +94,7 @@ class _Replies(_LeasePolicy):
             else:
                 # Round up, not down. Truncating sent a 3600-second lease as
                 # 3599 -- a different number than the one granted, every time.
-                expires = _math.ceil(
-                    (lease.expires - _dt.datetime.now()).total_seconds()
-                )
+                expires = _math.ceil((lease.expires - now).total_seconds())
                 expires = min(expires, _const.INFINITE_LEASE_TIME)
             if expires > 0:
                 resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = expires
@@ -130,6 +123,20 @@ class _Replies(_LeasePolicy):
         context: DHCPRequestContext,
         resp_ty: _enum.DHCPMessageType,
     ) -> None:
+        datagram = self._reply_datagram(msg, resp, context, resp_ty)
+        context.transport.send(
+            datagram.data, datagram.dst, datagram.port, datagram.client_mac
+        )
+        self.metrics.packets_sent += 1
+
+    def _reply_datagram(
+        self,
+        msg: DHCPMessage,
+        resp: DHCPMessage,
+        context: DHCPRequestContext,
+        resp_ty: _enum.DHCPMessageType,
+    ) -> _Datagram:
+        """Filter and encode `resp`, and decide where it goes. Sends nothing."""
         requests_params_raw = msg.options.get(
             DHCPOptionCode.PARAMETER_REQUEST_LIST,
             decode=_type.DHCPOptionCodes[DHCPOptionCode],
@@ -261,5 +268,4 @@ class _Replies(_LeasePolicy):
                     _net.SocketAddress(dest, dest_port),
                     _logging.DEBUG,
                 )
-        context.transport.send(data, dest, dest_port, context.client_mac)
-        self.metrics.packets_sent += 1
+        return _Datagram(data, dest, dest_port, context.client_mac)

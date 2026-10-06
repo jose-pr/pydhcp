@@ -213,7 +213,7 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         emit()
     loud = {record.name for record in caplog.records}
-    assert "pydhcp.server.handlers" in loud
+    assert "pydhcp.server._handlers" in loud
     assert "pydhcp.listener._interfaces" in loud
 
     caplog.clear()
@@ -226,5 +226,5 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     finally:
         quiet.setLevel(previous)
     names = {record.name for record in caplog.records}
-    assert "pydhcp.server.handlers" not in names
+    assert "pydhcp.server._handlers" not in names
     assert "pydhcp.listener._interfaces" in names
