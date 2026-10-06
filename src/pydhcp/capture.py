@@ -10,11 +10,14 @@ import string as _string
 import typing as _ty
 
 from . import _network as _net
-from .listener import AsyncDHCPListener, DHCPListener, ListenSpec, DHCPRequestContext
-from .options import DHCPOptionCode
+from .listener._asyncio import AsyncDHCPListener
+from .listener._sync import DHCPListener
+from .listener._spec import ListenSpec
+from .listener._receive import DHCPRequestContext
+from .options._codes import DHCPOptionCode
 from .exceptions import NoClientIdentityError
 from .packet._message import DHCPMessage
-from .options import DHCPOptionType
+from .options._codecs._base import DHCPOptionType
 
 #: This module's logger, a child of the package logger `pydhcp` (which
 #: `.listener` above has already imported, installing its `NullHandler`).

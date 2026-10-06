@@ -9,7 +9,8 @@ import typing as _ty
 
 from . import _enums as _enum
 from .. import _nvt as _nvt
-from ..options import BaseDHCPOptionCode, DHCPOptions
+from ..options._codes import BaseDHCPOptionCode
+from ..options import DHCPOptions
 from ..options import _codecs as _type
 from ._encode import _MessageEncode
 

@@ -6,18 +6,18 @@ import time as _time
 import typing as _ty
 
 from .packet._message import DHCPMessage
-from .listener import (
-    AsyncDHCPListener as _AsyncBase,
-    DHCPListener as _Base,
-    ListenSpec,
+from .listener._asyncio import AsyncDHCPListener as _AsyncBase
+from .listener._sync import DHCPListener as _Base
+from .listener._spec import ListenSpec
+from .listener._transport import (
     PktInfoUDPTransport as _PktInfoUDPTransport,
-    DHCPRequestContext,
     DHCPTransport as _DHCPTransport,
     UDPTransport as _UDPTransport,
 )
+from .listener._receive import DHCPRequestContext
 from . import _constants as _const, _network as _net
 from .packet import _enums as _enum
-from .options import DHCPOptionCode
+from .options._codes import DHCPOptionCode
 from .options import _codecs as _type
 from .server.reply import _is_loopback
 

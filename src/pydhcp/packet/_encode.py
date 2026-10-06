@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as _ty
 
 from .. import _constants as _const, _nvt as _nvt
-from ..options import DHCPOptionCode
+from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
 from ._decode import _MessageDecode
 from ._fields import (

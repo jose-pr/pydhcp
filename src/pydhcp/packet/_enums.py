@@ -3,7 +3,7 @@ import enum as _enum
 import typing as _ty
 
 from ..exceptions import DHCPDecodeError
-from ..options._codecs import DHCPOptionType
+from ..options._codecs._base import DHCPOptionType
 
 # `htype` is a message-header field, so this is its documented home and stays
 # part of `pydhcp.packet`'s surface -- but the enum itself lives in

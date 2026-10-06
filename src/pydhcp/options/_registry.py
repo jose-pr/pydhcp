@@ -2,7 +2,38 @@ from __future__ import annotations
 
 from ._codes import DHCPOptionCode
 from ..packet._enums import DHCPMessageType
-from ._codecs import *
+from ._codecs._addresses import (
+    ClasslessRoute,
+    IPv4AddressOption,
+    PolicyFilter,
+    StaticRoute,
+)
+from ._codecs._base import DHCPOptionCodes, List
+from ._codecs._ccc import CCCOption
+from ._codecs._domains import DomainList, DomainName, UncompressedDomainList
+from ._codecs._fqdn import ClientFQDN
+from ._codecs._mos import MoSFQDNList, MoSIPv4AddressList
+from ._codecs._scalar import (
+    Boolean,
+    Bytes,
+    ClientIdentifier,
+    Flag,
+    I32,
+    OctetString,
+    OptionOverload,
+    String,
+    U16,
+    U32,
+    U8,
+    URIList,
+)
+from ._codecs._servers import PCPServerList, RDNSSSelection, SIPServers, StatusCode
+from ._codecs._vendor import (
+    RelayAgentInformation,
+    VIVendorClass,
+    VIVendorSpecificInformation,
+    VendorSpecificInformation,
+)
 
 DHCPOptionCode.TIME_OFFSET.register_type(I32)
 DHCPOptionCode.RFC868_TIMESERVER.register_type(List[IPv4AddressOption])

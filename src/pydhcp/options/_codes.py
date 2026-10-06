@@ -4,7 +4,8 @@ import typing as _ty
 import enum as _enum
 import threading as _threading
 
-from ._codecs import Bytes, DHCPOptionType
+from ._codecs._scalar import Bytes
+from ._codecs._base import DHCPOptionType
 
 _CODEMAP: list[type[DHCPOptionType]] = [Bytes] * 256
 #: Reentrant: `registry` calls `register_type`, which re-enters

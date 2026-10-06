@@ -7,7 +7,7 @@ import typing as _ty
 
 
 from ..lease import LeaseBackend
-from ..listener import DHCPListener as _Base
+from ..listener._sync import DHCPListener as _Base
 from ..packet import _enums as _enum
 
 

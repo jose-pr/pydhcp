@@ -9,8 +9,8 @@ import typing as _ty
 from .. import _constants as _const
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
 from ..lease import DHCPLease
-from ..listener import DHCPRequestContext
-from ..options import DHCPOptionCode
+from ..listener._receive import DHCPRequestContext
+from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage

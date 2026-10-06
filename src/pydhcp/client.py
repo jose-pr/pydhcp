@@ -14,9 +14,13 @@ import netimps as _netimps
 
 from . import _constants as _const
 from .packet import _enums as _enum
-from .listener import DHCPListener, ListenSpec, DHCPRequestContext, UDPTransport
+from .listener._sync import DHCPListener
+from .listener._spec import ListenSpec
+from .listener._receive import DHCPRequestContext
+from .listener._transport import UDPTransport
 from .packet._message import DHCPMessage
-from .options import DHCPOptionCode, DHCPOptions
+from .options._codes import DHCPOptionCode
+from .options import DHCPOptions
 from .options import _codecs as _type
 
 LOGGER = _logging.getLogger(__name__)
