@@ -879,6 +879,11 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **The README's `--loglevel pydhcp=DEBUG` example is `--loglevel pydhcp:DEBUG`**: the option
+  takes `[NAME:]LEVEL`, and the line shown was rejected by the parser. Every command line in the README,
+  the docs and the shipped headers is now fed to the real parser by a test, and the README's lines run as
+  processes against loopback. The README says a hook is a program with an extension on Windows
+  (`./on-dhcp-capture.cmd`).
 - **A lease backend that is falsy when empty is no longer replaced.** `lease_backend`
   was tested for truthiness, so a backend defining `__len__` was discarded while
   empty and the server used a private store; it is now tested with `is None`.

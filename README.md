@@ -146,6 +146,7 @@ pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
 pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --output-mode per-capture --format json
 
 # Invoke a trusted local command hook with each captured packet on stdin
+# (on Windows the hook is a program with an extension: ./on-dhcp-capture.cmd)
 pydhcp capture --listen 127.0.0.1:6767 --hook ./on-dhcp-capture
 
 # Start the DHCP server from JSON or INI config
@@ -156,7 +157,7 @@ pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768
 
 # Increase logging while debugging (-v is repeatable; --loglevel targets one logger)
 pydhcp server --listen 127.0.0.1:6767 -v
-pydhcp server --listen 127.0.0.1:6767 --loglevel pydhcp=DEBUG
+pydhcp server --listen 127.0.0.1:6767 --loglevel pydhcp:DEBUG
 ```
 
 ### Exit status and errors
