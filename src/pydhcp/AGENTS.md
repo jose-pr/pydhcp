@@ -26,7 +26,7 @@ is imported from the module that owns it:
 | `ServerAddressLike`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
 | `ClientIdentifierLike` | `pydhcp.client` |
 | `PacketFilterLike` | `pydhcp.capture` |
-| `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook`, `DHCPLayer`, `dissect_dhcp`, `register_dhcp_dissector` | `pydhcp.capture` |
+| `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook`, `DHCPLayer`, `dissect_dhcp`, `register_dhcp_dissector`, `read_capture`, `capture_dissector`, `replay_capture` | `pydhcp.capture` |
 | `main`, `App` | `pydhcp.cli` |
 
 A name outside a module's `__all__` is not API. The address and MAC types are
@@ -848,7 +848,11 @@ exchange has an entry in the pending table.
   the listener's per-packet exception handler. `self.accepted_count` tracks
   how many events passed the filter.
 - **`CaptureEvent`** (frozen dataclass) — `message: DHCPMessage`, `context:
-  DHCPRequestContext`, `captured_at: datetime`. Properties: `.source` /
+  DHCPRequestContext | None`, `captured_at: datetime`, `datagram:
+  pktcap.CapturedDatagram | None = None`. A live event has a `context`; an event
+  **read from a capture file has `context=None`** and a `datagram` (its addresses,
+  time and octets), so `.source`, `.destination` and `.payload` come from it and the
+  `interface` filter key fails its clause. Properties: `.source` /
   `.destination` (`SocketAddress`: where the datagram was sent, so the broadcast
   address for a client with no address, and the port it arrived on),
   `.payload` (`bytes | None`: the datagram as the client sent it, which
@@ -929,6 +933,33 @@ exchange has an entry in the pending table.
   `ValueError` with nothing registered by the call. With it registered,
   `pktcap.compile_capture_filter("proto=dhcp", pktcap.frame_filter)` selects the
   frames that carry a message.
+- **`read_capture(source, *, packet_filter=None, ports=(67, 68), dissector=None)
+  -> Iterator[CaptureEvent]`** — the DHCP messages of a pcap or pcapng capture
+  (`source` a path or a binary stream), as events with `context=None`, in file
+  order: one for each UDP datagram to or from one of `ports` that the DHCP dissector
+  read and that passes `packet_filter` (text or a predicate, as for `DHCPCapture`).
+  `captured_at` is the datagram's time, the epoch when the file's time is not one;
+  `message` is `DHCPMessage.decode` of the octets, and `payload` those octets.
+  Datagrams between IPv6 addresses are not DHCP for IPv4 and are passed over.
+  Arguments are checked at the call; the file is read while iterating, and a
+  damaged capture raises `pktcap.CaptureFormatError` **after** the events before the
+  damage. **`capture_dissector(ports=(67, 68)) -> pktcap.FrameDissector`** is the
+  default `dissector`: a copy of pktcap's registry (the process-wide one is left
+  alone) with `dissect_dhcp` on `ports`; pass your own and read its `stats` (and
+  `unsupported_linktypes`) afterwards to tell an empty capture from frames nothing
+  could read: `malformed` frames held a message that did not decode or a cut-short
+  layer. A `dissector` you pass must have `dissect_dhcp` registered on `ports`.
+- **`replay_capture(source, server, port=67, *, endpoint=None, speed=1.0,
+  max_delay=5.0, limit=None) -> pktcap.ReplayResult`** — send again, through
+  `pktcap.replay_to`, the payload of each datagram the capture shows going to **UDP
+  port 67**, to `server` at `port`: **never to an address from the capture**, and a
+  datagram to port 68 (a reply) is not sent. `source` is a pcap or pcapng capture
+  (path or binary stream) or an iterable of `pktcap.CapturedDatagram`. `endpoint` is
+  a `netimps.UDPEndpoint` the caller made, to send from a chosen port or interface
+  or to a broadcast address. `speed=1.0` keeps the recorded waits (`None` removes
+  them), `max_delay` bounds one wait, `limit` ends the replay after that many
+  datagrams. `ReplayResult(sent, partial)`. `OSError` when `server` does not
+  resolve or a send fails; `ValueError` for an option out of range.
 - **`FILENAME_FIELDS`** — `("client_id", "timestamp", "msg_type", "xid",
   "format", "index")`, the placeholders a `per_capture` pattern may name.
 - **`UNIQUE_FILENAME_FIELDS`** — `{"timestamp", "xid", "index"}`, the subset that
@@ -1335,7 +1366,7 @@ stayed at the root level and the library's output never appeared.
   (`--decode`/`--encode` mutually exclusive+required, `--input`/`--output`
   accepting `-` for stdio, `--format json|yaml|toml|ini|summary`; `summary` is
   decode-only, its first line is the op and XID), `capture` (`--listen`,
-  `--filter`, `--format`, `--output` file/pattern/`-`, `--per-capture`,
+  `--filter`, `--format`, `--output` file/pattern/`-`, `--per-capture`, `--read`,
   `--max-files`, `--count`, `--hook` `module:function` or an
   executable (a name with a directory is that file, resolved against the working
   directory when the capture starts and run by its absolute path; a bare name is
@@ -1406,6 +1437,19 @@ stayed at the root level and the library's output never appeared.
   `json`, `yaml`, `toml` or `ini`; without it the ending of `--output` names it
   (`.pcap`, `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`,
   `.toml`, `.ini`), and an ending that names none, and standard output, are `json`.
+  **`capture --read FILE`** (`-` is standard input; `PYDHCP_CAPTURE_READ`, `read` in
+  the configuration file) puts the DHCP messages of a pcap or pcapng capture
+  through the same `--filter`, `--format`, `--output`, `--count` and `--hook`, with
+  no socket bound, and ends when the file does; `--listen` with it is status 2. A
+  capture cut or damaged in the middle prints the records before the damage and
+  exits 2 with a line naming the file. When frames could not be read, one stderr line
+  says how many (`pydhcp: FILE: of N frames, 2 cut short or damaged; 1 of a link type
+  nothing here reads (105)`); the status is unchanged.
+  **`pydhcp replay --input FILE --server HOST[:PORT]`** (`-i`, `-s`; `--speed`,
+  `--no-delay`, `--max-delay`, `--limit`; `PYDHCP_REPLAY_*`) is `replay_capture`: it
+  sends the requests of the capture to the server named (port 67 by default),
+  prints `N datagrams sent, M partial passed over` and exits 0; a file that is
+  not a capture is status 2 naming it, a server that does not resolve is status 1.
   **`--format pcap` and `--format pcapng` write the datagrams as the clients sent
   them** (a file tcpdump and Wireshark open; to standard output the same octets, for
   `| tcpdump -r -`), the file replaced, not appended to; a `--hook` is then given
@@ -1472,7 +1516,8 @@ variable (status 2).
 | `PYDHCP_MCP` | not read: the root disables the tool server, and the variable is left untouched |
 | `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE` | `server --listen`, `--per-interface`, `--lease-file` |
 | `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
-| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_CAPTURE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--per-capture`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
+| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_CAPTURE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE`, `PYDHCP_CAPTURE_READ` | `capture --listen`, `--filter`, `--format`, `--output`, `--per-capture`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface`, `--read` |
+| `PYDHCP_REPLAY_INPUT`, `PYDHCP_REPLAY_SERVER`, `PYDHCP_REPLAY_SPEED`, `PYDHCP_REPLAY_NO_DELAY`, `PYDHCP_REPLAY_MAX_DELAY`, `PYDHCP_REPLAY_LIMIT` | `replay --input`, `--server`, `--speed`, `--no-delay`, `--max-delay`, `--limit` |
 | `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` (`--decode` and `--encode` choose a mode and are not settings) |
 | `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
 | `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input (`json` when the output is a capture file) |

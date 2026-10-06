@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pydhcp capture --read FILE`** and **`pydhcp.capture.read_capture(source, *, packet_filter=None,
+  ports=(67, 68), dissector=None)`**: the DHCP messages of a pcap or pcapng capture, through the
+  same filter, output formats and hook as a live capture, with no socket bound. An event read from a
+  file has `context=None` and a new field `CaptureEvent.datagram` (`pktcap.CapturedDatagram`); its
+  addresses, time and `payload` come from it, and the `interface` filter key fails its clause. A
+  capture cut in the middle prints the records before the cut and exits 2 naming the file; frames
+  nothing could read are counted by the dissector (`capture_dissector()`) and said in one stderr
+  line. `PYDHCP_CAPTURE_READ`, and `read` in a configuration file.
+- **`pydhcp replay --input FILE --server HOST[:PORT]`** and **`pydhcp.capture.replay_capture(source,
+  server, port=67, *, endpoint=None, speed=1.0, max_delay=5.0, limit=None)`**: send again the
+  datagrams a capture shows going to port 67, to the server you name and never to an address from the
+  capture, with the recorded waits unless `--no-delay`/`speed=None`. `PYDHCP_REPLAY_*`.
 - **`pydhcp.capture.dissect_dhcp`, `DHCPLayer` and `register_dhcp_dissector(registry=None)`**:
   DHCP as a pktcap dissector on UDP ports 67 and 68, so a pcap or pcapng capture read with
   `pktcap.read_dissected` carries a `DHCPLayer` (`op`, `xid`, `message_type`, `client_id`, and

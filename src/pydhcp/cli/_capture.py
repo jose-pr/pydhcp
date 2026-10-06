@@ -9,7 +9,9 @@ import typing as _ty
 import pktcap as _pktcap
 from duho import Meta
 
-from ..capture._events import CaptureEvent
+from ..capture._events import CaptureHook
+from ..capture._offline import capture_dissector, read_capture, unread_note
+from ..capture._run import CaptureRun
 from ..capture._sync import DHCPCapture
 from ..capture._writer import MAX_CAPTURE_FILES, DHCPCaptureWriter
 from ._capture_hook import _load_capture_hook
@@ -30,17 +32,6 @@ def _probe(path: pathlib.Path) -> None:
         raise ValueError(
             f"--output {path} cannot be written: {error.strerror or error}"
         ) from None
-
-
-class _Ending:
-    """Why the capture stopped before it was interrupted, and what it still owes."""
-
-    def __init__(self) -> None:
-        self.stopped = False
-        self.over_budget = False
-        self.failure: "_ty.Optional[Exception]" = None
-        self.count = 0
-        self.late = 0  # records that arrived after the budget ran out
 
 
 class Capture(_Configured):
@@ -101,6 +92,12 @@ class Capture(_Configured):
     "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
     ("--per-interface",)
 
+    read: _ty.Annotated[_ty.Optional[pathlib.Path], Meta(env="PYDHCP_CAPTURE_READ")] = (
+        None
+    )
+    "Read the DHCP messages of this pcap or pcapng capture file ('-' is standard input) instead of listening, and put them through the same filter, output and hook. Not with --listen. Default: listen"
+    ("--read",)
+
     def _writer(self, output: str, max_files: int) -> DHCPCaptureWriter:
         stdout = output == "-"
         target = sys.stdout.buffer if stdout else output
@@ -120,6 +117,38 @@ class Capture(_Configured):
         except ImportError as error:
             raise ValueError(str(error)) from None
 
+    def _read(
+        self, run: CaptureRun, hook: "_ty.Optional[CaptureHook]"
+    ) -> "_ty.Optional[BaseException]":
+        """Put the messages of the capture file through the sink and the hook.
+
+        Returns the hook failure that ended the run under `--hook-fail-fast`.
+        """
+        path = "-" if self.read is None else str(self.read)
+        source = sys.stdin.buffer if path == "-" else path
+        frames = capture_dissector()
+        try:
+            for event in read_capture(
+                source, packet_filter=self.packet_filter, dissector=frames
+            ):
+                run(event)
+                if hook is not None:
+                    try:
+                        hook(event)
+                    except Exception as error:
+                        self._logger_.error("Capture hook failed", exc_info=True)
+                        if self.hook_fail_fast:
+                            return error
+                if run.stopped:
+                    break
+        except _pktcap.CaptureFormatError as error:
+            raise ValueError(f"{path}: {error}") from None
+        finally:
+            say = unread_note(path, frames)
+            if say:
+                print(say, file=sys.stderr)
+        return None
+
     def __call__(self) -> None:
         output = str(self.output)
         max_files = MAX_CAPTURE_FILES if self.max_files is None else self.max_files
@@ -129,55 +158,47 @@ class Capture(_Configured):
             raise ValueError(f"--max-files must be at least 1, got {max_files}")
         if self.per_capture and output == "-":
             raise ValueError("--per-capture requires --output to be a filename pattern")
+        if self.read is not None and self.listen is not None:
+            raise ValueError(
+                "--read reads a capture file and does not listen: drop --listen"
+            )
         # Built before binding, so a mistake in the pattern or the format costs one
         # message and not one per packet.
         writer = self._writer(output, max_files)
         if not self.per_capture and output != "-":
             _probe(pathlib.Path(output))
-        ending = _Ending()
-        capture: DHCPCapture
-
-        def sink(event: CaptureEvent) -> None:
-            # The listener logs what a sink raises and carries on, so a record
-            # that cannot be kept has to end the capture from here.
-            if ending.stopped:
-                ending.late += ending.over_budget
-                return
-            try:
-                writer(event)
-            except (OSError, ValueError) as error:
-                ending.stopped, ending.failure = True, error
-                capture.shutdown()
-                return
-            if writer.refused:
-                ending.stopped = ending.over_budget = True
-                capture.shutdown()
-                return
-            ending.count += 1
-            if self.count is not None and ending.count >= self.count:
-                ending.stopped = True
-                capture.shutdown()
-
+        capture: _ty.Optional[DHCPCapture] = None
+        run = CaptureRun(
+            writer,
+            lambda: capture.shutdown() if capture is not None else None,
+            count=self.count,
+        )
         # A capture file holds no text of a message: a hook reads it as JSON.
         hook_format = (
             writer.format if writer.format in _pktcap.RECORD_FORMATS else "json"
         )
         hook = _load_capture_hook(self.hook, hook_format, self.hook_fail_fast)
-        with _arguments():
-            capture = DHCPCapture(
-                listen="*" if self.listen is None else self.listen,
-                packet_filter=self.packet_filter,
-                sink=sink,
-                hook=hook,
-                hook_fail_fast=self.hook_fail_fast,
-                per_interface=self.per_interface,
-            )
-        try:
-            with writer, capture:
-                capture.serve_forever()
-        except KeyboardInterrupt:
-            self._logger_.info("Stopped listening due to Ctrl-C")
-        failure = ending.failure
+        hook_error: "_ty.Optional[BaseException]" = None
+        with writer:
+            if self.read is not None:
+                hook_error = self._read(run, hook)
+            else:
+                with _arguments():
+                    capture = DHCPCapture(
+                        listen="*" if self.listen is None else self.listen,
+                        packet_filter=self.packet_filter,
+                        sink=run,
+                        hook=hook,
+                        hook_fail_fast=self.hook_fail_fast,
+                        per_interface=self.per_interface,
+                    )
+                try:
+                    with capture:
+                        capture.serve_forever()
+                except KeyboardInterrupt:
+                    self._logger_.info("Stopped listening due to Ctrl-C")
+                hook_error = capture.hook_error
+        failure = run.failure
         if isinstance(failure, OSError) and output == "-":
             closed = closed_stdout(failure)
             if closed is not None:
@@ -186,15 +207,15 @@ class Capture(_Configured):
             reason = getattr(failure, "strerror", None) or failure
             where = getattr(failure, "filename", None) or output
             raise _Failed(f"capture stopped: cannot write {where}: {reason}")
-        if ending.over_budget:
+        if run.over_budget:
             raise _Failed(
                 f"capture stopped: {max_files} files written, the limit of "
-                f"--max-files; {writer.refused + ending.late} records refused. "
+                f"--max-files; {writer.refused + run.late} records refused. "
                 "The filename pattern includes a value the client chooses, so a "
                 "flood of forged identifiers would otherwise fill the disk: raise "
                 "--max-files, or use a pattern without {client_id}"
             )
-        if capture.hook_error is not None:
+        if hook_error is not None:
             # --hook-fail-fast asked for this: say why it stopped, and do
             # not report success.
-            raise _Failed(f"capture stopped: hook failed ({capture.hook_error})")
+            raise _Failed(f"capture stopped: hook failed ({hook_error})")

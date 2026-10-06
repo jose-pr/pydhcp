@@ -80,6 +80,7 @@ EXPECTED_CLI = [
     "PACKET_FORMATS",
     "Packet",
     "Relay",
+    "Replay",
     "Server",
     "main",
 ]
@@ -240,10 +241,13 @@ EXPECTED_CAPTURE = [
     "MAX_CAPTURE_FILES",
     "PacketFilterLike",
     "UNIQUE_FILENAME_FIELDS",
+    "capture_dissector",
     "command_hook",
     "compile_capture_filter",
     "dissect_dhcp",
+    "read_capture",
     "register_dhcp_dissector",
+    "replay_capture",
 ]
 
 EXPECTED_LEASE = [

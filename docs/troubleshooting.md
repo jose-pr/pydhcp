@@ -66,6 +66,13 @@ as the client sent it.
 pydhcp capture --output heard.pcap
 ```
 
+To go through a capture someone else took (a `tcpdump -w` or Wireshark file) with the same
+filters, read it instead of listening:
+
+```bash
+pydhcp capture --read client.pcap --filter "client_id=01:AA:BB:CC:DD:EE:FF"
+```
+
 For long troubleshooting sessions, split captures into one file per packet.
 
 ```bash

@@ -22,6 +22,7 @@ from ._server import Server
 from ._relay import Relay
 from ._packet import Packet
 from ._capture import Capture
+from ._replay import Replay
 
 #: The command line's logger, a child of the package logger `pydhcp`: the
 #: `-v` and `--loglevel pydhcp:DEBUG` options configure the parent.
@@ -43,7 +44,7 @@ class App(Cli):
     _mcp_ = False
     _config_loader_ = staticmethod(_settings.load_layer)
     _help_formatter_ = DefaultsFormatter
-    _subcommands_ = [Interfaces, Server, Relay, Packet, Capture]
+    _subcommands_ = [Interfaces, Server, Relay, Packet, Capture, Replay]
 
 
 def _quiet_stdout() -> None:
@@ -113,4 +114,5 @@ __all__ = [
     "Relay",
     "Packet",
     "Capture",
+    "Replay",
 ]

@@ -8,6 +8,8 @@ import datetime as _dt
 import json as _json
 import typing as _ty
 
+import pktcap as _pktcap
+
 from .. import _network as _net
 from ..listener._receive import DHCPRequestContext
 from ..exceptions import NoClientIdentityError
@@ -32,16 +34,34 @@ def client_id_text(message: DHCPMessage) -> str:
 
 @_data.dataclass(frozen=True)
 class CaptureEvent:
+    """One DHCP message a capture heard, or read from a capture file.
+
+    A live event has a `context` (the receiving interface, the transport) and no
+    `datagram`. An event read from a file has `datagram` (who sent what to whom,
+    when) and no `context`, so nothing that names a local interface answers for it.
+    """
+
     message: DHCPMessage
-    context: DHCPRequestContext
+    context: _ty.Optional[DHCPRequestContext]
     captured_at: _dt.datetime
+    datagram: _ty.Optional[_pktcap.CapturedDatagram] = None
 
     @property
     def source(self) -> _net.SocketAddress:
+        if self.context is None:
+            return self._from_datagram(0)
         return self.context.client
+
+    def _from_datagram(self, which: int) -> _net.SocketAddress:
+        if self.datagram is None:
+            raise ValueError("an event with no context holds no datagram either")
+        host, port = (self.datagram.source, self.datagram.destination)[which]
+        return _net.SocketAddress(host, port)
 
     @property
     def destination(self) -> _net.SocketAddress:
+        if self.context is None:
+            return self._from_datagram(1)
         # Where the datagram was sent: a broadcast for a client with no
         # address, not the address of the interface that heard it. Without
         # packet info (a socket bound to one address) the destination is the
@@ -66,7 +86,9 @@ class CaptureEvent:
 
     @property
     def payload(self) -> _ty.Optional[bytes]:
-        """The datagram as it arrived, or `None` when the context holds none."""
+        """The datagram as it arrived, or `None` when there is none to give."""
+        if self.context is None:
+            return None if self.datagram is None else self.datagram.payload
         return self.context.payload
 
     @property

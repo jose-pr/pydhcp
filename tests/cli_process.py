@@ -35,7 +35,14 @@ def show(self):
     print(json.dumps(fields, default=str))
 
 
-for command in (cli.Interfaces, cli.Server, cli.Relay, cli.Packet, cli.Capture):
+for command in (
+    cli.Interfaces,
+    cli.Server,
+    cli.Relay,
+    cli.Packet,
+    cli.Capture,
+    cli.Replay,
+):
     command.__call__ = show
 raise SystemExit(cli.main(sys.argv[1:]))
 """

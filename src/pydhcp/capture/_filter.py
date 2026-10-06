@@ -204,7 +204,10 @@ def _dst_port(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
 def _interface(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
     # An adapter that does not exist yet may appear while the capture runs, so a
     # name cannot be refused here.
-    return lambda event: event.context.interface.name in values
+    # An event read from a capture file heard nothing on a local interface.
+    return lambda event: (
+        event.context is not None and event.context.interface.name in values
+    )
 
 
 _CLAUSES: (

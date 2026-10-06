@@ -115,6 +115,8 @@ def _prepare(directory: pathlib.Path, ports: "dict[str, int]") -> None:
     (directory / "packet.json").write_text(
         build_request(xid=0x1234ABCD).to_text("json"), encoding="utf-8"
     )
+    with pktcap.PcapWriter(directory / "heard.pcap") as heard:
+        heard.write(1.0, ("10.0.0.2", 68), ("10.0.0.1", 67), _discover())
     marker = "hook-ran.txt"
     if os.name == "nt":
         (directory / "on-dhcp-capture.cmd").write_bytes(
@@ -168,7 +170,7 @@ def test_a_readme_command_line_runs_as_written(
         pytest.skip("--help is not a run")
     verb = arguments[0]
 
-    if verb not in SERVING:
+    if verb not in SERVING or "--read" in arguments:
         stdin = _packet_hex() if "--decode" in arguments else ""
         done = run_cli(*arguments, input=stdin, cwd=tmp_path, timeout=60)
         assert done.returncode == 0, done.stderr

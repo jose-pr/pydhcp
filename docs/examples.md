@@ -303,6 +303,14 @@ identifier still gets its own file. A record that cannot be written (the directo
 disk is full) ends the capture the same way, with one line naming the path, and a single output
 file that cannot be appended to is refused before the capture binds.
 
+Read a capture file back through the same filter, output and hook, with no socket bound, or send
+its requests again to a server you name (the addresses in the capture are never sent to):
+
+```bash
+pydhcp capture --read heard.pcap --filter "msg_type=DHCPDISCOVER" --format yaml
+pydhcp replay --input heard.pcap --server 192.0.2.1 --no-delay
+```
+
 A capture file is also read with pktcap, with DHCP dissected as a layer. Register the dissector
 in a registry of your own (or in pktcap's process-wide one by passing none):
 
