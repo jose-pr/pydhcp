@@ -103,8 +103,10 @@ jobs:
         if: matrix.python-version == '3.14'
         run: python -m mypy src
 
+      # Once, on the newest interpreter: the documentation toolchain supports
+      # fewer interpreters than the package does.
       - name: Build docs
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.python-version == '3.14' && matrix.os == 'ubuntu-latest'
         run: python -m mkdocs build --strict
 
   # The delivery path -- which interface a reply leaves by, what a stock client
