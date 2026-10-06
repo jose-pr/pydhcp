@@ -378,6 +378,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
     client_mac)` is a transport (it was a class whose `send` raised
     `NotImplementedError`). `OptionCode` is the protocol of a code enum
     (`DHCPOptions(codemap=...)`); `BaseDHCPOptionCode` is its base class.
+- **Breaking: `DHCPMessage` takes its `op` and keywords.** Every header field but
+  `op` has a default (Ethernet, zeros, the wildcard address, no names, a fresh
+  option bag) and is keyword-only, so `DHCPMessage(DHCPOpcode.BOOTREQUEST)` is a
+  message that encodes to a legal 300-octet datagram. `hlen` is the length of
+  `chaddr` when it is left out and must equal it when given: `DHCPValueError` at
+  construction, and from `encode()` for a message changed since. `decode()` stays
+  liberal and keeps the `hlen` the sender wrote, whatever the hardware type, so a
+  relay still forwards what it received.
 - **Text a value type accepts is `Type.parse(text)`** (and `Type.try_parse(text,
   default=None)`, which answers `default` for text that does not parse): on
   `SocketAddress` (`"192.0.2.1:67"`, what `str()` writes), `ClasslessRoute`
@@ -387,6 +395,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   of the type and `TypeError` for an argument that is not text, and
   `parse(str(value)) == value`. `str()` of a `ClasslessRoute`, `StatusCode` and
   `ClientFQDN` is now that text.
+- **`DHCPMessage.message_type`** is option 53 read once: the
+  `DHCPMessageType` member, or `None` when there is no option 53 or its payload is
+  not a message type. The server, the client's reply matching and
+  `CaptureEvent.message_type` read it there.
 - **Named aliases for what a function accepts**, exported and listed in the
   headers: `IPv4AddressLike` (`pydhcp`), `ListenLike` (`pydhcp.listener`, was
   `ListenSpec`), `ServerAddressLike` (`pydhcp.relay`, was `ServerAddress`),

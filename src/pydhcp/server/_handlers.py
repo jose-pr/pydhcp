@@ -41,19 +41,18 @@ class _Handlers(_Replies):
             # every other such client shares.
             LOGGER.warning(f"[XID={msg.xid:08x}] Ignoring unidentifiable client: {e}")
             return
-        # Decoded once, and guarded. `DHCPMessageType` has no pseudo-member for
+        # Read once, guarded. `DHCPMessageType` has no pseudo-member for
         # an unassigned value, so option 53 = 99 raised straight out of
         # `handle()`. The listener's catch-all caught it, but its log line
         # carries no XID, client or type -- so the one packet an operator would
         # want to identify produced the one message that cannot identify it.
-        try:
-            msg_ty = msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
-        except DHCPDecodeError as e:
+        msg_ty = msg.message_type
+        if msg_ty is None and DHCPOptionCode.DHCP_MESSAGE_TYPE in msg.options:
             raw = msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE, decode=False)
             LOGGER.warning(
                 f"[XID={msg.xid:08x}] Dropping a message from "
                 f"{context.client}|{client_id} with an unusable DHCP message "
-                f"type (option 53 = {bytes(raw).hex() if raw else '<absent>'}): {e}"
+                f"type (option 53 = {bytes(raw).hex() if raw else '<empty>'})"
             )
             return
         msg_ty_name = (

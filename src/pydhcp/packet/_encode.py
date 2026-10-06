@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import typing as _ty
 
+from ..exceptions import DHCPValueError
 from .. import _constants as _const, _nvt as _nvt
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
@@ -190,6 +191,11 @@ class _MessageEncode(_MessageDecode):
         _check_bootp_field("sname", sname_bytes, _SNAME_FIELD_SIZE)
         _check_bootp_field("file", file_bytes, _FILE_FIELD_SIZE)
         _check_bootp_field("chaddr", self.chaddr, _CHADDR_FIELD_SIZE)
+        if self.hlen != len(self.chaddr):
+            raise DHCPValueError(
+                f"hlen={self.hlen} is not the length of chaddr "
+                f"({len(self.chaddr)} octets)"
+            )
 
         data = bytearray(28)
         _HEADER_STRUCT.pack_into(

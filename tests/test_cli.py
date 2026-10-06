@@ -1096,20 +1096,9 @@ def _capture_event_with_client_id(client_id: bytes):
     options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(client_id)
     message = DHCPMessage(
         DHCPOpcode.BOOTREQUEST,
-        HardwareAddressType.ETHERNET,
-        6,
-        0,
-        0x1234,
-        timedelta(0),
-        DHCPFlags.UNICAST,
-        IPv4("0.0.0.0"),
-        IPv4("0.0.0.0"),
-        IPv4("0.0.0.0"),
-        IPv4("0.0.0.0"),
-        b"\x00\x11\x22\x33\x44\x55",
-        "",
-        "",
-        options,
+        xid=0x1234,
+        chaddr=b"\x00\x11\x22\x33\x44\x55",
+        options=options,
     )
     context = DHCPRequestContext(
         transport=Mock(),

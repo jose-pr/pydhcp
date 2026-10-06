@@ -62,7 +62,7 @@ class CaptureEvent:
 
     @property
     def message_type(self) -> str:
-        value = self.message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+        value = self.message.message_type
         if value is None:
             return "UNKNOWN"
         return value.name if hasattr(value, "name") else str(value)

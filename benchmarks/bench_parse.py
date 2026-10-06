@@ -11,7 +11,6 @@ import pathlib
 import sys
 import timeit
 from collections import OrderedDict
-from datetime import timedelta
 from typing import Any
 
 # Ensure src/ is in the import path
@@ -20,11 +19,8 @@ sys.path.insert(0, SRC_DIR.as_posix())
 
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
-from pydhcp.packet import DHCPFlags
-from pydhcp.packet import HardwareAddressType
 from pydhcp.packet import DHCPOpcode
 from pydhcp.packet import DHCPMessage
-from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
 
 
@@ -39,20 +35,9 @@ def build_benchmark_payload() -> bytes:
     )
 
     msg = DHCPMessage(
-        op=DHCPOpcode.BOOTREQUEST,
-        htype=HardwareAddressType.ETHERNET,
-        hlen=6,
-        hops=0,
+        DHCPOpcode.BOOTREQUEST,
         xid=0x3903F326,
-        secs=timedelta(seconds=0),
-        flags=DHCPFlags.UNICAST,
-        ciaddr=IPv4("0.0.0.0"),
-        yiaddr=IPv4("0.0.0.0"),
-        siaddr=IPv4("0.0.0.0"),
-        giaddr=IPv4("0.0.0.0"),
         chaddr=b"\x00\x11\x22\x33\x44\x55",
-        sname="",
-        file="",
         options=options,
     )
     return bytes(msg.encode())

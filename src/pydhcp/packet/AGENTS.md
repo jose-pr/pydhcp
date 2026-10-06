@@ -17,7 +17,18 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
 `pydhcp.packet`;
 `decode`/`from_mapping` are typed to return the class they are called on.
 
-- **`DHCPMessage`** (dataclass) — the full DHCPv4 wire message. Fields:
+- **`DHCPMessage(op, *, htype=HardwareAddressType.ETHERNET, hlen=None, hops=0,
+  xid=0, secs=timedelta(0), flags=DHCPFlags.UNICAST, ciaddr=0.0.0.0,
+  yiaddr=0.0.0.0, siaddr=0.0.0.0, giaddr=0.0.0.0, chaddr=b"", sname="", file="",
+  options=None)`** (dataclass) — the full DHCPv4 wire message; only `op` is
+  required and everything after it is a keyword. `DHCPMessage(DHCPOpcode.BOOTREQUEST)`
+  encodes to a legal 300-octet message. **`hlen`** is the length of `chaddr`
+  when left out, and must equal it when given: `DHCPValueError` otherwise, at
+  construction and again in `.encode()` if either field was changed since.
+  `.decode()` stays liberal: it takes the `hlen` the sender wrote, whatever the
+  `htype` (a 4-octet address under Ethernet, 16 octets under InfiniBand, `hlen =
+  0`) and keeps the address as long as that, so what was received re-encodes
+  as it arrived. `options=None` makes a fresh `DHCPOptions`. Fields:
   `op: DHCPOpcode`, `htype: HardwareAddressType`, `hlen: int`, `hops: int`,
   `xid: int`, `secs: datetime.timedelta`, `flags: DHCPFlags`, `ciaddr: IPv4`,
   `yiaddr: IPv4`, `siaddr: IPv4`, `giaddr: IPv4`, `chaddr: bytes` (≤16
@@ -97,6 +108,11 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       subclass — YAML cannot represent the subclass and TOML writes something
       it cannot read back.
     Backs the JSON/YAML/TOML/INI helpers below.
+  - **`.message_type -> DHCPMessageType | None`** (read-only property) — option
+    53 as its member; `None` when there is no option 53 or its payload is not a
+    message type this package decodes (the wrong length, or a number
+    `DHCPMessageType` has no member for). `DHCPServer`, `DHCPClient` and
+    `CaptureEvent` read it here.
   - **`.get_client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
     `htype.value + chaddr`; returned as uppercase colon-hex. Raises

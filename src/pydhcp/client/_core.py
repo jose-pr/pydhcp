@@ -216,7 +216,7 @@ class _ClientCore:
         The only thing standing between a DHCPNAK and a caller that believes it
         holds `yiaddr`.
         """
-        return msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is msg_type
+        return msg.message_type is msg_type
 
     def _retransmit_intervals(
         self, timeout: float, retries: int

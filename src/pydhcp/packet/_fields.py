@@ -8,10 +8,11 @@ import datetime as _dt
 import struct as _struct
 import typing as _ty
 
-from ..exceptions import DHCPValueError
+from ..exceptions import DHCPDecodeError, DHCPValueError
 from . import _enums as _enum
 from .. import _constants as _const, _nvt as _nvt
 from ..options import DHCPOptions
+from ..options._codes import DHCPOptionCode
 
 _NULL = 0x00.to_bytes(1, "big")
 
@@ -104,7 +105,7 @@ def _decode_bootp_field(raw: memoryview, field: str) -> str:
     return _nvt.decode(text, f"BOOTP {field} field")
 
 
-@_data.dataclass
+@_data.dataclass(init=False)
 class _MessageFields:
     """The fields and class constants of `DHCPMessage` -- the dataclass itself.
 
@@ -172,6 +173,71 @@ class _MessageFields:
     directory-path name in DHCPOFFER."""
     options: DHCPOptions
     """Optional parameters field."""
+
+    def __init__(
+        self,
+        op: _enum.DHCPOpcode,
+        *,
+        htype: _enum.HardwareAddressType = _enum.HardwareAddressType.ETHERNET,
+        hlen: _ty.Optional[int] = None,
+        hops: int = 0,
+        xid: int = 0,
+        secs: _dt.timedelta = _dt.timedelta(0),
+        flags: _enum.DHCPFlags = _enum.DHCPFlags.UNICAST,
+        ciaddr: _ipaddress.IPv4Address = _const.WILDCARD_V4,
+        yiaddr: _ipaddress.IPv4Address = _const.WILDCARD_V4,
+        siaddr: _ipaddress.IPv4Address = _const.WILDCARD_V4,
+        giaddr: _ipaddress.IPv4Address = _const.WILDCARD_V4,
+        chaddr: bytes = b"",
+        sname: str = "",
+        file: str = "",
+        options: _ty.Optional[DHCPOptions] = None,
+    ) -> None:
+        """A message with every header field but `op` defaulted.
+
+        `hlen` is the length of `chaddr` when left out, and must equal it when
+        given: the header's hardware address length is the length of the address
+        in the same header, so a message that says otherwise is refused here and
+        by `encode`. (`decode` reads whatever `hlen` the sender wrote, and the
+        address is that many octets, so a received message always agrees.) A
+        fresh option bag is made when `options` is not given.
+        """
+        if hlen is None:
+            hlen = len(chaddr)
+        elif hlen != len(chaddr):
+            raise DHCPValueError(
+                f"hlen={hlen} is not the length of chaddr ({len(chaddr)} octets)"
+            )
+        self.op = op
+        self.htype = htype
+        self.hlen = hlen
+        self.hops = hops
+        self.xid = xid
+        self.secs = secs
+        self.flags = flags
+        self.ciaddr = ciaddr
+        self.yiaddr = yiaddr
+        self.siaddr = siaddr
+        self.giaddr = giaddr
+        self.chaddr = chaddr
+        self.sname = sname
+        self.file = file
+        self.options = DHCPOptions() if options is None else options
+
+    @property
+    def message_type(self) -> _ty.Optional[_enum.DHCPMessageType]:
+        """The DHCP message type (option 53), or `None` when there is none to read.
+
+        `None` for a message with no option 53 and for one whose payload is not
+        a message type this package knows (the wrong length, or an unassigned
+        number); the option's octets are still there to forward.
+        """
+        try:
+            return self.options.get(
+                DHCPOptionCode.DHCP_MESSAGE_TYPE, decode=_enum.DHCPMessageType
+            )
+        except DHCPDecodeError:
+            return None
 
     #: Key marking an option written as raw hex because its decoded form does
     #: not reproduce the original octets. Round-trips through JSON, YAML, TOML
