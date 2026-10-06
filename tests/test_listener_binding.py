@@ -434,3 +434,16 @@ def test_a_held_port_is_reported_in_netimps_words() -> None:
     assert str(port) in message
     assert "try port" not in message.lower()
     assert "6767" not in message
+
+
+def test_a_socket_that_fails_to_close_is_logged_not_swallowed(caplog) -> None:
+    from pydhcp.listener._binding import _close_socket
+
+    class Stubborn:
+        def close(self) -> None:
+            raise OSError("already gone")
+
+    endpoints = {}
+    with caplog.at_level(logging.DEBUG, logger="pydhcp.listener._binding"):
+        _close_socket(Stubborn(), endpoints)  # type: ignore[arg-type]
+    assert any("Closing a listening socket failed" in r.getMessage() for r in caplog.records)
