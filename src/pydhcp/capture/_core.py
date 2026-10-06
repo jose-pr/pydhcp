@@ -20,8 +20,8 @@ from ._events import (
     CapturePredicate,
     PacketFilterLike,
     CaptureSink,
-    compile_capture_filter,
 )
+from ._filter import compile_capture_filter
 
 #: This module's logger, a child of the package logger `pydhcp` (which
 #: `.listener` has already imported, installing its `NullHandler`).

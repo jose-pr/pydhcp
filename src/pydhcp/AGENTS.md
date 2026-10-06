@@ -891,18 +891,27 @@ exchange has an entry in the pending table.
   The hook runs on the receive thread, so without a bound a hanging program would
   stop packets being read at all.
 - **`compile_capture_filter(text) -> Callable[[CaptureEvent], bool]`** —
-  `None`/blank → always-true. Otherwise parses `and`-joined `key=value`
-  clauses (`or` unsupported, raises `ValueError`). Both keywords are matched
-  **case-insensitively**: `AND`/`And` join clauses, `OR`/`Or`/`or` raise.
-  Keys: `op`, `msg_type`, `xid` (int, any base), `client_id`, `chaddr`,
+  `None`/blank → always-true. The grammar is pktcap's: `key=value` or
+  `key!=value` clauses joined by `and` (any letter case, space on both sides;
+  there is no `or`, and an expression may not end in `and`). `!=` selects what
+  the clause does not. Keys: `op`, `msg_type`, `xid`, `client_id`, `chaddr`,
   `src`, `src_port`, `dst`, `dst_port`, `interface`, or
   `option.<NAME_OR_CODE>` (compares the option's decoded/enum-name or string
-  value). `client_id` and `chaddr` compare as separator-free hex, so
-  `00:11:22:33:44:55`, `00-11-22-33-44-55` and `001122334455` are all the same
-  filter. Unknown keys **and unparseable values** raise `ValueError` eagerly,
-  at compile time: `xid`, `src_port` and `dst_port` must parse as integers and
-  `src`/`dst` as IPv4 addresses, so a typo is one startup error instead of one
-  per packet — or, for `src`/`dst`, instead of a filter that matches nothing.
+  value, as one text: a comma in it is part of it). For every other key a
+  comma means **any of**: `msg_type=DHCPDISCOVER,DHCPREQUEST`.
+  - `op` and `msg_type` take a member's name in any letter case (`bootrequest`,
+    `dhcpdiscover`) or a number from 0 to 255, named or not; `msg_type` also
+    takes `UNKNOWN` (a message with no option 53) and `TYPE_<n>` (an unnamed
+    type). `xid` is an integer in any base up to 32 bits; the ports 0 to 65535;
+    `src` and `dst` an IPv4 address; `interface` an adapter name, compared as
+    written. `client_id` and `chaddr` are whole octets of hexadecimal digits with
+    `:`, `-` or `.` between groups, compared without them, so `00:11:22:33:44:55`,
+    `00-11-22-33-44-55`, `0011.2233.4455` and `001122334455` are one filter.
+  - A value no packet could match is refused when the filter is compiled, so
+    a typo is one start-up error and never a capture that reports nothing:
+    an unknown name (the message lists the names), a number out of range, hex
+    that is not octets, an `option.` code outside 1 to 254. The error is
+    **`pktcap.CaptureFilterError`**, a `ValueError`, and names the clause.
 
 **Gotcha**: without packet info (a socket bound to one address)
 `CaptureEvent.destination` falls back to the address replies leave from, which it

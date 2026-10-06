@@ -5,6 +5,7 @@ import logging
 import socket
 from datetime import datetime, timezone
 
+import pktcap
 import pytest
 
 from pydhcp import (
@@ -229,6 +230,146 @@ def test_hardware_address_filters_still_reject_other_addresses() -> None:
 
     assert not compile_capture_filter("chaddr=68-F7-D8-E5-1E-84")(event)
     assert not compile_capture_filter("client_id=01-68-F7-D8-E5-1E-84")(event)
+
+
+# -- what a value may be: one that no packet could match is refused at compile time ----
+
+
+@pytest.mark.parametrize(
+    "filter_text",
+    [
+        "msg_type=DISCOVER",  # the name is DHCPDISCOVER
+        "msg_type=256",
+        "msg_type=0x100",
+        "msg_type=TYPE_999",
+        "op=REQUEST",  # the names are BOOTREQUEST and BOOTREPLY
+        "op=300",
+        "client_id=not-hex",
+        "client_id=01:zz",
+        "client_id=abc",  # an odd number of digits is no octets
+        "client_id=" + "ab" * 256,  # an option holds 255 octets at most
+        "chaddr=zz:zz",
+        "chaddr=0:",
+        "chaddr=" + "ab" * 17,  # `hlen` is 16 at most
+        "xid=0x100000000",
+        "xid=-1",
+        "src_port=70000",
+        "dst_port=-1",
+        "option.999=x",
+        "option.0=x",
+        "option.255=x",
+        "msg_type=,",
+    ],
+)
+def test_a_value_no_packet_could_match_is_refused_when_compiled(
+    filter_text: str,
+) -> None:
+    with pytest.raises(pktcap.CaptureFilterError):
+        compile_capture_filter(filter_text)
+
+
+def test_the_refusal_of_a_name_lists_the_names() -> None:
+    with pytest.raises(ValueError) as refused:
+        compile_capture_filter("msg_type=DISCOVER")
+    assert "DHCPDISCOVER" in str(refused.value) and "DHCPNAK" in str(refused.value)
+    with pytest.raises(ValueError, match="BOOTREPLY"):
+        compile_capture_filter("op=REQUEST")
+
+
+@pytest.mark.parametrize(
+    "filter_text",
+    [
+        "msg_type=dhcpdiscover",
+        "msg_type=DhcpDiscover",
+        "msg_type=1",
+        "msg_type=0x01",
+        "op=bootrequest",
+        "op=1",
+        "op=0x1",
+    ],
+)
+def test_a_name_in_any_case_or_a_number_selects_the_message(filter_text: str) -> None:
+    assert compile_capture_filter(filter_text)(_event())
+
+
+@pytest.mark.parametrize(
+    "filter_text", ["msg_type=2", "msg_type=dhcpoffer", "op=2", "op=bootreply"]
+)
+def test_a_name_or_number_of_another_value_selects_nothing(filter_text: str) -> None:
+    assert not compile_capture_filter(filter_text)(_event())
+
+
+def test_an_unnamed_message_type_is_selected_by_its_number_or_its_label() -> None:
+    event = _event(_message(DHCPMessageType(99)))
+
+    assert compile_capture_filter("msg_type=99")(event)
+    assert compile_capture_filter("msg_type=TYPE_99")(event)
+    assert not compile_capture_filter("msg_type=TYPE_98")(event)
+    assert not compile_capture_filter("msg_type=UNKNOWN")(event)
+
+
+def test_a_message_with_no_type_is_selected_as_unknown_and_by_no_number() -> None:
+    event = _event(build_request(message_type=None))
+
+    assert compile_capture_filter("msg_type=UNKNOWN")(event)
+    assert compile_capture_filter("msg_type!=DHCPDISCOVER")(event)
+    assert not compile_capture_filter("msg_type=DHCPDISCOVER")(event)
+    assert not compile_capture_filter("msg_type=0")(event)
+
+
+def test_a_clause_negated_selects_everything_the_clause_does_not() -> None:
+    discover, offer = _event(), _event(_message(DHCPMessageType.DHCPOFFER))
+    not_offer = compile_capture_filter("msg_type!=DHCPOFFER")
+
+    assert not_offer(discover) and not not_offer(offer)
+    both = compile_capture_filter("msg_type!=DHCPOFFER and src=192.0.2.55")
+    assert both(discover) and not both(offer)
+
+
+def test_a_comma_means_any_of_for_every_key_but_an_option() -> None:
+    discover, offer = _event(), _event(_message(DHCPMessageType.DHCPOFFER))
+    for text in (
+        "msg_type=DHCPDISCOVER,DHCPREQUEST",
+        "msg_type=dhcpack, 1",
+        "op=BOOTREPLY,BOOTREQUEST",
+        "xid=1,0x1234ABCD",
+        "client_id=ff:ff,01:00:11:22:33:44:55",
+        "chaddr=aa:bb:cc:dd:ee:ff,00-11-22-33-44-55",
+        "src=192.0.2.1,192.0.2.55",
+        "src_port=67,68",
+        "dst=192.0.2.9,192.0.2.1",
+        "interface=eth0,eth-test",
+    ):
+        assert compile_capture_filter(text)(discover), text
+    assert not compile_capture_filter("msg_type=DHCPACK,DHCPREQUEST")(discover)
+    assert compile_capture_filter("msg_type=DHCPDISCOVER,DHCPOFFER")(offer)
+    assert not compile_capture_filter("src=192.0.2.1,192.0.2.2")(discover)
+    assert not compile_capture_filter("msg_type!=DHCPDISCOVER,DHCPOFFER")(offer)
+
+
+def test_the_text_of_an_option_is_compared_whole_with_its_commas() -> None:
+    message = _message()
+    message.options[DHCPOptionCode.HOSTNAME] = "a,b"
+    event = _event(message)
+
+    assert compile_capture_filter("option.HOSTNAME=a,b")(event)
+    assert compile_capture_filter("option.12=a,b")(event)
+    assert not compile_capture_filter("option.HOSTNAME=a")(event)
+
+
+@pytest.mark.parametrize(
+    "filter_text",
+    ["msg_type=DHCPDISCOVER and", "option.12=x and", "and", "src=192.0.2.55 and "],
+)
+def test_a_filter_ending_in_and_is_refused(filter_text: str) -> None:
+    """`option.12=x and` used to compile, with the word `and` as part of the value."""
+    with pytest.raises(pktcap.CaptureFilterError):
+        compile_capture_filter(filter_text)
+
+
+def test_a_filter_names_the_clause_it_refuses() -> None:
+    with pytest.raises(pktcap.CaptureFilterError, match="msg_type=DISCOVER"):
+        compile_capture_filter("src=192.0.2.55 and msg_type=DISCOVER")
 
 
 def test_capture_event_formats_safe_filenames() -> None:

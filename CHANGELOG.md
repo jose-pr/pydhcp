@@ -108,6 +108,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **The capture filter's grammar is pktcap's, which pydhcp now requires** (`pktcap>=0.1.0,<0.2`): what
+  each key means stays in pydhcp. A malformed or unusable expression raises `pktcap.CaptureFilterError`
+  (a `ValueError`), whose message names the clause. These expressions mean something new:
+  `msg_type!=DHCPOFFER` and every `key!=value` select what the clause does not (it was refused as an
+  unsupported key `msg_type!`); a comma means "any of" for every key but `option.NAME`, so
+  `msg_type=DHCPDISCOVER,DHCPREQUEST` selects both (it compared the whole text and matched nothing);
+  `op` and `msg_type` take a member's name in any letter case or a number; an expression that
+  ends in `and`, or in `and` and nothing, is refused (`option.12=x and` compiled, with the word in the
+  value). A filter that compiled and could match before is unchanged.
 - **`pydhcp.cli.main(argv=None) -> int`** takes the argument vector and returns the exit
   status instead of reading `sys.argv` and exiting; `python -m pydhcp` and the console
   script exit with it. **Breaking** for a caller that relied on `SystemExit`. The status
@@ -883,6 +892,14 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **A capture filter whose value no packet could match is refused when it is compiled**, with
+  `pktcap.CaptureFilterError` naming the clause, instead of compiling and reporting nothing (which
+  looks like a quiet segment): `msg_type=DISCOVER` (the names are `DHCPDISCOVER` and the rest; the
+  message lists them), `op=REQUEST`, a message type or opcode above 255, `client_id` or `chaddr` that
+  is not whole octets of hexadecimal digits (or past 255 and 16 octets), `xid` outside 32 bits, a
+  port outside 0 to 65535, and `option.999`. `msg_type=dhcpdiscover`, `msg_type=1`, `op=bootrequest`
+  and `op=1` now select the message (they compared names case-sensitively and matched nothing).
+  `msg_type=UNKNOWN` and `msg_type=TYPE_99` still select a message with no type and one of type 99.
 - **The README's `--loglevel pydhcp=DEBUG` example is `--loglevel pydhcp:DEBUG`**: the option
   takes `[NAME:]LEVEL`, and the line shown was rejected by the parser. Every command line in the README,
   the docs and the shipped headers is now fed to the real parser by a test, and the README's lines run as

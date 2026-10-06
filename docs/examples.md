@@ -246,12 +246,15 @@ packet data. Use `-` for stdout.
 pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
 ```
 
-Capture filters support exact matches joined by `and`.
+Capture filters are `key=value` or `key!=value` clauses joined by `and`; a comma in a value means
+"any of" (except in `option.NAME`). A value that no packet could match, such as a message type name that
+does not exist, is refused when the capture starts.
 
 ```bash
 pydhcp capture --filter "op=BOOTREQUEST and src_port=68"
 pydhcp capture --filter "client_id=01:AA:BB:CC:DD:EE:FF"
 pydhcp capture --filter "option.DHCP_MESSAGE_TYPE=DHCPREQUEST"
+pydhcp capture --filter "msg_type=DHCPDISCOVER,DHCPREQUEST and src!=192.0.2.1"
 ```
 
 Write one file containing all accepted captures:

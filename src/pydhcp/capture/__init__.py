@@ -11,9 +11,9 @@ from ._events import (
     CapturePredicate,
     CaptureSink,
     PacketFilterLike,
-    compile_capture_filter,
     validate_filename_pattern,
 )
+from ._filter import compile_capture_filter
 from ._command import HOOK_TIMEOUT_SECONDS, command_hook
 from ._sync import DHCPCapture
 
