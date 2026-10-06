@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pydhcp capture --format pcap|pcapng`** and `DHCPCaptureWriter` with a `pcap` or `pcapng`
+  format: the datagrams a capture heard, as the clients sent them, in a file tcpdump and
+  Wireshark open (and `pktcap.read_datagrams` reads back octet for octet). The ending of `--output`
+  names it (`.pcap`, `.cap`, `.pcapng`); a capture file is replaced, not appended to, and
+  `--output -` writes it to standard output. A command hook beside it is given JSON on standard
+  input, and `PYDHCP_CAPTURE_FORMAT` says `json`. Each datagram is written under the event's two
+  addresses and its time. `DHCPRequestContext` gains a last field `payload: bytes | None = None`,
+  the datagram as it arrived (the listener keeps one reference to the received `bytes`, no copy), and
+  `CaptureEvent.payload` reads it; a capture file refuses an event with none (`ValueError`), since a
+  message encoded again is padded to 300 octets and is not the packet that arrived.
 - **`pydhcp.capture.DHCPCaptureWriter(target, format=None, *, per_capture=False, max_files=1000)`**
   and **`MAX_CAPTURE_FILES`**: the record writer, no longer reachable only from `pydhcp capture`.
   Called with a `CaptureEvent` it writes one record, so it is a `sink=`; it writes to a path

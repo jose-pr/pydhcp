@@ -49,6 +49,11 @@ class CaptureEvent:
         return _net.SocketAddress(address, port)
 
     @property
+    def payload(self) -> _ty.Optional[bytes]:
+        """The datagram as it arrived, or `None` when the context holds none."""
+        return self.context.payload
+
+    @property
     def message_type(self) -> str:
         value = self.message.message_type
         if value is None:

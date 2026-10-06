@@ -364,6 +364,7 @@ class _ListenerCore:
                 is_unicast,
                 adapter,
                 self.metrics,
+                data if type(data) is bytes else bytes(data),
             )
             if LOGGER.isEnabledFor(_logging.DEBUG):
                 bound = _net.SocketAddress.from_socket(sock)

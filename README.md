@@ -141,6 +141,9 @@ pydhcp packet --encode --input packet.json --format json --output packet.hex
 # Capture DHCPDISCOVER packets as newline-delimited JSON on stdout
 pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
 
+# Record the datagrams as the clients sent them, in a file tcpdump and Wireshark open
+pydhcp capture --listen 127.0.0.1:6767 --output heard.pcap
+
 # Write one structured file per capture (at most --max-files files, 1000 by default:
 # the capture then ends with status 1 and says how many records it refused)
 pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-capture --format json

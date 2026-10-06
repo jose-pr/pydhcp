@@ -64,13 +64,13 @@ class Capture(_Configured):
         _ty.Optional[str],
         Meta(choices=CAPTURE_FORMATS, env="PYDHCP_CAPTURE_RECORD_FORMAT"),
     ] = None
-    "Record format. Default: from the --output ending (.json, .jsonl, .yaml, .yml, .toml, .ini), else json"
+    "Output format: pcap or pcapng (the datagrams, readable by tcpdump and Wireshark), or json, yaml, toml, ini (one record for each message). Default: from the --output ending (.pcap, .cap, .pcapng, .json, .jsonl, .ndjson, .yaml, .yml, .toml, .ini), else json"
     ("--format", "-f")
 
     output: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_CAPTURE_OUTPUT")] = (
         pathlib.Path("-")
     )
-    "Capture output file (appended to), filename pattern with --per-capture, or '-' for stdout"
+    "Capture output file (a record file is appended to, a capture file replaced), filename pattern with --per-capture, or '-' for stdout"
     ("--output", "-o")
 
     per_capture: _ty.Annotated[bool, Meta(env="PYDHCP_CAPTURE_PER_CAPTURE")] = False
@@ -158,7 +158,11 @@ class Capture(_Configured):
                 ending.stopped = True
                 capture.shutdown()
 
-        hook = _load_capture_hook(self.hook, writer.format, self.hook_fail_fast)
+        # A capture file holds no text of a message: a hook reads it as JSON.
+        hook_format = (
+            writer.format if writer.format in _pktcap.RECORD_FORMATS else "json"
+        )
+        hook = _load_capture_hook(self.hook, hook_format, self.hook_fail_fast)
         with _arguments():
             capture = DHCPCapture(
                 listen="*" if self.listen is None else self.listen,

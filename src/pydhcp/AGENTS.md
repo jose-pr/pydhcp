@@ -356,7 +356,12 @@ everything below from `pydhcp.listener` itself.
   `ifindex: int | None = None`, `local_ip: IPv4 | None = None`,
   `received_at: datetime | None = None` (timezone-aware UTC),
   `received_monotonic: float | None = None` (`time.monotonic()` seconds),
-  `destination: IPv4 | None = None` and `is_unicast: bool | None = None`.
+  `destination: IPv4 | None = None`, `is_unicast: bool | None = None` and
+  `payload: bytes | None = None`.
+  - `payload` is the datagram as it arrived, one reference to the received
+    `bytes` (no copy); `None` on a context built by hand. A decoded message cannot
+    give it back: `encode` pads to 300 octets and a decode ignores what follows
+    the end option. A capture file is written from it.
   - `received_at` and `received_monotonic`: the listener stamps both when the
     datagram arrives, and the server, relay and capture read the time of an
     exchange from them. A context built by hand has `None` for both and the hooks
@@ -846,28 +851,40 @@ exchange has an entry in the pending table.
   DHCPRequestContext`, `captured_at: datetime`. Properties: `.source` /
   `.destination` (`SocketAddress`: where the datagram was sent, so the broadcast
   address for a client with no address, and the port it arrived on),
+  `.payload` (`bytes | None`: the datagram as the client sent it, which
+  `DHCPRequestContext.payload` holds; `None` for a context built by hand),
   `.message_type` (str name or `"UNKNOWN"`),
   `.client_id` (str), `.xid` (8-hex-digit str).
 - **`DHCPCaptureWriter(target, format=None, *, per_capture=False,
-  max_files=1000)`** — writes the records of a capture, built on pktcap's
-  `CaptureWriter`. Called with a `CaptureEvent` it writes one record, so it is
+  max_files=1000)`** — writes what a capture heard, built on pktcap's
+  `CaptureWriter`. Called with a `CaptureEvent` it writes one item, so it is
   a `sink=`: `DHCPCapture(sink=DHCPCaptureWriter("caps.json"))`. A record is
   exactly `DHCPMessage.to_text(format)`: one compact line of JSON for `json`,
   and the text of the message for `yaml`, `toml` and `ini`, in UTF-8 with a
-  line feed ending every line on every platform. Properties: `.format`,
-  `.written` (records written), `.refused` (records a full budget turned away);
-  `close()`, and a context manager. A stream stays the caller's to close.
+  line feed ending every line on every platform. **A capture file (`pcap`,
+  `pcapng`) holds the datagram as the client sent it**, the event's `payload`,
+  which tcpdump and Wireshark read and `pktcap.read_datagrams` reads back octet
+  for octet (a message encoded again is padded to 300 octets and is not that
+  packet): an event with no `payload` is a `ValueError`, raised by the call, and
+  nothing is written. Each datagram is written under the event's two addresses
+  (the destination port is the one it arrived on) and its `captured_at`.
+  Properties: `.format`, `.written` (items written), `.refused` (items a full
+  budget turned away); `close()`, and a context manager. A stream stays the
+  caller's to close.
   - `target` is a path or a **binary** stream (`sys.stdout.buffer`). A path is
-    **appended to**, and its directories are made when the first record is
-    written (building the writer touches nothing); a `yaml` file gets `---`
-    before every document, the first included, so an appended file stays one
-    valid stream; `json` is one record per line.
-  - `format` is `json`, `yaml`, `toml` or `ini`; `None` takes it from the ending
-    of `target`'s name (`.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`,
+    **appended to** for a record format and **replaced** for a capture file (a
+    capture cannot be appended to), and its directories are made when the first
+    item is written (building the writer touches nothing); a `yaml` file gets
+    `---` before every document, the first included, so an appended file stays
+    one valid stream; `json` is one record per line.
+  - `format` is one of `pktcap.OUTPUT_FORMATS`: `pcap`, `pcapng`, `json`, `yaml`,
+    `toml` or `ini`; `None` takes it from the ending of `target`'s name (`.pcap`,
+    `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`,
     `.ini`, any letter case) and raises `pktcap.UnsupportedFormatError` (a
     `ValueError`) when the ending names none. `toml` and `ini` hold one record
     per file and so need `per_capture`; `toml` needs the `toml` extra
-    (`ImportError` naming it).
+    (`ImportError` naming it). With `per_capture` a capture format is one file
+    for each datagram.
   - `per_capture=True`: `target` is a filename pattern in `str.format` syntax
     (`out/{client_id}/{timestamp}_{msg_type}.{format}`), one file per record,
     directories made as needed. The placeholders are `FILENAME_FIELDS`:
@@ -1367,10 +1384,14 @@ stayed at the root level and the library's output never appeared.
 - **Where the records go**: `--output -` (the default) is standard output, as
   UTF-8 with a line feed ending each line on every platform (Windows included),
   flushed after each record; `--output FILE` is appended to, and `--output
-  PATTERN --per-capture` is one file per record. `--format` is `json`, `yaml`,
-  `toml` or `ini`; without it the ending of `--output` names it (`.json`,
-  `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`, `.ini`), and an ending that names
-  none, and standard output, are `json`.
+  PATTERN --per-capture` is one file per record. `--format` is `pcap`, `pcapng`,
+  `json`, `yaml`, `toml` or `ini`; without it the ending of `--output` names it
+  (`.pcap`, `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`,
+  `.toml`, `.ini`), and an ending that names none, and standard output, are `json`.
+  **`--format pcap` and `--format pcapng` write the datagrams as the clients sent
+  them** (a file tcpdump and Wireshark open; to standard output the same octets, for
+  `| tcpdump -r -`), the file replaced, not appended to; a `--hook` is then given
+  JSON on standard input and `PYDHCP_CAPTURE_FORMAT` is `json`.
 - **A record that cannot be written ends the capture**: the first one that
   fails (a directory the pattern names is a file, a full or read-only disk, a
   path that is a directory) stops the capture with status 1 and one line,
@@ -1436,4 +1457,4 @@ variable (status 2).
 | `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_CAPTURE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--per-capture`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
 | `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` (`--decode` and `--encode` choose a mode and are not settings) |
 | `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
-| `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input |
+| `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input (`json` when the output is a capture file) |

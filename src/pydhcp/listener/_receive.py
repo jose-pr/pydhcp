@@ -47,6 +47,11 @@ class DHCPRequestContext(_ty.NamedTuple):
     #: Whether `destination` names one host (not a broadcast, a multicast group
     #: or the wildcard); `None` when `destination` is unknown.
     is_unicast: _ty.Optional[bool] = None
+    #: The datagram as it arrived, which a decoded message cannot give back:
+    #: `encode` pads to 300 octets and a decode ignores what follows the end
+    #: option. The listener keeps one reference to the received `bytes`, no
+    #: copy; `None` on a context built by hand.
+    payload: _ty.Optional[bytes] = None
 
 
 def _is_loopback(context: DHCPRequestContext) -> bool:
@@ -181,6 +186,7 @@ def _context_for(
     is_unicast: "_ty.Optional[bool]" = None,
     adapter: "_ty.Optional[_netimps.Interface]" = None,
     metrics: "_ty.Optional[DHCPMetrics]" = None,
+    payload: "_ty.Optional[bytes]" = None,
 ) -> DHCPRequestContext:
     """Build the context for one received datagram.
 
@@ -190,7 +196,8 @@ def _context_for(
     driver read when the datagram arrived. ``limit`` is the listener's log limit,
     which a transport writes its own warnings through, and ``metrics`` the
     counters it writes a dropped reply to. ``adapter`` is the
-    receiving interface as netimps resolved it with the datagram.
+    receiving interface as netimps resolved it with the datagram, and ``payload``
+    the datagram's octets.
     """
     transport: DHCPTransport
     if ifindex is not None or local_ip is not None:
@@ -213,4 +220,5 @@ def _context_for(
         received_monotonic=received.monotonic if received is not None else None,
         destination=destination,
         is_unicast=is_unicast,
+        payload=payload,
     )

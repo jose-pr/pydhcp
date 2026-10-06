@@ -263,12 +263,29 @@ Write one file containing all accepted captures:
 pydhcp capture --listen 127.0.0.1:6767 --output captures.json --format json
 ```
 
+Write the datagrams themselves, as the clients sent them, in a file that tcpdump and Wireshark
+open. The ending names the format (`.pcap`, `.cap` or `.pcapng`), or `--format` does; a capture
+file is replaced, not appended to, and `--output -` writes it to standard output.
+
+```bash
+pydhcp capture --listen 127.0.0.1:6767 --output heard.pcap
+pydhcp capture --listen 127.0.0.1:6767 --output heard.pcapng --count 10
+```
+
+`tcpdump -r heard.pcap -n` reads the first back.
+
+A message put back together is not the packet that arrived (it is padded to 300 octets), so a
+capture file keeps the received octets; a command hook beside it is given the message as JSON.
+
 From Python, `DHCPCaptureWriter` is the sink:
 
 ```python
 from pydhcp.capture import DHCPCapture, DHCPCaptureWriter
 
 with DHCPCaptureWriter("captures.yaml") as writer:  # appended to; the ending names the format
+    DHCPCapture(listen="127.0.0.1:6767", sink=writer).serve_forever()
+
+with DHCPCaptureWriter("heard.pcap") as writer:  # the received datagrams, `CaptureEvent.payload`
     DHCPCapture(listen="127.0.0.1:6767", sink=writer).serve_forever()
 ```
 

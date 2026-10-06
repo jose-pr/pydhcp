@@ -59,6 +59,13 @@ pydhcp capture --filter "client_id=01:AA:BB:CC:DD:EE:FF"
 pydhcp capture --filter "option.DHCP_MESSAGE_TYPE=DHCPREQUEST"
 ```
 
+To look at the traffic in tcpdump or Wireshark, write a capture file; it holds each datagram
+as the client sent it.
+
+```bash
+pydhcp capture --output heard.pcap
+```
+
 For long troubleshooting sessions, split captures into one file per packet.
 
 ```bash

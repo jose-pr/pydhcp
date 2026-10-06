@@ -1,4 +1,4 @@
-"""`DHCPCaptureWriter`: what a capture records, in one growing file or one file per record."""
+"""`DHCPCaptureWriter`: what a capture records, as records or as a capture file."""
 
 from __future__ import annotations
 
@@ -48,18 +48,21 @@ def _open(
 ) -> _pktcap.CaptureWriter:
     """The pktcap writer, with the refusals that name this library's terms."""
 
-    def build(per_record: bool) -> _pktcap.CaptureWriter:
+    def build(per_record: bool, append: bool = False) -> _pktcap.CaptureWriter:
         return _pktcap.CaptureWriter(
             target,
             format,
             per_record=per_record,
-            append=True,
+            append=append,
             fields=_NAMES,
             max_files=max_files,
         )
 
     try:
-        return build(per_capture)
+        writer = build(per_capture)
+        # Building opens nothing. A record file is appended to; a capture file
+        # cannot be, and a second run replaces it.
+        return build(per_capture, True) if _is_record(writer) else writer
     except ImportError:
         if not _pktcap.has_output_format("toml"):
             raise ImportError(
@@ -82,6 +85,10 @@ def _open(
         raise
 
 
+def _is_record(writer: _pktcap.CaptureWriter) -> bool:
+    return writer.format in _pktcap.RECORD_FORMATS
+
+
 def _fields_of(pattern: str) -> "_ty.Set[str]":
     found: "_ty.Set[str]" = set()
     for _literal, field, spec, _conversion in _string.Formatter().parse(pattern):
@@ -92,8 +99,8 @@ def _fields_of(pattern: str) -> "_ty.Set[str]":
     return found
 
 
-def _datagram(event: CaptureEvent) -> _pktcap.CapturedDatagram:
-    """The event as pktcap's datagram: when it was heard and between whom."""
+def _datagram(event: CaptureEvent, payload: bytes) -> _pktcap.CapturedDatagram:
+    """The event as pktcap's datagram: when it was heard, between whom, and what."""
     heard = event.captured_at
     if heard.tzinfo is None:
         heard = heard.replace(tzinfo=_dt.timezone.utc)
@@ -102,24 +109,28 @@ def _datagram(event: CaptureEvent) -> _pktcap.CapturedDatagram:
         (heard - _EPOCH).total_seconds(),
         (str(source.ip), source.port),
         (str(destination.ip), destination.port),
-        b"",
+        payload,
     )
 
 
 class DHCPCaptureWriter:
-    """Writes each captured message as a record, to one growing file or one file per record.
+    """Writes each captured message, as a record or as a datagram in a capture file.
 
-    Called with a `CaptureEvent` it writes one record, so it is a `sink=` for
+    Called with a `CaptureEvent` it writes one item, so it is a `sink=` for
     `DHCPCapture` and `AsyncDHCPCapture`. A record is exactly what
-    `DHCPMessage.to_text(format)` gives (one line of JSON for `json`).
+    `DHCPMessage.to_text(format)` gives (one line of JSON for `json`). A capture
+    file (`pcap`, `pcapng`) holds the datagram as the client sent it, which is the
+    event's `payload`: an event with none is a `ValueError`, because a message
+    encoded again is padded and is not that packet.
 
     `target` is a path or a binary stream (`sys.stdout.buffer`; it stays the
-    caller's to close). A path is appended to, and its directories are made when
-    the first record is written. With `per_capture`, `target` is a filename
-    pattern, one file per record, whose placeholders are `FILENAME_FIELDS`.
-    `format` is `json`, `yaml`, `toml` or `ini`; `None` takes it from the ending
-    of the target's name (`UnsupportedFormatError`, a `ValueError`, when the
-    ending names none). `toml` and `ini` hold one record per file, so they need
+    caller's to close). A record file is appended to and a capture file replaced
+    when the first item is written, and the directories above a path are made then.
+    With `per_capture`, `target` is a filename pattern, one file per item, whose
+    placeholders are `FILENAME_FIELDS`. `format` is one of `pktcap.OUTPUT_FORMATS`
+    (`pcap`, `pcapng`, `json`, `yaml`, `toml`, `ini`); `None` takes it from the
+    ending of the target's name (`UnsupportedFormatError`, a `ValueError`, when
+    the ending names none). `toml` and `ini` hold one record per file, so they need
     `per_capture`, and `toml` needs the `toml` extra.
 
     `max_files` bounds the distinct files a `per_capture` writer creates: a record
@@ -137,12 +148,7 @@ class DHCPCaptureWriter:
     ) -> None:
         self._per_capture = per_capture
         self._writer = _open(target, format, per_capture, max_files)
-        if self._writer.format not in _pktcap.RECORD_FORMATS:
-            self._writer.close()
-            raise ValueError(
-                f"{self._writer.format} is a capture file format; the formats "
-                f"written are {', '.join(_pktcap.RECORD_FORMATS)}"
-            )
+        self._records = _is_record(self._writer)
         if per_capture and not _fields_of(_os.fspath(_ty.cast(str, target))) & (
             UNIQUE_FILENAME_FIELDS
         ):
@@ -160,7 +166,7 @@ class DHCPCaptureWriter:
 
     @property
     def written(self) -> int:
-        """The records written."""
+        """The records, or datagrams, written."""
         return self._writer.written
 
     @property
@@ -169,21 +175,30 @@ class DHCPCaptureWriter:
         return self._writer.refused
 
     def __call__(self, event: CaptureEvent) -> None:
-        """Write `event`'s record. `OSError` when it cannot be written."""
+        """Write `event`. `OSError` when it cannot be written.
+
+        `ValueError` for a capture file when the event has no `payload`.
+        """
+        names = {
+            "client_id": event.client_id,
+            "msg_type": event.message_type,
+            "xid": event.xid,
+        }
+        if not self._records:
+            payload = event.payload
+            if payload is None:
+                raise ValueError(
+                    f"a {self._writer.format} capture holds the datagram a client "
+                    "sent, and this event has no payload"
+                )
+            self._writer.write(_datagram(event, payload), names=names)
+            return
         text = serialize_event(event, self._writer.format)
         # A lone surrogate in a decoded string is written as its escape, not refused.
         text = text.encode("utf-8", "backslashreplace").decode("utf-8")
         if not self._per_capture and not text.endswith("\n"):
             text += "\n"
-        self._writer.write(
-            _datagram(event),
-            text=text,
-            names={
-                "client_id": event.client_id,
-                "msg_type": event.message_type,
-                "xid": event.xid,
-            },
-        )
+        self._writer.write(_datagram(event, b""), text=text, names=names)
 
     def close(self) -> None:
         """Close the file this writer opened. Harmless when repeated."""

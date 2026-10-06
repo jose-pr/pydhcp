@@ -41,6 +41,7 @@ from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from ipaddress import IPv4Address as IPv4
 
+from capture_input import short_datagram
 from conftest import build_request
 
 HEARD = datetime(2026, 7, 14, 12, 30, 15, tzinfo=timezone.utc)
@@ -541,3 +542,105 @@ def test_the_writer_is_the_sink_of_a_capture(
     assert growing.written == each.written == 1
     assert len(target.read_bytes().splitlines()) == 1
     assert [p.name for p in _files(tmp_path / "each")] == ["1234ABCD.json"]
+
+
+# -- a capture file ------------------------------------------------------------------
+
+
+def _heard(
+    payload: "_ty.Optional[bytes]", xid: int = 0x1234ABCD, at: datetime = HEARD
+) -> CaptureEvent:
+    context = _context()._replace(payload=payload)
+    return CaptureEvent(_message(xid=xid), context, at)
+
+
+@pytest.mark.parametrize("name", ["pcap", "pcapng"])
+def test_a_capture_file_holds_the_datagrams_as_they_arrived(
+    tmp_path: pathlib.Path, name: str
+) -> None:
+    """A datagram is written as the client sent it, not as the message encodes: the
+    short one is below the 300 octets `encode` pads to."""
+    short = short_datagram()
+    padded = bytes(_message().encode())
+    assert len(short) < len(padded)
+    target = tmp_path / ("caps." + name)
+
+    with DHCPCaptureWriter(target, name) as writer:
+        writer(_heard(short, xid=1))
+        writer(_heard(padded, xid=2, at=HEARD + timedelta(seconds=2)))
+
+    assert writer.format == name and writer.written == 2 and writer.refused == 0
+    read = list(pktcap.read_datagrams(target))
+    assert [d.payload for d in read] == [short, padded]
+    assert [d.source for d in read] == [("192.0.2.55", 68)] * 2
+    assert [d.time for d in read] == [
+        HEARD.timestamp(),
+        (HEARD + timedelta(seconds=2)).timestamp(),
+    ]
+
+
+@pytest.mark.parametrize(
+    "ending, name", [(".pcap", "pcap"), (".CAP", "pcap"), (".pcapng", "pcapng")]
+)
+def test_the_ending_of_a_file_names_a_capture_format(
+    tmp_path: pathlib.Path, ending: str, name: str
+) -> None:
+    assert DHCPCaptureWriter(tmp_path / ("caps" + ending)).format == name
+
+
+def test_a_capture_file_goes_to_a_stream() -> None:
+    stream = io.BytesIO()
+
+    with DHCPCaptureWriter(stream, "pcap") as writer:
+        writer(_heard(short_datagram()))
+
+    (read,) = pktcap.read_datagrams(io.BytesIO(stream.getvalue()))
+    assert read.payload == short_datagram()
+    assert not stream.closed
+
+
+def test_a_capture_file_replaces_what_it_finds(tmp_path: pathlib.Path) -> None:
+    """A capture cannot be appended to: a second run starts a new file."""
+    target = tmp_path / "caps.pcap"
+    for _run in range(2):
+        with DHCPCaptureWriter(target) as writer:
+            writer(_heard(short_datagram()))
+
+    assert len(list(pktcap.read_datagrams(target))) == 1
+
+
+def test_a_capture_file_per_record(tmp_path: pathlib.Path) -> None:
+    pattern = tmp_path / "{xid}.{format}"
+
+    with DHCPCaptureWriter(pattern, "pcapng", per_capture=True) as writer:
+        writer(_heard(short_datagram(), xid=1))
+        writer(_heard(short_datagram(), xid=2))
+
+    names = [p.name for p in _files(tmp_path)]
+    assert names == ["00000001.pcapng", "00000002.pcapng"]
+    for path in _files(tmp_path):
+        (read,) = pktcap.read_datagrams(path)
+        assert read.payload == short_datagram()
+
+
+@pytest.mark.parametrize("name", ["pcap", "pcapng"])
+def test_a_capture_file_refuses_an_event_that_has_no_octets(
+    tmp_path: pathlib.Path, name: str
+) -> None:
+    """A message put back together is not the packet that arrived, so there is
+    nothing true to write."""
+    target = tmp_path / ("caps." + name)
+
+    with DHCPCaptureWriter(target, name) as writer:
+        with pytest.raises(ValueError, match="payload"):
+            writer(_event())
+
+    assert writer.written == 0 and not target.exists()
+
+
+def test_a_record_file_needs_no_octets(tmp_path: pathlib.Path) -> None:
+    with DHCPCaptureWriter(tmp_path / "caps.json") as writer:
+        writer(_event())
+        writer(_heard(short_datagram()))
+
+    assert writer.written == 2

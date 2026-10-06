@@ -19,6 +19,7 @@ import sys
 import time
 import typing as _ty
 
+import pktcap
 import pytest
 
 from cli_process import Running, free_port, run_cli
@@ -192,6 +193,14 @@ def test_a_readme_command_line_runs_as_written(
                 assert _wait_for(
                     lambda: any(p.is_file() for p in (tmp_path / "output").rglob("*"))
                 )
+            elif arguments[arguments.index("--output") + 1].endswith(".pcap"):
+                target = tmp_path / arguments[arguments.index("--output") + 1]
+                assert _wait_for(
+                    lambda: target.exists() and len(list(pktcap.read_datagrams(target)))
+                )
+                assert [d.payload for d in pktcap.read_datagrams(target)] == [
+                    _discover()
+                ]
             else:
                 assert _wait_for(lambda: any(l.startswith("{") for l in command.stdout))
                 assert json.loads(command.stdout[0])["xid"] == 0x1234ABCD
