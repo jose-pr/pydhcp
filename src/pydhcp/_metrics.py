@@ -40,6 +40,9 @@ class DHCPMetrics:
         "addresses_refused",
         "replies_dropped_pin",
         "packets_dropped_other_interface",
+        "packets_dropped_relay_loop",
+        "packets_dropped_unknown_giaddr",
+        "packets_dropped_reused_transaction",
     )
 
     packets_received: int
@@ -73,9 +76,10 @@ class DHCPMetrics:
     #: address nor in the served network: the ACK goes to `ciaddr`, so
     #: answering would send a reply to an address the sender chose.
     informs_ignored: int
-    #: Replies sent without the relay agent information option because
+    #: Messages sent without the relay agent information option because
     #: carrying it would have needed the overloaded `sname` or `file`
-    #: field (RFC 3046 s2.2 forbids the option there).
+    #: field (RFC 3046 s2.1 and s2.2 forbid the option there): a reply the
+    #: server echoed it into, or a request the relay would have added it to.
     relay_info_omitted: int
     packets_dropped_hop_limit: int
     packets_dropped_untrusted: int
@@ -116,6 +120,15 @@ class DHCPMetrics:
     #: Datagrams dropped before decoding because they arrived on an interface
     #: other than the one(s) the listener was told to serve.
     packets_dropped_other_interface: int
+    #: Requests a relay dropped because their `giaddr` is one of its own
+    #: addresses (RFC 3046 s2.1.1): forwarded, they would loop.
+    packets_dropped_relay_loop: int
+    #: Replies a relay dropped because their `giaddr` is not one of its own
+    #: addresses (RFC 1542 s4.1.2).
+    packets_dropped_unknown_giaddr: int
+    #: Requests a relay dropped because they reuse the transaction of a
+    #: pending request from another source address.
+    packets_dropped_reused_transaction: int
 
     def __init__(self) -> None:
         self.reset()

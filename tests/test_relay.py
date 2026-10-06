@@ -165,13 +165,13 @@ def test_forward_to_servers_sends_to_every_configured_server(relay_class):
 def test_forward_to_servers_is_idempotent_when_giaddr_already_set(relay_class):
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     context = _context()
-    msg = _discover(giaddr="10.0.0.1")
+    msg = _discover(giaddr="10.5.5.1")
 
     relay.handle(msg, context)
 
     data, *_rest = context.transport.send.call_args.args
     forwarded = DHCPMessage.decode(data)
-    assert forwarded.giaddr == IPv4("10.0.0.1")
+    assert forwarded.giaddr == IPv4("10.5.5.1")
 
 
 def test_forward_to_servers_drops_packet_over_hop_limit(relay_class):
@@ -277,11 +277,14 @@ def test_request_with_relay_info_and_giaddr_zero_is_dropped(relay_class):
 
 
 def test_relay_agent_info_passthrough_when_already_present(relay_class):
-    """A downstream relay's option is passed through unmodified.
+    """RFC 3046 s2.1.1: a request another relay already stamped is forwarded as is.
 
-    giaddr is set, so this came from another relay rather than a client. The
-    same holds for a client-sourced request when the access layer below is
-    trusted and trust_client_relay_agent_info=True.
+    Its `giaddr` is set and not ours, so it came from a downstream relay rather
+    than a client: "SHALL forward any received DHCP packet with a valid non-zero
+    giaddr WITHOUT adding any relay agent options", and the downstream relay's
+    own option passes through unmodified. The same holds for a client-sourced
+    request when the access layer below is trusted
+    (trust_client_relay_agent_info=True).
     """
     relay = relay_class(
         listen=("127.0.0.1", 6767),
@@ -290,7 +293,7 @@ def test_relay_agent_info_passthrough_when_already_present(relay_class):
         circuit_id=b"circuit-1",
     )
     context = _context()
-    msg = _discover(giaddr="10.0.0.1", with_relay_info=True)
+    msg = _discover(giaddr="10.5.5.1", with_relay_info=True)
 
     relay.handle(msg, context)
 
@@ -445,9 +448,14 @@ def test_bootreply_from_an_unconfigured_source_is_dropped(relay_class):
 
 
 def test_relay_strips_relay_agent_information_from_replies(relay_class):
-    """RFC 3046 s2.2: the option is relay-to-server bookkeeping and is removed
-    before the reply reaches the client."""
-    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    """RFC 3046 s2.2: the option this relay added is relay-to-server bookkeeping
+    and is removed before the reply reaches the client."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        insert_relay_agent_info=True,
+        circuit_id=b"circuit-1",
+    )
     reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
     reply.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
         [TLVOption(1, b"circuit-1")]
@@ -683,3 +691,228 @@ def test_pending_entries_expire_rather_than_accumulate(relay_class):
 
     relay._expire_pending(time.monotonic())
     assert dict(relay._pending_clients) == {}
+
+
+# --- RFC 3046: what the relay may add to a request, and when ---
+#
+# Each test reads the octets that went out, not a decoded message: the decoder
+# folds an overloaded `sname` back into the options, which is how a wrong layout
+# once printed a right answer.
+
+_INSERTING = dict(
+    insert_relay_agent_info=True, circuit_id=b"circuit-1", remote_id=b"remote-1"
+)
+_OPTIONS_OFFSET = 240  # fixed header (236) and the magic cookie
+_SNAME = slice(44, 108)
+_FILE = slice(108, 236)
+
+
+def _wire_options(data) -> "list[tuple[int, bytes]]":
+    """The (code, payload) pairs of the options field, in wire order, to END."""
+    data = bytes(data)
+    out = []
+    index = _OPTIONS_OFFSET
+    while index < len(data) and data[index] != 255:
+        if data[index] == 0:
+            index += 1
+            continue
+        length = data[index + 1]
+        out.append((data[index], data[index + 2 : index + 2 + length]))
+        index += 2 + length
+    return out
+
+
+def _sent_data(context) -> bytes:
+    return bytes(context.transport.send.call_args.args[0])
+
+
+def test_a_request_with_a_nonzero_giaddr_is_forwarded_without_adding_option_82(
+    relay_class,
+):
+    """RFC 3046 s2.1.1: "SHALL forward any received DHCP packet with a valid
+    non-zero giaddr WITHOUT adding any relay agent options"."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], **_INSERTING
+    )
+    context = _context()
+
+    relay.handle(_discover(giaddr="10.5.5.1"), context)
+
+    data = _sent_data(context)
+    assert 82 not in [code for code, _ in _wire_options(data)]
+    assert DHCPMessage.decode(data).giaddr == IPv4("10.5.5.1")
+
+
+@pytest.mark.parametrize("inserting", [True, False])
+def test_a_request_whose_giaddr_is_the_relays_own_address_is_dropped(
+    relay_class, inserting
+):
+    """RFC 3046 s2.1.1: "SHALL discard the packet if the giaddr spoofs a giaddr
+    address implemented by the local agent itself". The rule is stated for a
+    relay that adds option 82; forwarding such a request with insertion off is a
+    loop all the same, so it is dropped there too."""
+    options = _INSERTING if inserting else {}
+    relay = relay_class(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], **options
+    )
+    context = _context()
+
+    relay.handle(_discover(giaddr="10.0.0.1"), context)
+
+    context.transport.send.assert_not_called()
+    assert relay.metrics.packets_dropped_relay_loop == 1
+    assert relay.metrics.packets_sent == 0
+
+
+def test_option_82_is_added_last_before_end(relay_class):
+    """RFC 3046 s2.1: "SHALL add it as the last option (but before 'End Option'
+    255, if present)"."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], **_INSERTING
+    )
+    context = _context()
+    request = _discover()
+    request.options[DHCPOptionCode.HOSTNAME] = "client-host"
+
+    relay.handle(request, context)
+
+    options = _wire_options(_sent_data(context))
+    assert options[-1] == (82, b"\x01\x09circuit-1\x02\x08remote-1")
+    assert [code for code, _ in options] == [53, 12, 82]
+
+
+def test_option_82_is_not_added_through_option_overload_and_is_counted(relay_class):
+    """RFC 3046 s2.1: the agent "SHALL NOT add an 'Option Overload' option to the
+    packet or use the 'file' or 'sname' fields for adding Relay Agent Information
+    option", and a packet that "would exceed this configured maximum size shall
+    be forwarded WITHOUT adding the Agent Information option"."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        max_packet_size=576,
+        insert_relay_agent_info=True,
+        circuit_id=b"c" * 20,
+        remote_id=b"r" * 20,
+    )
+    context = _context()
+    request = _discover()
+    request.options[DHCPOptionCode.VENDOR_CLASS_IDENTIFIER] = "x" * 200
+    request.options[DHCPOptionCode.HOSTNAME] = "h" * 60
+
+    relay.handle(request, context)
+
+    data = _sent_data(context)
+    codes = [code for code, _ in _wire_options(data)]
+    assert 82 not in codes
+    assert 52 not in codes
+    assert data[_SNAME] == bytes(64) and data[_FILE] == bytes(128)
+    assert relay.metrics.relay_info_omitted == 1
+    assert relay.metrics.packets_sent == 1
+
+
+def test_the_encode_limit_of_a_request_is_the_relays_not_the_clients(relay_class):
+    """Option 57 is what the client can *receive*. The same request, advertising
+    576, that overloaded `sname` when the relay used it as its own limit keeps
+    option 82 in the options field of a 598-octet datagram."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        insert_relay_agent_info=True,
+        circuit_id=b"c" * 40,
+        remote_id=b"r" * 40,
+    )
+    context = _context()
+    request = _discover()
+    request.options[DHCPOptionCode.VENDOR_CLASS_IDENTIFIER] = "x" * 200
+    request.options[DHCPOptionCode.HOSTNAME] = "h" * 60
+    request.options[DHCPOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE] = 576
+
+    relay.handle(request, context)
+
+    data = _sent_data(context)
+    codes = [code for code, _ in _wire_options(data)]
+    assert codes[-1] == 82 and 52 not in codes
+    assert data[_SNAME] == bytes(64) and data[_FILE] == bytes(128)
+    assert relay.metrics.relay_info_omitted == 0
+
+
+# --- RFC 3046 s2.2: which replies lose option 82 ---
+
+
+def _reply_with(option) -> DHCPMessage:
+    reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.50")
+    reply.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = option
+    return reply
+
+
+def test_a_reply_loses_the_option_82_this_relay_added(relay_class):
+    """RFC 3046 s2.1: the echoed option "MUST be removed by either the relay
+    agent or the trusted downstream network element which added it"."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], **_INSERTING
+    )
+    context = _server_context()
+
+    relay.handle(
+        _reply_with(
+            RelayAgentInformation(
+                [TLVOption(1, b"circuit-1"), TLVOption(2, b"remote-1")]
+            )
+        ),
+        context,
+    )
+
+    assert 82 not in [code for code, _ in _wire_options(_sent_data(context))]
+
+
+def test_a_reply_keeps_the_option_82_a_trusted_downstream_element_added(relay_class):
+    """The same sentence names the downstream element as the one that removes
+    its own option: this relay inserted nothing, so it removes nothing."""
+    relay = relay_class(
+        listen=("127.0.0.1", 6767),
+        server_addresses=["192.0.2.1"],
+        trust_client_relay_agent_info=True,
+    )
+    context = _server_context()
+
+    relay.handle(
+        _reply_with(RelayAgentInformation([TLVOption(1, b"switch-port-7")])), context
+    )
+
+    options = dict(_wire_options(_sent_data(context)))
+    assert options[82] == b"\x01\x0dswitch-port-7"
+
+
+def test_a_reply_keeps_an_option_82_that_is_not_the_one_this_relay_added(relay_class):
+    relay = relay_class(
+        listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], **_INSERTING
+    )
+    context = _server_context()
+
+    relay.handle(
+        _reply_with(RelayAgentInformation([TLVOption(1, b"switch-port-7")])), context
+    )
+
+    assert 82 in [code for code, _ in _wire_options(_sent_data(context))]
+
+
+# --- the constructor refuses what cannot work ---
+
+
+def test_insert_relay_agent_info_without_an_id_is_refused(relay_class):
+    with pytest.raises(ValueError, match="circuit_id or remote_id"):
+        relay_class(
+            listen=("127.0.0.1", 6767),
+            server_addresses=["192.0.2.1"],
+            insert_relay_agent_info=True,
+        )
+
+
+@pytest.mark.parametrize("name", ["circuit_id", "remote_id"])
+def test_an_id_without_insert_relay_agent_info_is_refused(relay_class, name):
+    with pytest.raises(ValueError, match="insert_relay_agent_info"):
+        relay_class(
+            listen=("127.0.0.1", 6767),
+            server_addresses=["192.0.2.1"],
+            **{name: b"id"},
+        )

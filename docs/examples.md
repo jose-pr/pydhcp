@@ -217,9 +217,12 @@ relay = DHCPRelay(
 relay.serve_forever()
 ```
 
-Pass `insert_relay_agent_info=True` (with `circuit_id`/`remote_id`) to tag forwarded requests with
-`RELAY_AGENT_INFORMATION` (option 82) per RFC 3046 — a request that already carries option 82 (a
-chained relay) is passed through unmodified rather than double-tagged.
+Pass `insert_relay_agent_info=True` with `circuit_id` and/or `remote_id` to tag the requests that
+reach the relay straight from a client with `RELAY_AGENT_INFORMATION` (option 82) per RFC 3046. A
+request another relay already stamped (its `giaddr` is set) is forwarded without a second tag, and a
+request that would not fit the option within the relay's `max_packet_size` is forwarded without it
+and counted in `metrics.relay_info_omitted`. The flag without an id, or an id without the flag, is a
+`ValueError`.
 
 ```bash
 pydhcp relay --listen 127.0.0.1:6767 --server 127.0.0.1:6768 --insert-relay-agent-info --circuit-id aabbcc

@@ -122,11 +122,11 @@ _RECEIVE_PATH = (
     "AsyncDHCPListener._end_receiving",
 )
 
-#: The module holding each async class, and the module holding the core whose
-#: policy it inherits rather than restates.
-_CORE_MODULE = {
-    "relay/_asyncio.py": "relay/_core.py",
-    "capture/_asyncio.py": "capture/_core.py",
+#: The modules holding the core whose policy each async class inherits rather
+#: than restates.
+_CORE_MODULES = {
+    "relay/_asyncio.py": ("relay/_core.py", "relay/_pending.py"),
+    "capture/_asyncio.py": ("capture/_core.py",),
 }
 
 #: The policy each async class inherits rather than restates.
@@ -136,14 +136,16 @@ _POLICY = {
         "_RelayCore._forward_to_servers",
         "_RelayCore._forward_to_client",
         "_RelayCore._init_relay_state",
-        "_RelayCore._record_pending",
-        "_RelayCore._lookup_pending",
-        "_RelayCore._expire_pending",
         "_RelayCore._client_transport",
         "_RelayCore._routed_transport",
         "_RelayCore._encode_for_forward",
-        "_RelayCore._insert_relay_agent_info",
-        "_RelayCore._pending_key",
+        "_RelayCore._encode_request",
+        "_RelayCore._added_option_82",
+        "_RelayCore._is_own_address",
+        "_PendingClients._record_pending",
+        "_PendingClients._lookup_pending",
+        "_PendingClients._expire_pending",
+        "_PendingClients._pending_key",
     ),
     "capture/_asyncio.py": (
         "_CaptureCore.handle",
@@ -168,9 +170,16 @@ def _shared_corpus(module: str) -> "set[str]":
     corpus: set[str] = set()
     for path in _RECEIVE_PATH:
         corpus |= _listener_code(path)
-    tree, lines = _module(_CORE_MODULE[module])
+    parsed = [_module(core) for core in _CORE_MODULES[module]]
     for path in _POLICY[module]:
-        corpus |= _code_lines(_node(tree, path), lines)
+        for tree, lines in parsed:
+            try:
+                corpus |= _code_lines(_node(tree, path), lines)
+                break
+            except AssertionError:
+                continue
+        else:  # pragma: no cover - a rename should fail loudly
+            raise AssertionError(f"{path!r} is in none of {_CORE_MODULES[module]}")
     return corpus
 
 

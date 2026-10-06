@@ -12,7 +12,8 @@ import ipaddress as _ipaddress
 import logging as _logging
 import typing as _ty
 
-from .._clock import _Timed
+import netimps as _netimps
+
 from .._metrics import DHCPMetrics
 from ..packet._message import DHCPMessage
 from ..listener._transport import (
@@ -26,6 +27,8 @@ from .. import _constants as _const, _network as _net
 from ..packet import _enums as _enum
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
+from . import _info
+from ._pending import PendingClient, _PendingClients
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -43,23 +46,6 @@ RFC1542_MAX_HOPS = 16
 #: were the default. Four relays deep is already an unusual topology; a
 #: deployment that genuinely needs more passes `max_hops` explicitly.
 DEFAULT_MAX_HOPS = 4
-
-
-class PendingClient(_ty.NamedTuple):
-    """Where a forwarded request came from, so its reply can be sent back there.
-
-    The reply arrives on the *server*-facing interface, but has to leave on the
-    client-facing one. On a wildcard bind that is not something the kernel can
-    work out: a broadcast would go out the default route and never reach the
-    client's segment. The ingress interface recorded here is what pins it back.
-    """
-
-    client: _net.SocketAddress
-    ifindex: _ty.Optional[int] = None
-    local_ip: _ty.Optional[_ipaddress.IPv4Address] = None
-    #: When it was recorded, so a stale entry ages out instead of being popped
-    #: by whichever reply happens to arrive first.
-    recorded_at: float = 0.0
 
 
 def _normalize_server_address(
@@ -87,7 +73,7 @@ def _normalize_server_address(
         ) from None
 
 
-class _RelayCore(_Timed):
+class _RelayCore(_PendingClients):
     """RFC 1542 / RFC 2131 4.1 / RFC 3046 DHCP relay agent, without its I/O.
 
     Forwards client broadcasts (received on port 67, same as a server) to one or
@@ -109,15 +95,6 @@ class _RelayCore(_Timed):
     _max_packet_size: int
 
     DEFAULT_PORTS: _ty.Sequence[int] = (_enum.DHCPPort.SERVER,)
-
-    #: Upper bound on in-flight `xid -> client address` entries.
-    MAX_PENDING_CLIENTS = 1024
-
-    #: How long a recorded client stays usable. An exchange is over in seconds,
-    #: so this only has to outlive a retransmit; entries are kept rather than
-    #: popped on the first reply, because several configured servers each send
-    #: one and they all go to the same client.
-    PENDING_TTL_SECONDS = 60.0
 
     def _init_relay_state(
         self,
@@ -143,14 +120,29 @@ class _RelayCore(_Timed):
                 f"(RFC 1542 4.1.1), got {max_hops}"
             )
         self.max_hops = max_hops
+        if insert_relay_agent_info:
+            if circuit_id is None and remote_id is None:
+                raise ValueError(
+                    "insert_relay_agent_info=True needs circuit_id or remote_id: "
+                    "option 82 with no sub-option would add nothing"
+                )
+        elif circuit_id is not None or remote_id is not None:
+            raise ValueError(
+                "circuit_id and remote_id are the sub-options of the option 82 "
+                "this relay inserts: pass insert_relay_agent_info=True with "
+                "them, or drop them"
+            )
         self.insert_relay_agent_info = insert_relay_agent_info
         self.circuit_id = circuit_id
         self.remote_id = remote_id
         self.trust_client_relay_agent_info = trust_client_relay_agent_info
-        self._server_ips = {ip for ip, _port in self.server_addresses}
-        self._pending_clients: _ty.OrderedDict[tuple[int, bytes], PendingClient] = (
-            _ty.OrderedDict()
+        #: The option this relay adds; a reply echoing exactly its octets is the
+        #: one this relay added.
+        self._relay_info: _ty.Optional[_type.RelayAgentInformation] = (
+            _info.relay_info(circuit_id, remote_id) if insert_relay_agent_info else None
         )
+        self._server_ips = {ip for ip, _port in self.server_addresses}
+        self._init_pending()
 
     def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         if msg.op == _enum.DHCPOpcode.BOOTREQUEST:
@@ -203,7 +195,7 @@ class _RelayCore(_Timed):
         return self._routed_transport(transport)
 
     def _encode_for_forward(self, msg: DHCPMessage) -> bytes:
-        """Encode a message being forwarded without shrinking it.
+        """Encode a server reply being forwarded to its client without shrinking it.
 
         `encode()` defaults to the 576-octet minimum, which is not a limit this
         relay gets to impose: a server reply legitimately exceeds it whenever the
@@ -217,9 +209,52 @@ class _RelayCore(_Timed):
         limit = int(advertised) if advertised else self._max_packet_size
         return msg.encode(max(limit, _const.DHCP_MIN_LEGAL_PACKET_SIZE))
 
+    def _encode_request(
+        self, forwarded: DHCPMessage, add_info: bool, now: float
+    ) -> bytes:
+        """Encode a request for the servers, at this relay's own size limit.
+
+        Option 57 in a request is the size the client can *receive*, so it is
+        not a limit on what goes upstream: the limit is `max_packet_size`. With
+        `add_info`, option 82 goes last (RFC 3046 s2.1) unless that would need
+        the overload option or the `sname` and `file` fields, which the same
+        sentence forbids: then the request goes without it and is counted.
+        """
+        limit = max(self._max_packet_size, _const.DHCP_MIN_LEGAL_PACKET_SIZE)
+        if add_info and self._relay_info is not None:
+            forwarded.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = self._relay_info
+            try:
+                data = forwarded.encode(limit)
+            except OverflowError:
+                data = None
+            if data is not None and not _info.uses_overload(data):
+                return data
+            del forwarded.options[int(DHCPOptionCode.RELAY_AGENT_INFORMATION)]
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "option 82 does not fit",
+                "[XID=%08x] Forwarding the request without RELAY_AGENT_INFORMATION: "
+                "it does not fit the options field within max_packet_size=%d",
+                forwarded.xid,
+                limit,
+                now=now,
+            )
+            self.metrics.relay_info_omitted += 1
+        return forwarded.encode(limit)
+
+    def _is_own_address(
+        self, address: _ipaddress.IPv4Address, context: DHCPRequestContext
+    ) -> bool:
+        """Whether `address` is one this relay holds, the receiving one included."""
+        return address == context.interface.ip or _netimps.is_local_address(
+            address, cache=True
+        )
+
     def _forward_to_servers(
         self, msg: DHCPMessage, context: DHCPRequestContext
     ) -> None:
+        now = self._instant(context).monotonic
         if (
             msg.giaddr == _const.WILDCARD_V4
             and DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options
@@ -238,9 +273,30 @@ class _RelayCore(_Timed):
                 "present with giaddr 0 (untrusted source)",
                 msg.xid,
                 context.client,
-                now=self._instant(context).monotonic,
+                now=now,
             )
             self.metrics.packets_dropped_untrusted += 1
+            return
+
+        if msg.giaddr != _const.WILDCARD_V4 and self._is_own_address(
+            msg.giaddr, context
+        ):
+            # RFC 3046 s2.1.1: "SHALL discard the packet if the giaddr spoofs a
+            # giaddr address implemented by the local agent itself". Forwarded,
+            # the server's reply would come back addressed to this relay as the
+            # relay of a client it never saw.
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "giaddr is this relay",
+                "[XID=%08x] Dropping request from %s: giaddr %s is an address "
+                "of this relay",
+                msg.xid,
+                context.client,
+                msg.giaddr,
+                now=now,
+            )
+            self.metrics.packets_dropped_relay_loop += 1
             return
 
         # RFC 1542 4.1.1 discards a request whose hops field *exceeds* the
@@ -266,13 +322,20 @@ class _RelayCore(_Timed):
         forwarded.options = msg.options.copy()
         forwarded.hops = msg.hops + 1
 
+        # RFC 3046 s2.1.1: only a request straight from a client (giaddr 0) is
+        # given option 82; one a relay already stamped goes on as it is. A
+        # client's own option 82 (the trusted case) stays.
+        add_info = (
+            self.insert_relay_agent_info
+            and msg.giaddr == _const.WILDCARD_V4
+            and DHCPOptionCode.RELAY_AGENT_INFORMATION not in msg.options
+        )
         if forwarded.giaddr == _const.WILDCARD_V4:
             forwarded.giaddr = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
 
         self._record_pending(msg, context)
-        self._insert_relay_agent_info(forwarded, self._instant(context).monotonic)
 
-        data = self._encode_for_forward(forwarded)
+        data = self._encode_request(forwarded, add_info, now)
         transport = self._routed_transport(context.transport)
         for server_ip, server_port in self.server_addresses:
             forwarded.log(
@@ -283,101 +346,19 @@ class _RelayCore(_Timed):
             transport.send(data, server_ip, port=server_port, client_mac=msg.chaddr)
             self.metrics.packets_sent += 1
 
-    def _insert_relay_agent_info(self, msg: DHCPMessage, now: float) -> None:
-        if not self.insert_relay_agent_info:
-            return
-        if DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options:
-            self._log_limit.log(
-                LOGGER,
-                _logging.WARNING,
-                "option 82 already present",
-                "[XID=%08x] Request already carries RELAY_AGENT_INFORMATION, "
-                "passing through unmodified.",
-                msg.xid,
-                now=now,
-            )
-            return
-        suboptions: list[tuple[int, bytes]] = []
-        if self.circuit_id is not None:
-            suboptions.append((1, self.circuit_id))
-        if self.remote_id is not None:
-            suboptions.append((2, self.remote_id))
-        if suboptions:
-            msg.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = (
-                _type.RelayAgentInformation(suboptions)
-            )
+    def _added_option_82(self, reply: DHCPMessage) -> bool:
+        """Whether the reply echoes the option 82 this relay adds to requests.
 
-    def _pending_key(self, msg: DHCPMessage) -> tuple[int, bytes]:
-        """Identify an exchange by transaction *and* client.
-
-        The xid alone is not an identity: it travels in cleartext in a broadcast
-        DISCOVER, so any host on the segment can read it and send its own
-        request carrying the same one. Keyed by xid alone, that overwrote the
-        victim's entry and the relay then sent the victim's OFFER to the
-        attacker's port -- the victim never saw it.
+        A server echoes the option's octets unchanged (RFC 3046 s2.2), so the
+        octets this relay would have added are what tell its option from one a
+        downstream element added; nothing is remembered per exchange.
         """
-        return msg.xid, bytes(msg.chaddr[: msg.hlen or len(msg.chaddr)])
-
-    def _record_pending(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        """Note where a reply for this exchange has to go.
-
-        Recorded for every client, including one on the standard port 68. It is
-        tempting to skip those, since 68 is the fallback anyway -- but the entry
-        also carries the ingress interface, and that is what pins the reply back
-        onto the client's segment on a wildcard bind. Skipping it would send
-        every ordinary client's reply out the default route instead.
-
-        An entry is never replaced by a request from a *different* source
-        address: that takeover is what this tracking has to survive.
-        """
-        key = self._pending_key(msg)
-        now = self._instant(context).monotonic
-        existing = self._pending_clients.get(key)
-        if (
-            existing is not None
-            and existing.client.ip != context.client.ip
-            and now - existing.recorded_at < self.PENDING_TTL_SECONDS
-        ):
-            self._log_limit.log(
-                LOGGER,
-                _logging.WARNING,
-                "reused transaction",
-                "[XID=%08x] Ignoring a request from %s that reuses the "
-                "transaction of %s",
-                msg.xid,
-                context.client,
-                existing.client,
-                now=now,
-            )
-            return
-        self._pending_clients[key] = PendingClient(
-            context.client, context.ifindex, context.local_ip, now
+        if self._relay_info is None:
+            return False
+        echoed = reply.options.get(
+            DHCPOptionCode.RELAY_AGENT_INFORMATION, default=None, decode=False
         )
-        self._pending_clients.move_to_end(key)
-        self._expire_pending(now)
-
-    def _lookup_pending(
-        self, msg: DHCPMessage, now: float
-    ) -> _ty.Optional[PendingClient]:
-        """Find where this reply goes, leaving the entry for any further ones.
-
-        Popping on the first reply meant that with more than one server
-        configured, the second server's reply had lost the tracked port and fell
-        back to 68 -- so which reply reached the client depended on which server
-        answered first.
-
-        `now` is seconds on the monotonic clock, the one the table is kept on.
-        """
-        self._expire_pending(now)
-        return self._pending_clients.get(self._pending_key(msg))
-
-    def _expire_pending(self, now: float) -> None:
-        """Drop entries past their TTL, then anything over the cap."""
-        for key in list(self._pending_clients):
-            if now - self._pending_clients[key].recorded_at >= self.PENDING_TTL_SECONDS:
-                del self._pending_clients[key]
-        while len(self._pending_clients) > self.MAX_PENDING_CLIENTS:
-            self._pending_clients.popitem(last=False)
+        return echoed is not None and bytes(echoed) == bytes(self._relay_info.pack())
 
     def _forward_to_client(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         if context.client.ip not in self._server_ips:
@@ -421,11 +402,12 @@ class _RelayCore(_Timed):
 
         reply = DHCPMessage(**msg.__dict__.copy())
         reply.options = msg.options.copy()
-        if DHCPOptionCode.RELAY_AGENT_INFORMATION in reply.options:
-            # RFC 3046 s2.2: the relay strips the option it echoed back before
-            # handing the reply to the client. It is relay-to-server bookkeeping
-            # -- circuit and remote ids describe the access port -- and has no
-            # meaning to, and should not be disclosed to, the client.
+        if self._added_option_82(reply):
+            # RFC 3046 s2.1: the echoed option "MUST be removed by either the
+            # relay agent or the trusted downstream network element which added
+            # it". This relay removes the one it added -- circuit and remote
+            # ids describe the access port and are not for the client -- and
+            # leaves an element's own for that element to remove.
             del reply.options[int(DHCPOptionCode.RELAY_AGENT_INFORMATION)]
 
         data = self._encode_for_forward(reply)

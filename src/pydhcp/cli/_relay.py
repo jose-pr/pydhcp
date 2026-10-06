@@ -73,12 +73,8 @@ class Relay(_Command):
     ("--per-interface",)
 
     def __call__(self) -> None:
-        # The help text has always said these "require --insert-relay-agent-info",
-        # and nothing enforced it: `_insert_relay_agent_info` returns early when
-        # the flag is off, so `-s 10.0.0.1 --circuit-id 0a01` forwarded packets
-        # with no option 82 and said nothing. Checked here rather than in
-        # DHCPRelay because the library documents these as independent kwargs
-        # and tests construct it that way -- raising there is an API break.
+        # The ids are named by their flags here; the constructor refuses the same
+        # combinations in the library's words.
         ignored = [
             flag
             for flag, value in (
@@ -96,15 +92,6 @@ class Relay(_Command):
         server_addresses = [_parse_server_address(addr) for addr in self.server]
         circuit_id = bytes.fromhex(self.circuit_id) if self.circuit_id else None
         remote_id = bytes.fromhex(self.remote_id) if self.remote_id else None
-
-        if self.insert_relay_agent_info and not ignored:
-            # An empty sub-option list inserts nothing, so the flag alone is a
-            # no-op. A warning rather than an error: the flag is the library's
-            # documented switch and a future sub-option could make it meaningful.
-            self._logger_.warning(
-                "--insert-relay-agent-info was given without --circuit-id or "
-                "--remote-id, so no relay agent information option will be added"
-            )
 
         # Construct first, announce second. The constructor is what validates
         # the upstream addresses and `max_hops`, so announcing first meant a bad

@@ -705,11 +705,21 @@ client that is never started will always time out waiting for a reply.
   agent. `server_addresses` is required and non-empty (each entry an `IPv4`,
   a string, or a `(host, port)` tuple; bare entries default to port 67) —
   raises `ValueError` otherwise. `insert_relay_agent_info=True` adds option
-  82 with `circuit_id`/`remote_id` sub-options (skipped, with a warning, if
-  the request already carries one). **`max_hops` defaults to 4**, the RFC 1542
+  82 with `circuit_id`/`remote_id` sub-options to a request that arrives with
+  `giaddr` 0 and no option 82 (RFC 3046 s2.1.1: a request another relay already
+  stamped goes on without it). The flag needs `circuit_id` or `remote_id`, and
+  either id needs the flag: any other combination is a `ValueError` from the
+  constructor. The option goes last in the options field, never through option
+  52 or `sname`/`file`; a request it would not fit (the limit is the relay's own
+  `max_packet_size`, not the client's option 57, which says what the client can
+  receive) is forwarded without it and counted in `metrics.relay_info_omitted`.
+  A request whose `giaddr` is one of the relay's own addresses (the receiving
+  interface's or any host address) is dropped and counted in
+  `metrics.packets_dropped_relay_loop`, whether or not insertion is on. **`max_hops`
+  defaults to 4**, the RFC 1542
   §4.1.1 default, and must be 0..16 -- that clause's hard ceiling -- or the
-  constructor raises `ValueError`. It was previously 16: the ceiling used as
-  though it were the default. **`trust_client_relay_agent_info=False`**: a request
+  constructor raises `ValueError`.
+  **`trust_client_relay_agent_info=False`**: a request
   with `giaddr` 0 (straight from a client) that already carries option 82 is
   **dropped** and counted in `metrics.packets_dropped_untrusted`, since the
   option is forged (RFC 3046 s2.1, s5); `True` forwards it, for an access layer
@@ -720,7 +730,11 @@ client that is never started will always time out waiting for a reply.
     counts in `metrics.packets_dropped_hop_limit` when the *received* `hops`
     exceeds `max_hops`, so a request at exactly the threshold is still
     forwarded -- RFC 1542 §4.1.1) and
-    forwards `BOOTREPLY` back to the original client.
+    forwards `BOOTREPLY` back to the original client. A reply's option 82 is
+    removed only when it is the one this relay adds (RFC 3046 s2.1: the element
+    that added the option removes it): the octets are compared with the option
+    the constructor built, so an option a trusted downstream element added
+    reaches that element.
 
 - **`AsyncDHCPRelay(listen=None, server_addresses=(), *, max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
@@ -1010,8 +1024,10 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     `packets_dropped_other_interface` (a datagram dropped before decoding because it
     arrived on an interface the listener was not told to serve),
     `informs_ignored` (a DHCPINFORM whose `ciaddr` is neither the sender's address nor
-    in the served network, or absent), `relay_info_omitted` (a reply sent without
-    option 82 because it would not fit in the options field),
+    in the served network, or absent), `relay_info_omitted` (a message sent without
+    option 82 because it would not fit in the options field: a reply the server
+    echoed it into, or a request the relay would have added it to),
+    `packets_dropped_relay_loop` (a request whose `giaddr` is an address of the relay),
     `packets_dropped_malformed_option` (a message dropped for an option 50 or 54 of
     the wrong length), `options_ignored_malformed` (an option 51 or 57 of the wrong
     length, treated as absent), `declines_ignored` (a DHCPDECLINE that quarantined
@@ -1047,7 +1063,7 @@ Not importable from a public module: they live in the private
   default, not its minimum: `encode()` accepts anything from 269 up.
   Exceeding it needs the client's option 57 (`MAXIMUM_DHCP_MESSAGE_SIZE`);
   `DHCPRelay._encode_for_forward` reads that option rather than shrinking a
-  reply it is only forwarding.
+  reply it is only forwarding (a request goes at the relay's own `max_packet_size`).
 - **`UDP_MIN_PACKET_SIZE`** (28) — IPv4 + UDP headers, subtracted from a
   message-size limit to get the DHCP payload budget.
 - **`UDP_MAX_PACKET_SIZE`** (65535) — the listeners' default

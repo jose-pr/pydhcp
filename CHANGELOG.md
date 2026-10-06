@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `addresses_refused`, for what a decoder forgave and for three server drops that
   had no counter.
 - **`pydhcp.__version__`**, read from the installed distribution's metadata.
+- **Three relay counters in `DHCPMetrics`**: `packets_dropped_relay_loop` (a request
+  whose `giaddr` is one of the relay's own addresses), `packets_dropped_unknown_giaddr`
+  (a reply whose `giaddr` is not) and `packets_dropped_reused_transaction` (a request
+  that reuses the transaction of a pending one from another source address).
+  `relay_info_omitted` now also counts a request the relay forwarded without option 82
+  because it would not fit.
 - **`AsyncDHCPClient`** (`pydhcp` and `pydhcp.client`): `DHCPClient` on an event
   loop. `send`, `discover_offer` and `dora` are coroutines taking the same
   keywords as the synchronous client's and returning the same results, with the
@@ -78,6 +84,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `options_ignored_malformed`, `declines_ignored` and `quarantines_refused`.
 
 ### Changed
+
+- **The relay follows RFC 3046 section 2.1 on the request side.** It adds option 82 only to
+  a request that arrives with `giaddr` 0 (a request another relay already stamped is
+  forwarded as it is, where it used to be given a second option), drops a request whose
+  `giaddr` is one of its own addresses (it used to forward it, with insertion on or off),
+  puts option 82 last in the options field and never through option 52 or the `sname` and
+  `file` fields (a request advertising 576 in option 57 used to be forwarded as 548 octets
+  with the option split into `sname`), and encodes a request at the relay's own
+  `max_packet_size`, not the client's option 57. A request the option would not fit is
+  forwarded without it and counted in `relay_info_omitted`. A reply loses option 82 only
+  when it is the option this relay added; an option a trusted downstream element added
+  (`trust_client_relay_agent_info=True`, insertion off) now reaches that element.
+- **Breaking: `DHCPRelay` and `AsyncDHCPRelay` refuse contradictory options.**
+  `insert_relay_agent_info=True` with neither `circuit_id` nor `remote_id` (it inserted
+  nothing and said nothing) and either id without the flag (it was ignored) are a
+  `ValueError` at construction, and `pydhcp relay --insert-relay-agent-info` with no id is
+  the same error instead of a warning.
+- The relay's reused-transaction record is logged by `pydhcp.relay._pending`.
 
 - **Breaking, in behaviour: a reply goes to port 67 when it goes to a relay and port 68
   otherwise, whatever port the request came from** (RFC 1542 section 5.4: "The UDP

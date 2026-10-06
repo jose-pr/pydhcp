@@ -756,6 +756,7 @@ def test_what_the_server_prints_of_a_client_is_hex_and_short(
 # -- the relay -----------------------------------------------------------------
 
 RELAY = "pydhcp.relay._core"
+RELAY_PENDING = "pydhcp.relay._pending"
 
 
 def _relay(clock: Clock, **kwargs: ty.Any) -> DHCPRelay:
@@ -820,19 +821,38 @@ def test_a_reused_transaction_from_another_address_is_limited_and_counted(
     _assert_bounded(
         caplog,
         clock,
-        RELAY,
+        RELAY_PENDING,
         lambda: relay.handle(message, _context(clock, client="10.0.0.51")),
     )
 
 
-def test_a_request_already_carrying_option_82_is_limited(
+def test_a_request_whose_giaddr_is_the_relays_own_is_limited_and_counted(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
-    relay = _relay(clock, insert_relay_agent_info=True, circuit_id=b"c")
-    message = _relay_request(giaddr="10.0.0.1", with_info=True)
+    relay = _relay(clock)
+    message = _relay_request(giaddr="10.0.0.1")
     _assert_bounded(
         caplog, clock, RELAY, lambda: relay.handle(message, _context(clock))
     )
+    assert relay.metrics.packets_dropped_relay_loop == INSIDE + 1
+
+
+def test_a_request_that_cannot_carry_option_82_is_limited_and_counted(
+    caplog: pytest.LogCaptureFixture, clock: Clock
+) -> None:
+    relay = _relay(
+        clock,
+        insert_relay_agent_info=True,
+        circuit_id=b"c" * 100,
+        remote_id=b"r" * 100,
+        max_packet_size=576,
+    )
+    message = _relay_request()
+    message.options[DHCPOptionCode.VENDOR_CLASS_IDENTIFIER] = "x" * 200
+    _assert_bounded(
+        caplog, clock, RELAY, lambda: relay.handle(message, _context(clock))
+    )
+    assert relay.metrics.relay_info_omitted == INSIDE + 1
 
 
 # -- the client and the capture -------------------------------------------------

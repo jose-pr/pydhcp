@@ -717,18 +717,10 @@ def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
     assert kwargs["remote_id"] == b"\x0b\x02"
 
 
-@patch("pydhcp.cli._relay.DHCPRelay")
-def test_relay_warns_when_insert_flag_has_no_ids(mock_dhcp_relay_cls, caplog) -> None:
-    """The flag alone builds an empty sub-option list and inserts nothing."""
-    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+def test_relay_refuses_the_insert_flag_without_an_id() -> None:
+    """The constructor says so before anything is bound or announced."""
+    with pytest.raises(ValueError, match="circuit_id or remote_id"):
         Relay(server=("192.0.2.1",), insert_relay_agent_info=True)()
-
-    assert any(
-        "--insert-relay-agent-info" in record.getMessage()
-        for record in caplog.records
-        if record.levelno == logging.WARNING
-    )
-    assert mock_dhcp_relay_cls.called
 
 
 def test_relay_id_misuse_is_reported_as_a_clean_cli_error(monkeypatch, capsys) -> None:
