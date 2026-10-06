@@ -37,7 +37,7 @@ def _dest_string(dest: _net.IPv4) -> str:
     0.0.0.0, which is what `str()` would produce and what `sendto` would then
     reject or silently route nowhere.
     """
-    return BROADCAST_ADDRESS if dest == _net.WILDCARD_IPv4 else str(dest)
+    return BROADCAST_ADDRESS if dest == _net.WILDCARD_V4 else str(dest)
 
 
 class UDPTransport(DHCPTransport):
@@ -70,7 +70,7 @@ class UDPTransport(DHCPTransport):
         # EACCES, ENETUNREACH, a closed socket -- where a broadcast is both
         # useless and a disclosure: it puts a reply the caller deliberately
         # unicast onto the whole segment, carrying yiaddr, chaddr, the lease
-        # options and any echoed option 82 (`gap1-posix-pktinfo-4`).
+        # options and any echoed option 82.
         #
         # Deciding *whether* a reply should be broadcast belongs to the caller
         # and is already made there: the server picks 255.255.255.255 for a

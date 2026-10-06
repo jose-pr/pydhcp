@@ -35,10 +35,9 @@ _ENCODE_FIXED_OVERHEAD = _const.UDP_MIN_PACKET_SIZE + _MAGIC_COOKIE_END
 
 
 #: Smallest `max_packetsize` that can produce a packet: the overhead plus one
-#: octet for the END marker. Measured 2026-09-20 across 266..284 -- 268 does
-#: reach the encoder, but leaves a zero-length options field and dies inside
-#: `partial_encode` on "Invalid Options Max Size", which names neither the
-#: argument nor the shortfall.
+#: octet for the END marker. A `max_packetsize` of 268 reaches the encoder but
+#: leaves a zero-length options field, which `partial_encode` rejects with
+#: "Invalid Options Max Size", naming neither the argument nor the shortfall.
 _MIN_ENCODE_PACKET_SIZE = _ENCODE_FIXED_OVERHEAD + 1
 
 
@@ -56,12 +55,11 @@ def _check_header_int(field: str, value: _ty.Any, maximum: int) -> int:
     """Range-check a fixed-width header field before `struct` sees it.
 
     `_HEADER_STRUCT.pack_into` raises `struct.error` for an out-of-range value
-    and names the *format character*, not the field: measured 2026-09-20,
-    `hops=256`, `hlen=256` and `xid=2**32` each produced
-    `'B' format requires 0 <= number <= 255` (or `'I' ...`), from which a caller
-    cannot tell which of the four `B` fields was wrong. `struct.error` is also
-    neither `ValueError` nor `TypeError`, so an `except ValueError` around a
-    send path did not catch it.
+    and names the *format character*, not the field: `hops=256`, `hlen=256`
+    and `xid=2**32` each raise `'B' format requires 0 <= number <= 255` (or
+    `'I' ...`), from which a caller cannot tell which of the four `B` fields
+    was wrong. `struct.error` is also neither `ValueError` nor `TypeError`, so
+    an `except ValueError` around a send path would not catch it.
     """
     if isinstance(value, int) and 0 <= value <= maximum:
         return int(value)
@@ -74,12 +72,12 @@ def _check_header_int(field: str, value: _ty.Any, maximum: int) -> int:
 def _check_bootp_field(field: str, value: _ty.Sized, width: int) -> None:
     """Refuse to silently truncate a fixed-width BOOTP field.
 
-    `sname`, `file` and `chaddr` were packed with `.ljust(width)[:width]`, so an
-    over-long value lost its tail with no error and no log line. Measured
-    2026-09-20: a 100-character `sname` and a 200-character `file` both encoded
-    "successfully" at 300 octets, carrying the first 64 and 128 octets. `file`
-    is the PXE boot filename -- a truncated one sends the client to a TFTP path
-    that does not exist, and nothing in the exchange reports why it failed.
+    Packing `sname`, `file` and `chaddr` with `.ljust(width)[:width]` would drop
+    the tail of an over-long value with no error and no log line: a 100-character
+    `sname` and a 200-character `file` would encode "successfully" at 300 octets,
+    carrying only the first 64 and 128 octets. `file` is the PXE boot filename --
+    a truncated one sends the client to a TFTP path that does not exist, and
+    nothing in the exchange reports why it failed.
 
     Over-long options are handled instead of truncated (see `encode`'s overload
     branches), which is what makes doing neither here indefensible.

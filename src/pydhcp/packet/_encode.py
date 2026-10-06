@@ -99,8 +99,6 @@ class _MessageEncode(_MessageDecode):
             # overload, ahead of OPTION_OVERLOAD. RFC 2131 s3 walks the protocol
             # by message type, and receivers read option 53 before parsing the
             # rest -- it is what tells one whether the packet is even for it.
-            # Measured 2026-09-20 on the version before: code 52 was the first
-            # TLV after the cookie on the overload path.
             try:
                 options._options.move_to_end(
                     int(DHCPOptionCode.DHCP_MESSAGE_TYPE), False
