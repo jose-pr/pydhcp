@@ -99,6 +99,27 @@ discover = client.build_discover(b"\x00\x11\x22\x33\x44\x55")
 client.send(discover, destination="127.0.0.1", port=6767)
 ```
 
+`AsyncDHCPClient` is the same client on an event loop: `send`, `discover_offer` and
+`dora` are coroutines with the same keywords, and the receive tasks run between
+`await client.start()` and `await client.aclose()`.
+
+```python
+import asyncio
+from pydhcp.client import AsyncDHCPClient
+
+
+async def main() -> None:
+    async with AsyncDHCPClient(listen=("127.0.0.1", 6768)) as client:
+        await client.start()
+        ack = await client.dora(
+            b"\x00\x11\x22\x33\x44\x55", destination="127.0.0.1", port=6767
+        )
+        print(ack)
+
+
+asyncio.run(main())
+```
+
 ## Command Line Interface (CLI)
 
 `pydhcp` includes a command line interface for listing network adapters, decoding packets, and starting servers.

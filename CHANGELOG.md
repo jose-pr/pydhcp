@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `UnicodeDecodeError`, for a destination with host bits set an `ipaddress`
   `ValueError`). `except ValueError` keeps working.
 - **`pydhcp.__version__`**, read from the installed distribution's metadata.
+- **`AsyncDHCPClient`** (`pydhcp` and `pydhcp.client`): `DHCPClient` on an event
+  loop. `send`, `discover_offer` and `dora` are coroutines taking the same
+  keywords as the synchronous client's and returning the same results, with the
+  same retransmission schedule, `secs` and reply matching; `next_reply` is a
+  coroutine and `drain_replies` and the `build_*` methods are plain methods. It
+  uses the listener's lifecycle (`await start()`, `shutdown()`,
+  `await wait_closed()`, `await aclose()`, `async with`). Cancelling a pending
+  exchange abandons it and leaves no task, socket or accepted transaction behind,
+  and several exchanges may be pending on one client. Its `on_reply` hook runs on
+  the event loop, not on a worker thread. `import pydhcp` imports `asyncio` as it
+  did before.
 
 ### Changed
 
@@ -109,6 +120,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking: `SocketAddress(sock)` is `SocketAddress.from_socket(sock)`**, and
   `SocketAddress(ip, port)` needs both arguments (`TypeError` otherwise, where it
   was `ValueError`).
+- **`pydhcp.client` is a package** (same import path and names). The message
+  builders, the reply matching and the retransmission schedule are one private
+  core under `DHCPClient` and `AsyncDHCPClient`, so `DHCPClient`'s behaviour on
+  the wire is unchanged. A record the client logs (an OFFER without a server
+  identifier) is named `pydhcp.client._core`, and a test that patches
+  `pydhcp.client.UDPTransport` patches `pydhcp.client._sync.UDPTransport`.
 - **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
   are gone** (they exported nothing); the layers are private modules of
   `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.

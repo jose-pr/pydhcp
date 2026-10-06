@@ -64,6 +64,15 @@ serve a private or vendor option space instead of the IANA registry above.
 ## DHCPClient
 
 ::: pydhcp.client.DHCPClient
+    options:
+      # The message builders and the reply matching live in a private base.
+      inherited_members: true
+
+## AsyncDHCPClient
+
+::: pydhcp.client.AsyncDHCPClient
+    options:
+      inherited_members: true
 
 ## DHCPRelay
 
