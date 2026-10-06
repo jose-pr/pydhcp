@@ -323,14 +323,14 @@ def test_with_a_listener_that_cannot_bind_holds_no_port() -> None:
 @pytest.fixture
 def fresh_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     """The warning is once per process: let each test see it again."""
-    import pydhcp.listener.binding as binding
+    import pydhcp.listener._binding as binding
 
     monkeypatch.setattr(binding, "_ADDRESS_BOUND_WARNED", False)
 
 
 def _platform(monkeypatch: pytest.MonkeyPatch, hears_no_broadcast: bool) -> None:
     """Say what the platform does, without changing `sys.platform` under netimps."""
-    import pydhcp.listener.binding as binding
+    import pydhcp.listener._binding as binding
 
     monkeypatch.setattr(
         binding, "_address_bound_hears_no_broadcast", lambda: hears_no_broadcast

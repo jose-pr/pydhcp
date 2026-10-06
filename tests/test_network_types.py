@@ -9,7 +9,7 @@ import netimps
 
 from pydhcp import _network as network  # the module's own surface is what is tested
 from pydhcp import NetworkInterface, SocketAddress
-from pydhcp.listener.interfaces import _network_interface
+from pydhcp.listener._interfaces import _network_interface
 
 
 def test_network_holds_only_pydhcps_own_names() -> None:

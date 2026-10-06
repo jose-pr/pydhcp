@@ -193,7 +193,7 @@ def test_every_module_that_logs_does_so_on_its_own_logger() -> None:
 def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     """A server warning and a listener warning, one logger apart."""
     from pydhcp import DHCPServer
-    from pydhcp.listener import interfaces
+    from pydhcp.listener import _interfaces as interfaces
     from pydhcp.packet import DHCPOpcode
 
     reply = build_request(DHCPMessageType.DHCPOFFER)
@@ -209,7 +209,7 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
         emit()
     loud = {record.name for record in caplog.records}
     assert "pydhcp.server.handlers" in loud
-    assert "pydhcp.listener.interfaces" in loud
+    assert "pydhcp.listener._interfaces" in loud
 
     caplog.clear()
     quiet = logging.getLogger("pydhcp.server")
@@ -222,4 +222,4 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
         quiet.setLevel(previous)
     names = {record.name for record in caplog.records}
     assert "pydhcp.server.handlers" not in names
-    assert "pydhcp.listener.interfaces" in names
+    assert "pydhcp.listener._interfaces" in names

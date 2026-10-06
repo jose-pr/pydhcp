@@ -1,23 +1,23 @@
 """DHCP listeners and transports.
 
-Split by responsibility; every name is importable from here as it always was:
+Split by responsibility, one private module each:
 
-- `transport`  -- how a reply leaves (`UDPTransport`, `PktInfoUDPTransport`)
-- `spec`       -- the `listen` argument and the addresses it expands to
-- `interfaces` -- which host interface a datagram arrived on
-- `receive`    -- packet-info support and turning a netimps datagram into a
+- `_transport`  -- how a reply leaves (`UDPTransport`, `PktInfoUDPTransport`)
+- `_spec`       -- the `listen` argument and the addresses it expands to
+- `_interfaces` -- which host interface a datagram arrived on
+- `_receive`    -- packet-info support and turning a netimps datagram into a
   `DHCPRequestContext`
-- `binding`    -- claiming the ports, and the errors when that fails
-- `sync`       -- `DHCPListener`
-- `aio`        -- `AsyncDHCPListener`
+- `_binding`    -- claiming the ports, and the errors when that fails
+- `_sync`       -- `DHCPListener`
+- `_asyncio`    -- `AsyncDHCPListener`
 """
 
 from __future__ import annotations
 
-from .aio import AsyncDHCPListener
-from .binding import _REQUESTED_ADDRESS, _bind_sockets, _close_socket
-from .interfaces import _network_interface, _resolve_interface
-from .receive import (
+from ._asyncio import AsyncDHCPListener
+from ._binding import _REQUESTED_ADDRESS, _bind_sockets, _close_socket
+from ._interfaces import _network_interface, _resolve_interface
+from ._receive import (
     Arrival,
     DHCPRequestContext,
     _TruncatedDatagram,
@@ -25,7 +25,7 @@ from .receive import (
     _context_for,
     _pktinfo_supported,
 )
-from .spec import (
+from ._spec import (
     ListenAddress,
     ListenBinding,
     ListenPort,
@@ -37,8 +37,8 @@ from .spec import (
     _split_host_port,
     _split_listen_string,
 )
-from .sync import DHCPListener
-from .transport import (
+from ._sync import DHCPListener
+from ._transport import (
     BROADCAST_ADDRESS,
     PktInfoUDPTransport,
     DHCPTransport,

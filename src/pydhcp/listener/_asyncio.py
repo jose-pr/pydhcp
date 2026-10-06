@@ -17,15 +17,15 @@ from .. import _constants as _const, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from .binding import _bind_sockets, _close_socket
-from .receive import (
+from ._binding import _bind_sockets, _close_socket
+from ._receive import (
     DHCPRequestContext,
     _TruncatedDatagram,
     _arrival,
     _context_for,
     _pktinfo_supported,
 )
-from .spec import ListenSpec, _parselisteners
+from ._spec import ListenSpec, _parselisteners
 
 LOGGER = _logging.getLogger(__name__)
 

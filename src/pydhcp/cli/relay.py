@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as _ty
 import duho
 
-from ..listener.spec import _split_host_port
+from ..listener._spec import _split_host_port
 from ..relay import DEFAULT_MAX_HOPS, DHCPRelay
 from ..packet._enums import DHCPPort
 from ._common import _Command

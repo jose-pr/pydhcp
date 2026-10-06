@@ -10,13 +10,9 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import _network as _net
-from .interfaces import _resolve_interface
-from .spec import ListenSpec, _listen_uses_wildcard
-from .transport import (
-    PktInfoUDPTransport,
-    DHCPTransport,
-    UDPTransport,
-)
+from ._interfaces import _resolve_interface
+from ._spec import ListenSpec, _listen_uses_wildcard
+from ._transport import PktInfoUDPTransport, DHCPTransport, UDPTransport
 
 LOGGER = _logging.getLogger(__name__)
 
