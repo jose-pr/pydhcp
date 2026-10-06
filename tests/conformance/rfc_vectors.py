@@ -212,10 +212,6 @@ VECTORS: list[Vector] = [
         _h("00 01 09 ff 01 07"),
         ([(0, b"\x09"), (255, b"\x07")],),
         code=82,
-        pending={
-            "decode": "option 82 is read with the framing of option 43, "
-            "where 0 is PAD and 255 is END"
-        },
     ),
     Vector(
         "rfc4280-s4.6-bcmcs-domain-names",
@@ -254,7 +250,6 @@ VECTORS: list[Vector] = [
         (["example.com", "sip.example.com"], 0),
         code=120,
         direction="decode",
-        pending={"decode": "option 120 refuses a compression pointer"},
     ),
     Vector(
         "rfc3925-s3-vi-vendor-class",
@@ -307,10 +302,6 @@ VECTORS: list[Vector] = [
         _h("01") + _RDNSS_ADDRESSES + EXAMPLE_COM + b"\x00",
         (1, "192.0.2.1", "192.0.2.2", ["example.com", "."]),
         code=146,
-        pending={
-            "decode": "the trailing root name is dropped",
-            "encode": "the root name '.' is refused",
-        },
     ),
     Vector(
         "rfc6731-s4.3-only-the-root-domain",
@@ -318,10 +309,6 @@ VECTORS: list[Vector] = [
         _h("00") + _RDNSS_ADDRESSES + b"\x00",
         (0, "192.0.2.1", "192.0.2.2", ["."]),
         code=146,
-        pending={
-            "decode": "the trailing root name is dropped",
-            "encode": "the root name '.' is refused",
-        },
     ),
     Vector(
         "rfc6731-s4.3-reserved-bits-are-ignored-on-receipt",
@@ -330,7 +317,6 @@ VECTORS: list[Vector] = [
         (1, "192.0.2.1", "192.0.2.2", ["example.com"]),
         code=146,
         direction="decode",
-        pending={"decode": "the six reserved bits are kept in flags"},
     ),
     Vector(
         "rfc8973-s5.2-dots-reference-identifier",
@@ -451,6 +437,5 @@ VECTORS.append(
         ([("192.0.2.1", "129.210.177.128/25")],),
         code=121,
         direction="decode",
-        pending={"decode": "a destination with host bits set is refused"},
     )
 )

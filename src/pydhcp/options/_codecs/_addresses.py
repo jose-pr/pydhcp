@@ -122,8 +122,10 @@ class ClasslessRoute(_Record, _TextForm):
                 f"ClasslessRoute option is truncated: needs {last + 4} bytes, got {len(option)}"
             )
         net_bytes = option[1:last].tobytes() + b"\x00\x00\x00\x00"
+        # RFC 3442 s3: the client MUST zero the bits of the destination that
+        # the mask zeroes, so a descriptor with host bits set is read, masked.
         try:
-            network = _Network((net_bytes[:4], cidr))
+            network = _Network((net_bytes[:4], cidr), strict=False)
         except ValueError as exc:
             raise DHCPDecodeError(f"ClasslessRoute destination: {exc}") from exc
         gateway = _IP(option[last : last + 4].tobytes())
@@ -200,3 +202,33 @@ class StaticRoute(_IPv4PairList):
                 "StaticRoute does not allow a default-route destination"
             )
         return left, right
+
+    @classmethod
+    def unpack_from(
+        cls: type[_IPv4PairListT], option: memoryview
+    ) -> tuple[_IPv4PairListT, int]:
+        """Read the pairs as they came, a 0.0.0.0 destination included.
+
+        RFC 2132 s5.8 forbids that destination: a sender is refused it
+        (`append`, `pack_into`) and a receiver keeps the route a peer sent.
+        """
+        if len(option) % 8:
+            raise DHCPDecodeError(
+                f"{cls.__name__} option is truncated: expected 8-byte records"
+            )
+        self = cls()
+        for idx in range(0, len(option), 8):
+            pair = (
+                _IP(option[idx : idx + 4].tobytes()),
+                _IP(option[idx + 4 : idx + 8].tobytes()),
+            )
+            list.append(self, pair)
+        return self, len(option)
+
+    def pack_into(self, data: bytearray) -> int:
+        for destination, _ in self:
+            if destination == _IP("0.0.0.0"):
+                raise DHCPValueError(
+                    "StaticRoute does not allow a default-route destination"
+                )
+        return super().pack_into(data)

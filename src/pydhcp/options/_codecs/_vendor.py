@@ -138,7 +138,32 @@ class VendorSpecificInformation(Bytes):
 
 
 class RelayAgentInformation(EncapsulatedOptions):
-    """RFC 3046 relay-agent sub-options."""
+    """RFC 3046 relay-agent sub-options.
+
+    Plain code, length, value tuples: RFC 3046 s2.0 defines no pad sub-option
+    and no terminating 255, so 0 and 255 are sub-option codes like any other.
+    """
+
+    @classmethod
+    def unpack_from(
+        cls: type[_EncapsulatedOptionsT], option: memoryview
+    ) -> tuple[_EncapsulatedOptionsT, int]:
+        self = cls()
+        idx = 0
+        size = len(option)
+        while idx < size:
+            if idx + 2 > size:
+                raise DHCPDecodeError(
+                    f"{cls.__name__} option is truncated: missing length"
+                )
+            code = option[idx]
+            length = option[idx + 1]
+            idx += 2
+            if idx + length > size:
+                raise DHCPDecodeError(f"{cls.__name__} option is truncated")
+            self.append(TLVOption(code, option[idx : idx + length]))
+            idx += length
+        return self, size
 
 
 _VIVendorSpecificInformationRecordT = _ty.TypeVar(
@@ -206,6 +231,9 @@ class VIVendorClassRecord(_Record):
     value: UserClass
 
     def __init__(self, enterprise_number: int, value: _ty.Any) -> None:
+        if isinstance(value, (list, tuple)) and not isinstance(value, UserClass):
+            # `to_json` writes each entry as hex text.
+            value = [_octets(item) if isinstance(item, str) else item for item in value]
         _set(self, "enterprise_number", int(enterprise_number))
         _set(
             self,

@@ -17,6 +17,135 @@ from ._domain import (
 MAX_POINTER_HOPS = 127
 
 
+def read_names(
+    view: memoryview, what: str = "search list", base: int = 0
+) -> tuple[list[str], bool]:
+    """Read the concatenated, possibly compressed names in `view`.
+
+    Returns the names and whether the last one ended, so a caller that must not
+    drop a partial name can refuse it. The names are bounded as a message needs
+    them to be: a decoded name is at most `MAX_NAME_OCTETS` (255, RFC 1035
+    s2.3.4), a name follows at most `MAX_POINTER_HOPS` pointers, and a pointer
+    must point strictly backwards, to the start of a component of a name that
+    begins before the name holding the pointer. A name or a pointer outside
+    those limits, a reserved length prefix and a label whose length octet
+    declares more than remains raise `DHCPDecodeError`.
+
+    `base` is the offset of `view[0]` in the option's data, which is what a
+    pointer counts from.
+    """
+    # offset -> (kind, value, offset of the next component, start of the
+    # name the component belongs to)
+    #   kind "label": value is the decoded text
+    #   kind "root" : value is None (a 0x00 terminator)
+    #   kind "ptr"  : value is the target offset
+    components: dict[int, tuple[str, _ty.Any, int, int]] = {}
+    domains: list[int] = []
+    name_start = 0
+    id = 0
+    size = len(view)
+    while id < size:
+        start = id
+        ptr_or_len = view[id]
+        id += 1
+        if ptr_or_len == 0x00:
+            components[start] = ("root", None, id, name_start)
+            domains.append(name_start)
+            name_start = id
+            continue
+        is_ptr = ptr_or_len & 0xC0
+        if is_ptr:
+            if is_ptr != 0xC0:
+                raise DHCPDecodeError(
+                    f"{what} octet {ptr_or_len:#04x} at offset {start} sets a "
+                    "reserved label-length prefix; RFC 1035 s4.1.4 defines only "
+                    "00 (label) and 11 (compression pointer)"
+                )
+            if id >= size:
+                break  # half a pointer: the name is partial
+            components[start] = (
+                "ptr",
+                (((0x3F & ptr_or_len) << 8) | view[id]) - base,
+                id + 1,
+                name_start,
+            )
+            id += 1
+            domains.append(name_start)
+            name_start = id
+        else:
+            dc = view[id : ptr_or_len + id]
+            if len(dc) != ptr_or_len:
+                raise DHCPDecodeError(
+                    f"{what} is truncated: a label declares {ptr_or_len} "
+                    f"octets but only {len(dc)} remain"
+                )
+            try:
+                label = dc.tobytes().decode()
+            except UnicodeDecodeError as exc:
+                raise DHCPDecodeError(
+                    f"{what} has a label that is not valid UTF-8"
+                ) from exc
+            if "." in label:
+                # These names are joined with ".", so a label already
+                # containing one re-encodes as a different number of labels
+                # than arrived.
+                raise DHCPDecodeError(
+                    f"{what} has a label containing '.' ({label!r}), "
+                    "which cannot be represented unambiguously in dotted form"
+                )
+            components[start] = ("label", label, id + ptr_or_len, name_start)
+            id += ptr_or_len
+
+    def get_dn(start: int) -> list[str]:
+        """Resolve one name by walking its component chain.
+
+        Iterative, so a long chain is a decode error and not a
+        `RecursionError`. The walk stops at `MAX_NAME_OCTETS` of decoded
+        name and at `MAX_POINTER_HOPS` pointers, which is what keeps the
+        work for one name, and so for the option, proportional to its
+        length: names that point at names that point at names would
+        otherwise grow with every resolution.
+        """
+        result: list[str] = []
+        octets = 1  # the terminating root label
+        hops = 0
+        offset = start
+        while True:
+            component = components.get(offset)
+            if component is None:
+                raise DHCPDecodeError(
+                    f"{what} pointer to offset {offset + base} does not point at "
+                    "the start of a label or a root label"
+                )
+            kind, value, nxt, owner = component
+            if kind == "root":
+                return result
+            if kind == "ptr":
+                hops += 1
+                if hops > MAX_POINTER_HOPS:
+                    raise DHCPDecodeError(
+                        f"{what} name follows more than {MAX_POINTER_HOPS} "
+                        "compression pointers"
+                    )
+                if value >= owner:
+                    raise DHCPDecodeError(
+                        f"{what} pointer to offset {value + base} does not point "
+                        f"backwards of the name starting at offset {owner + base} "
+                        "(RFC 1035 s4.1.4: a pointer refers to a prior name)"
+                    )
+                offset = value
+                continue
+            octets += 1 + len(value.encode())
+            if octets > MAX_NAME_OCTETS:
+                raise DHCPDecodeError(
+                    f"{what} name exceeds {MAX_NAME_OCTETS} octets (RFC 1035 s2.3.4)"
+                )
+            result.append(value)
+            offset = nxt
+
+    return [".".join(get_dn(domain)) for domain in domains], name_start == size
+
+
 _DomainListT = _ty.TypeVar("_DomainListT", bound="DomainList")
 
 
@@ -43,7 +172,9 @@ class DomainList(_NormalizedList[str]):
             raise TypeError(
                 f"domain-list entries must be str, not {type(item).__name__}"
             )
-        return item
+        # "." and "" are both the root name, which a list may hold (RFC 6731
+        # s4.3 marks the default RDNSS with one).
+        return "" if item == "." else item
 
     @classmethod
     def unpack_from(
@@ -51,132 +182,16 @@ class DomainList(_NormalizedList[str]):
     ) -> tuple[_DomainListT, int]:
         """Decode a compressed search list (RFC 1035 s4.1.4, RFC 3397 s3).
 
-        The names are bounded as a message needs them to be: a decoded name is
-        at most `MAX_NAME_OCTETS` (255, RFC 1035 s2.3.4), a name follows at
-        most `MAX_POINTER_HOPS` pointers, and a pointer must point strictly
-        backwards, to the start of a component of a name that begins before the
-        name holding the pointer. A name or a pointer outside those limits is a
-        `ValueError`; so is a reserved length prefix and a label whose length
-        octet declares more than remains. A last name that ends, between
-        labels, without a root label or a whole pointer is discarded (RFC 3397
-        s3), and the names before it are kept.
+        Bounded as `read_names` says. A last name that ends, between labels,
+        without a root label or a whole pointer is discarded (RFC 3397 s3), and
+        the names before it are kept.
         """
-        view = memoryview(option)
         self = cls()
         if not option:
             return self, 0
-        # offset -> (kind, value, offset of the next component, start of the
-        # name the component belongs to)
-        #   kind "label": value is the decoded text
-        #   kind "root" : value is None (a 0x00 terminator)
-        #   kind "ptr"  : value is the target offset
-        components: dict[int, tuple[str, _ty.Any, int, int]] = {}
-        domains: list[int] = []
-        name_start = 0
-        id = 0
-        size = len(view)
-        while id < size:
-            start = id
-            ptr_or_len = view[id]
-            id += 1
-            if ptr_or_len == 0x00:
-                components[start] = ("root", None, id, name_start)
-                domains.append(name_start)
-                name_start = id
-                continue
-            is_ptr = ptr_or_len & 0xC0
-            if is_ptr:
-                if is_ptr != 0xC0:
-                    raise DHCPDecodeError(
-                        f"search list octet {ptr_or_len:#04x} at offset {start} sets a "
-                        "reserved label-length prefix; RFC 1035 s4.1.4 defines only "
-                        "00 (label) and 11 (compression pointer)"
-                    )
-                if id >= size:
-                    break  # half a pointer: the name is partial
-                components[start] = (
-                    "ptr",
-                    ((0x3F & ptr_or_len) << 8) | view[id],
-                    id + 1,
-                    name_start,
-                )
-                id += 1
-                domains.append(name_start)
-                name_start = id
-            else:
-                dc = view[id : ptr_or_len + id]
-                if len(dc) != ptr_or_len:
-                    raise DHCPDecodeError(
-                        f"search list is truncated: a label declares {ptr_or_len} "
-                        f"octets but only {len(dc)} remain"
-                    )
-                try:
-                    label = dc.tobytes().decode()
-                except UnicodeDecodeError as exc:
-                    raise DHCPDecodeError(
-                        "search list has a label that is not valid UTF-8"
-                    ) from exc
-                if "." in label:
-                    # Same reason as `domain.decode_domain_name`: these names
-                    # are joined with ".", so a label already containing one
-                    # re-encodes as a different number of labels than arrived.
-                    raise DHCPDecodeError(
-                        f"search list has a label containing '.' ({label!r}), "
-                        "which cannot be represented unambiguously in dotted form"
-                    )
-                components[start] = ("label", label, id + ptr_or_len, name_start)
-                id += ptr_or_len
-
-        def get_dn(start: int) -> list[str]:
-            """Resolve one name by walking its component chain.
-
-            Iterative, so a long chain is a decode error and not a
-            `RecursionError`. The walk stops at `MAX_NAME_OCTETS` of decoded
-            name and at `MAX_POINTER_HOPS` pointers, which is what keeps the
-            work for one name, and so for the option, proportional to its
-            length: names that point at names that point at names would
-            otherwise grow with every resolution.
-            """
-            result: list[str] = []
-            octets = 1  # the terminating root label
-            hops = 0
-            offset = start
-            while True:
-                component = components.get(offset)
-                if component is None:
-                    raise DHCPDecodeError(
-                        f"search list pointer to offset {offset} does not point at "
-                        "the start of a label or a root label"
-                    )
-                kind, value, nxt, owner = component
-                if kind == "root":
-                    return result
-                if kind == "ptr":
-                    hops += 1
-                    if hops > MAX_POINTER_HOPS:
-                        raise DHCPDecodeError(
-                            f"search list name follows more than {MAX_POINTER_HOPS} "
-                            "compression pointers"
-                        )
-                    if value >= owner:
-                        raise DHCPDecodeError(
-                            f"search list pointer to offset {value} does not point "
-                            f"backwards of the name starting at offset {owner} "
-                            "(RFC 1035 s4.1.4: a pointer refers to a prior name)"
-                        )
-                    offset = value
-                    continue
-                octets += 1 + len(value.encode())
-                if octets > MAX_NAME_OCTETS:
-                    raise DHCPDecodeError(
-                        f"search list name exceeds {MAX_NAME_OCTETS} octets "
-                        "(RFC 1035 s2.3.4)"
-                    )
-                result.append(value)
-                offset = nxt
-
-        for domain in domains:
-            self.append(".".join(get_dn(domain)))
+        names, _ = read_names(memoryview(option))
+        for name in names:
+            self.append(name)
         return self, len(option)
 
     def pack_into(self, _data: bytearray) -> int:

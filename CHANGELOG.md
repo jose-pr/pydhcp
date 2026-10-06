@@ -405,6 +405,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ClientIdentifierLike` (`pydhcp.client`) and `PacketFilterLike`
   (`pydhcp.capture`). `ListenAddress`, `ListenBinding` and `ListenPort` are no
   longer exported.
+- **Codecs read what real peers send.** Each reading is an RFC allowance, and
+  what is written is as strict as before.
+  - Option 120 (`SIPServers`) reads compressed names (RFC 3361 section 3.1:
+    clients MUST support them), with the bounds of the search list (255 octets
+    a name, 127 pointers); a pointer counts from the encoding octet. It still
+    writes uncompressed names.
+  - A classless route (121, 249) whose destination has host bits set is read
+    with them zeroed (RFC 3442 section 3); one such route no longer costs the
+    whole option. `ClasslessRoute(...)` stays strict.
+  - A static route (33) to `0.0.0.0` is read; building or writing one still
+    raises.
+  - Option 146 (`RDNSSSelection`) keeps the root name that marks the default
+    RDNSS (RFC 6731 section 4.3), which `"."` spells as well as `""`, and
+    ignores the six reserved bits of `flags`. It and option 124
+    (`VIVendorClass`) are built from the form their `to_json` emits.
+  - Option 82 (`RelayAgentInformation`) reads sub-options 0 and 255 as codes
+    (RFC 3046 section 2.0 defines no pad and no end); before, they ended or
+    skipped the option.
 
 ### Renamed
 

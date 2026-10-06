@@ -14,10 +14,10 @@ from ._base import (
     _text_argument,
     frozen,
 )
-from ._domain import decode_domain_name, encode_domain_name
+from ._domain import encode_domain_name
 
 
-from ._domains import UncompressedDomainList
+from ._domains import UncompressedDomainList, read_names
 
 _RDNSSSelectionT = _ty.TypeVar("_RDNSSSelectionT", bound="RDNSSSelection")
 
@@ -28,6 +28,9 @@ class RDNSSSelection(_Record):
     __slots__ = ("flags", "primary", "secondary", "domains")
     _FIELDS = __slots__
 
+    #: The two low bits, the preference; the other six are reserved.
+    PREFERENCE_BITS = 0x03
+
     flags: int
     primary: _IP
     secondary: _IP
@@ -35,11 +38,28 @@ class RDNSSSelection(_Record):
 
     def __init__(
         self,
-        flags: int,
-        primary: _IP,
-        secondary: _IP,
+        flags: _ty.Any,
+        primary: _ty.Any = None,
+        secondary: _ty.Any = None,
         domains: _ty.Any = None,
     ) -> None:
+        if isinstance(flags, RDNSSSelection):
+            flags, primary, secondary, domains = (
+                flags.flags,
+                flags.primary,
+                flags.secondary,
+                flags.domains,
+            )
+        elif isinstance(flags, (list, tuple)):
+            # What `to_json` emits: [flags, primary, secondary, domains].
+            if len(flags) not in (3, 4):
+                raise TypeError(
+                    "RDNSSSelection takes (flags, primary, secondary, domains) "
+                    f"or one such sequence, got {len(flags)} items"
+                )
+            flags, primary, secondary, domains = (*flags, None)[:4]
+        if primary is None or secondary is None:
+            raise TypeError("RDNSSSelection needs a primary and a secondary address")
         _set(self, "flags", int(flags))
         _set(self, "primary", _IP(primary))
         _set(self, "secondary", _IP(secondary))
@@ -49,11 +69,9 @@ class RDNSSSelection(_Record):
     def _normalize_domains(domains: _ty.Any) -> UncompressedDomainList:
         # Uncompressed: RFC 6731 §4.3 defers to RFC 3315 §8, which forbids the
         # compressed form. A bare `str` is one domain here, not one per
-        # character -- see `DomainList`.
-        normalized = UncompressedDomainList(domains)
-        if normalized and normalized[-1] == "":
-            normalized.pop()
-        return normalized
+        # character -- see `DomainList`. The root name ("" or ".") stays: it
+        # marks the default RDNSS.
+        return UncompressedDomainList(domains)
 
     @classmethod
     def unpack_from(
@@ -61,7 +79,8 @@ class RDNSSSelection(_Record):
     ) -> tuple[_RDNSSSelectionT, int]:
         if len(option) < 9:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
-        flags = option[0]
+        # The six high bits are reserved and ignored on receipt (RFC 6731 s4.3).
+        flags = option[0] & cls.PREFERENCE_BITS
         primary = _IP(option[1:5].tobytes())
         secondary = _IP(option[5:9].tobytes())
         domains, read = UncompressedDomainList.unpack_from(option[9:])
@@ -161,12 +180,12 @@ class SIPServers(_Record):
                 for idx in range(0, len(body), 4)
             ]
         elif encoding == cls.ENCODING_DOMAIN:
-            values = []
-            idx = 0
-            while idx < len(body):
-                name, read = decode_domain_name(body, idx, "SIPServers name")
-                values.append(name)
-                idx += read
+            # Compression is read (RFC 3361 s3.1: clients MUST support it) and
+            # never sent. A pointer counts from the encoding octet, the start
+            # of the option data, as RFC 3397's counts from the start of its.
+            values, complete = read_names(body, "SIPServers name list", base=1)
+            if not complete:
+                raise DHCPDecodeError("SIPServers name list is truncated")
         else:
             raise DHCPDecodeError(f"SIPServers encoding must be 0 or 1, got {encoding}")
         return cls(values, encoding), len(option)

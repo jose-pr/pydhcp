@@ -274,13 +274,20 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   `(gateway, network)` pair or an existing instance, so routes normalize from
   JSON/YAML/config input. `str(route)` is `"10.0.0.0/8 via 192.0.2.1"` and
   `ClasslessRoute.parse(text)` / `.try_parse(text, default=None)` read that
-  (`DHCPValueError` for anything else, host bits in the network included). Options 121 and 249 are registered as
+  (`DHCPValueError` for anything else, host bits in the network included).
+  A destination **read** with host bits set is masked to its prefix (RFC 3442
+  §3: "the client MUST zero any bits ... where the corresponding bit in the mask
+  is zero"; the RFC's own case is 129.210.177.132/25, installed as
+  129.210.177.128/25), so one out-of-spec route does not cost the option;
+  the constructor stays strict. Options 121 and 249 are registered as
   **`List[ClasslessRoute]`**, not a bare `ClasslessRoute`: RFC 3442 defines one
   or more routes and a server sending the option SHOULD include the default
   route, so assign and expect a list.
 - **`PolicyFilter`** / **`StaticRoute`** — lists of `(IPv4, IPv4)` 8-byte
   record pairs (destination/mask, destination/router respectively);
-  `StaticRoute` rejects a `0.0.0.0` destination.
+  `StaticRoute` rejects a `0.0.0.0` destination when it is built or written
+  and **keeps one it reads** (RFC 2132 §5.8 forbids a sender it, and a receiver
+  keeps what a peer sent).
 - **`DomainList`** — RFC 1035/3397 domain-name list with DNS-style
   compression-pointer support on both decode and encode (encode
   deduplicates common suffixes automatically). Names obey the same limits as
@@ -295,7 +302,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   iterable of *characters*. Registered for `DOMAIN_SEARCH` (119, RFC 3397)
   and `SIP_UA_CONFIG_SERVICE_DOMAINS` (141, RFC 6011 §4.1), the two options
   that **require** the compressed form.
-  **Decode bounds** (the reader serves options 119, 141, 88 and 146): a
+  **Decode bounds** (the reader serves options 119, 141, 88, 120 and 146): a
   decoded name is at most 255 octets (RFC 1035 §2.3.4), a name follows at
   most 127 compression pointers (`MAX_POINTER_HOPS`), and a pointer must
   point strictly backwards, at the start of a label or root label of an
@@ -334,11 +341,19 @@ client FQDN, and server-locator/status codecs. Import every one of them from
 - **`SIPServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
   120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
   IPv4 addresses, written as a leading encoding octet. A plain list infers its
-  encoding. `.values` is a tuple of strings either way.
+  encoding. `.values` is a tuple of strings either way. Names are **read
+  compressed** (RFC 3361 §3.1: clients MUST support it) with the search list's
+  bounds (255 octets a name, 127 pointers, a pointer to an earlier name); a
+  pointer counts from the encoding octet, the start of the option data. A last
+  name that does not end is a `DHCPDecodeError`. Names are written uncompressed.
 - **`RDNSSSelection(flags, primary, secondary, domains=None)`** — RFC 6731
   RDNSS selection record. `.domains` is an `UncompressedDomainList` and
   normalizes like one, so `RDNSSSelection(..., "a.com").domains` is
-  `["a.com"]` rather than one entry per character.
+  `["a.com"]` rather than one entry per character. The root name (`""`, spelled
+  `"."` too) marks the default RDNSS (§4.3): it is kept on decode, last or not,
+  and written as a single zero octet. The six high bits of `flags` are reserved
+  and ignored on receipt, so a decoded `flags` is 0 to 3. Also built from one
+  sequence, the `(flags, primary, secondary, domains)` that `to_json` emits.
 - **`DomainName`** — a single **uncompressed** RFC 1035 name as the whole
   payload, through the shared name helpers (so the 63/255-octet limits apply
   and a compression pointer is refused). Registered for `V4_DOTS_RI` (147,
@@ -371,7 +386,10 @@ client FQDN, and server-locator/status codecs. Import every one of them from
 - **`VendorSpecificInformation`** — option 43 payload (opaque `Bytes` by
   default; wrap with `TLVOption`/`EncapsulatedOptions` for structured TLV
   access).
-- **`RelayAgentInformation`** — option 82 payload; constructed from a list
+- **`RelayAgentInformation`** — option 82 payload; sub-options are plain
+  code, length, value tuples, so 0 and 255 are ordinary sub-option codes
+  (RFC 3046 §2.0: no pad sub-option, no terminating 255), unlike
+  `EncapsulatedOptions`; constructed from a list
   of `(sub-code: int, value: bytes)` tuples (see `DHCPRelay`'s
   `insert_relay_agent_info`).
 - **`VIVendorSpecificInformationRecord`** / **`VIVendorSpecificInformation`**
@@ -379,7 +397,8 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   keyed TLV records / their list container).
 - **`VIVendorClassRecord`** / **`VIVendorClass`** — RFC 3925
   vendor-identifying vendor class (enterprise-number-keyed data / its list
-  container).
+  container). Each entry may be bytes or the hex text `to_json` writes, so a
+  message written as JSON, YAML or TOML reads back as the same value.
 
 ### Domain names (`_codecs/_domain.py`)
 
