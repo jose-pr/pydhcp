@@ -109,7 +109,7 @@ def test_boolean_option():
 
 def test_repr_and_json_value_shapes():
     route = ClasslessRoute(IPv4("192.168.1.1"), ip_network("10.0.0.0/8"))
-    assert repr(route) == "ClasslessRoute(gateway=192.168.1.1, network=10.0.0.0/8)"
+    assert repr(route) == "ClasslessRoute(gateway='192.168.1.1', network='10.0.0.0/8')"
     assert repr(Boolean(True)) == "Boolean(True)"
     assert repr(U16(500)) == "U16(500)"
 
@@ -499,7 +499,8 @@ def test_client_identifier_option():
         ClientIdentifier._dhcp_read(memoryview(b"\x01"))  # Too short
 
     ci = ClientIdentifier(b"\x01\x00\x11\x22\x33\x44\x55")
-    assert repr(ci).startswith("ETHERNET")
+    assert repr(ci) == "ClientIdentifier(b'\\x01\\x00\\x11\"3DU')"
+    assert ci._display_text().startswith("ETHERNET")
     assert str(ci) == "01:00:11:22:33:44:55"
 
 

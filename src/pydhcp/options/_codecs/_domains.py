@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import typing as _ty
 from ...exceptions import DHCPDecodeError
-from ._base import DHCPOptionType
+from ._base import DHCPOptionType, _NormalizedList
 from ._domain import (
     MAX_NAME_OCTETS,
     decode_domain_name,
     encode_domain_name,
     split_domain_name,
 )
-from collections.abc import Iterable
 
 #: A decoded name has at most 127 labels (255 octets, two per label), so a
 #: name that needs more pointers than that is not one a message needs.
@@ -21,7 +20,7 @@ MAX_POINTER_HOPS = 127
 _DomainListT = _ty.TypeVar("_DomainListT", bound="DomainList")
 
 
-class DomainList(DHCPOptionType, list[str]):
+class DomainList(_NormalizedList[str]):
     """RFC 1035 domain-name list with compression support.
 
     Normalizes like `List[T]` does, and for the same reason. With no
@@ -38,22 +37,13 @@ class DomainList(DHCPOptionType, list[str]):
         for group in items:
             self.extend(group if isinstance(group, (tuple, list)) else (group,))
 
-    @staticmethod
-    def _normalize(item: _ty.Any) -> str:
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> str:
         if not isinstance(item, str):
             raise TypeError(
                 f"domain-list entries must be str, not {type(item).__name__}"
             )
         return item
-
-    def __setitem__(self, idx: _ty.Any, item: str) -> None:  # type: ignore[override]
-        list.__setitem__(self, idx, self._normalize(item))
-
-    def append(self, item: str) -> None:
-        list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[str]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
     def _dhcp_read(
@@ -308,3 +298,9 @@ class DomainName(DHCPOptionType, str):
 
     def __json__(self) -> str:
         return str(self)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str.__repr__(self)})"
+
+    def _display_text(self) -> str:
+        return str.__repr__(self)

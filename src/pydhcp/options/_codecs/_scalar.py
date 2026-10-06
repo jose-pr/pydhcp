@@ -1,5 +1,4 @@
 from __future__ import annotations
-from collections.abc import Iterable
 import typing as _ty
 import enum as _enum
 from ...exceptions import DHCPDecodeError, DHCPValueError
@@ -7,7 +6,7 @@ from ... import _nvt as _nvt
 from ..._network import HardwareAddressType as _HardwareAddressType
 
 
-from ._base import DHCPOptionType
+from ._base import DHCPOptionType, _NormalizedList
 
 _BytesT = _ty.TypeVar("_BytesT", bound="Bytes")
 
@@ -26,7 +25,10 @@ class Bytes(DHCPOptionType, bytes):
         return super().__new__(cls, src)
 
     def __repr__(self) -> str:
-        return str(bytes(self))
+        return f"{type(self).__name__}({bytes.__repr__(self)})"
+
+    def _display_text(self) -> str:
+        return bytes.__repr__(self)
 
     def __str__(self) -> str:
         return self.hex().upper()
@@ -46,7 +48,7 @@ class Bytes(DHCPOptionType, bytes):
 _URIListT = _ty.TypeVar("_URIListT", bound="URIList")
 
 
-class URIList(DHCPOptionType, list[str]):
+class URIList(_NormalizedList[str]):
     """List of UTF-8 URIs encoded as repeated U16-length-prefixed entries."""
 
     def __init__(self, *items: _ty.Any):
@@ -61,12 +63,6 @@ class URIList(DHCPOptionType, list[str]):
         if isinstance(item, str):
             return item
         return str(item)
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
     def _dhcp_read(cls: type[_URIListT], option: memoryview) -> tuple[_URIListT, int]:
@@ -130,6 +126,12 @@ class String(DHCPOptionType, str):
     def __json__(self) -> str:
         return _nvt.display(self)
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str.__repr__(self)})"
+
+    def _display_text(self) -> str:
+        return str.__repr__(self)
+
 
 _OctetStringT = _ty.TypeVar("_OctetStringT", bound="OctetString")
 
@@ -177,6 +179,9 @@ class Boolean(DHCPOptionType, int):
         return 1
 
     def __repr__(self) -> str:
+        return f"{type(self).__name__}({bool(self)!r})"
+
+    def _display_text(self) -> str:
         return f"Boolean({bool(self)!r})"
 
     def __json__(self) -> bool:
@@ -194,6 +199,8 @@ class Flag(DHCPOptionType):
     Boolean both rejects conformant packets on decode and emits a malformed
     option on encode.
     """
+
+    __slots__ = ()
 
     def __init__(self, value: _ty.Any = True) -> None:
         # A zero-length option says everything by being there, so there is no
@@ -220,7 +227,9 @@ class Flag(DHCPOptionType):
         return True
 
     def __eq__(self, other: object) -> bool:
-        return isinstance(other, Flag)
+        if not isinstance(other, Flag):
+            return NotImplemented
+        return True
 
     def __hash__(self) -> int:
         return hash(type(self))
@@ -340,7 +349,9 @@ class ClientIdentifier(Bytes):
             )
         return super()._dhcp_read(option)
 
-    def __repr__(self) -> str:
+    def _display_text(self) -> str:
+        if not self:
+            return ""
         ty_val = self[0]
         addr = self[1:]
         ty_str = str(ty_val)
@@ -366,6 +377,14 @@ class OptionOverload(DHCPOptionType, _enum.IntFlag):
     FILE = 1
     SNAME = 2
     BOTH = FILE | SNAME
+
+    def __repr__(self) -> str:
+        if self.name is None:
+            return f"{type(self).__name__}({int(self)})"
+        return f"{type(self).__name__}.{self.name}"
+
+    def _display_text(self) -> str:
+        return _enum.IntFlag.__repr__(self)
 
     @classmethod
     def _dhcp_read(

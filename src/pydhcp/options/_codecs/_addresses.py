@@ -5,8 +5,7 @@ from __future__ import annotations
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ipaddress import IPv4Address as _IP, IPv4Network as _Network
-from ._base import DHCPOptionType
-from collections.abc import Iterable
+from ._base import DHCPOptionType, _NormalizedList, _Record, _set
 
 _IPv4AddressOptionT = _ty.TypeVar("_IPv4AddressOptionT", bound="IPv4AddressOption")
 
@@ -33,6 +32,9 @@ class IPv4AddressOption(DHCPOptionType, _IP):
         return 4
 
     def __repr__(self) -> str:
+        return f"{type(self).__name__}({str(self)!r})"
+
+    def _display_text(self) -> str:
         return str(self)
 
     def __json__(self) -> str:
@@ -42,13 +44,16 @@ class IPv4AddressOption(DHCPOptionType, _IP):
 _ClasslessRouteT = _ty.TypeVar("_ClasslessRouteT", bound="ClasslessRoute")
 
 
-class ClasslessRoute(DHCPOptionType):
+class ClasslessRoute(_Record):
     """RFC 3442 classless static route entry.
 
     Accepts either ``ClasslessRoute(gateway, network)`` or a single
     ``(gateway, network)`` pair / existing instance, so that the option's list
     container can normalize routes coming from JSON, YAML or a config file.
     """
+
+    __slots__ = ("gateway", "network")
+    _FIELDS = __slots__
 
     # Declared here so the pair-accepting constructor below can read
     # `other.gateway` without mypy hitting a circular inference.
@@ -70,8 +75,8 @@ class ClasslessRoute(DHCPOptionType):
                     "ClasslessRoute takes (gateway, network) or a single "
                     f"(gateway, network) pair, got {gateway!r}"
                 ) from None
-        self.gateway = _IP(gw)
-        self.network = _Network(net)
+        _set(self, "gateway", _IP(gw))
+        _set(self, "network", _Network(net))
 
     @classmethod
     def _dhcp_read(
@@ -106,17 +111,6 @@ class ClasslessRoute(DHCPOptionType):
         data.extend(self.gateway.packed)
         return last + 5
 
-    def __repr__(self) -> str:
-        return f"ClasslessRoute(gateway={self.gateway}, network={self.network})"
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ClasslessRoute):
-            return NotImplemented
-        return (self.gateway, self.network) == (other.gateway, other.network)
-
-    def __hash__(self) -> int:
-        return hash((self.gateway, self.network))
-
     def __json__(self) -> list[_ty.Any]:
         return [str(self.gateway), str(self.network)]
 
@@ -124,7 +118,7 @@ class ClasslessRoute(DHCPOptionType):
 _IPv4PairListT = _ty.TypeVar("_IPv4PairListT", bound="_IPv4PairList")
 
 
-class _IPv4PairList(DHCPOptionType, list[tuple[_IP, _IP]]):
+class _IPv4PairList(_NormalizedList[tuple[_IP, _IP]]):
     _SECOND_LABEL: str = "second"
 
     def __init__(self, *items: _ty.Any):
@@ -159,12 +153,6 @@ class _IPv4PairList(DHCPOptionType, list[tuple[_IP, _IP]]):
             data.extend(left.packed)
             data.extend(right.packed)
         return len(self) * 8
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
 
     def __json__(self) -> list[list[str]]:
         return [[str(left), str(right)] for left, right in self]

@@ -6,9 +6,8 @@ import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _nvt as _nvt
 from ipaddress import IPv4Address as _IP
-from ._base import DHCPOptionType
+from ._base import _NormalizedList, _Record, _set, frozen
 from ._domain import decode_domain_name, encode_domain_name
-from collections.abc import Iterable
 
 
 from ._domains import UncompressedDomainList
@@ -16,8 +15,16 @@ from ._domains import UncompressedDomainList
 _RDNSSSelectionT = _ty.TypeVar("_RDNSSSelectionT", bound="RDNSSSelection")
 
 
-class RDNSSSelection(DHCPOptionType):
+class RDNSSSelection(_Record):
     """RFC 6731 RDNSS selection payload."""
+
+    __slots__ = ("flags", "primary", "secondary", "domains")
+    _FIELDS = __slots__
+
+    flags: int
+    primary: _IP
+    secondary: _IP
+    domains: UncompressedDomainList
 
     def __init__(
         self,
@@ -26,10 +33,10 @@ class RDNSSSelection(DHCPOptionType):
         secondary: _IP,
         domains: _ty.Any = None,
     ) -> None:
-        self.flags = int(flags)
-        self.primary = _IP(primary)
-        self.secondary = _IP(secondary)
-        self.domains = self._normalize_domains(domains or [])
+        _set(self, "flags", int(flags))
+        _set(self, "primary", _IP(primary))
+        _set(self, "secondary", _IP(secondary))
+        _set(self, "domains", frozen(self._normalize_domains(domains or [])))
 
     @staticmethod
     def _normalize_domains(domains: _ty.Any) -> UncompressedDomainList:
@@ -61,30 +68,6 @@ class RDNSSSelection(DHCPOptionType):
         data.extend(encoded)
         return 9 + len(encoded)
 
-    def __repr__(self) -> str:
-        return (
-            f"RDNSSSelection(flags={self.flags!r}, primary={self.primary}, "
-            f"secondary={self.secondary}, domains={self.domains!r})"
-        )
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, RDNSSSelection):
-            return NotImplemented
-        return (
-            self.flags,
-            self.primary,
-            self.secondary,
-            list(self.domains),
-        ) == (
-            other.flags,
-            other.primary,
-            other.secondary,
-            list(other.domains),
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.flags, self.primary, self.secondary, tuple(self.domains)))
-
     def __json__(self) -> list[_ty.Any]:
         return [
             self.flags,
@@ -97,7 +80,7 @@ class RDNSSSelection(DHCPOptionType):
 _SIPServersT = _ty.TypeVar("_SIPServersT", bound="SIPServers")
 
 
-class SIPServers(DHCPOptionType):
+class SIPServers(_Record):
     """RFC 3361 SIP servers: an encoding octet, then names or addresses.
 
     Encoding 0 is a list of RFC 1035 names, encoding 1 a list of IPv4 addresses.
@@ -106,12 +89,15 @@ class SIPServers(DHCPOptionType):
     read the first address octet as the encoding and rejected the option.
     """
 
+    __slots__ = ("values", "encoding")
+    _FIELDS = __slots__
+
     ENCODING_DOMAIN = 0
     ENCODING_ADDRESS = 1
 
     # See ClientFQDN: declared to keep mypy out of a circular inference.
     encoding: int
-    values: list[str]
+    values: tuple[str, ...]
 
     def __init__(
         self, values: _ty.Any = (), encoding: _ty.Optional[int] = None
@@ -145,8 +131,8 @@ class SIPServers(DHCPOptionType):
             raise DHCPValueError(f"SIPServers encoding must be 0 or 1, got {encoding}")
         if encoding == self.ENCODING_ADDRESS:
             items = [str(_IP(item)) for item in items]
-        self.encoding = int(encoding)
-        self.values = items
+        _set(self, "encoding", int(encoding))
+        _set(self, "values", tuple(items))
 
     @classmethod
     def _dhcp_read(
@@ -189,17 +175,9 @@ class SIPServers(DHCPOptionType):
                 data.extend(encode_domain_name(value, "SIPServers name"))
         return len(data) - start
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, SIPServers):
-            return NotImplemented
-        return (self.encoding, self.values) == (other.encoding, other.values)
-
-    def __hash__(self) -> int:
-        return hash((self.encoding, tuple(self.values)))
-
-    def __repr__(self) -> str:
+    def _display_text(self) -> str:
         kind = "address" if self.encoding == self.ENCODING_ADDRESS else "domain"
-        return f"SIPServers({kind}, {self.values!r})"
+        return f"SIPServers({kind}, {list(self.values)!r})"
 
     def __json__(self) -> dict[str, _ty.Any]:
         return {
@@ -213,12 +191,15 @@ class SIPServers(DHCPOptionType):
 _StatusCodeT = _ty.TypeVar("_StatusCodeT", bound="StatusCode")
 
 
-class StatusCode(DHCPOptionType):
+class StatusCode(_Record):
     """RFC 6926 s6.2.2 status: one code octet, then an optional UTF-8 message.
 
     Registered as a bare `U8` the message made the option the wrong size, so a
     DHCPLEASEQUERY reply carrying one could not be decoded at all.
     """
+
+    __slots__ = ("code", "message")
+    _FIELDS = __slots__
 
     code: int
     message: str
@@ -235,8 +216,8 @@ class StatusCode(DHCPOptionType):
         value = int(code)
         if not 0 <= value <= 255:
             raise DHCPValueError(f"StatusCode code must fit one octet, got {value}")
-        self.code = value
-        self.message = str(message or "")
+        _set(self, "code", value)
+        _set(self, "message", str(message or ""))
 
     @classmethod
     def _dhcp_read(
@@ -253,17 +234,6 @@ class StatusCode(DHCPOptionType):
         data.extend(encoded)
         return 1 + len(encoded)
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, StatusCode):
-            return NotImplemented
-        return (self.code, self.message) == (other.code, other.message)
-
-    def __hash__(self) -> int:
-        return hash((self.code, self.message))
-
-    def __repr__(self) -> str:
-        return f"StatusCode(code={self.code}, message={self.message!r})"
-
     def __json__(self) -> dict[str, _ty.Any]:
         return {"code": self.code, "message": _nvt.display(self.message)}
 
@@ -271,7 +241,7 @@ class StatusCode(DHCPOptionType):
 _PCPServerListT = _ty.TypeVar("_PCPServerListT", bound="PCPServerList")
 
 
-class PCPServerList(DHCPOptionType, list[list[str]]):
+class PCPServerList(_NormalizedList[list[str]]):
     """RFC 7291 s4 PCP servers: one or more length-prefixed address lists.
 
     Each entry is a List-Length octet giving the octet count, then that many
@@ -293,20 +263,14 @@ class PCPServerList(DHCPOptionType, list[list[str]]):
         for entry in entries:
             self.append(entry)
 
-    @staticmethod
-    def _normalize(entry: _ty.Any) -> list[str]:
+    @classmethod
+    def _normalize(cls, entry: _ty.Any) -> list[str]:
         if isinstance(entry, (str, _IP)):
             entry = [entry]
         addresses = [str(_IP(address)) for address in entry]
         if not addresses:
             raise DHCPValueError("PCPServerList entry must hold at least one address")
         return addresses
-
-    def append(self, entry: _ty.Any) -> None:
-        list.append(self, self._normalize(entry))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(entry) for entry in __iterable])
 
     @classmethod
     def _dhcp_read(

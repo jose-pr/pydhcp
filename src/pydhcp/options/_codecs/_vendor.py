@@ -1,10 +1,9 @@
 from __future__ import annotations
-from collections.abc import Iterable
 import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ._base import DHCPOptionType, RecordList, hashable_payload
+from ._base import DHCPOptionType, RecordList, _NormalizedList, _Record, _set, frozen
 from ._scalar import Bytes
 
 _LengthPrefixedOpaqueListT = _ty.TypeVar(
@@ -12,7 +11,7 @@ _LengthPrefixedOpaqueListT = _ty.TypeVar(
 )
 
 
-class _LengthPrefixedOpaqueList(DHCPOptionType, list[_ty.Any]):
+class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
     def __init__(self, *items: _ty.Any):
         if len(items) == 1 and isinstance(items[0], list):
             self.extend(items[0])
@@ -32,12 +31,6 @@ class _LengthPrefixedOpaqueList(DHCPOptionType, list[_ty.Any]):
         if not item_bytes:
             raise DHCPValueError(f"{cls.__name__} entries must be non-empty")
         return item_bytes
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
     def _dhcp_read(
@@ -79,23 +72,18 @@ class UserClass(_LengthPrefixedOpaqueList):
     """RFC 3004 user-class opaque byte list."""
 
 
-class TLVOption(DHCPOptionType):
+class TLVOption(_Record):
+    __slots__ = ("code", "value")
+    _FIELDS = __slots__
+
+    code: int
+    value: Bytes
+
     def __init__(
         self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]
     ) -> None:
-        self.code = int(code)
-        self.value = Bytes(value)
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(code={self.code}, value={self.value!r})"
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, TLVOption):
-            return NotImplemented
-        return (self.code, self.value) == (other.code, other.value)
-
-    def __hash__(self) -> int:
-        return hash((self.code, self.value))
+        _set(self, "code", int(code))
+        _set(self, "value", Bytes(value))
 
     def __json__(self) -> list[_ty.Any]:
         return [self.code, self.value.__json__()]
@@ -158,31 +146,20 @@ _VIVendorSpecificInformationRecordT = _ty.TypeVar(
 )
 
 
-class VIVendorSpecificInformationRecord(DHCPOptionType):
+class VIVendorSpecificInformationRecord(_Record):
+    __slots__ = ("enterprise_number", "value")
+    _FIELDS = __slots__
+
+    enterprise_number: int
+    value: Bytes
+
     def __init__(
         self,
         enterprise_number: int,
         value: _ty.Union[bytes, bytearray, memoryview, Bytes],
     ) -> None:
-        self.enterprise_number = int(enterprise_number)
-        self.value = Bytes(value)
-
-    def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}(enterprise_number={self.enterprise_number}, "
-            f"value={self.value!r})"
-        )
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, VIVendorSpecificInformationRecord):
-            return NotImplemented
-        return (self.enterprise_number, self.value) == (
-            other.enterprise_number,
-            other.value,
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.enterprise_number, self.value))
+        _set(self, "enterprise_number", int(enterprise_number))
+        _set(self, "value", Bytes(value))
 
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]
@@ -221,30 +198,20 @@ _VIVendorClassRecordT = _ty.TypeVar(
 )
 
 
-class VIVendorClassRecord(DHCPOptionType):
+class VIVendorClassRecord(_Record):
+    __slots__ = ("enterprise_number", "value")
+    _FIELDS = __slots__
+
+    enterprise_number: int
+    value: UserClass
+
     def __init__(self, enterprise_number: int, value: _ty.Any) -> None:
-        self.enterprise_number = int(enterprise_number)
-        if isinstance(value, UserClass):
-            self.value = value
-        else:
-            self.value = UserClass(value)
-
-    def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}(enterprise_number={self.enterprise_number}, "
-            f"value={self.value!r})"
+        _set(self, "enterprise_number", int(enterprise_number))
+        _set(
+            self,
+            "value",
+            frozen(value if isinstance(value, UserClass) else UserClass(value)),
         )
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, VIVendorClassRecord):
-            return NotImplemented
-        return (self.enterprise_number, self.value) == (
-            other.enterprise_number,
-            other.value,
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.enterprise_number, hashable_payload(self.value)))
 
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]

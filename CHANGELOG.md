@@ -295,6 +295,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `pydhcp.metrics.DHCPMetrics` and then a private module's. `pydhcp.options` exports
   `MIN_OPTION_CODE`, `MAX_OPTION_CODE` and every option codec in one list, and
   `from pydhcp.server import DHCPLease` is not API (it is `pydhcp.lease.DHCPLease`).
+- **Option codecs are values.** The record codecs (`ClasslessRoute`,
+  `ClientFQDN`, `StatusCode`, `SIPServers`, `RDNSSSelection`, `TLVOption`, the
+  `VI*`, `MoS*` and `CCC*` records) are read-only: assigning or deleting an
+  attribute raises `AttributeError`, and a list a record holds is a read-only
+  copy (`TypeError` on any change), so a record put in a set keeps its hash.
+  `SIPServers.values` is a tuple. `Flag() == other` returns `NotImplemented` for
+  another type, as the rest do.
+- **`repr()` of a codec is the constructor call that rebuilds it.** It was the
+  display text: `repr(IPv4AddressOption("192.0.2.1"))` was `192.0.2.1` and
+  `repr(DHCPMessageType.DHCPACK)` was `DHCPACK`; they are
+  `IPv4AddressOption('192.0.2.1')` and `DHCPMessageType.DHCPACK`, and a list is
+  `List[IPv4AddressOption]([IPv4AddressOption('192.0.2.1')])`. `repr()` of an
+  empty `ClientIdentifier` no longer raises. What `DHCPMessage.dumps()`, the
+  command and the capture formats print is unchanged.
+- **Every list codec normalizes on every change**: `append`, `extend`, `insert`,
+  `+=`, item assignment and slice assignment. A refused item raises
+  `DHCPValueError` (or `TypeError` for a wrong type) and leaves the list as it
+  was. The classes `List[...]` builds are named `List[IPv4AddressOption]` and
+  belong to the module of `List`.
 
 ### Renamed
 
@@ -447,6 +466,12 @@ importable. Replace each name in the left column with the one beside it.
   dropped socket's receive task cleanly; it used to wait for ever.
 - `SocketAddress` refuses a port outside 0-65535 with `DHCPValueError`; `str()` of one
   with a port such as 70000 used to raise.
+- `options.get(code)` of a list option (`ROUTER`, `DNS`, `PARAMETER_REQUEST_LIST` and
+  the others) pickles, copies and deep-copies to an equal value, and so do a
+  `DHCPOptions` bag and a `DHCPMessage` holding them; `pickle.dumps` of one
+  raised `PicklingError`. `insert`, `+=` and slice assignment on a list codec
+  stored items un-normalized (`StaticRoute[0] = (...)` skipped the
+  default-destination check).
 
 ## [0.7.0] - 2026-10-03
 

@@ -133,8 +133,8 @@ ITEMS: dict[type, tuple[_ty.Any, _ty.Any]] = {
     RelayAgentInformation: ((9, b"z"), (1,)),
     VIVendorSpecificInformation: ((9, b"z"), (1,)),
     VIVendorClass: ((9, [b"z"]), (9, [b""])),
-    MoSIPv4AddressList: ((9, ["192.0.2.9"]), (1, ["not an address"])),
-    MoSFQDNList: ((9, ["b.example.com"]), (1, ["a..b"])),
+    MoSIPv4AddressList: ((2, ["192.0.2.9"]), (1, ["not an address"])),
+    MoSFQDNList: ((2, ["b.example.com"]), (1, ["a..b"])),
     CCCOption: ((200, b"z"), (4, "x")),
     CCCKDCServerAddressList: ("192.0.2.9", "not an address"),
 }

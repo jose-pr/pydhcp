@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copyreg as _copyreg
 import typing as _ty
 import types as _types
 
@@ -8,6 +9,10 @@ if _ty.TYPE_CHECKING:
     class GenericMeta(type): ...
 
 else:
+
+    def _type_name(arg: _ty.Any) -> str:
+        """A type argument as a reader writes it: `U8`, not its module path."""
+        return arg.__name__ if isinstance(arg, type) else _ty._type_repr(arg)
 
     class GenericMeta(type):
         # https://stackoverflow.com/questions/60985221/how-can-i-access-t-from-a-generict-instance-early-in-its-lifecycle
@@ -38,9 +43,32 @@ else:
             if concrete is not None:
                 return concrete
 
-            args_repr = ", ".join(_ty._type_repr(a) for a in key_t)
-            name = f"{_ty._type_repr(cls)}[{args_repr}]"
+            name = f"{cls.__name__}[{', '.join(_type_name(a) for a in key_t)}]"
             cache[key_t] = concrete = _types.new_class(
-                name, (cls,), {}, lambda ns: ns.update(_args_=key_t)
+                name,
+                (cls,),
+                {},
+                lambda ns: ns.update(
+                    _args_=key_t,
+                    _origin_=cls,
+                    __module__=cls.__module__,
+                    __qualname__=name,
+                ),
             )
             return concrete
+
+    def _subscribe(origin: _ty.Any, args: tuple[_ty.Any, ...]) -> _ty.Any:
+        return origin[args]
+
+    def _reduce_class(cls: GenericMeta) -> _ty.Any:
+        """Pickle a subscripted class as the subscription that builds it.
+
+        Its name (`List[U8]`) is not an attribute of any module, so a pickle by
+        name could not find it again, in this process or in another. Every other
+        class of this metaclass is pickled by name as usual.
+        """
+        if "_origin_" in cls.__dict__:
+            return _subscribe, (cls.__dict__["_origin_"], cls.__dict__["_args_"])
+        return cls.__qualname__
+
+    _copyreg.pickle(GenericMeta, _reduce_class)

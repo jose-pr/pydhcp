@@ -45,9 +45,12 @@ class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
         return 1
 
     def __repr__(self) -> str:
-        return self.name
+        return f"{type(self).__name__}.{self.name}"
 
     def __str__(self) -> str:
+        return self.name
+
+    def _display_text(self) -> str:
         return self.name
 
     DHCPDISCOVER = 1

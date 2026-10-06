@@ -132,18 +132,38 @@ memoryview) -> tuple[Self, int]` (classmethod decode + bytes consumed),
 for structured (JSON/YAML/TOML/INI) round-tripping. `_dhcp_decode(bytes) ->
 Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 
-**Hashability**: every record codec is hashable and its hash agrees with its
-`__eq__`, so decoded values can go into a `set` or be used as dict keys. The
-**list** codecs (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList` and
-`UncompressedDomainList`,
-`PCPServerList`, `URIList`, `CCCOption`, the `VI*`/`MoS*` containers) are
-mutable `list` subclasses and so are deliberately **not** hashable — build a
-`tuple` from one if you need a key.
+**Values.** Every codec is a value: it copies, deep-copies and pickles to an
+equal value of the same class (the classes `List[...]` builds pickle too, in
+another process as well), and `repr()` is the constructor call that rebuilds
+it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
+`U8(1)`, `DHCPMessageType.DHCPACK`).
+
+- **Record codecs** (`ClasslessRoute`, `ClientFQDN`, `StatusCode`, `SIPServers`,
+  `RDNSSSelection`, `TLVOption`, the `VI*`, `MoS*` and `CCC*` records) are
+  read-only: assigning or deleting an attribute raises `AttributeError`, and
+  a list a record holds (`RDNSSSelection.domains`, `VIVendorClassRecord.value`,
+  a `MoS*`/`CCC*` record's list payload) is a read-only copy that raises
+  `TypeError` on any change. Equal records hash equal, so they can go into a
+  `set` or be dict keys. Comparing a record with another type returns
+  `NotImplemented`.
+- **List codecs** (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList`,
+  `UncompressedDomainList`, `PCPServerList`, `URIList`, `CCCOption`, the
+  `VI*`/`MoS*` containers, `PolicyFilter`, `StaticRoute`) are `list`
+  subclasses and so **not** hashable: build a `tuple` from one if you need a
+  key. Every operation that adds an item normalizes it first: `append`,
+  `extend`, `insert`, `+=`, `[i] = x` and slice assignment (each item of the
+  slice, not the slice as one item). A refused item raises `DHCPValueError`,
+  or `TypeError` for a wrong type, and leaves the list unchanged.
+- **Builtin-subclass codecs** (`Bytes`, `String`, `IPv4AddressOption`, the
+  integers, `Boolean`, `OptionOverload`, `DHCPMessageType`) compare and hash as
+  the builtin they subclass: `options.get(51) == 86400`,
+  `String("a") == "a"`, `address in network`. That is documented and kept;
+  `Boolean(1) == U8(1)` follows from it.
 
 - **`DHCPOptionType`** — the base protocol above.
 - **`List[T]`** (generic, subscript with a `DHCPOptionType`, e.g.
   `List[IPv4AddressOption]`) — a homogeneous repeated-record list; items are
-  normalized through `T(...)` on append/extend/`__setitem__`.
+  normalized through `T(...)` on every operation that adds an item.
 - **`RecordList[T]`** (`List[T]` subclass) — the same container for a record
   type built from **two** constructor arguments (`T(code, value)`). It differs
   from `List` only in normalization: a `tuple` argument is one record, not a
@@ -260,7 +280,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
 - **`SIPServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
   120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
   IPv4 addresses, written as a leading encoding octet. A plain list infers its
-  encoding. `.values` is a list of strings either way.
+  encoding. `.values` is a tuple of strings either way.
 - **`RDNSSSelection(flags, primary, secondary, domains=None)`** — RFC 6731
   RDNSS selection record. `.domains` is an `UncompressedDomainList` and
   normalizes like one, so `RDNSSSelection(..., "a.com").domains` is

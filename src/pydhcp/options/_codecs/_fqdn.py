@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ._base import DHCPOptionType
+from ._base import _Record, _set
 from ._domain import decode_domain_name, encode_domain_name
 
 _ClientFQDNT = _ty.TypeVar("_ClientFQDNT", bound="ClientFQDN")
 
 
-class ClientFQDN(DHCPOptionType):
+class ClientFQDN(_Record):
     """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
 
     With the E bit the name is a fully qualified name (RFC 1035 labels and the
@@ -39,6 +39,9 @@ class ClientFQDN(DHCPOptionType):
 
     #: The flag bits RFC 4702 s2.1 defines; the other four must be zero.
     FLAGS_MASK = 0x0F
+
+    __slots__ = ("name", "flags", "rcode1", "rcode2", "partial")
+    _FIELDS = __slots__
 
     # Declared so the instance-accepting constructor can read `other.name`
     # without mypy hitting a circular inference.
@@ -83,11 +86,11 @@ class ClientFQDN(DHCPOptionType):
             raise DHCPValueError(
                 "ClientFQDN partial applies to the DNS wire format: set the E bit"
             )
-        self.name = str(name)
-        self.flags = int(flags)
-        self.rcode1 = int(rcode1)
-        self.rcode2 = int(rcode2)
-        self.partial = bool(partial)
+        _set(self, "name", str(name))
+        _set(self, "flags", int(flags))
+        _set(self, "rcode1", int(rcode1))
+        _set(self, "rcode2", int(rcode2))
+        _set(self, "partial", bool(partial))
 
     @property
     def encoded(self) -> bool:
@@ -150,21 +153,7 @@ class ClientFQDN(DHCPOptionType):
             data.extend(self.name.encode("utf-8"))
         return len(data) - start
 
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, ClientFQDN):
-            return NotImplemented
-        return (self.name, self.flags, self.rcode1, self.rcode2, self.partial) == (
-            other.name,
-            other.flags,
-            other.rcode1,
-            other.rcode2,
-            other.partial,
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.name, self.flags, self.rcode1, self.rcode2, self.partial))
-
-    def __repr__(self) -> str:
+    def _display_text(self) -> str:
         return (
             f"ClientFQDN(name={self.name!r}, flags={self.flags:#04x}, "
             f"rcode1={self.rcode1}, rcode2={self.rcode2}"

@@ -1,10 +1,17 @@
 from __future__ import annotations
-from collections.abc import Iterable
 import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ._base import DHCPOptionType, List, RecordList, hashable_payload
+from ._base import (
+    DHCPOptionType,
+    List,
+    RecordList,
+    _NormalizedList,
+    _Record,
+    _set,
+    frozen,
+)
 from ._domain import decode_domain_name, encode_domain_name
 from ._addresses import IPv4AddressOption
 from ._scalar import Bytes
@@ -12,7 +19,7 @@ from ._scalar import Bytes
 _MoSLabelListT = _ty.TypeVar("_MoSLabelListT", bound="_MoSLabelList")
 
 
-class _MoSLabelList(DHCPOptionType, list[str]):
+class _MoSLabelList(_NormalizedList[str]):
     def __init__(self, *items: _ty.Any):
         if len(items) == 1 and isinstance(items[0], list):
             self.extend(items[0])
@@ -37,12 +44,6 @@ class _MoSLabelList(DHCPOptionType, list[str]):
             normalized = str(item)
         cls._encode_domain(normalized)
         return normalized
-
-    def append(self, item: _ty.Any) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
-        list.extend(self, [self._normalize(item) for item in __iterable])
 
     @classmethod
     def _dhcp_read(
@@ -72,21 +73,16 @@ class _MoSLabelList(DHCPOptionType, list[str]):
 _MoSSubOptionT = _ty.TypeVar("_MoSSubOptionT", bound="_MoSSubOption")
 
 
-class _MoSSubOption(DHCPOptionType):
+class _MoSSubOption(_Record):
+    __slots__ = ("code", "value")
+    _FIELDS = __slots__
+
+    code: int
+    value: _ty.Any
+
     def __init__(self, code: int, value: _ty.Any) -> None:
-        self.code = int(code)
-        self.value = self._normalize_value(self.code, value)
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, _MoSSubOption):
-            return NotImplemented
-        return (self.code, self.value) == (other.code, other.value)
-
-    def __hash__(self) -> int:
-        return hash((self.code, hashable_payload(self.value)))
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(code={self.code!r}, value={self.value!r})"
+        _set(self, "code", int(code))
+        _set(self, "value", frozen(self._normalize_value(int(code), value)))
 
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:

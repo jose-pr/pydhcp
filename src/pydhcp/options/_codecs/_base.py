@@ -1,7 +1,8 @@
 from __future__ import annotations
 from collections.abc import Iterable
+import ipaddress as _ipaddress
 import typing as _ty
-from ...exceptions import DHCPDecodeError, DHCPValueError
+from ...exceptions import DHCPDecodeError, DHCPError, DHCPValueError
 from ..._generic import GenericMeta
 
 if _ty.TYPE_CHECKING:
@@ -18,6 +19,8 @@ class DHCPOptionType:
     advertise a fixed size with `_dhcp_len_hint`. The encode/decode pair should
     round-trip the same Python value.
     """
+
+    __slots__ = ()
 
     @classmethod
     def _dhcp_read(
@@ -82,6 +85,8 @@ def display_of(value: _ty.Any) -> str:
         return "[" + ", ".join(display_of(item) for item in value) + "]"
     if isinstance(value, DHCPOptionType):
         return value._display_text()
+    if isinstance(value, (_ipaddress.IPv4Address, _ipaddress.IPv4Network)):
+        return str(value)
     return repr(value)
 
 
@@ -94,31 +99,207 @@ def option_text(value: _ty.Any) -> str:
 
 _T = _ty.TypeVar("_T", bound=DHCPOptionType)
 _C = _ty.TypeVar("_C", bound="BaseDHCPOptionCode")
+_ItemT = _ty.TypeVar("_ItemT")
 
 
 def hashable_payload(value: _ty.Any) -> _ty.Any:
     """A hashable stand-in for a payload value, for use inside `__hash__`.
 
-    Ten record codecs define `__eq__` and so were left unhashable by Python's
-    `__hash__ = None` rule, while `Bytes`, `String`, `IPv4AddressOption` and the
-    integer codecs stayed hashable through their bases -- so
-    `set(options.get(code))` worked or raised `TypeError` depending on which
-    option the caller happened to touch. Several of those records hold a
-    payload that may itself be a list codec (`List[IPv4AddressOption]`, `UserClass`,
-    a MoS label list), which is what stops a plain `hash((a, b))` from working.
-
-    Every such codec is a flat sequence of hashable items, so the tuple of its
-    items hashes consistently with the element-wise `__eq__` beside it.
+    A record may hold a list codec (`List[IPv4AddressOption]`, `UserClass`, a
+    label list), and a list does not hash. Every such codec is a flat sequence
+    of hashable items, so the tuple of its items hashes consistently with the
+    element-wise `==` beside it.
     """
     if isinstance(value, list):
         return tuple(hashable_payload(item) for item in value)
     return value
 
 
+_set = object.__setattr__
+
+
+def _field_repr(value: _ty.Any) -> str:
+    if type(value).__module__ == "ipaddress":
+        return repr(str(value))
+    if isinstance(value, tuple):
+        return repr(list(value))
+    return repr(value)
+
+
+class _Record(DHCPOptionType):
+    """A read-only value made of named fields.
+
+    A subclass lists its fields, in constructor order, as `__slots__` and as
+    `_FIELDS`, and stores each with `_set(self, name, value)` in `__init__`.
+    Equality, hash, `repr` and pickling follow from the fields: two records of
+    one class are equal when their fields are, equal records hash equal, and
+    `repr()` is the constructor call that builds the same record. A record
+    never holds a list that can change (see `frozen`), so its hash cannot move.
+    """
+
+    __slots__ = ()
+    _FIELDS: _ty.ClassVar[tuple[str, ...]] = ()
+
+    def __setattr__(self, name: str, value: _ty.Any) -> _ty.NoReturn:
+        raise AttributeError(f"{type(self).__name__} is read-only")
+
+    def __delattr__(self, name: str) -> _ty.NoReturn:
+        raise AttributeError(f"{type(self).__name__} is read-only")
+
+    def _args(self) -> tuple[_ty.Any, ...]:
+        """The constructor arguments that build an equal record."""
+        return tuple(getattr(self, name) for name in self._FIELDS)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, _Record):
+            return NotImplemented
+        if not (isinstance(other, type(self)) or isinstance(self, type(other))):
+            return NotImplemented
+        return self._args() == other._args()
+
+    def __hash__(self) -> int:
+        return hash(tuple(hashable_payload(arg) for arg in self._args()))
+
+    def __repr__(self) -> str:
+        fields = ", ".join(
+            f"{name}={_field_repr(value)}"
+            for name, value in zip(self._FIELDS, self._args())
+        )
+        return f"{type(self).__name__}({fields})"
+
+    def _display_text(self) -> str:
+        fields = ", ".join(
+            f"{name}={display_of(value)}"
+            for name, value in zip(self._FIELDS, self._args())
+        )
+        return f"{type(self).__name__}({fields})"
+
+    def __reduce__(self) -> tuple[_ty.Any, ...]:
+        return (type(self), self._args())
+
+    def __copy__(self) -> _ty.Any:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, _ty.Any]) -> _ty.Any:
+        return self
+
+
+class _NormalizedList(DHCPOptionType, list[_ItemT]):
+    """A list that holds only normalised items, however it is changed.
+
+    A subclass defines `_normalize(item)`, which returns the stored form of one
+    item or raises. Every operation that adds an item calls it first, for the
+    whole batch before anything changes, so a refused item leaves the list as it
+    was. A value that is not a `ValueError` of the package is raised as
+    `DHCPValueError`; a wrong type stays a `TypeError`.
+
+    A list put in a record is `frozen`: it then refuses every change with a
+    `TypeError`.
+    """
+
+    _locked = False
+
+    @classmethod
+    def _normalize(cls, item: _ty.Any) -> _ItemT:
+        raise NotImplementedError()
+
+    def _accepted(self, item: _ty.Any) -> _ItemT:
+        try:
+            return self._normalize(item)
+        except (DHCPError, TypeError):
+            raise
+        except ValueError as exc:
+            raise DHCPValueError(str(exc)) from exc
+
+    def _modifiable(self) -> None:
+        if self._locked:
+            raise TypeError(f"this {type(self).__name__} is read-only")
+
+    def append(self, item: _ty.Any) -> None:
+        self._modifiable()
+        list.append(self, self._accepted(item))
+
+    def extend(self, __iterable: Iterable[_ty.Any]) -> None:
+        self._modifiable()
+        list.extend(self, [self._accepted(item) for item in __iterable])
+
+    def insert(self, __index: _ty.SupportsIndex, __item: _ty.Any) -> None:
+        self._modifiable()
+        list.insert(self, __index, self._accepted(__item))
+
+    def __iadd__(self, __iterable: Iterable[_ty.Any]) -> _ty.Any:  # type: ignore[misc]
+        self.extend(__iterable)
+        return self
+
+    def __imul__(self, __count: _ty.SupportsIndex) -> _ty.Any:
+        self._modifiable()
+        return list.__imul__(self, __count)
+
+    def __setitem__(self, __index: _ty.Any, __value: _ty.Any) -> None:
+        self._modifiable()
+        if isinstance(__index, slice):
+            list.__setitem__(self, __index, [self._accepted(i) for i in __value])
+        else:
+            list.__setitem__(self, __index, self._accepted(__value))
+
+    def __delitem__(self, __index: _ty.Any) -> None:
+        self._modifiable()
+        list.__delitem__(self, __index)
+
+    def pop(self, __index: _ty.SupportsIndex = -1) -> _ItemT:
+        self._modifiable()
+        return list.pop(self, __index)
+
+    def remove(self, __value: _ty.Any) -> None:
+        self._modifiable()
+        list.remove(self, __value)
+
+    def clear(self) -> None:
+        self._modifiable()
+        list.clear(self)
+
+    def reverse(self) -> None:
+        self._modifiable()
+        list.reverse(self)
+
+    def sort(self, *, key: _ty.Any = None, reverse: bool = False) -> None:
+        self._modifiable()
+        list.sort(self, key=key, reverse=reverse)
+
+    def _lock(self) -> None:
+        self._locked = True
+
+    def _locked_copy(self) -> _ty.Any:
+        """A read-only copy; the items are already normalised."""
+        copied = type(self).__new__(type(self))
+        list.extend(copied, self)
+        copied._locked = True
+        return copied
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({list.__repr__(self)})"
+
+    def __reduce__(self) -> tuple[_ty.Any, ...]:
+        if self._locked:
+            return (type(self), (list(self),), {"_locked": True})
+        return (type(self), (list(self),))
+
+
+def frozen(value: _ty.Any) -> _ty.Any:
+    """`value` as a record may hold it: a list codec read-only, anything else as is.
+
+    A list codec the caller still holds is copied, so changing it afterwards
+    does not reach the record; one already read-only is shared.
+    """
+    if isinstance(value, _NormalizedList):
+        return value if value._locked else value._locked_copy()
+    return value
+
+
 _ListT = _ty.TypeVar("_ListT", bound="List[_ty.Any]")
 
 
-class List(DHCPOptionType, list[_T], metaclass=GenericMeta):
+class List(_NormalizedList[_T], metaclass=GenericMeta):
     """Typed DHCP option list container."""
 
     _args_: _ty.ClassVar[tuple[_T]]
@@ -134,18 +315,6 @@ class List(DHCPOptionType, list[_T], metaclass=GenericMeta):
             return _ty.cast(_T, item)
         return _ty.cast(_T, _ty.cast(_ty.Any, ty)(item))
 
-    def __setitem__(self, idx: _ty.Any, item: _T) -> None:  # type: ignore[override]
-        return list.__setitem__(self, idx, self._normalize(item))
-
-    def append(self, item: _T) -> None:
-        return list.append(self, self._normalize(item))
-
-    def extend(self, __iterable: Iterable[_T]) -> None:
-        list.extend(
-            self,
-            [self._normalize(item) for item in __iterable],
-        )
-
     @classmethod
     def _dhcp_read(cls: type[_ListT], option: memoryview) -> tuple[_ListT, int]:
         _l = len(option)
@@ -153,7 +322,7 @@ class List(DHCPOptionType, list[_T], metaclass=GenericMeta):
         ty = self._args_[0]
         while option:
             item, l = ty._dhcp_read(option)
-            self.append(item)
+            list.append(self, item)
             option = option[l:]
         return self, _l
 
@@ -230,3 +399,6 @@ class DHCPOptionCodes(List[_C]):  # type: ignore[type-var]
     def _dhcp_write(self, data: bytearray) -> int:
         data.extend(_ty.cast(_ty.Iterable[int], self))
         return len(self)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({[int(code) for code in self]!r})"

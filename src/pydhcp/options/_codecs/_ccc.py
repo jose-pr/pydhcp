@@ -5,7 +5,15 @@ import typing as _ty
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
 
-from ._base import DHCPOptionType, List, RecordList, hashable_payload
+from ._base import (
+    DHCPOptionType,
+    List,
+    RecordList,
+    _Record,
+    _set,
+    display_of,
+    frozen,
+)
 from ._domain import decode_domain_name, encode_domain_name
 from ._addresses import IPv4AddressOption
 from ._scalar import Boolean, Bytes, U8
@@ -47,6 +55,12 @@ class _CCCDomainText(DHCPOptionType, str):
     def __json__(self) -> str:
         return str(self)
 
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({str.__repr__(self)})"
+
+    def _display_text(self) -> str:
+        return str.__repr__(self)
+
 
 class CCCProvisioningServerFQDN(_CCCDomainText):
     """CCC provisioning server FQDN payload without DNS compression."""
@@ -66,11 +80,25 @@ class CCCKerberosRealmName(_CCCDomainText):
         return super().__new__(cls, str(value).upper())
 
 
-class CCCProvisioningServerAddress(DHCPOptionType):
+class CCCProvisioningServerAddress(_Record):
     """CCC sub-option 3 tagged union for IPv4 address or FQDN."""
 
+    __slots__ = ("kind", "value")
+    _FIELDS = __slots__
+
+    kind: str
+    value: _ty.Any
+
     def __init__(self, value: _ty.Any) -> None:
-        self.kind, self.value = self._normalize(value)
+        kind, payload = self._normalize(value)
+        _set(self, "kind", kind)
+        _set(self, "value", payload)
+
+    def _args(self) -> tuple[_ty.Any, ...]:
+        return ((self.kind, self.value),)
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}(({self.kind!r}, {str(self.value)!r}))"
 
     @staticmethod
     def _normalize(value: _ty.Any) -> tuple[str, _ty.Any]:
@@ -142,8 +170,11 @@ class CCCProvisioningServerAddress(DHCPOptionType):
         data.extend(encoded)
         return len(encoded) + 1
 
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(kind={self.kind!r}, value={self.value!r})"
+    def _display_text(self) -> str:
+        return (
+            f"{type(self).__name__}(kind={self.kind!r}, "
+            f"value={display_of(self.value)})"
+        )
 
     def __json__(self) -> list[_ty.Any]:
         return [
@@ -154,14 +185,6 @@ class CCCProvisioningServerAddress(DHCPOptionType):
                 else str(self.value)
             ),
         ]
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, CCCProvisioningServerAddress):
-            return NotImplemented
-        return (self.kind, self.value) == (other.kind, other.value)
-
-    def __hash__(self) -> int:
-        return hash((self.kind, self.value))
 
 
 class CCCPrimaryDHCPServerAddress(IPv4AddressOption):
@@ -175,8 +198,15 @@ class CCCSecondaryDHCPServerAddress(IPv4AddressOption):
 _CCCASBackoffRetryT = _ty.TypeVar("_CCCASBackoffRetryT", bound="CCCASBackoffRetry")
 
 
-class CCCASBackoffRetry(DHCPOptionType):
+class CCCASBackoffRetry(_Record):
     """CCC sub-option 4 AS-REQ/AS-REP backoff and retry tuple."""
+
+    __slots__ = ("initial_timeout", "maximum_timeout", "maximum_retry_count")
+    _FIELDS = __slots__
+
+    initial_timeout: int
+    maximum_timeout: int
+    maximum_retry_count: int
 
     def __init__(
         self,
@@ -184,9 +214,9 @@ class CCCASBackoffRetry(DHCPOptionType):
         maximum_timeout: _ty.Any,
         maximum_retry_count: _ty.Any,
     ) -> None:
-        self.initial_timeout = int(initial_timeout)
-        self.maximum_timeout = int(maximum_timeout)
-        self.maximum_retry_count = int(maximum_retry_count)
+        _set(self, "initial_timeout", int(initial_timeout))
+        _set(self, "maximum_timeout", int(maximum_timeout))
+        _set(self, "maximum_retry_count", int(maximum_retry_count))
 
     @classmethod
     def _dhcp_read(
@@ -208,31 +238,6 @@ class CCCASBackoffRetry(DHCPOptionType):
         data.extend(self.maximum_timeout.to_bytes(4, "big"))
         data.extend(self.maximum_retry_count.to_bytes(4, "big"))
         return 12
-
-    def __repr__(self) -> str:
-        return (
-            f"{type(self).__name__}(initial_timeout={self.initial_timeout!r}, "
-            f"maximum_timeout={self.maximum_timeout!r}, "
-            f"maximum_retry_count={self.maximum_retry_count!r})"
-        )
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, CCCASBackoffRetry):
-            return NotImplemented
-        return (
-            self.initial_timeout,
-            self.maximum_timeout,
-            self.maximum_retry_count,
-        ) == (
-            other.initial_timeout,
-            other.maximum_timeout,
-            other.maximum_retry_count,
-        )
-
-    def __hash__(self) -> int:
-        return hash(
-            (self.initial_timeout, self.maximum_timeout, self.maximum_retry_count)
-        )
 
     def __json__(self) -> list[int]:
         return [self.initial_timeout, self.maximum_timeout, self.maximum_retry_count]
@@ -295,14 +300,19 @@ class CCCKDCServerAddressList(List[IPv4AddressOption]):
 _CCCSubOptionT = _ty.TypeVar("_CCCSubOptionT", bound="CCCSubOption")
 
 
-class CCCSubOption(DHCPOptionType):
+class CCCSubOption(_Record):
     """Typed CCC sub-option record."""
 
+    __slots__ = ("code", "value")
+    _FIELDS = __slots__
+
+    code: int
+    value: _ty.Any
     _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
 
     def __init__(self, code: int, value: _ty.Any) -> None:
-        self.code = int(code)
-        self.value = self._normalize_value(self.code, value)
+        _set(self, "code", int(code))
+        _set(self, "value", frozen(self._normalize_value(int(code), value)))
 
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
@@ -337,17 +347,6 @@ class CCCSubOption(DHCPOptionType):
         data.append(payload_len)
         data.extend(payload)
         return payload_len + 2
-
-    def __repr__(self) -> str:
-        return f"{type(self).__name__}(code={self.code!r}, value={self.value!r})"
-
-    def __eq__(self, other: object) -> bool:
-        if not isinstance(other, CCCSubOption):
-            return NotImplemented
-        return (self.code, self.value) == (other.code, other.value)
-
-    def __hash__(self) -> int:
-        return hash((self.code, hashable_payload(self.value)))
 
     def __json__(self) -> list[_ty.Any]:
         value = self.value
