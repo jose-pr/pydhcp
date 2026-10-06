@@ -12,11 +12,11 @@ from .. import _constants as _const, _network as _net
 from ..lease import DHCPLease
 from ..listener._receive import DHCPRequestContext, _is_loopback
 from ..listener._transport import _Datagram
+from ..options import DHCPOptions
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from math import inf as _inf
 from ._policy import _LeasePolicy
 
 __all__: list[str] = []
@@ -38,16 +38,46 @@ class _Replies(_LeasePolicy):
     ) -> DHCPMessage:
         """The reply to `msg`, cloned from it.
 
-        `now` is wall-clock time, the clock `lease.expires` is recorded on;
+        `now` is an aware instant, the clock `lease.expires` is read on;
         omitted, the driver's reading is used.
         """
         if now is None:
-            now = self._read_clock().wall
+            now = self._read_clock().utc
+        return self._build_reply(
+            msg, lease.options, actual_server_id, resp_ty, lease=lease, now=now
+        )
+
+    def _create_inform_response(
+        self,
+        msg: DHCPMessage,
+        options: DHCPOptions,
+        actual_server_id: _ipaddress.IPv4Address,
+    ) -> DHCPMessage:
+        """The DHCPACK to a DHCPINFORM: the options, and no address or lease time."""
+        return self._build_reply(
+            msg,
+            options,
+            actual_server_id,
+            _enum.DHCPMessageType.DHCPACK,
+            lease=None,
+            now=None,
+        )
+
+    def _build_reply(
+        self,
+        msg: DHCPMessage,
+        options: DHCPOptions,
+        actual_server_id: _ipaddress.IPv4Address,
+        resp_ty: _enum.DHCPMessageType,
+        *,
+        lease: "_ty.Optional[DHCPLease]",
+        now: "_ty.Optional[_dt.datetime]",
+    ) -> DHCPMessage:
         resp = DHCPMessage(**msg.__dict__.copy())
-        # Never alias the stored lease's options: the response pipeline injects
+        # A copy, never the stored lease's own bag: the response pipeline injects
         # bookkeeping options and PARAMETER_REQUEST_LIST filtering deletes
-        # entries, which would otherwise write straight through to the backend.
-        resp.options = lease.options.copy()
+        # entries, and a lease's options are read-only.
+        resp.options = options.copy()
         resp.op = _enum.DHCPOpcode.BOOTREPLY
         resp.hops = 0
         resp.secs = _dt.timedelta(seconds=0)
@@ -84,14 +114,13 @@ class _Replies(_LeasePolicy):
             resp.siaddr = _const.WILDCARD_V4
             resp.sname = ""
             resp.file = ""
-        elif lease.ip:
-            if (
-                lease.expires is None
-                or lease.expires == _inf
-                or not isinstance(lease.expires, _dt.datetime)
-            ):
+        elif lease is None:
+            resp.yiaddr = _const.WILDCARD_V4
+        else:
+            if lease.expires is None:
                 expires = _const.INFINITE_LEASE_TIME
             else:
+                assert now is not None
                 # Round up, not down. Truncating sent a 3600-second lease as
                 # 3599 -- a different number than the one granted, every time.
                 expires = _math.ceil((lease.expires - now).total_seconds())

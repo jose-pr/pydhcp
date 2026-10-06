@@ -8,13 +8,11 @@ import typing as _ty
 
 from .. import _constants as _const
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
-from ..lease import DHCPLease
 from ..listener._receive import DHCPRequestContext
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from math import inf as _inf
 from ._reply import _Replies
 
 __all__: list[str] = []
@@ -116,7 +114,7 @@ class _Handlers(_Replies):
         # A DISCOVER is a probe, so it may look and reserve but must not extend
         # an existing binding -- see `_NonExtendingBackend`.
         lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
-        now = self._instant(context).wall
+        now = self._instant(context).utc
         if not lease or not self._has_time_left(lease, now):
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -172,7 +170,7 @@ class _Handlers(_Replies):
         )
         if not ip_req:
             ip_req = msg.ciaddr
-        now = self._instant(context).wall
+        now = self._instant(context).utc
         if ip_req == lease.ip and self._has_time_left(lease, now):
             resp_ty = _enum.DHCPMessageType.DHCPACK
             # Only now is anything agreed, so this is where the lease time the
@@ -250,19 +248,7 @@ class _Handlers(_Replies):
         # so an INFORM flood grew the lease store -- and bypassed the
         # allocation-free hook documented for exactly this path whenever a
         # binding happened to exist.
-        lease = DHCPLease(
-            _const.WILDCARD_V4,
-            _inf,
-            self.get_inform_options(actual_server_id, msg),
+        resp = self._create_inform_response(
+            msg, self.get_inform_options(actual_server_id, msg), actual_server_id
         )
-        resp = self._create_response(
-            msg,
-            lease,
-            actual_server_id,
-            _enum.DHCPMessageType.DHCPACK,
-            now=self._instant(context).wall,
-        )
-        if DHCPOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
-            del resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME]
-        resp.yiaddr = _const.WILDCARD_V4
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPACK)

@@ -185,12 +185,10 @@ class _LeasePolicy(_ServerState):
         reach this. An overriding `acquire_lease` can, which is exactly why the
         check lives on the reply path rather than in the allocator.
 
-        `now` is wall-clock time, the clock `DHCPLease.expires` is recorded on.
+        `now` is an aware instant, the clock `DHCPLease.expires` is read on.
         """
         expires = lease.expires
         if expires is None:
-            return False
-        if expires == _inf or not isinstance(expires, _datetime.datetime):
             return True
         return (expires - now).total_seconds() > 0
 

@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pydhcp.packet import DHCPMessage
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
@@ -51,7 +51,7 @@ def test_lease_expiration_total_seconds():
     # Create lease expiring in 1 hour 1 minute
     lease = DHCPLease(
         IPv4("192.168.1.100"),
-        datetime.now() + timedelta(hours=1, minutes=1, seconds=1),
+        datetime.now(timezone.utc) + timedelta(hours=1, minutes=1, seconds=1),
         DHCPOptions(),
     )
     resp = server._create_response(

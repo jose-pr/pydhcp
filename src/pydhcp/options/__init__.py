@@ -348,7 +348,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         value = self._options.get(__key, _MISSING)
         if value is _MISSING:
             return default
-        assert isinstance(value, bytearray)
+        assert isinstance(value, (bytes, bytearray))
         if decode:
             target_decoder: _ty.Union[
                 _builtins.type[DHCPOptionType], _ty.Callable[[bytearray], _ty.Any]

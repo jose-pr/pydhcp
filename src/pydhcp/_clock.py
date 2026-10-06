@@ -19,18 +19,13 @@ if _ty.TYPE_CHECKING:
 class _Instant(_ty.NamedTuple):
     """One moment on the two clocks the library uses.
 
-    `utc` is wall-clock time (timezone-aware); `monotonic` is `time.monotonic()`
-    seconds. A lease's expiry is wall-clock (`wall`, naive local time, the form
-    `DHCPLease.expires` holds); the relay's pending table and the decline
-    quarantine are monotonic.
+    `utc` is wall-clock time (timezone-aware), the clock a lease's expiry is
+    read on; `monotonic` is `time.monotonic()` seconds, the clock the relay's
+    pending table and the decline quarantine run on.
     """
 
     utc: _dt.datetime
     monotonic: float
-
-    @property
-    def wall(self) -> _dt.datetime:
-        return self.utc.astimezone().replace(tzinfo=None)
 
 
 def _read() -> _Instant:

@@ -346,7 +346,8 @@ A test that patches a module global patches it in the private module that reads 
     `releases_ignored`. Releasing on client identifier alone let a late or
     duplicated RELEASE for an old address delete the client's current binding.
   - `.get_inform_options(server_id, msg) -> DHCPOptions` — override point for
-    DHCPINFORM-only option sets (no address allocated). Same default set, and
+    DHCPINFORM-only option sets (no address allocated, and no `DHCPLease` built:
+    the ACK carries these options, no `yiaddr` and no lease time). Same default set, and
     the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
   - **Host-address lookups use netimps' enumeration cache** (`cache=True`, a
     one-second TTL), and `.bind()` clears it. "Which interface holds
@@ -655,8 +656,22 @@ IPv6-only interface can break at runtime.
 
 ## Leases (`lease.py`)
 
-- **`DHCPLease`** (`NamedTuple`) — `ip: IPv4 | None`, `expires: datetime |
-  float` (`math.inf` for an infinite lease), `options: DHCPOptions`.
+- **`DHCPLease(ip, expires=None, options=None)`** — one address held by one
+  client, as a **value**: read-only (assigning raises `AttributeError`),
+  hashable, equal when the address, expiry and option payloads are.
+  - `ip: IPv4Address` is required. `None` raises `TypeError` and `0.0.0.0`
+    raises `DHCPValueError`: a lease has an address.
+  - `expires: datetime | None` is the instant the lease ends, **timezone-aware**
+    (held in UTC), or `None` for a lease that never ends. A naive `datetime`
+    raises `DHCPValueError` (use `datetime.now(timezone.utc)`); a `float` or
+    anything else raises `TypeError`. `math.inf` is no longer an expiry.
+  - `options: DHCPOptions` is **copied in** and read-only: the bag you passed
+    stays yours, and `lease.options[...] = x`, `del`, `clear()`, `update()` and
+    `append()` raise `TypeError`. Payloads read back as `bytes`.
+    `lease.options.copy()` is an ordinary bag to change. A lease is the reply's
+    source, never its scratch space.
+  - Copies, deep-copies and pickles to an equal lease, across a process
+    boundary too, so a `LeaseBackend` kept in another process can return one.
 - **`LeaseBackend`** (`Protocol`) — `.allocate(client_id, ip, ttl,
   options=None) -> DHCPLease | None`, `.lookup(client_id) -> DHCPLease |
   None`, `.release(client_id) -> bool`, `.renew(client_id, ttl) -> DHCPLease
@@ -664,7 +679,8 @@ IPv6-only interface can break at runtime.
   It is `float` rather than `int` because that is what `math.inf` is and what
   the implementations have always accepted; an `int` still satisfies it.
 - **`InMemoryLeaseBackend()`** — dict-backed reference implementation;
-  `.lookup()` evicts (and returns `None` for) expired leases lazily. Each
+  `.lookup()` evicts (and returns `None` for) expired leases lazily; `ttl` of
+  `math.inf` stores a lease whose `expires` is `None`. Each
   method is atomic against the others (an `RLock` on `self._lock`), so one
   backend can be shared by a threaded server and an async one. A **caller's**
   compound operation is not — "is this address free, then allocate it" is two
@@ -693,6 +709,11 @@ IPv6-only interface can break at runtime.
     an interrupted write cannot truncate it. The rename retries briefly on
     `PermissionError` (on Windows an indexer or antivirus holding the file
     looks exactly like that).
+  - The file maps each client identifier to `{"ip", "expires", "options"}`
+    (option payloads as hex). `expires` is an ISO-8601 time with an offset, or
+    `"inf"` for no expiry. A time without an offset, as older files hold, is
+    read as local time of the same instant; an entry with no `ip` is skipped
+    with a warning.
   - A missing file starts empty and says nothing. An **unreadable** one is
     logged at ERROR and moved aside to `<filepath>.corrupt` — it is the only
     copy of that state, so it is kept for recovery rather than overwritten by

@@ -64,7 +64,9 @@ class ExampleDHCPServer(DHCPServer):
             "8.8.8.8",
             "1.1.1.1",
         ]
-        return DHCPLease(ip, dt.datetime.now() + dt.timedelta(hours=1), options)
+        return DHCPLease(
+            ip, dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1), options
+        )
 
 
 if __name__ == "__main__":

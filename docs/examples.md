@@ -41,7 +41,7 @@ resolver, and naming it as both would point clients' off-link traffic and name l
 a host that handles neither. Supply the real values here, as below.
 
 ```python
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from pydhcp import DHCPLease, DHCPOptions
 from pydhcp.options import DHCPOptionCode
@@ -55,7 +55,7 @@ class FixedLeaseServer(DHCPServer):
         options[DHCPOptionCode.DNS] = [IPv4("1.1.1.1")]
         return DHCPLease(
             IPv4("192.0.2.50"),
-            datetime.now() + timedelta(hours=1),
+            datetime.now(timezone.utc) + timedelta(hours=1),
             options,
         )
 ```

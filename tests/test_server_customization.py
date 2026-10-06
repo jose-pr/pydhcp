@@ -1,6 +1,6 @@
 import pytest
 import ipaddress
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from pydhcp import (
@@ -55,7 +55,7 @@ def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
             options[DHCPOptionCode.DNS] = [IPv4("1.1.1.1")]
             return DHCPLease(
                 IPv4("127.0.0.10"),
-                datetime.now() + timedelta(seconds=3600),
+                datetime.now(timezone.utc) + timedelta(seconds=3600),
                 options,
             )
 
@@ -172,10 +172,10 @@ def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
 def test_inform_does_not_strip_lease_time_from_the_stored_lease() -> None:
     msg = _message(DHCPMessageType.DHCPINFORM)
     client_id = msg.client_id()
-    backend = _seeded_backend(client_id)
-    seeded = backend.lookup(client_id)
-    assert seeded is not None
-    seeded.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
+    backend = InMemoryLeaseBackend()
+    options = DHCPOptions()
+    options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
+    backend.allocate(client_id, IPv4("127.0.0.10"), 3600, options)
 
     server = _BackendServer(lease_backend=backend)
     server.handle(msg, _context(Mock()))
@@ -193,7 +193,9 @@ class _NakServer(DHCPServer):
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         return DHCPLease(
-            IPv4("10.0.0.10"), datetime.now() + timedelta(seconds=3600), DHCPOptions()
+            IPv4("10.0.0.10"),
+            datetime.now(timezone.utc) + timedelta(seconds=3600),
+            DHCPOptions(),
         )
 
 
@@ -269,7 +271,7 @@ def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() ->
         def acquire_lease(self, client_id, server_id, msg, *, commit=True):
             return DHCPLease(
                 IPv4("10.0.0.10"),
-                datetime.now() + timedelta(seconds=3600),
+                datetime.now(timezone.utc) + timedelta(seconds=3600),
                 DHCPOptions(),
             )
 

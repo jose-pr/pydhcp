@@ -40,7 +40,7 @@ def test_in_memory_lease_backend():
     renewed = backend.renew(client_id, 10)
     assert renewed is not None
     assert renewed.ip == ip
-    assert (renewed.expires - _dt.datetime.now()).total_seconds() > 5
+    assert (renewed.expires - _dt.datetime.now(_dt.timezone.utc)).total_seconds() > 5
 
     # Test release
     assert backend.release(client_id) is True
@@ -102,7 +102,9 @@ def test_file_lease_backend(tmp_path):
     third_backend = FileLeaseBackend(filepath=filepath)
     loaded_renewed = third_backend.lookup(client_id)
     assert loaded_renewed is not None
-    assert (loaded_renewed.expires - _dt.datetime.now()).total_seconds() > 60
+    assert (
+        loaded_renewed.expires - _dt.datetime.now(_dt.timezone.utc)
+    ).total_seconds() > 60
 
     # Release
     assert third_backend.release(client_id) is True

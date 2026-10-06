@@ -15,7 +15,7 @@ import pytest
 import socket
 import time
 import typing as _ty
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from pydhcp import DHCPLease, DHCPMessage, DHCPOptions, DHCPServer
 from ipaddress import IPv4Address as IPv4
@@ -194,7 +194,7 @@ class FixedLeaseServer(DHCPServer):
         options[DHCPOptionCode.ROUTER] = IPv4("127.0.0.1")
         return DHCPLease(
             IPv4("127.0.0.1"),
-            datetime.now() + timedelta(seconds=self.LEASE_SECONDS),
+            datetime.now(timezone.utc) + timedelta(seconds=self.LEASE_SECONDS),
             options,
         )
 

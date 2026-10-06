@@ -10,6 +10,7 @@ import threading as _threading
 import typing as _ty
 from math import inf as _inf
 
+from ._lease import DHCPLease
 from .options import DHCPOptions
 
 __all__ = [
@@ -22,14 +23,9 @@ __all__ = [
 LOGGER = _logging.getLogger(__name__)
 
 
-class DHCPLease(_ty.NamedTuple):
-    ip: _ty.Optional[_ipaddress.IPv4Address]
-    expires: _ty.Union[_dt.datetime, float]
-    options: DHCPOptions
-
-
 class LeaseBackend(_ty.Protocol):
-    """Where leases live. `ttl` is seconds, or `math.inf` for no expiry.
+    """Where leases live. `ttl` is seconds, or `math.inf` for no expiry (a lease
+    whose `expires` is `None`).
 
     `ttl` is typed `float` rather than `int` because `math.inf` is a float and
     the implementations have always accepted it -- `InMemoryLeaseBackend`
@@ -92,16 +88,20 @@ class InMemoryLeaseBackend:
         ttl: float,
         options: _ty.Optional[DHCPOptions] = None,
     ) -> _ty.Optional[DHCPLease]:
-        expires = (
-            _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
-        )
-        lease = DHCPLease(ip=ip, expires=expires, options=options or DHCPOptions())
+        lease = DHCPLease(ip=ip, expires=self._expiry(ttl), options=options)
         with self._lock:
             if client_id not in self._leases and not self._make_room():
                 self._report_full()
                 return None
             self._leases[client_id] = lease
         return lease
+
+    @staticmethod
+    def _expiry(ttl: float) -> _ty.Optional[_dt.datetime]:
+        """The instant `ttl` seconds from now, or `None` for no expiry."""
+        if ttl == _inf:
+            return None
+        return _dt.datetime.now(_dt.timezone.utc) + _dt.timedelta(seconds=ttl)
 
     #: Seconds between "store is full" reports. The condition is reached once
     #: per refused packet, and the thing that fills the store is a flood -- so
@@ -131,10 +131,10 @@ class InMemoryLeaseBackend:
         """
         if len(self._leases) < self.MAX_LEASES:
             return True
-        now = _dt.datetime.now()
+        now = _dt.datetime.now(_dt.timezone.utc)
         for client_id in list(self._leases):
             expires = self._leases[client_id].expires
-            if isinstance(expires, _dt.datetime) and expires < now:
+            if expires is not None and expires < now:
                 del self._leases[client_id]
         return len(self._leases) < self.MAX_LEASES
 
@@ -150,10 +150,8 @@ class InMemoryLeaseBackend:
             # and reproducible on the 3.9 floor, where it is coarse enough that
             # allocate and lookup routinely read the same instant. That is the
             # whole reason the floor is run rather than assumed.
-            if (
-                lease.expires != _inf
-                and isinstance(lease.expires, _dt.datetime)
-                and lease.expires <= _dt.datetime.now()
+            if lease.expires is not None and lease.expires <= _dt.datetime.now(
+                _dt.timezone.utc
             ):
                 self._leases.pop(client_id, None)
                 return None
@@ -187,10 +185,9 @@ class InMemoryLeaseBackend:
             lease = self.lookup(client_id)
             if lease is None:
                 return None
-            expires = (
-                _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
+            renewed = DHCPLease(
+                ip=lease.ip, expires=self._expiry(ttl), options=lease.options
             )
-            renewed = DHCPLease(ip=lease.ip, expires=expires, options=lease.options)
             self._leases[client_id] = renewed
             return renewed
 
@@ -270,14 +267,19 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                 data = _json.load(f)
             for client_id, lease_data in data.items():
                 ip_str = lease_data.get("ip")
-                ip = _ipaddress.IPv4Address(ip_str) if ip_str else None
+                if not ip_str:
+                    LOGGER.warning(
+                        f"Skipping the lease of {client_id} in {self.filepath}: "
+                        "it has no address"
+                    )
+                    continue
                 exp_str = lease_data.get("expires")
-                if exp_str == "inf":
-                    expires: _ty.Union[_dt.datetime, float] = _inf
-                elif exp_str:
+                expires: _ty.Optional[_dt.datetime] = None
+                if exp_str and exp_str != "inf":
                     expires = _dt.datetime.fromisoformat(exp_str)
-                else:
-                    expires = _inf
+                    if expires.utcoffset() is None:
+                        # Written as naive local time; the same instant.
+                        expires = expires.astimezone()
 
                 opts = DHCPOptions()
                 opts_data = lease_data.get("options", {})
@@ -286,7 +288,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                     opts[code] = bytearray.fromhex(val_hex)
 
                 self._leases[client_id] = DHCPLease(
-                    ip=ip, expires=expires, options=opts
+                    ip=_ipaddress.IPv4Address(ip_str), expires=expires, options=opts
                 )
         except Exception as e:
             # Swallowing this started the server with an empty store and then
@@ -334,16 +336,12 @@ class FileLeaseBackend(InMemoryLeaseBackend):
 
             data = {}
             for client_id, lease in self._leases.items():
-                exp_str = (
-                    "inf"
-                    if not isinstance(lease.expires, _dt.datetime)
-                    else lease.expires.isoformat()
-                )
+                exp_str = "inf" if lease.expires is None else lease.expires.isoformat()
                 opts_data = {}
                 for code, option in lease.options.items(decoded=False):
                     opts_data[str(int(code))] = option.hex()
                 data[client_id] = {
-                    "ip": str(lease.ip) if lease.ip else None,
+                    "ip": str(lease.ip),
                     "expires": exp_str,
                     "options": opts_data,
                 }

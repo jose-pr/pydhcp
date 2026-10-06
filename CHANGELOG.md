@@ -314,6 +314,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `DHCPValueError` (or `TypeError` for a wrong type) and leaves the list as it
   was. The classes `List[...]` builds are named `List[IPv4AddressOption]` and
   belong to the module of `List`.
+- **Breaking: `DHCPLease` is a value, not a tuple.** `DHCPLease(ip, expires=None,
+  options=None)` is read-only, hashable and equal by content, and it no longer
+  unpacks or indexes. `ip` is required (`None` raises `TypeError`, `0.0.0.0`
+  raises `DHCPValueError`). `expires` is a timezone-aware `datetime` or `None`
+  for a lease that never ends; a naive `datetime` raises `DHCPValueError` and
+  `math.inf` or any other type raises `TypeError`, so an `acquire_lease`
+  override or a `LeaseBackend` that built `DHCPLease(ip, datetime.now() + ttl,
+  options)` or `DHCPLease(ip, math.inf, options)` builds
+  `datetime.now(timezone.utc) + ttl` or `None`. `None` was a lease with no time
+  left on the reply path and an infinite one in the reply; it is infinite
+  throughout. `options` is copied in and read-only (`TypeError` on any change;
+  `lease.options.copy()` is a bag to change), so a lease a backend stored cannot
+  be altered through the one it handed out. The stock backends hold UTC
+  instants, and `FileLeaseBackend` writes them with an offset and still loads
+  a file that holds the naive local times it wrote before.
+- **A DHCPINFORM is answered from its options.** The ACK is built without a
+  lease (it used to be built from one with the wildcard address and an infinite
+  expiry, and then had its address and lease time removed); what the client
+  receives is unchanged.
 
 ### Renamed
 

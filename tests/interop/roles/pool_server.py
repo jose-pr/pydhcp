@@ -78,9 +78,9 @@ class Pool:
                     continue
                 if self._address_refusal(candidate, interface, client_id) is not None:
                     continue
-                expires = datetime.datetime.now() + datetime.timedelta(
-                    seconds=args.lease_seconds
-                )
+                expires = datetime.datetime.now(
+                    datetime.timezone.utc
+                ) + datetime.timedelta(seconds=args.lease_seconds)
                 lease = DHCPLease(candidate, expires, self._options(network, router))
                 store[client_id] = lease
                 break

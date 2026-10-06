@@ -46,7 +46,7 @@ def server() -> DHCPServer:
 
 @pytest.fixture
 def lease() -> DHCPLease:
-    return DHCPLease(IPv4("10.0.0.50"), float("inf"), DHCPOptions())
+    return DHCPLease(IPv4("10.0.0.50"), None, DHCPOptions())
 
 
 @pytest.mark.parametrize(

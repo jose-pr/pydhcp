@@ -1,7 +1,7 @@
 """Option 57 clamping and unservable leases (`server-20`, `server-11`)."""
 
 import ipaddress
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -69,7 +69,7 @@ def test_a_max_size_below_the_rfc_minimum_still_gets_a_reply(advertised) -> None
     `encode` refuses anything below 268 outright, so the client got nothing at
     all and the listener logged an error with no XID for every such packet.
     """
-    server = _FixedLeaseServer(datetime.now() + timedelta(seconds=3600))
+    server = _FixedLeaseServer(datetime.now(timezone.utc) + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(
         _message(DHCPMessageType.DHCPDISCOVER, max_size=advertised), _context(transport)
@@ -87,7 +87,7 @@ def test_a_max_size_below_the_rfc_minimum_still_gets_a_reply(advertised) -> None
 
 def test_a_large_advertised_size_is_left_alone() -> None:
     """No upper clamp: reply size is set by what the server has to say."""
-    server = _FixedLeaseServer(datetime.now() + timedelta(seconds=3600))
+    server = _FixedLeaseServer(datetime.now(timezone.utc) + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(
         _message(DHCPMessageType.DHCPDISCOVER, max_size=9000), _context(transport)
@@ -97,7 +97,7 @@ def test_a_large_advertised_size_is_left_alone() -> None:
 
 def test_lease_time_is_rounded_up_not_truncated() -> None:
     """A 3600-second lease went out as 3599 -- a different number than granted."""
-    server = _FixedLeaseServer(datetime.now() + timedelta(seconds=3600))
+    server = _FixedLeaseServer(datetime.now(timezone.utc) + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
     offer = DHCPMessage.decode(bytearray(_sent(transport)))
@@ -105,7 +105,7 @@ def test_lease_time_is_rounded_up_not_truncated() -> None:
 
 
 def test_an_expired_lease_produces_no_offer() -> None:
-    server = _FixedLeaseServer(datetime.now() - timedelta(seconds=1))
+    server = _FixedLeaseServer(datetime.now(timezone.utc) - timedelta(seconds=1))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
     assert not transport.send.called, "offered a lease with no time left"
@@ -113,7 +113,7 @@ def test_an_expired_lease_produces_no_offer() -> None:
 
 def test_an_expired_lease_naks_a_request_instead_of_acking_nothing() -> None:
     """Measured before: a DHCPACK with yiaddr 0.0.0.0 and no option 51."""
-    server = _FixedLeaseServer(datetime.now() - timedelta(seconds=1))
+    server = _FixedLeaseServer(datetime.now(timezone.utc) - timedelta(seconds=1))
     transport = Mock(send=Mock(return_value=1))
     request = _message(DHCPMessageType.DHCPREQUEST)
     request.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")

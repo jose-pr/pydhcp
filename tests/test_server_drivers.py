@@ -117,7 +117,8 @@ class _Recording:
         self._note("acquire_lease")
         return DHCPLease(
             LOOPBACK,
-            datetime.datetime.now() + datetime.timedelta(seconds=60),
+            datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(seconds=60),
             DHCPOptions(),
         )
 
@@ -303,7 +304,8 @@ class _ExpiringLease(DHCPServer):
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):  # type: ignore[no-untyped-def]
         return DHCPLease(
             LOOPBACK,
-            datetime.datetime.now() + datetime.timedelta(seconds=100),
+            datetime.datetime.now(datetime.timezone.utc)
+            + datetime.timedelta(seconds=100),
             DHCPOptions(),
         )
 

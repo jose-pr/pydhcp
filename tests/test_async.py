@@ -11,11 +11,13 @@ from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 
 class MockAsyncDHCPServer(AsyncDHCPServer):
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        from datetime import datetime, timedelta
+        from datetime import datetime, timedelta, timezone
 
         options = DHCPOptions()
         return DHCPLease(
-            IPv4("127.0.0.1"), datetime.now() + timedelta(seconds=10), options
+            IPv4("127.0.0.1"),
+            datetime.now(timezone.utc) + timedelta(seconds=10),
+            options,
         )
 
 
