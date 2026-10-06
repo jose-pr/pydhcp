@@ -13,35 +13,16 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import _constants as _const, _network as _net
-from .._metrics import DHCPMetrics
-from ..packet import _enums as _enum
-from ..packet._message import DHCPMessage
-from ._binding import _bind_sockets, _close_socket
-from ._receive import (
-    DHCPRequestContext,
-    _TruncatedDatagram,
-    _arrival,
-    _context_for,
-    _pktinfo_supported,
-)
-from ._spec import ListenSpec, _parselisteners
+from .. import _network as _net
+from ._core import _ListenerCore
+from ._receive import _TruncatedDatagram, _arrival
+from ._spec import ListenSpec
 
 LOGGER = _logging.getLogger(__name__)
 
 
-class AsyncDHCPListener:
-    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DHCPPort)
-
-    #: As on `DHCPListener`; see `_bind_sockets`.
-    REUSE_ADDRESS: bool = False
-
-    #: Receive buffer to ask the OS for on every listening socket, in octets;
-    #: 0 keeps the OS default. 1 MiB holds about 3500 typical 300-octet DHCP
-    #: datagrams, against about 220 in Windows' 64 KiB default -- a segment
-    #: powering up sends its DISCOVERs together. The kernel may grant less
-    #: (Linux caps at net.core.rmem_max); a shortfall is logged at INFO.
-    RECEIVE_BUFFER_SIZE: int = 1 << 20
+class AsyncDHCPListener(_ListenerCore):
+    _BIND_LABEL = "async"
 
     #: Datagrams that may wait for, or be in, the handler at once when
     #: `max_queued` is not given: about 3 MiB of queued 300-octet
@@ -60,6 +41,12 @@ class AsyncDHCPListener:
         per_interface: _ty.Optional[bool] = None,
         max_queued: _ty.Optional[int] = None,
     ) -> None:
+        _ListenerCore.__init__(
+            self,
+            listen=listen,
+            max_packet_size=max_packet_size,
+            per_interface=per_interface,
+        )
         if max_queued is None:
             max_queued = self.MAX_QUEUED_DATAGRAMS
         if isinstance(max_queued, bool) or not isinstance(max_queued, int):
@@ -77,26 +64,11 @@ class AsyncDHCPListener:
         self._pending_lock = _thread.Lock()
         self._last_backlog_report = float("-inf")
         self._closing = False
-        self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
-        if listen is None:
-            listen = "*"
-        self._pktinfo = _pktinfo_supported(listen, per_interface)
-        self._listen = _parselisteners(
-            listen, self.DEFAULT_PORTS, expand_wildcard=not self._pktinfo
-        )
-        self._per_interface = per_interface
-        self._sockets: list[_socket.socket] = []
-        #: As on `DHCPListener`.
-        self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
         #: One receive task per socket; see `_receive`.
         self._tasks: "list[_asyncio.Task[None]]" = []
         self._loop: _ty.Optional[_asyncio.AbstractEventLoop] = None
         self._stopped: _ty.Optional[_asyncio.Event] = None
         self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
-        self.metrics = DHCPMetrics()
-        #: As on `DHCPListener`.
-        self.packets_dropped_truncated = 0
-        self.packets_dropped_error = 0
 
     async def _receive(
         self, sock: _socket.socket, endpoint: _netimps.UDPEndpoint
@@ -221,67 +193,7 @@ class AsyncDHCPListener:
         if self._closing:  # stop() was called after this was queued
             self.metrics.packets_dropped_backlog += 1
             return
-        # Split for the same reason as `DHCPListener._receive_one`: a packet the
-        # peer malformed and a bug in a `handle()` override are different
-        # events, and only the second one's traceback is worth keeping.
-        try:
-            msg = DHCPMessage.decode(memoryview(data))
-        except Exception as e:
-            self.metrics.packets_dropped_error += 1
-            LOGGER.warning(
-                f"Discarding an undecodable {len(data)}-octet datagram from "
-                f"{client}: {e.__class__.__name__} | {e}"
-            )
-            return
-        try:
-            self.metrics.packets_received += 1
-            if LOGGER.isEnabledFor(_logging.DEBUG):
-                msg.log(client, _net.SocketAddress(sock), _logging.DEBUG)
-            context = _context_for(
-                sock, client, msg.chaddr, ifindex, local_ip, self._endpoints.get(sock)
-            )
-            self.handle(msg, context)
-        except Exception as e:
-            self.metrics.packets_dropped_error += 1
-            LOGGER.error(
-                f"Encounter error handling async request from {client} : "
-                f"{e.__class__.__name__} | {e}",
-                exc_info=True,
-            )
-
-    @property
-    def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
-        """The addresses this listener is currently bound to.
-
-        Empty before `bind()` and after `stop()` has actually run -- which is
-        not necessarily when `stop()` returns; see the note on `stop()` about
-        being called from the handler worker. Asking the socket rather than
-        repeating `self._listen` is the point: binding port 0 gives an ephemeral
-        port that only the socket knows, which is how a test or a tool discovers
-        where to send. Without this the only way to find out was to reach into
-        the private socket list, which the tests did in twenty-one places.
-        """
-        addresses = []
-        for sock in self._sockets:
-            try:
-                addresses.append(_net.SocketAddress(sock))
-            except OSError:  # pragma: no cover - socket closed underneath us
-                continue
-        return tuple(addresses)
-
-    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        pass
-
-    def bind(self) -> None:
-        _bind_sockets(
-            self._listen,
-            self._sockets,
-            self._endpoints,
-            self._pktinfo,
-            label="async",
-            reuse_address=self.REUSE_ADDRESS,
-            receive_buffer=self.RECEIVE_BUFFER_SIZE,
-        )
+        self._dispatch(data, client, sock, ifindex, local_ip)
 
     async def wait(self) -> None:
         """Block until `stop()` is called.
@@ -401,23 +313,21 @@ class AsyncDHCPListener:
         except RuntimeError:
             # No running loop, so the tasks cannot be waited for and nobody can
             # be awaiting this anyway.
-            self._close_sockets(stopped)
+            self._finish_close(stopped)
             return None
         if not tasks:
-            self._close_sockets(stopped)
+            self._finish_close(stopped)
             future = running.create_future()
             future.set_result(None)
             return future
 
         async def finish() -> None:
             await _asyncio.gather(*tasks, return_exceptions=True)
-            self._close_sockets(stopped)
+            self._finish_close(stopped)
 
         return running.create_task(finish())
 
-    def _close_sockets(self, stopped: "_ty.Optional[_asyncio.Event]" = None) -> None:
-        for sock in self._sockets:
-            _close_socket(sock, self._endpoints)
-        self._sockets.clear()
+    def _finish_close(self, stopped: "_ty.Optional[_asyncio.Event]" = None) -> None:
+        self._close_sockets()
         if stopped is not None:
             stopped.set()

@@ -24,6 +24,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking: `NoClientIdentity` is now `pydhcp.NoClientIdentityError`**
   (`pydhcp.exceptions`), no longer importable from `pydhcp.packet.message`.
   No alias is kept. It is a `ValueError` as before.
+- **The two listeners share one private base** for their configuration, binding
+  and the handling of one datagram, and one is not the other's lookalike any more.
+  Three differences between them are gone: `AsyncDHCPListener` no longer has the
+  plain attributes `packets_dropped_truncated` and `packets_dropped_error`, which
+  nothing ever incremented (the counts are on `.metrics`, as on the sync
+  listener); `DHCPListener(max_packet_size=...)` defaults to `None`, as the
+  header says, which means the largest UDP payload exactly as the old default
+  constant did; and a listener that serves a wildcard through one socket per
+  address (`per_interface=True`, or no packet info) lists the host's interfaces
+  when `bind()` runs, not when it is constructed. The async listener's
+  error record for a failing handler now reads like the sync one's.
 - **`DHCPClient.discover_offer()` and `.dora()` name the keywords they
   forward** (`xid`, `client_identifier`, `parameter_request_list` and, for
   `discover_offer`, `broadcast`) instead of taking `**discover_kwargs`. The same

@@ -114,25 +114,39 @@ def _parselisteners(
         if not isinstance(ip, _ipaddress.IPv4Address):
             ip = _ipaddress.IPv4Address(ip)
 
-        if ip == _const.WILDCARD_V4 and expand_wildcard:
+        ports: _ty.Sequence[int]
+        if port is None:
+            ports = default_ports
+        elif isinstance(port, int):
+            ports = [port]
+        else:
+            ports = port
+        for p in ports:
+            bind_addr = _net.SocketAddress(ip, int(p))
+            if bind_addr not in _listen:
+                _listen.append(bind_addr)
+    return _expand_wildcards(_listen) if expand_wildcard else _listen
+
+
+def _expand_wildcards(
+    addresses: _ty.Iterable[_net.SocketAddress],
+) -> list[_net.SocketAddress]:
+    """Replace each wildcard address by one entry per host IPv4 address.
+
+    Reads the host's interfaces, so it belongs where sockets are bound.
+    """
+    expanded: list[_net.SocketAddress] = []
+    for address in addresses:
+        if address.ip == _const.WILDCARD_V4:
             ips = [
                 i.ip
                 for i in _net.host_ip_interfaces()
                 if isinstance(i.ip, _ipaddress.IPv4Address)
             ]
         else:
-            ips = [ip]
+            ips = [address.ip]
         for ip in ips:
-            ports: _ty.Sequence[int]
-            if port is None:
-                ports = default_ports
-            elif isinstance(port, int):
-                ports = [port]
-            else:
-                ports = port
-            for p in ports:
-                p = int(p)
-                bind_addr = _net.SocketAddress(ip, p)
-                if bind_addr not in _listen:
-                    _listen.append(bind_addr)
-    return _listen
+            entry = _net.SocketAddress(ip, address.port)
+            if entry not in expanded:
+                expanded.append(entry)
+    return expanded

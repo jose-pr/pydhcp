@@ -83,7 +83,7 @@ everything below from `pydhcp.listener` itself.
     `ipaddress.AddressValueError`.
   - **Wildcard expansion uses the APIPA-filtered address list.** A wildcard on
     a platform without packet info (or with `per_interface=True`) becomes one
-    socket per `host_ip_interfaces()` address, which
+    socket per `host_ip_interfaces()` address, read when `.bind()` runs and not when the listener is constructed, which
     excludes 169.254/16: binding is *selection* (which addresses this process
     answers on), not *resolution* (which interface a datagram arrived on, which
     uses `filter=False`). A link-local address means DHCP did not answer —
@@ -190,9 +190,10 @@ everything below from `pydhcp.listener` itself.
     counted in the same counter and reported once at INFO; only the handler
     already running finishes. `AsyncDHCPServer`, `AsyncDHCPRelay` and
     `AsyncDHCPCapture` take the same `max_queued`.
-  - `.bound_addresses`, `.REUSE_ADDRESS`, `.packets_dropped_truncated` and
-    `.packets_dropped_error` — as on `DHCPListener`, including the oversized
-    -datagram drop.
+  - `.bound_addresses`, `.REUSE_ADDRESS`, `.bind()` and the handling of one
+    datagram — as on `DHCPListener`, including the oversized-datagram drop; both
+    listeners share one private base for them, and neither is a subclass of the
+    other. The counters are on `.metrics` only.
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
     (there is no blocking loop to enter — use `start()` then `wait()`).
