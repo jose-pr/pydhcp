@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 hypothesis = pytest.importorskip("hypothesis")
-from hypothesis import HealthCheck, given, settings, strategies as st
+from hypothesis import HealthCheck, assume, event, given, settings, strategies as st
 
 from ipaddress import IPv4Address as IPv4
 
@@ -295,6 +295,108 @@ def _messages(draw) -> DHCPMessage:
     )
 
 
+#: Octets of option payload a default-size packet holds in its options field
+#: (576 less 28 of IP and UDP less 240 of header and cookie), END included.
+_OPTIONS_FIELD = 308
+
+
+def _needs_a_field_moved(message: DHCPMessage) -> bool:
+    """Whether the options only fit by moving an occupied `sname` or `file`.
+
+    Counted from the wire form of the bag alone, never from `encode`: the
+    options overflow the options field, so the only room is in `sname` and
+    `file`, and an occupied one has to travel as option 66 or 67 first.
+    """
+    return len(message.options.encode()) > _OPTIONS_FIELD and bool(
+        message.sname or message.file
+    )
+
+
+def _tlv(code: int, payload: bytes) -> bytes:
+    return bytes([code, len(payload)]) + payload
+
+
+#: A message whose options need 342 octets against a 308-octet field while
+#: `sname` (23 octets) and `file` (123) are both occupied. Overloading both
+#: fields fits it: 494 octets of options, the overload option and the two
+#: relocated names, against 307 + 127 + 63 octets of room.
+_SNAME = "n" * 23
+_FILE = "f" * 123
+_PACKED_OPTIONS = {
+    53: b"\x01",
+    1: bytes(4),
+    51: bytes(4),
+    3: bytes(24),
+    12: b"h" * 59,
+    119: (b"\x0e" + b"b" * 14 + b"\x00") * 10 + b"\x09" + b"c" * 9 + b"\x00",
+    43: bytes(64),
+}
+
+
+def _packed_example() -> DHCPMessage:
+    raw = b"".join(_tlv(code, value) for code, value in _PACKED_OPTIONS.items())
+    return DHCPMessage(
+        DHCPOpcode.BOOTREQUEST,
+        sname=_SNAME,
+        file=_FILE,
+        options=DHCPOptions.decode(raw + b"\xff"),
+    )
+
+
+def test_the_overload_example_fits_in_a_default_size_datagram() -> None:
+    """The ground truth for the example below: a legal datagram holds it.
+
+    The fields are laid out by hand (RFC 2132 section 9.3: option 52 value 3,
+    the file field read first, each field ended by END), so the message is
+    known to fit whatever `encode` does with it.
+    """
+    message = _packed_example()
+    assert len(message.options.encode()) == 342
+    options = {c: _tlv(c, v) for c, v in _PACKED_OPTIONS.items()}
+    main = (
+        options[53]
+        + _tlv(52, b"\x03")
+        + options[119]
+        + _tlv(67, _FILE.encode())
+        + b"\xff"
+    )
+    file_field = options[43] + options[12] + b"\xff"
+    sname_field = (
+        options[3] + _tlv(66, _SNAME.encode()) + options[1] + options[51] + b"\xff"
+    )
+    assert (
+        len(main) <= _OPTIONS_FIELD
+        and len(file_field) <= 128
+        and len(sname_field) <= 64
+    )
+    header = (
+        bytes([1, 1, 0, 0])
+        + bytes(4 + 2 + 2 + 16 + 16)
+        + sname_field.ljust(64, b"\x00")
+        + file_field.ljust(128, b"\x00")
+        + b"c\x82Sc"
+    )
+    restored = DHCPMessage.decode(header + main)
+    assert restored.sname == _SNAME
+    assert restored.file == _FILE
+    assert {
+        int(c): bytes(v) for c, v in restored.options.items(decoded=False)
+    } == _PACKED_OPTIONS
+
+
+@pytest.mark.xfail(
+    strict=True,
+    raises=OverflowError,
+    reason="encode lays the options out in order and does not search for a packing "
+    "that places a relocated name in the field with room for it",
+)
+def test_an_example_that_needs_both_fields_packed_tightly_encodes() -> None:
+    message = _packed_example()
+    restored = DHCPMessage.decode(message.encode())
+    assert restored.sname == _SNAME
+    assert restored.file == _FILE
+
+
 @given(_messages())
 def test_dhcp_message_round_trip(message: DHCPMessage) -> None:
     """A whole packet survives `encode()` -> `decode()` -> `encode()`.
@@ -304,6 +406,12 @@ def test_dhcp_message_round_trip(message: DHCPMessage) -> None:
     `sname`/`file` had no property coverage at all -- only the handful of
     hand-written examples in test_message.py.
     """
+    # A message that overflows the options field and carries an occupied name
+    # is laid out only by a packing search `encode` does not do; the example
+    # above pins that case on its own, and the count shows how often it is drawn.
+    moved = _needs_a_field_moved(message)
+    event(f"needs an occupied field moved: {moved}")
+    assume(not moved)
     encoded = message.encode()
     restored = DHCPMessage.decode(encoded)
 
