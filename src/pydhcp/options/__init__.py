@@ -160,8 +160,6 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         if codemap is None:
             codemap = DHCPOptionCode
         self._codemap = codemap
-        if codemap is DHCPOptionCode:
-            DHCPOptionCode.ensure_registered()
         self._options: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
     def __repr__(self) -> str:

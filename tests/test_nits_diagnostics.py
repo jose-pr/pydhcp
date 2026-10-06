@@ -42,7 +42,6 @@ def test_option_code_over_one_octet_names_the_value() -> None:
     # `DHCPOptionCode(256)` raises, so `_normalize` falls through to the
     # one-octet range check. Measured, not assumed -- a `DHCPOptionCodes[int]`
     # returns early on `isinstance(256, int)` and never reaches the branch.
-    DHCPOptionCode.ensure_registered()
     codes = DHCPOptionCodes[DHCPOptionCode]  # type: ignore[index]
     with pytest.raises(ValueError) as exc:
         codes._normalize(256)

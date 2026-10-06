@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from ._codes import DHCPOptionCode
-from ..packet._enums import DHCPMessageType
 from ._codecs._addresses import (
     ClasslessRoute,
     IPv4AddressOption,
@@ -12,6 +11,7 @@ from ._codecs._base import DHCPOptionCodes, List
 from ._codecs._ccc import CCCOption
 from ._codecs._domains import DomainList, DomainName, UncompressedDomainList
 from ._codecs._fqdn import ClientFQDN
+from ._codecs._message_type import DHCPMessageType
 from ._codecs._mos import MoSFQDNList, MoSIPv4AddressList
 from ._codecs._scalar import (
     Boolean,

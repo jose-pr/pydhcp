@@ -174,6 +174,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (`_bind_sockets`, `_arrival`, `_TruncatedDatagram`, `_split_host_port`,
   `_load_capture_hook`, `_write_capture_record` and the rest). They are in the private
   modules that define them.
+- **Breaking: `DHCPOptionCode.ensure_registered()` is gone.** The built-in codecs are
+  bound to the standard option codes when `pydhcp.options` is imported, so a lookup
+  never depends on an earlier call; there is no alias to call. A codec registered with
+  `register_type` afterwards replaces the built-in one, as before. `DHCPMessageType` is
+  defined in the options package (`pydhcp.packet.DHCPMessageType` and
+  `pydhcp.DHCPMessageType` are the same object).
 - **`DHCPMetrics` is `pydhcp.listener.DHCPMetrics`**, where it was
   `pydhcp.metrics.DHCPMetrics` and then a private module's. `pydhcp.options` exports
   `MIN_OPTION_CODE`, `MAX_OPTION_CODE` and every option codec in one list, and
