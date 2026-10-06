@@ -71,7 +71,7 @@ from ipaddress import ip_network
 
 from pydhcp import DHCPOptions
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options.type import ClasslessRoute
 
 options = DHCPOptions()
@@ -102,7 +102,7 @@ from ipaddress import ip_network
 
 from pydhcp import DHCPOptions
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options.type import Boolean, ClasslessRoute
 
 options = DHCPOptions()

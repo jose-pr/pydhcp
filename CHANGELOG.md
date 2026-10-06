@@ -71,6 +71,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `import pydhcp` raises `ValueError` at import; use `NETIMPS_SOCKET_PATCH=0`
   to disable the `socket` patch.
 
+- **Breaking: `pydhcp.network` holds only pydhcp's own types** (`HardwareAddressType`,
+  `NetworkInterface`, `SocketAddress`, `host_ip_interfaces`). `IPv4`, `IPv6`, `IP`,
+  `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `LINK_LOCAL_V4` and
+  `SocketOption` are gone from it: import `ipaddress.IPv4Address` and the others from
+  `ipaddress`, and `LINK_LOCAL_V4` and `SocketOption` from `netimps`. `WILDCARD_V4` is
+  `pydhcp.constants.WILDCARD_V4`. No alias is kept.
+- **Breaking: `pydhcp.MACAddress` and `NetworkInterface.mac` are `netimps.MACAddress`.**
+  `str(mac)` is now `aa:bb:cc:dd:ee:ff` where it was `AA-BB-CC-DD-EE-FF`; `pydhcp
+  interfaces` still prints the hyphenated upper-case form, through `mac.format("-",
+  upper=True)`.
+- **Breaking: `SocketAddress.listen()` is gone.** The listener calls `netimps.bind()`
+  directly with the arguments it always passed (`broadcast=True`, `connreset=False`, an
+  exclusive address unless `reuse_address` is set), so what a bound socket does on the wire
+  is unchanged; the method's own `connreset=True` default was never reached.
+- **A failed bind raises netimps' own error, with its own message.** The suggestions
+  "try port N+1000" and "Try 6767 for testing" are no longer appended to it.
+- **An adapter holding loopback and routable addresses answers from the routable one.**
+  The address a reply is sent from, when the request's destination names none of the
+  adapter's addresses, is `Interface.primary_ip()` (routable, then loopback,
+  link-local last); it was the first address in the adapter's order that was not
+  link-local. Only an adapter listing both kinds (Linux `lo` with an address added to
+  it) is affected.
+- **A request received without an arrival interface is judged by `Datagram.is_unicast`.**
+  A destination that is the subnet broadcast of an adapter this host holds is now treated
+  like the limited broadcast (no local address is taken from it); only the limited
+  broadcast and multicast were before.
+
 ### Renamed
 
 **Breaking.** Every public class name spells its acronyms in capitals, and the

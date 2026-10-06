@@ -9,7 +9,7 @@ subpackage ships its own header beside its code:
 | [`src/pydhcp/AGENTS.md`](src/pydhcp/AGENTS.md) | listener, server, client, relay, capture, leases, metrics, NVT text, constants, CLI |
 | [`src/pydhcp/packet/AGENTS.md`](src/pydhcp/packet/AGENTS.md) | the wire message and structured (de)serialization |
 | [`src/pydhcp/options/AGENTS.md`](src/pydhcp/options/AGENTS.md) | the options container, code registry and payload codecs |
-| [`src/pydhcp/network/AGENTS.md`](src/pydhcp/network/AGENTS.md) | addresses, interfaces, socket helpers |
+| [`src/pydhcp/network/AGENTS.md`](src/pydhcp/network/AGENTS.md) | the hardware-type enum, interface and socket-address types |
 
 Those headers are meant to be read *instead of* the source, so they are kept
 current with the code in the same commit that changes it.
@@ -20,7 +20,7 @@ current with the code in the same commit that changes it.
 src/pydhcp/        the package (src layout — an editable install or PYTHONPATH is needed)
   packet/          DHCPMessage, enums, structured formats
   options/         DHCPOptions, DHCPOptionCode, type/ payload codecs (incl. ccc.py)
-  network/         addresses and host interface discovery
+  network/         hardware-type, interface and socket-address types
   listener/        listeners and transports, one module per responsibility
   cli/             the `pydhcp` command: App in __init__, one module per subcommand
 tests/             pytest suite, including tests/integration (real sockets on loopback)

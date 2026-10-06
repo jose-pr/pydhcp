@@ -11,7 +11,8 @@ project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 them** — the previous wording said "everything", and 17 documented or
 subpackage names are not importable from `pydhcp`, among them `DHCPMetrics`,
 `ListenSpec`, `load_config`, `main`, `DHCPMessageType`, `DHCPPort`, `DHCPFlags`,
-`HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_V4`.
+`HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_V4`
+(the last now lives in `pydhcp.constants`).
 `from pydhcp import DHCPMessage` works; `from pydhcp import DHCPMessageType`
 does not. Import from the owning module when a name is not in `__all__`
 (83 names today, `__version__` among them: the installed distribution's
@@ -647,6 +648,8 @@ IPv6-only interface can break at runtime.
 
 Not re-exported from the top-level package — import from `pydhcp.constants`.
 
+- **`WILDCARD_V4`** — `IPv4Address("0.0.0.0")`: the "every address" bind target, and
+  the source of a client that has none yet. netimps has no such constant.
 - **`BOOTP_MIN_PACKET_SIZE`** (300) — the minimal BOOTP message (RFC 951's
   fixed header plus its 64-octet vend field). `DHCPMessage.encode()` pads to
   it: RFC 1542 §2.1 has a relay agent check a datagram can hold this and
