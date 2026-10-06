@@ -13,7 +13,7 @@ import subprocess
 import sys
 import typing as _ty
 
-from ..capture import CaptureEvent
+from ..capture._events import CaptureEvent
 from ..packet.structured import dump_message
 
 LOGGER = _logging.getLogger(__name__)

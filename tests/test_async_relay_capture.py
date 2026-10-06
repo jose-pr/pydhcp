@@ -125,7 +125,7 @@ _RECEIVE_PATH = (
 #: policy it inherits rather than restates.
 _CORE_MODULE = {
     "relay/_asyncio.py": "relay/_core.py",
-    "capture.py": "capture.py",
+    "capture/_asyncio.py": "capture/_core.py",
 }
 
 #: The policy each async class inherits rather than restates.
@@ -144,9 +144,9 @@ _POLICY = {
         "_RelayCore._insert_relay_agent_info",
         "_RelayCore._pending_key",
     ),
-    "capture.py": (
-        "DHCPCapture.handle",
-        "DHCPCapture._init_capture_state",
+    "capture/_asyncio.py": (
+        "_CaptureCore.handle",
+        "_CaptureCore._init_capture_state",
     ),
 }
 
@@ -175,7 +175,10 @@ def _shared_corpus(module: str) -> "set[str]":
 
 @pytest.mark.parametrize(
     "module, async_class",
-    [("relay/_asyncio.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
+    [
+        ("relay/_asyncio.py", "AsyncDHCPRelay"),
+        ("capture/_asyncio.py", "AsyncDHCPCapture"),
+    ],
 )
 def test_the_async_class_copies_no_receive_path_or_policy_line(
     module: str, async_class: str
@@ -194,7 +197,10 @@ def test_the_async_class_copies_no_receive_path_or_policy_line(
 
 @pytest.mark.parametrize(
     "module, async_class",
-    [("relay/_asyncio.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
+    [
+        ("relay/_asyncio.py", "AsyncDHCPRelay"),
+        ("capture/_asyncio.py", "AsyncDHCPCapture"),
+    ],
 )
 def test_the_async_class_never_names_a_receive_path_helper(
     module: str, async_class: str
@@ -218,13 +224,13 @@ def test_the_async_class_never_names_a_receive_path_helper(
     "module, async_class, state_init",
     [
         ("relay/_asyncio.py", "AsyncDHCPRelay", "_init_relay_state"),
-        ("capture.py", "AsyncDHCPCapture", "_init_capture_state"),
+        ("capture/_asyncio.py", "AsyncDHCPCapture", "_init_capture_state"),
     ],
 )
 def test_the_async_class_is_only_a_constructor_and_a_handle(
     module: str, async_class: str, state_init: str
 ) -> None:
-    """Two methods and a class attribute. Anything else is drift waiting.
+    """A constructor and nothing else; the rules are inherited from the core.
 
     `__init__` must delegate its state to the same method the sync constructor
     calls -- the `_init_server_state` shape. Re-implementing the body is how
@@ -238,9 +244,7 @@ def test_the_async_class_is_only_a_constructor_and_a_handle(
         for n in node.body
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
     ]
-    assert methods == (
-        ["__init__", "handle"] if module == "capture.py" else ["__init__"]
-    ), methods
+    assert methods == ["__init__"], methods
 
     init = _ty.cast(ast.FunctionDef, _node(tree, f"{async_class}.__init__"))
     called = [

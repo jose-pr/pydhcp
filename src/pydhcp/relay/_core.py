@@ -338,7 +338,7 @@ class _RelayCore(_Timed):
         back to 68 -- so which reply reached the client depended on which server
         answered first.
 
-        `now` is `time.monotonic()` seconds, the clock the table is kept on.
+        `now` is seconds on the monotonic clock, the one the table is kept on.
         """
         self._expire_pending(now)
         return self._pending_clients.get(self._pending_key(msg))

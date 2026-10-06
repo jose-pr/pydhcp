@@ -354,7 +354,7 @@ def test_dhcp_capture_logs_hook_errors_without_fail_fast(capture_class, caplog) 
 
     capture = capture_class(listen=("127.0.0.1", 6767), hook=bad_hook)
 
-    with caplog.at_level(logging.ERROR, logger="pydhcp.capture"):
+    with caplog.at_level(logging.ERROR, logger="pydhcp.capture._core"):
         capture.handle(_message(), _context())
 
     assert capture.accepted_count == 1
@@ -362,7 +362,7 @@ def test_dhcp_capture_logs_hook_errors_without_fail_fast(capture_class, caplog) 
     # Not fail-fast: the capture is still usable and says so.
     assert capture.hook_error is None
 
-    records = [r for r in caplog.records if r.name == "pydhcp.capture"]
+    records = [r for r in caplog.records if r.name == "pydhcp.capture._core"]
     assert len(records) == 1
     assert records[0].levelno == logging.ERROR
     assert records[0].getMessage() == "Capture hook failed"

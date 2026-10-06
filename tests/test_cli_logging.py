@@ -16,7 +16,8 @@ import subprocess
 import sys
 from unittest.mock import MagicMock
 
-import pydhcp.capture as capture_module
+# The module that logs for the capture; a logger is named for its module.
+import pydhcp.capture._core as capture_module
 import pydhcp.cli as cli_module
 from pydhcp.cli import (
     _capture_hook as capture_hook_module,
@@ -47,7 +48,7 @@ def _event() -> CaptureEvent:
 
 
 def test_module_loggers_are_children_of_the_package_logger() -> None:
-    assert capture_module.LOGGER.name == "pydhcp.capture"
+    assert capture_module.LOGGER.name == "pydhcp.capture._core"
     assert cli_module.LOGGER.name == "pydhcp.cli"
     for logger in (capture_module.LOGGER, cli_module.LOGGER):
         assert logger is not LOGGER

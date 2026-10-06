@@ -55,6 +55,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   pending table ages on the monotonic time stamped on each context, and
   `pydhcp.relay` is now a package (same import path and names; `PendingClient`
   is private); the relay's records are logged by `pydhcp.relay._core`.
+- **Breaking: `AsyncDHCPCapture` is no longer a subclass of `DHCPCapture`**, on the
+  same terms as the server and the relay: one private core holds the filter, sink
+  and hook rules (`hook_fail_fast` included), and the two captures are sibling
+  drivers over it. `isinstance(capture, DHCPCapture)` is false for an asynchronous
+  capture, and `CaptureEvent.captured_at` is the time stamped on the context when the
+  datagram arrived. `pydhcp.capture` is now a package (same import path and
+  names); its hook-failure record is logged by `pydhcp.capture._core`.
 - **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
   are gone** (they exported nothing); the layers are private modules of
   `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.

@@ -9,12 +9,12 @@ import typing as _ty
 
 from duho import Meta
 
-from ..capture import (
+from ..capture._events import (
     UNIQUE_FILENAME_FIELDS,
     CaptureEvent,
-    DHCPCapture,
     validate_filename_pattern,
 )
+from ..capture._sync import DHCPCapture
 from ._common import CAPTURE_FORMATS, _Command
 from ._capture_hook import _load_capture_hook, _serialize_capture_event
 

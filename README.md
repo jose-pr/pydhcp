@@ -54,9 +54,10 @@ server.listen()
 ### Asynchronous Server
 
 Every listener has an asyncio counterpart -- `AsyncDHCPListener`,
-`AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`. They are mixins over
-the same receive path rather than parallel implementations, so a fix reaches both
-halves; a test fails if any receive-path line is duplicated between them.
+`AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`. Each pair is two
+sibling drivers over one private core that owns no socket, thread or clock, so a
+fix to the rules reaches both; neither is a subclass of the other, and a test
+fails if a receive-path line is duplicated between them.
 
 ```python
 import asyncio

@@ -1,44 +1,21 @@
+"""What a capture records and how a filter chooses: events, filters and filename patterns."""
+
 from __future__ import annotations
 
 import ipaddress as _ipaddress
 import dataclasses as _data
 import datetime as _dt
 import enum as _enum_base
-import logging as _logging
 import re as _re
 import string as _string
 import typing as _ty
 
-from . import _network as _net
-from .listener._asyncio import AsyncDHCPListener
-from .listener._sync import DHCPListener
-from .listener._spec import ListenSpec
-from .listener._receive import DHCPRequestContext
-from .options._codes import DHCPOptionCode
-from .exceptions import NoClientIdentityError
-from .packet._message import DHCPMessage
-from .options._codecs._base import DHCPOptionType
-
-__all__ = [
-    "AsyncDHCPCapture",
-    "CaptureEvent",
-    "CaptureHook",
-    "CapturePredicate",
-    "CaptureSink",
-    "DHCPCapture",
-    "FILENAME_FIELDS",
-    "UNIQUE_FILENAME_FIELDS",
-    "compile_capture_filter",
-    "validate_filename_pattern",
-]
-
-#: This module's logger, a child of the package logger `pydhcp` (which
-#: `.listener` above has already imported, installing its `NullHandler`).
-LOGGER = _logging.getLogger(__name__)
-
-CapturePredicate = _ty.Callable[["CaptureEvent"], bool]
-CaptureHook = _ty.Callable[["CaptureEvent"], None]
-CaptureSink = _ty.Callable[["CaptureEvent"], None]
+from .. import _network as _net
+from ..listener._receive import DHCPRequestContext
+from ..options._codes import DHCPOptionCode
+from ..exceptions import NoClientIdentityError
+from ..packet._message import DHCPMessage
+from ..options._codecs._base import DHCPOptionType
 
 #: The placeholders `CaptureEvent.format_filename` fills in, and so the only
 #: ones a `--output-mode per-capture` filename pattern may name.
@@ -116,6 +93,11 @@ class CaptureEvent:
         return pattern.format(**values)
 
 
+CapturePredicate = _ty.Callable[[CaptureEvent], bool]
+CaptureHook = _ty.Callable[[CaptureEvent], None]
+CaptureSink = _ty.Callable[[CaptureEvent], None]
+
+
 def validate_filename_pattern(pattern: str) -> frozenset[str]:
     """Check a per-capture filename pattern; return the fields it names.
 
@@ -189,136 +171,6 @@ def compile_capture_filter(text: _ty.Optional[str]) -> CapturePredicate:
         return all(check(event) for check in checks)
 
     return predicate
-
-
-class DHCPCapture(DHCPListener):
-    def __init__(
-        self,
-        listen: ListenSpec = None,
-        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
-        sink: _ty.Optional[CaptureSink] = None,
-        hook: _ty.Optional[CaptureHook] = None,
-        hook_fail_fast: bool = False,
-        select_timeout: _ty.Optional[float] = None,
-        max_packet_size: _ty.Optional[int] = None,
-        per_interface: _ty.Optional[bool] = None,
-    ) -> None:
-        super().__init__(
-            listen=listen,
-            select_timeout=select_timeout,
-            max_packet_size=max_packet_size,
-            per_interface=per_interface,
-        )
-        self._init_capture_state(
-            packet_filter=packet_filter,
-            sink=sink,
-            hook=hook,
-            hook_fail_fast=hook_fail_fast,
-        )
-
-    def _init_capture_state(
-        self,
-        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
-        sink: _ty.Optional[CaptureSink] = None,
-        hook: _ty.Optional[CaptureHook] = None,
-        hook_fail_fast: bool = False,
-    ) -> None:
-        """Set up the state every capture variant needs.
-
-        `AsyncDHCPCapture` cannot call this class's `__init__` (its own base
-        takes a different argument set), so one method both constructors call is
-        what keeps the two from drifting -- the way `AsyncDHCPServer` drifted
-        from `DHCPServer` until `_init_server_state` existed.
-        """
-        self.packet_filter = (
-            compile_capture_filter(packet_filter)
-            if isinstance(packet_filter, str) or packet_filter is None
-            else packet_filter
-        )
-        self.sink = sink
-        self.hook = hook
-        self.hook_fail_fast = hook_fail_fast
-        #: The hook failure that stopped the capture, if `hook_fail_fast` is set.
-        #: Lets a caller distinguish "stopped because the hook failed" from
-        #: "stopped because it was asked to", which an exception swallowed by the
-        #: listener loop could not.
-        self.hook_error: _ty.Optional[BaseException] = None
-        self.accepted_count = 0
-
-    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        event = CaptureEvent(
-            message=msg,
-            context=context,
-            captured_at=_dt.datetime.now(tz=_dt.timezone.utc),
-        )
-        if not self.packet_filter(event):
-            return
-        self.accepted_count += 1
-        if self.sink is not None:
-            self.sink(event)
-        if self.hook is not None:
-            try:
-                self.hook(event)
-            except Exception as exc:
-                LOGGER.exception("Capture hook failed")
-                if self.hook_fail_fast:
-                    # Re-raising alone achieved nothing: handle() runs inside the
-                    # listener's per-packet try, which logs and carries on, so
-                    # capture kept running and still exited 0. Record the failure
-                    # and stop the loop, so a caller can tell that it ended
-                    # because of the hook rather than because it was asked to.
-                    self.hook_error = exc
-                    self.stop()
-                    raise
-
-
-class AsyncDHCPCapture(AsyncDHCPListener, DHCPCapture):  # type: ignore[misc]
-    """`DHCPCapture`'s filter/sink/hook policy on the asyncio listener.
-
-    Mixed the way `AsyncDHCPServer` is: no receive-path code is repeated here,
-    so the packet-info wildcard path, the interface resolution and the bind
-    diagnostics are the same ones the sync capture uses.
-
-    `accepted_count`, `hook_error` and anything a `sink` keeps are unguarded,
-    exactly as on `DHCPCapture`. What keeps them safe is that
-    `AsyncDHCPListener` runs handlers on a single worker thread -- including
-    the sink, so the capture CLI's `--count` budget needs no lock and no
-    library-side state of its own.
-
-    `hook_fail_fast` stops the capture through `AsyncDHCPListener.stop()`,
-    which is not a coroutine and is called from that worker thread; it hands
-    the close back to the event loop rather than touching it from off-thread.
-    """
-
-    def __init__(
-        self,
-        listen: ListenSpec = None,
-        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
-        sink: _ty.Optional[CaptureSink] = None,
-        hook: _ty.Optional[CaptureHook] = None,
-        hook_fail_fast: bool = False,
-        max_packet_size: _ty.Optional[int] = None,
-        per_interface: _ty.Optional[bool] = None,
-        max_queued: _ty.Optional[int] = None,
-    ) -> None:
-        AsyncDHCPListener.__init__(
-            self,
-            listen=listen,
-            max_packet_size=max_packet_size,
-            per_interface=per_interface,
-            max_queued=max_queued,
-        )
-        self._init_capture_state(
-            packet_filter=packet_filter,
-            sink=sink,
-            hook=hook,
-            hook_fail_fast=hook_fail_fast,
-        )
-
-    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        # Both bases define handle() and AsyncDHCPListener's no-op comes first
-        # in the MRO; without this the capture would record nothing.
-        DHCPCapture.handle(self, msg, context)
 
 
 def _sanitize_filename_value(value: str) -> str:

@@ -495,7 +495,7 @@ observed by this relay instance.
   entry costs the port-68 fallback and the interface pin. Raise either class
   attribute for a deployment with more exchanges genuinely in flight.
 
-## Capture (`capture.py`)
+## Capture (`capture/`)
 
 - **`DHCPCapture(listen=None, packet_filter=None, sink=None, hook=None,
   hook_fail_fast=False, select_timeout=None, max_packet_size=None,
@@ -556,9 +556,9 @@ IPv6-only interface can break at runtime.
 - **`AsyncDHCPCapture(listen=None, packet_filter=None, sink=None, hook=None,
   hook_fail_fast=False, max_packet_size=None, per_interface=None,
   max_queued=None)`** — the same
-  filter/sink/hook policy running on `AsyncDHCPListener`.
-  `isinstance(x, DHCPCapture)` holds. Identical arguments minus
-  `select_timeout`, and both constructors share `_init_capture_state()`. Drive
+  filter/sink/hook rules running on `AsyncDHCPListener`: a sibling of
+  `DHCPCapture` over one private core, not a subclass. Identical arguments minus
+  `select_timeout`, and both constructors share the core's state setup. Drive
   it with `await .start()` / `await .wait()` / `.stop()` rather than
   `.listen()`, and check `.hook_error` after `.wait()` returns.
   - `accepted_count`, `hook_error` and whatever a `sink` keeps are unguarded on
