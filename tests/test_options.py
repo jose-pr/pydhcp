@@ -2,7 +2,7 @@ import pytest
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptions
 from pydhcp.options import DHCPOptionCode
-from pydhcp.options._codecs import (
+from pydhcp.options import (
     IPv4AddressOption,
     SIPServers,
     ClientFQDN,

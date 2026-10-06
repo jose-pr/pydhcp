@@ -11,15 +11,18 @@ from __future__ import annotations
 
 import pytest
 
+# the loader behind the command line is not public
 from pydhcp import _config as config
 from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode, DHCPOptions
-from pydhcp.options._codecs import DomainList, OptionOverload
-from pydhcp.options._codecs._base import DHCPOptionCodes
-from pydhcp.options._codecs._ccc import CCCProvisioningServerAddress
-from pydhcp.options._codecs._addresses import IPv4AddressOption
-from pydhcp.options._codecs._scalar import U32
+from pydhcp.options import DomainList, OptionOverload
+from pydhcp.options import DHCPOptionCodes
+from pydhcp.options import CCCProvisioningServerAddress
+from pydhcp.options import IPv4AddressOption
+from pydhcp.options import U32
 from pydhcp.packet import DHCPMessageType
+
+# the message class is public through pydhcp.packet
 from pydhcp.packet import _message as _message
 from pydhcp.packet import structured
 
@@ -121,6 +124,7 @@ def test_ccc_address_narrows_its_except_to_valueerror() -> None:
     def _explode(_value: object) -> object:
         raise RuntimeError("codec defect")
 
+    # the CCC sub-option helpers are not public
     import pydhcp.options._codecs._ccc as ccc
 
     original = ccc.IPv4AddressOption

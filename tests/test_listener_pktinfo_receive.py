@@ -21,7 +21,10 @@ from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 from pydhcp import DHCPServer
 import netimps
 
-from pydhcp.listener import AsyncDHCPListener, DHCPListener, _pktinfo_supported
+from pydhcp.listener import AsyncDHCPListener, DHCPListener
+
+# the receive path is not public
+from pydhcp.listener._receive import _pktinfo_supported
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessage, DHCPMessageType

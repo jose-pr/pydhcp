@@ -11,8 +11,10 @@ from __future__ import annotations
 import pytest
 
 from pydhcp.options import DHCPOptions
-from pydhcp.options._codes import DHCPOptionCode
-from pydhcp.options._codecs import DomainList, RDNSSSelection, UncompressedDomainList
+from pydhcp.options import DHCPOptionCode
+from pydhcp.options import DomainList, RDNSSSelection, UncompressedDomainList
+
+# the name reader's bounds are not public
 from pydhcp.options._codecs._domains import MAX_POINTER_HOPS
 
 # (codec, octets that precede the name list inside the option's payload)

@@ -19,7 +19,9 @@ import socket
 import pytest
 
 from pydhcp import _network as net  # the host-interface enumeration is not public
-from pydhcp.listener import _resolve_interface
+
+# the arrival-interface lookup is not public
+from pydhcp.listener._interfaces import _resolve_interface
 
 APIPA = ipaddress.IPv4Interface("169.254.11.89/16")
 

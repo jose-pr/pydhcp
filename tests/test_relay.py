@@ -14,7 +14,7 @@ from pydhcp import (
 )
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
-from pydhcp.options._codecs import RelayAgentInformation, TLVOption
+from pydhcp.options import RelayAgentInformation, TLVOption
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
 

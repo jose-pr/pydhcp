@@ -28,9 +28,13 @@ import pytest
 
 import pydhcp
 import pydhcp.options as _options
+
+# the registry module is loaded for its bindings
 import pydhcp.options._registry as _registry
+
+# the option-code machinery is not public
 from pydhcp.options import _codes as _code
-from pydhcp.options._codes import DHCPOptionCode
+from pydhcp.options import DHCPOptionCode
 
 #: The tree under test, so a subprocess imports the same one pytest did rather
 #: than whatever an editable install happens to point at.

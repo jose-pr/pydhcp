@@ -30,9 +30,9 @@ import datetime
 from pydhcp import AsyncDHCPServer, DHCPLease, DHCPServer
 from ipaddress import IPv4Address as IPv4
 from pydhcp import NetworkInterface
-from pydhcp._network import (
-    host_ip_interfaces,
-)  # the host-interface enumeration is not public
+
+# the host-interface enumeration is not public
+from pydhcp._network import host_ip_interfaces
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 
 parser = argparse.ArgumentParser()

@@ -2,7 +2,10 @@ import ipaddress
 
 import pytest
 
-from pydhcp.listener import DHCPListener, _parselisteners
+from pydhcp.listener import DHCPListener
+
+# the listen-argument parser is not public
+from pydhcp.listener._spec import _parselisteners
 from ipaddress import IPv4Address as IPv4
 from pydhcp import NetworkInterface, SocketAddress
 from pydhcp.server import AsyncDHCPServer, DHCPServer
@@ -156,7 +159,8 @@ def _a_real_interface():
 
 
 def test_resolve_interface_prefers_pktinfo_over_getsockname() -> None:
-    from pydhcp.listener import _resolve_interface
+    # the arrival-interface lookup is not public
+    from pydhcp.listener._interfaces import _resolve_interface
 
     index, expected = _a_real_interface()
     sock = _wildcard_socket()
@@ -174,7 +178,8 @@ def test_resolve_interface_prefers_pktinfo_over_getsockname() -> None:
 
 def test_resolve_interface_without_pktinfo_still_falls_back() -> None:
     """Unchanged behaviour for the address-bound receive path."""
-    from pydhcp.listener import _resolve_interface
+    # the arrival-interface lookup is not public
+    from pydhcp.listener._interfaces import _resolve_interface
 
     sock = _wildcard_socket()
     try:
@@ -190,7 +195,8 @@ def test_resolve_interface_by_index_alone_answers_from_the_adapter() -> None:
     index picks the adapter and its own routable address answers."""
     import netimps
 
-    from pydhcp.listener import _resolve_interface
+    # the arrival-interface lookup is not public
+    from pydhcp.listener._interfaces import _resolve_interface
 
     index, expected = _a_real_interface()
     netimps.clear_interface_cache()
@@ -207,7 +213,8 @@ def test_resolve_interface_by_index_alone_answers_from_the_adapter() -> None:
 
 def test_resolve_interface_falls_back_to_address_when_index_is_unknown() -> None:
     """A stale or unmatched ifindex must not lose an otherwise valid address."""
-    from pydhcp.listener import _resolve_interface
+    # the arrival-interface lookup is not public
+    from pydhcp.listener._interfaces import _resolve_interface
 
     _index, expected = _a_real_interface()
     sock = _wildcard_socket()
@@ -310,7 +317,10 @@ def test_interface_resolution_is_cached_and_cleared_by_bind(enumerations) -> Non
     resolution now costs one enumeration, and a bind forces the next."""
     import socket
 
-    from pydhcp.listener import DHCPListener, _resolve_interface
+    from pydhcp.listener import DHCPListener
+
+    # the arrival-interface lookup is not public
+    from pydhcp.listener._interfaces import _resolve_interface
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))

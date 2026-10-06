@@ -251,7 +251,10 @@ def test_async_listener_builds_a_packet_info_context():
     half previously built its own DHCPRequestContext and dropped ifindex/local_ip,
     so replies went out with whatever SERVER_IDENTIFIER the wildcard implied.
     """
-    from pydhcp.listener import PktInfoUDPTransport, UDPTransport, _context_for
+    from pydhcp.listener import PktInfoUDPTransport, UDPTransport
+
+    # the receive path is not public
+    from pydhcp.listener._receive import _context_for
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))

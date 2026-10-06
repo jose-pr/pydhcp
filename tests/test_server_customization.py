@@ -614,6 +614,7 @@ def test_configured_client_still_gets_a_unicast_reply() -> None:
 
 
 def _discover_requesting(seconds=None):
+    # a codec helper that no public module exports
     from pydhcp.options import _codecs as _optype
 
     options = DHCPOptions()
@@ -743,6 +744,7 @@ def test_relayed_client_on_another_subnet_is_refused_not_misconfigured():
 
 
 def _discover_requesting_ip(ip):
+    # a codec helper that no public module exports
     from pydhcp.options import _codecs as _optype
 
     options = DHCPOptions()
@@ -787,9 +789,9 @@ def _servable_interface():
     on the server side.
     """
     from netimps import LINK_LOCAL_V4
-    from pydhcp._network import (
-        host_ip_interfaces,
-    )  # the host-interface enumeration is not public
+
+    # the host-interface enumeration is not public
+    from pydhcp._network import host_ip_interfaces
 
     for interface in host_ip_interfaces(
         lambda i: not i.ip.is_loopback and i.ip not in LINK_LOCAL_V4

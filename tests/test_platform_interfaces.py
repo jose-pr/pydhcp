@@ -1,9 +1,9 @@
 import pytest
 from ipaddress import IPv4Address, IPv6Address
 from pydhcp import NetworkInterface
-from pydhcp._network import (
-    host_ip_interfaces,
-)  # the host-interface enumeration is not public
+
+# the host-interface enumeration is not public
+from pydhcp._network import host_ip_interfaces
 
 
 def test_pure_python_interfaces() -> None:

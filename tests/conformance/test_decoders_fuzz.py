@@ -13,6 +13,8 @@ import typing as _ty
 import pytest
 
 from pydhcp.options import DHCPOptionCode
+
+# a codec helper that no public module exports
 from pydhcp.options import _codecs as t
 
 SEEDS = [

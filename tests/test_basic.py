@@ -20,7 +20,7 @@ def test_socket_address():
 
 
 def test_classless_route():
-    from pydhcp.options._codecs import ClasslessRoute
+    from pydhcp.options import ClasslessRoute
     from ipaddress import IPv4Network
 
     # 24-bit subnet, router 192.168.1.1, network 192.168.1.0/24

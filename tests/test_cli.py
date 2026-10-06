@@ -19,19 +19,18 @@ from pydhcp import (
     NetworkInterface,
     DHCPRequestContext,
 )
-from pydhcp.cli import (
-    App,
-    Capture,
-    Interfaces,
-    Packet,
-    Relay,
-    Server,
-    _infer_capture_format,
-    _load_capture_hook,
-    _parse_server_address,
-    _write_capture_record,
-    main,
-)
+from pydhcp.cli import App, Capture, Interfaces, Packet, Relay, Server, main
+
+# the capture command's helpers are not public
+from pydhcp.cli._capture import _infer_capture_format, _write_capture_record
+
+# the hook loader is not public
+from pydhcp.cli._capture_hook import _load_capture_hook
+
+# the relay command's parser is not public
+from pydhcp.cli._relay import _parse_server_address
+
+# the loader behind the command line is not public
 from pydhcp._config import load_config
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.packet.structured import dump_message
@@ -529,7 +528,8 @@ def test_parse_server_address_shares_the_listener_parser():
     still calls IPv4() on whatever it gets -- it makes one syntax mean one
     thing.
     """
-    from pydhcp.listener import _split_host_port
+    # the listen-argument parser is not public
+    from pydhcp.listener._spec import _split_host_port
 
     assert _parse_server_address("[::1]:6767") == _split_host_port("[::1]:6767")
 
@@ -913,6 +913,7 @@ def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> Non
     """ConfigParser.read() ignores a path that does not exist, so a typo'd
     --config silently started a server on its defaults -- while the same typo in
     a .yaml or .json path raised."""
+    # the loader behind the command line is not public
     from pydhcp._config import load_config
 
     for suffix in (".ini", ".json", ".yaml"):
@@ -1088,7 +1089,7 @@ def _capture_event_with_client_id(client_id: bytes):
         HardwareAddressType,
         DHCPOpcode,
     )
-    from pydhcp.packet._message import DHCPMessage
+    from pydhcp.packet import DHCPMessage
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER

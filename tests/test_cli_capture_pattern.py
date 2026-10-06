@@ -23,7 +23,10 @@ from pydhcp.capture import (
     UNIQUE_FILENAME_FIELDS,
     validate_filename_pattern,
 )
-from pydhcp.cli import Capture, _write_capture_record
+from pydhcp.cli import Capture
+
+# the capture command's helpers are not public
+from pydhcp.cli._capture import _write_capture_record
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
 from pydhcp.packet import DHCPMessageType

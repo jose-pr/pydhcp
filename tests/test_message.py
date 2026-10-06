@@ -3,7 +3,7 @@ import logging
 import pytest
 from datetime import timedelta
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
-from pydhcp.packet._message import DHCPMessage
+from pydhcp.packet import DHCPMessage
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
@@ -370,6 +370,7 @@ def test_min_legal_size_is_the_rfc2131_capability_floor():
     be prepared to receive DHCP messages with an 'options' field of at least
     length 312 octets".
     """
+    # protocol constants are not public
     from pydhcp import _constants as const
 
     fixed_header = 236  # op..file, RFC 2131 s2 figure 1

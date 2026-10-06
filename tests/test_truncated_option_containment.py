@@ -20,8 +20,10 @@ from pydhcp import NetworkInterface, DHCPRequestContext
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
+
+# a codec helper that no public module exports
 from pydhcp.options import _codecs as T
-from pydhcp.packet._message import DHCPMessage
+from pydhcp.packet import DHCPMessage
 from pydhcp.server import DHCPServer
 
 

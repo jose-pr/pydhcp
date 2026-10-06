@@ -16,7 +16,7 @@ import pytest
 from pydhcp import DHCPMessage, DHCPOptions
 from pydhcp.exceptions import DHCPDecodeError
 from pydhcp.options import DHCPOptionCode
-from pydhcp.options._codecs import IPv4AddressOption
+from pydhcp.options import IPv4AddressOption
 from ipaddress import IPv4Address as IPv4
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 

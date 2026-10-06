@@ -22,6 +22,8 @@ from pydhcp.cli import (
     _capture_hook as capture_hook_module,
 )  # patches the hook's subprocess call
 from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
+
+# the logging setup is not public
 from pydhcp._log import LOGGER
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
@@ -194,6 +196,8 @@ def test_every_module_that_logs_does_so_on_its_own_logger() -> None:
 def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     """A server warning and a listener warning, one logger apart."""
     from pydhcp import DHCPServer
+
+    # the arrival-interface lookup is not public
     from pydhcp.listener import _interfaces as interfaces
     from pydhcp.packet import DHCPOpcode
 

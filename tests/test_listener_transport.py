@@ -21,12 +21,10 @@ import ipaddress
 
 import netimps
 
-from pydhcp.listener import (
-    DHCPListener,
-    PktInfoUDPTransport,
-    UDPTransport,
-    _arrival,
-)
+from pydhcp.listener import DHCPListener, PktInfoUDPTransport, UDPTransport
+
+# the receive path is not public
+from pydhcp.listener._receive import _arrival
 from ipaddress import IPv4Address as IPv4
 
 

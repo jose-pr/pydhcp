@@ -9,6 +9,8 @@ import netimps
 
 from pydhcp import _network as network  # the module's own surface is what is tested
 from pydhcp import NetworkInterface, SocketAddress
+
+# the arrival-interface lookup is not public
 from pydhcp.listener._interfaces import _network_interface
 
 

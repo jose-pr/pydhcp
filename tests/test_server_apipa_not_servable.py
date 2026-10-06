@@ -78,7 +78,8 @@ def _request(requested: str):
 
 
 def test_a_link_local_interface_is_not_servable(host) -> None:
-    from pydhcp.server import _servable_interface
+    # the server's lease-selection helper is not public
+    from pydhcp.server.policy import _servable_interface
 
     assert (
         _servable_interface(IPv4("169.254.11.89")) is None
@@ -86,7 +87,8 @@ def test_a_link_local_interface_is_not_servable(host) -> None:
 
 
 def test_a_routable_interface_still_is(host) -> None:
-    from pydhcp.server import _servable_interface
+    # the server's lease-selection helper is not public
+    from pydhcp.server.policy import _servable_interface
 
     found = _servable_interface(IPv4("10.0.0.1"))
     assert found is not None and found.name == "eth0"

@@ -3,7 +3,10 @@ from __future__ import annotations
 import json
 import pytest
 
+# the loader behind the command line is not public
 from pydhcp import _config as config
+
+# the loader behind the command line is not public
 from pydhcp._config import load_config
 
 

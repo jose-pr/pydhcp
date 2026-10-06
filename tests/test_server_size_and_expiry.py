@@ -7,6 +7,8 @@ from unittest.mock import Mock
 import pytest
 
 from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContext
+
+# protocol constants are not public
 from pydhcp import _constants as const
 from pydhcp.lease import DHCPLease, InMemoryLeaseBackend
 from ipaddress import IPv4Address as IPv4

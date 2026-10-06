@@ -123,8 +123,8 @@ def test_routing_rfc2131():
 
 
 def test_relay_agent_information_echoed_in_reply():
-    from pydhcp.packet._message import DHCPMessage as _DHCPMessage
-    from pydhcp.options._codecs import RelayAgentInformation, TLVOption
+    from pydhcp.packet import DHCPMessage as _DHCPMessage
+    from pydhcp.options import RelayAgentInformation, TLVOption
 
     server = MockDHCPServer()
     transport_mock = Mock()
@@ -160,7 +160,7 @@ class MockDHCPServerWithBackend(DHCPServer):
     DEFAULT_PORTS = (6767,)
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        from pydhcp.options._codecs import IPv4AddressOption, U32
+        from pydhcp.options import IPv4AddressOption, U32
 
         existing = self.lease_backend.lookup(client_id)
         if existing:

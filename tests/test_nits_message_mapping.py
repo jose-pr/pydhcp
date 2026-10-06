@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from pydhcp.packet._message import DHCPMessage
+from pydhcp.packet import DHCPMessage
 from pydhcp.packet.structured import load_message
 
 
