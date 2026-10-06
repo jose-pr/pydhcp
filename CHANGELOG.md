@@ -41,9 +41,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   socket reports no packet info.
 - **`DHCPMetrics.replies_dropped_pin`**: broadcast replies dropped because they
   could not be pinned to the interface the request arrived on.
+- **`listen` accepts an interface**: an adapter name (`"eth1"`, `"eth1:67"`), a MAC in
+  any spelling (`"aa-bb-cc-dd-ee-ff:67"`, `("aa:bb:cc:dd:ee:ff", 67)`), or a
+  `netimps.Interface` or `netimps.MACAddress`, in the constructors, `--listen` and a
+  configuration file. The listener binds one wildcard socket (so a broadcast is still
+  heard, which an address-bound socket on Linux is not) and drops, before decoding, a
+  datagram that arrived on another interface, counting it in the new
+  `DHCPMetrics.packets_dropped_other_interface`. The adapter is looked up by `bind()`,
+  and one that does not exist is a `ValueError` there. Cannot be combined with
+  `per_interface=True`.
 
 ### Changed
 
+- **Breaking: text in `listen` that is not an IPv4 address is an interface name.**
+  `"eth0"`, `"localhost:6767"` and `("localhost", 6767)` raised
+  `ipaddress.AddressValueError` and are now read as adapter names (a host name is
+  never resolved), so the error is a `ValueError` from `bind()` ("no interface
+  matches ...") when the host has no such adapter. IPv6 addresses are still refused
+  with `AddressValueError`.
 - **Breaking: the `listen` argument has one grammar, and some forms mean
   something else.** `("127.0.0.1", "6767")` bound ports 6 and 7 and
   `("127.0.0.1", True)` bound port 1; both, and any bare number or `bool` as an

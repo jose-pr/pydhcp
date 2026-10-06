@@ -17,7 +17,9 @@ pydhcp server --config server.yaml
 
 `listen` is text (`"127.0.0.1:6767,127.0.0.2:6768"`), an `[address, port]` pair
 (`listen: [127.0.0.1, 6767]`) or a list of either. `None`/`null` as the address is the
-wildcard; an empty value, a boolean or a bare number is an error.
+wildcard; an empty value, a boolean or a bare number is an error. Text that is not an
+IPv4 address names an interface (see [Listening on one
+interface](#listening-on-one-interface)).
 
 TOML support requires Python 3.11+ (stdlib `tomllib`) or the optional `tomli` package on older versions.
 
@@ -91,6 +93,39 @@ instead. **On Linux such a socket hears no broadcast**, so a client that has no 
 not served through it (macOS and the BSDs are expected to behave the same, unmeasured;
 Windows delivers the broadcast). Use it for unicast traffic and for tests, not to serve
 unconfigured clients; pydhcp warns once per process when it binds an address.
+
+## Listening on one interface
+
+To serve one interface and not the others, name it: an adapter name, a MAC or a
+`netimps.Interface`, with an optional port.
+
+```python
+from pydhcp.server import DHCPServer
+
+server = DHCPServer(listen="eth1")             # the adapter named eth1, default ports
+server = DHCPServer(listen="eth1:6767")        # ... on port 6767
+server = DHCPServer(listen="aa-bb-cc-dd-ee-ff:6767")   # the adapter with that MAC
+server = DHCPServer(listen=("aa:bb:cc:dd:ee:ff", 6767))
+server.serve_forever()
+```
+
+```bash
+pydhcp server --listen eth1
+```
+
+The text is read as an IPv4 address first, then as a MAC (`aa:bb:cc:dd:ee:ff`,
+`aa-bb-cc-dd-ee-ff`, `aabb.ccdd.eeff`, `aabbccddeeff`), and otherwise as an adapter
+name; a host name is **never resolved**, so `localhost` is looked for among the
+adapters. The port follows the last colon (`eth0:1` is `eth0`, port 1): a colon-spelled MAC
+takes its port in a pair, and an adapter whose name holds a colon, or looks like an
+address or a MAC, is passed as a `netimps.Interface`. The adapter is looked up when the
+listener binds, and one that does not exist is an error then.
+
+This is one wildcard socket: a socket bound to an address hears no broadcast on Linux, so
+the listener has to hear every interface to hear a client that has no address. It drops,
+before decoding, a datagram that arrived on another interface, and counts it in
+`metrics.packets_dropped_other_interface`. Naming the wildcard on the same port (`"*:67"`)
+removes the limit.
 
 For deterministic local testing or tools that need several explicit sockets, pass a list of
 endpoints or a tuple with multiple ports.
