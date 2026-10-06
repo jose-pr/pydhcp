@@ -50,6 +50,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `DHCPMetrics.packets_dropped_other_interface`. The adapter is looked up by `bind()`,
   and one that does not exist is a `ValueError` there. Cannot be combined with
   `per_interface=True`.
+- **An offered state in the lease store.** `LeaseBackend` gains
+  `offer(client_id, ip, hold_seconds, options=None)` and `commit(client_id, ttl)`,
+  `DHCPLease` gains `offered` (keyword-only, default `False`, part of equality and
+  hash), and `lookup` reports the state through it. An offer holds the address for
+  `hold_seconds` and is an expired record after that; `commit` turns it into a
+  binding. `allocate` stays as an offer and its commit in one call. The lease file
+  gains a `state` field (`"offered"` or `"bound"`); a file written before it, with
+  no `state`, loads as bindings.
+- **`DHCPServer.OFFER_HOLD_SECONDS`** (class attribute, `120.0`): how long an
+  address offered in a DHCPOFFER is held for the client it was offered to.
+- **Two counters in `DHCPMetrics`**: `leases_offered` (addresses held by an OFFER)
+  and `offers_withdrawn` (offers dropped because the client's REQUEST named another
+  server).
 
 ### Changed
 
@@ -577,6 +590,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   said it raised `DHCPDecodeError`, and the check could not fire. A message that
   stops after a complete option, inside one, or after the cookie decodes and
   keeps what arrived.
+- **Breaking: a DHCPDISCOVER no longer reserves an address for the lease time.**
+  253 forged DISCOVERs, each asking for a day, held a whole /24 for a day: the
+  stock allocator stored a full binding on the DISCOVER. It now holds the address
+  as an offer for `OFFER_HOLD_SECONDS` (120 s) and the client's REQUEST commits
+  it, so a forged flood holds the pool for the hold and no longer, and commits
+  nothing. The OFFER still advertises the lease the ACK would grant.
+  `leases_allocated` counts commits (an accepted offer, or an address allocated and
+  committed in one step); `leases_offered` counts offers. A REQUEST that names
+  another server gives back an address held by an *offer* and keeps a binding, which
+  anyone could have cancelled by naming another server.
+- **Breaking: `LeaseBackend` has six methods, and a backend lacking one is refused
+  when the server is built.** A backend written for the four methods `allocate`,
+  `lookup`, `release` and `renew` raises `TypeError: lease_backend X does not
+  implement LeaseBackend: it has no offer, commit (see pydhcp.lease.LeaseBackend)` from
+  `DHCPServer(...)` and `AsyncDHCPServer(...)`, where it used to fail on the first
+  DISCOVER; it works once it gains `offer` and `commit`. `allocate` and `offer` refuse
+  an address another client holds in either state (`allocate` used to store one
+  address for two clients), and `renew` extends a bound lease only.
+  `InMemoryLeaseBackend.lookup_by_ip` is answered from an address index: its cost
+  no longer grows with the number of leases.
+- **`pydhcp.lease` re-exports its names from private modules** (`_lease_store`,
+  `_lease_file`): the log lines of the two stores come from the loggers
+  `pydhcp._lease_store` and `pydhcp._lease_file`, not `pydhcp.lease`.
 
 ### Renamed
 

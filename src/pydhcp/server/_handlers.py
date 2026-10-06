@@ -96,10 +96,16 @@ class _Handlers(_Replies):
             server_id, actual_server_id
         ):
             if msg_ty is _enum.DHCPMessageType.DHCPREQUEST:
-                # The client selected a different server, so give the
-                # reservation back (RFC 2131 4.3.2).
-                if self.release_lease(client_id, server_id, msg):
-                    self.metrics.leases_released += 1
+                # The client selected a different server, so the address held
+                # for it by an offer is given back (RFC 2131 4.3.2). A binding
+                # the client accepted stays: anyone can name another server.
+                held = self.lease_backend.lookup(client_id)
+                if (
+                    held is not None
+                    and held.offered
+                    and self.release_lease(client_id, server_id, msg)
+                ):
+                    self.metrics.offers_withdrawn += 1
             else:
                 self.metrics.packets_dropped_other_server += 1
                 self._log_limit.log(
@@ -148,8 +154,8 @@ class _Handlers(_Replies):
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPDISCOVER from {context.client}|{client_id}"
         )
-        # A DISCOVER is a probe, so it may look and reserve but must not extend
-        # an existing binding -- see `_NonExtendingBackend`.
+        # A DISCOVER is a probe: it may hold an address as an offer but must
+        # not extend an existing binding or commit one.
         lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
         now = self._instant(context).utc
         if not lease or not self._has_time_left(lease, now):
@@ -224,6 +230,9 @@ class _Handlers(_Replies):
             )
             if committed is not None:
                 lease = committed
+            elif lease.offered:
+                # The hold lapsed between the decision and the commit.
+                resp_ty = _enum.DHCPMessageType.DHCPNAK
         else:
             # A lease with no time left NAKs rather than ACKing nothing: the
             # client is told to start over, which is recoverable, instead of

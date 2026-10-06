@@ -9,7 +9,7 @@ import netimps as _netimps
 import typing as _ty
 
 from .. import _constants as _const, _network as _net
-from ..lease import DHCPLease, LeaseBackend
+from ..lease import DHCPLease
 from ..listener._limit import _brief
 from ..options._codes import DHCPOptionCode
 from ..options import DHCPOptions
@@ -58,62 +58,6 @@ def _servable_interface(
         ),
         None,
     )
-
-
-class _NonExtendingBackend:
-    """A lease backend view that will not push an existing lease further out.
-
-    RFC 2131 s4.3.1 makes DHCPDISCOVER a probe: the server checks for a binding
-    and offers it, but nothing is agreed until the client REQUESTs. `renew` ran
-    anyway on that path -- measured: a DISCOVER carrying option 51 = 999999
-    pushed an existing 60-second lease twelve days out and incremented
-    `leases_renewed`. A DHCPREQUEST about to be NAKed renewed for the same
-    reason, so a client asking for the wrong address still got its old address
-    held longer, and `FileLeaseBackend` rewrote the file for each such packet.
-
-    Only *extension* is suppressed, which is the whole of the measured defect.
-    `allocate` still passes straight through, because reserving the address you
-    are about to offer is ordinary server behaviour and the base allocator only
-    ever allocates the address the client asked for -- so on the base
-    implementation the allocating path is exactly the path that goes on to ACK.
-    Suppressing it too would also mean offering an address a full store could
-    not actually hand over, turning today's honest silence into an offer
-    followed by silence.
-
-    `acquire_lease` reads the store through this view when its `commit`
-    argument is false. `__getattr__` forwards `lookup_by_ip` and any
-    backend-specific helper so a custom backend keeps working.
-    """
-
-    def __init__(self, inner: LeaseBackend) -> None:
-        self._inner = inner
-
-    def lookup(self, client_id: str) -> _ty.Optional[DHCPLease]:
-        return self._inner.lookup(client_id)
-
-    def allocate(
-        self,
-        client_id: str,
-        ip: _ipaddress.IPv4Address,
-        ttl: float,
-        options: _ty.Optional[DHCPOptions] = None,
-    ) -> _ty.Optional[DHCPLease]:
-        return self._inner.allocate(client_id, ip, ttl, options)
-
-    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DHCPLease]:
-        """Report the binding as it stands, unextended and unwritten.
-
-        Returning the very object `lookup` gave is what lets `acquire_lease`
-        tell a real renewal from this one without knowing which backend it is
-        talking to -- see the identity check there.
-        """
-        return self._inner.lookup(client_id)
-
-    def release(self, client_id: str) -> bool:
-        return False
-
-    def __getattr__(self, name: str) -> _ty.Any:
-        return getattr(self._inner, name)
 
 
 class _LeasePolicy(_ServerState):
@@ -217,39 +161,39 @@ class _LeasePolicy(_ServerState):
         DHCPREQUEST makes two, `commit=False` to decide and then `commit=True`
         if it is ACKed. An override honours `commit` itself, including in what
         it does to `self.lease_backend`, which is the real backend on both
-        calls: only this base implementation reads through a view that does not
-        extend a binding when `commit` is false.
+        calls.
 
-        The base implementation is intentionally small: it renews existing
-        leases and allocates only when the client supplies `REQUESTED_IP` or
-        `ciaddr`.
+        The base implementation is intentionally small. A client with a record
+        gets it back: on `commit=False` as it stands, on `commit=True` an
+        offered lease committed (`LeaseBackend.commit`) and a bound one renewed.
+        A client with none gets an address only when it supplies `REQUESTED_IP`
+        or `ciaddr`: held as an offer for `OFFER_HOLD_SECONDS` on
+        `commit=False`, allocated on `commit=True`.
         """
         _server = _servable_interface(server_id)
         if _server is None:
             return None
 
-        backend = (
-            self.lease_backend
-            if commit
-            else _ty.cast(LeaseBackend, _NonExtendingBackend(self.lease_backend))
-        )
+        backend = self.lease_backend
+        ttl = self.get_lease_seconds(msg)
         existing = backend.lookup(client_id)
         if existing:
-            renewed = backend.renew(client_id, self.get_lease_seconds(msg))
+            if not commit:
+                return existing
+            if existing.offered:
+                committed = backend.commit(client_id, ttl)
+                if committed is not None:
+                    self.metrics.leases_allocated += 1
+                return committed
+            renewed = backend.renew(client_id, ttl)
             if renewed:
-                # `_NonExtendingBackend.renew` hands back the object `lookup`
-                # returned, so identity is what separates a real renewal from a
-                # probe that merely looked. Counting the probe is how a DISCOVER
-                # came to inflate `leases_renewed`.
-                if renewed is not existing:
-                    self.metrics.leases_renewed += 1
+                self.metrics.leases_renewed += 1
                 return renewed
             return existing
 
         requested_ip = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
-        ttl = self.get_lease_seconds(msg)
 
         ip: _ty.Optional[_ipaddress.IPv4Address] = None
         if requested_ip:
@@ -289,10 +233,16 @@ class _LeasePolicy(_ServerState):
         # is recoverable, where being pointed at a black hole is not.
         # Override `acquire_lease` to supply the real ones.
 
-        LOGGER.debug(f"[XID={msg.xid:08x}] Allocating {ip} for {client_id}")
-        lease = backend.allocate(client_id, ip, ttl, options)
+        if commit:
+            LOGGER.debug(f"[XID={msg.xid:08x}] Allocating {ip} for {client_id}")
+            lease = backend.allocate(client_id, ip, ttl, options)
+            if lease is not None:
+                self.metrics.leases_allocated += 1
+            return lease
+        LOGGER.debug(f"[XID={msg.xid:08x}] Offering {ip} to {client_id}")
+        lease = backend.offer(client_id, ip, self.OFFER_HOLD_SECONDS, options)
         if lease is not None:
-            self.metrics.leases_allocated += 1
+            self.metrics.leases_offered += 1
         return lease
 
     def _address_refusal(

@@ -15,10 +15,12 @@ class DHCPMetrics:
     FIELDS: _ty.ClassVar[_ty.Tuple[str, ...]] = (
         "packets_received",
         "packets_sent",
+        "leases_offered",
         "leases_allocated",
         "leases_renewed",
         "leases_released",
         "leases_declined",
+        "offers_withdrawn",
         "releases_ignored",
         "packets_dropped_hop_limit",
         "packets_dropped_untrusted",
@@ -36,6 +38,11 @@ class DHCPMetrics:
 
     packets_received: int
     packets_sent: int
+    #: Addresses held for a client by a DHCPOFFER; none of them is a lease
+    #: until the client's REQUEST commits it.
+    leases_offered: int
+    #: Leases the server committed: an offer the client accepted, or an
+    #: address allocated and committed in one step.
     leases_allocated: int
     leases_renewed: int
     leases_released: int
@@ -44,6 +51,8 @@ class DHCPMetrics:
     #: address-conflict signal an operator needs to see, and folding it into
     #: `leases_released` made a conflict storm look like orderly shutdowns.
     leases_declined: int
+    #: Offers dropped because the client's REQUEST chose another server.
+    offers_withdrawn: int
     #: DHCPRELEASEs refused because the address named did not match the stored
     #: binding. Visible so "nobody is releasing" reads differently from
     #: "somebody is releasing addresses they do not hold".

@@ -282,7 +282,10 @@ def test_the_lease_policy_hook_is_called_by_the_base_allocator(
         _wait_for_calls(server, {"get_lease_seconds"})
 
     serve(server, exercise, loop_type)
-    assert server.metrics.leases_allocated == 1
+    # A DISCOVER holds an address as an offer; nothing is a lease until a
+    # REQUEST commits it.
+    assert server.metrics.leases_offered == 1
+    assert server.metrics.leases_allocated == 0
 
 
 # --- time arrives as an argument ---------------------------------------------

@@ -248,6 +248,11 @@ class _SmallStore(InMemoryLeaseBackend):
     MAX_LEASES = 50
 
 
+def _host(n: int) -> IPv4Address:
+    """The n-th address of 10.1.0.0/16: one address is held by one client."""
+    return IPv4Address(0x0A010000 + n)
+
+
 def test_lease_store_is_bounded():
     """Nothing about a DHCP client is authenticated.
 
@@ -259,8 +264,7 @@ def test_lease_store_is_bounded():
     backend = _SmallStore()
 
     accepted = sum(
-        backend.allocate(f"forged-{n}", IPv4Address("10.0.0.1"), 3600) is not None
-        for n in range(500)
+        backend.allocate(f"forged-{n}", _host(n), 3600) is not None for n in range(500)
     )
 
     assert accepted == backend.MAX_LEASES
@@ -282,7 +286,7 @@ def test_an_established_lease_is_never_evicted_to_make_room():
     backend.allocate("real-client", IPv4Address("10.0.0.9"), 3600)
 
     for n in range(500):
-        backend.allocate(f"forged-{n}", IPv4Address("10.0.0.1"), 3600)
+        backend.allocate(f"forged-{n}", _host(n), 3600)
 
     assert backend.lookup("real-client") is not None
     # and it can still renew, which is what keeps a working client working
@@ -298,9 +302,7 @@ def test_expired_leases_are_reclaimed_before_refusing():
     """
     backend = _SmallStore()
     for n in range(backend.MAX_LEASES):
-        backend.allocate(
-            f"transient-{n}", IPv4Address("10.0.0.1"), 0
-        )  # already expiring
+        backend.allocate(f"transient-{n}", _host(n), 0)  # already expiring
 
     time.sleep(0.01)
     assert backend.allocate("newcomer", IPv4Address("10.0.0.2"), 3600) is not None
@@ -316,7 +318,7 @@ def test_a_full_store_does_not_flood_the_log(caplog):
     backend = _SmallStore()
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         for n in range(500):
-            backend.allocate(f"forged-{n}", IPv4Address("10.0.0.1"), 3600)
+            backend.allocate(f"forged-{n}", _host(n), 3600)
 
     full_reports = [
         r for r in caplog.records if "Lease store is full" in r.getMessage()

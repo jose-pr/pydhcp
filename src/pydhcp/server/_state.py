@@ -12,6 +12,25 @@ from ..listener._limit import _LogLimit
 from ..lease import LeaseBackend
 from ..packet import _enums as _enum
 
+_BACKEND_METHODS = ("allocate", "offer", "commit", "lookup", "release", "renew")
+
+
+def _check_backend(backend: object) -> None:
+    """Refuse a lease backend that lacks a method of `LeaseBackend`, naming each.
+
+    Without this a backend that lacks `offer` and `commit` fails on the first
+    DHCPDISCOVER, in a handler, with an `AttributeError` that names no interface.
+    """
+    missing = [
+        name for name in _BACKEND_METHODS if not callable(getattr(backend, name, None))
+    ]
+    if missing:
+        raise TypeError(
+            f"lease_backend {type(backend).__name__} does not implement "
+            f"LeaseBackend: it has no {', '.join(missing)} "
+            "(see pydhcp.lease.LeaseBackend)"
+        )
+
 
 class _ServerState(_Timed):
     """Constants and per-instance state shared by the server layers.
@@ -58,6 +77,12 @@ class _ServerState(_Timed):
     #: asks for 0xFFFFFFFE holds the address until 2162.
     MAX_LEASE_SECONDS: float = 86400
 
+    #: How long an address offered in a DHCPOFFER is held for the client
+    #: that was offered it, in seconds. A client that does not REQUEST it
+    #: in that time loses it, so a DHCPDISCOVER from a forged identity
+    #: holds an address for this long and no longer.
+    OFFER_HOLD_SECONDS: float = 120.0
+
     #: Lower bound, so a client cannot ask for a one-second lease and turn
     #: itself into a renewal flood.
     MIN_LEASE_SECONDS: float = 60
@@ -77,6 +102,8 @@ class _ServerState(_Timed):
         """
         from ..lease import InMemoryLeaseBackend
 
+        if lease_backend is not None:
+            _check_backend(lease_backend)
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
         self._declined: _ty.OrderedDict[_ipaddress.IPv4Address, float] = (
             _ty.OrderedDict()

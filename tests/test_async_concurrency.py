@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import socket
 import time
-from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPOptions
+from pydhcp import AsyncDHCPServer, DHCPLease, DHCPMessage, DHCPOptions
 from pydhcp.options import IPv4AddressOption
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
@@ -18,7 +19,13 @@ class MockAsyncServerForConcurrency(AsyncDHCPServer):
         )
         ip = requested_ip if requested_ip else IPv4("127.0.0.1")
         options = DHCPOptions()
-        return self.lease_backend.allocate(client_id, ip, 3600, options)
+        # Every client is answered with the loopback address and nothing is
+        # stored: a store refuses an address another client holds, and this
+        # test is about concurrent handling, not about the store.
+        expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
+            hours=1
+        )
+        return DHCPLease(ip, expires, options)
 
 
 class ClientProtocol(asyncio.DatagramProtocol):
@@ -64,6 +71,10 @@ async def run_client(client_id_int: int, server_port: int):
     req_opts = DHCPOptions()
     req_opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPREQUEST
     req_opts[DHCPOptionCode.REQUESTED_IP] = offer.yiaddr
+    # A REQUEST that accepts an OFFER names the server that made it.
+    server_id = offer.options.get(DHCPOptionCode.SERVER_IDENTIFIER)
+    assert server_id is not None
+    req_opts[DHCPOptionCode.SERVER_IDENTIFIER] = server_id
     req_opts[DHCPOptionCode.CLIENT_IDENTIFIER] = mac
 
     request = build_request(options=req_opts, xid=2000 + client_id_int, chaddr=mac)

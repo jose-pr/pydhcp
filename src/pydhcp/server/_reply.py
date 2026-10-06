@@ -117,7 +117,16 @@ class _Replies(_LeasePolicy):
         elif lease is None:
             resp.yiaddr = _const.WILDCARD_V4
         else:
-            if lease.expires is None:
+            if lease.offered:
+                # What the OFFER promises is the lease the ACK would grant, not
+                # how long the address is held for while the client decides.
+                granted = self.get_lease_seconds(msg)
+                expires = (
+                    _const.INFINITE_LEASE_TIME
+                    if granted == _math.inf
+                    else min(_math.ceil(granted), _const.INFINITE_LEASE_TIME)
+                )
+            elif lease.expires is None:
                 expires = _const.INFINITE_LEASE_TIME
             else:
                 assert now is not None

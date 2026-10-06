@@ -6,7 +6,7 @@ import netimps as _netimps
 
 from .. import _network as _net
 from ._asyncio import AsyncDHCPServer
-from ._policy import _NonExtendingBackend, _servable_interface
+from ._policy import _servable_interface
 from ._sync import DHCPServer
 
 # `_net` and `_netimps` are the shared module objects: a test patches an attribute

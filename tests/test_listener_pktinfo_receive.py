@@ -138,7 +138,7 @@ def _exchange_discover(server_port: int) -> "DHCPMessage | None":
 def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     """End to end, on the base allocator. A wrong local address does not raise:
     it resolved a synthetic /32 interface with nothing in it to lease, and the
-    server received the DISCOVER and stayed silent. Only an allocation and a
+    server received the DISCOVER and stayed silent. Only an offer and a
     reply prove the path works."""
     server = DHCPServer(listen=spec, poll_interval=0.05)
     server.bind()
@@ -149,8 +149,8 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     finally:
         server.close()
 
-    assert server.metrics.leases_allocated == 1, server.metrics.snapshot()
-    assert reply is not None, "the server allocated but no reply arrived"
+    assert server.metrics.leases_offered == 1, server.metrics.snapshot()
+    assert reply is not None, "the server offered but no reply arrived"
     assert reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is (
         DHCPMessageType.DHCPOFFER
     )

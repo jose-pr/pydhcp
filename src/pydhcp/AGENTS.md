@@ -391,12 +391,20 @@ A test that patches a module global patches it in the private module that reads 
     one that writes to a store of its own, or extends a binding, does so only
     when `commit` is true: `self.lease_backend` is the real backend on both
     calls, and only the base implementation reads through a view that does not
-    extend a binding when `commit` is false. Base impl renews an existing lease, else allocates when
-    the client supplies `REQUESTED_IP` or a non-wildcard `ciaddr`; returns
-    `None` when nothing can be allocated (silently drops the message), which
-    includes any address outside the served network — so a relayed client on
-    another subnet is refused rather than answered with values that do not
-    apply there.
+    extend a binding when `commit` is false. Base impl, for a client with a record: on `commit=False` returns it as it
+    stands, on `commit=True` commits an **offered** lease and renews a bound
+    one. For a client with none: when the client supplies `REQUESTED_IP` or a
+    non-wildcard `ciaddr`, it **holds the address as an offer** for
+    `OFFER_HOLD_SECONDS` on `commit=False` (the DISCOVER) and allocates it on
+    `commit=True`; returns `None` when nothing can be offered (silently drops
+    the message), which includes any address outside the served network — so a
+    relayed client on another subnet is refused rather than answered with
+    values that do not apply there.
+    - **`OFFER_HOLD_SECONDS`** (class attribute, `120.0`) — how long an offered
+      address is held for the client it was offered to. A forged DHCPDISCOVER
+      therefore holds an address for this long and no longer; the OFFER
+      itself advertises the lease the ACK would grant (`get_lease_seconds`),
+      not the hold.
     - **Default options: `SUBNET_MASK` and `BROADCAST_ADDRESS` only**, both
       taken from the receiving interface. It deliberately does **not** send
       `ROUTER` or `DNS`: this host is not known to route or resolve, and
@@ -445,8 +453,9 @@ A test that patches a module global patches it in the private module that reads 
     from `.handle()`; each is independently overridable.
   - `.handle(msg, context) -> None` — dispatches on `DHCP_MESSAGE_TYPE`;
     ignores non-`BOOTREQUEST` messages and messages addressed to a different
-    `SERVER_IDENTIFIER` than this interface's IP (releasing the lease first
-    if it was a DHCPREQUEST).
+    `SERVER_IDENTIFIER` than this interface's IP (a DHCPREQUEST first gives
+    back an address held for the client by an *offer*, counted in
+    `offers_withdrawn`; a binding is kept).
   - Reply destination (`_filter_and_send`): unicasts to `giaddr:67` when a
     relay is in play (RFC 2131 §4.1); otherwise uses `ciaddr`, then
     broadcasts if the client's `BROADCAST` flag is set, else `yiaddr`,
@@ -745,7 +754,7 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
 
 ## Leases (`lease.py`)
 
-- **`DHCPLease(ip, expires=None, options=None)`** — one address held by one
+- **`DHCPLease(ip, expires=None, options=None, *, offered=False)`** — one address held by one
   client, as a **value**: read-only (assigning raises `AttributeError`),
   hashable, equal when the address, expiry and option payloads are.
   - `ip: IPv4Address` is required. `None` raises `TypeError` and `0.0.0.0`
@@ -759,14 +768,42 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     `append()` raise `TypeError`. Payloads read back as `bytes`.
     `lease.options.copy()` is an ordinary bag to change. A lease is the reply's
     source, never its scratch space.
+  - `offered: bool` is the lease's state: `True` for an address held for a
+    client that was offered it and has not accepted (`expires` is then the end
+    of the hold), `False` for a binding. It takes part in equality and hash.
   - Copies, deep-copies and pickles to an equal lease, across a process
     boundary too, so a `LeaseBackend` kept in another process can return one.
-- **`LeaseBackend`** (`Protocol`) — `.allocate(client_id, ip, ttl,
-  options=None) -> DHCPLease | None`, `.lookup(client_id) -> DHCPLease |
-  None`, `.release(client_id) -> bool`, `.renew(client_id, ttl) -> DHCPLease
-  | None`. **`ttl: float`** — seconds, or `math.inf` for an infinite lease.
-  It is `float` rather than `int` because that is what `math.inf` is and what
-  the implementations have always accepted; an `int` still satisfies it.
+- **`LeaseBackend`** (`Protocol`) — six methods, each atomic against the
+  others, each treating a record whose `expires` has passed as absent:
+  - `.offer(client_id, ip, hold_seconds, options=None) -> DHCPLease | None` —
+    hold `ip` for the client for `hold_seconds` and return the **offered**
+    lease (`offered` true, `expires` the end of the hold). `None` when another
+    client holds `ip` in either state, when the store is full and the client is
+    new, or when the client holds a *bound* lease on a different address (an
+    offer never replaces a binding). A client that holds a bound lease on `ip`
+    gets it back unchanged; an outstanding offer is replaced. `hold_seconds`
+    is finite and positive (`ValueError` otherwise).
+  - `.commit(client_id, ttl) -> DHCPLease | None` — turn the client's offered
+    lease into a bound one lasting `ttl`; `None` when it has none (absent,
+    lapsed, or already bound).
+  - `.lookup(client_id) -> DHCPLease | None` — the client's lease in either
+    state; `lease.offered` tells which.
+  - `.renew(client_id, ttl) -> DHCPLease | None` — extend a **bound** lease to
+    `ttl` from now; `None` for no lease or only an offer.
+  - `.release(client_id) -> bool` — drop the record in either state.
+  - `.allocate(client_id, ip, ttl, options=None) -> DHCPLease | None` — an
+    offer and its commit in one call, a bound lease; replaces whatever the
+    client held; `None` when another client holds `ip` or the store is full.
+  - **`ttl: float`** — seconds, or `math.inf` for an infinite lease. It is
+    `float` rather than `int` because that is what `math.inf` is and what the
+    implementations have always accepted; an `int` still satisfies it.
+  - A server refuses a backend that lacks any of the six at construction:
+    `TypeError: lease_backend X does not implement LeaseBackend: it has no
+    offer, commit`. A backend with only `allocate`, `lookup`, `release` and `renew` is refused
+    that way and works once it gains `offer` and `commit`.
+  - A backend that also has `lookup_by_ip(ip) -> str | None` (who holds the
+    address, in either state) lets the stock allocator say why it refused an
+    address; without it only `offer` and `allocate` refuse a held address.
 - **`InMemoryLeaseBackend()`** — dict-backed reference implementation;
   `.lookup()` evicts (and returns `None` for) expired leases lazily; `ttl` of
   `math.inf` stores a lease whose `expires` is `None`. Each
@@ -785,9 +822,11 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     at the cap. The accompanying warning is rate-limited to one per
     `FULL_LOG_INTERVAL_SECONDS` (60), so a flood cannot also flood the log;
     this counter is the exact figure.
-  - `.lookup_by_ip(ip) -> str | None` — who holds an address. An optional
-    extension, deliberately **not** on the `LeaseBackend` Protocol: a backend
-    without it just skips the allocator's already-in-use check.
+  - `.lookup_by_ip(ip) -> str | None` — who holds an address, offered or
+    bound. An optional extension, deliberately **not** on the `LeaseBackend`
+    Protocol: a backend without it just skips the allocator's already-in-use
+    check. Answered from an address index kept by offer, commit, allocate,
+    renew, release and expiry, so its cost does not grow with the store.
 - **`FileLeaseBackend(filepath)`** (`InMemoryLeaseBackend`
   subclass) — persists to JSON after every allocate/release/renew. `filepath`
   is required. **Construction reads nothing and touches no file**: `.open()`
@@ -798,11 +837,16 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     an interrupted write cannot truncate it. The rename retries briefly on
     `PermissionError` (on Windows an indexer or antivirus holding the file
     looks exactly like that).
-  - The file maps each client identifier to `{"ip", "expires", "options"}`
-    (option payloads as hex). `expires` is an ISO-8601 time with an offset, or
-    `"inf"` for no expiry. A time without an offset, as older files hold, is
-    read as local time of the same instant; an entry with no `ip` is skipped
-    with a warning.
+  - The file maps each client identifier to `{"ip", "expires", "state",
+    "options"}` (option payloads as hex). `state` is `"offered"` or `"bound"`;
+    an entry with no `state`, as older files hold, is bound. `expires` is an
+    ISO-8601 time with an offset, or `"inf"` for no expiry. A time without an
+    offset, as older files hold, is read as local time of the same instant; an
+    entry with no `ip` is skipped with a warning. An offer is not saved by
+    itself (it is short and means nothing after a restart, and a rewrite per
+    forged DISCOVER would cost what the sender chooses): the next save writes
+    the offers still held, and one that has lapsed by the time the file is read
+    is gone.
   - A missing file starts empty and says nothing. An **unreadable** one is
     logged at ERROR and moved aside to `<filepath>.corrupt` — it is the only
     copy of that state, so it is kept for recovery rather than overwritten by
@@ -830,7 +874,7 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     Add a counter here and it is initialised, reset and reported; the three
     used to repeat the list, which is how one gets incremented but never
     reported.
-  - Today: `packets_received`, `packets_sent`, `leases_allocated`,
+  - Today: `packets_received`, `packets_sent`, `leases_offered`, `leases_allocated`,
     `leases_renewed`, `leases_released`, `leases_declined`, `releases_ignored`,
     `packets_dropped_hop_limit`, `packets_dropped_untrusted`,
     `packets_dropped_truncated`, `packets_dropped_error`,
@@ -847,6 +891,12 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     and was dropped rather than sent by an interface the routing table picks) and
     `packets_dropped_other_interface` (a datagram dropped before decoding because it
     arrived on an interface the listener was not told to serve).
+  - **`leases_offered` counts offers, `leases_allocated` counts commits.** A
+    DHCPOFFER holds an address (`offer`) and adds one to `leases_offered`; the
+    REQUEST that accepts it (`commit`), or an address allocated and committed
+    in one step, adds one to `leases_allocated`. `offers_withdrawn` counts
+    offers dropped because the client's REQUEST named another server.
+    `leases_renewed` and `leases_released` count bound leases only.
   - `leases_declined` counts `DHCPDECLINE`, which used to land in
     `leases_released` though it means the opposite — the client found the
     address already in use. An address-conflict storm read as orderly
