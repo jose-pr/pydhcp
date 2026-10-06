@@ -108,6 +108,10 @@ send; keep it that way.
   RFC-documented members, and an `Enum`'s members cannot be split across
   modules. A class too big for one module becomes layers, each subclassing the
   last (see `server/` and `packet/_*.py`).
+  `tests/test_import_structure.py` pins this: the list of public modules (every
+  other module is underscored), the 500-line limit with each module over it named
+  and explained, and that no module imports a name through a re-exporting
+  `__init__`.
 
 - **Option codecs** live in `src/pydhcp/options/_codecs/` and are bound to codes
   in `_registry.py`. A codec must match the wire form its RFC defines, and a
