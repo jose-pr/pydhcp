@@ -23,15 +23,15 @@ import types
 import netimps
 
 from pydhcp.listener import (
-    DhcpListener,
-    PktInfoUdpTransport,
-    UdpTransport,
+    DHCPListener,
+    PktInfoUDPTransport,
+    UDPTransport,
     _arrival,
 )
 from pydhcp.network import IPv4
 
 
-class RecordingListener(DhcpListener):
+class RecordingListener(DHCPListener):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.handled: list = []
@@ -40,7 +40,7 @@ class RecordingListener(DhcpListener):
         self.handled.append(msg)
 
 
-def _drain(listener: DhcpListener, turns: int = 1) -> None:
+def _drain(listener: DHCPListener, turns: int = 1) -> None:
     """Run the receive loop just long enough to take what is already queued."""
     listener._select_timeout = 0.05
     thread = threading.Thread(target=listener.listen, daemon=True)
@@ -249,7 +249,7 @@ def test_a_reply_to_a_vanished_client_does_not_cost_the_next_datagram(caplog) ->
 # --- transport-25: three failures, three reports ---
 
 
-class ExplodingListener(DhcpListener):
+class ExplodingListener(DHCPListener):
     def handle(self, msg, context) -> None:
         raise RuntimeError("deliberate handler failure")
 
@@ -326,7 +326,7 @@ def test_a_failed_broadcast_is_not_retried_as_the_same_broadcast() -> None:
     could only fail identically -- while the warning claimed a retry had been
     made and the *second* exception, not the first, reached the caller."""
     sock = FailingSocket(sendto_error=OSError("no broadcast permission"))
-    transport = UdpTransport(sock)  # type: ignore[arg-type]
+    transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     with pytest.raises(OSError):
         transport.send(b"x" * 20, IPv4("255.255.255.255"), 68, b"\x00" * 6)
@@ -338,7 +338,7 @@ def test_a_wildcard_destination_is_also_only_tried_once() -> None:
     """0.0.0.0 is mapped to the broadcast before the send, so it is the same
     address the fallback would have used."""
     sock = FailingSocket(sendto_error=OSError("no broadcast permission"))
-    transport = UdpTransport(sock)  # type: ignore[arg-type]
+    transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     with pytest.raises(OSError):
         transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6)
@@ -351,7 +351,7 @@ def test_a_failed_unicast_is_not_escalated_to_a_broadcast() -> None:
 
     Its stated rationale was "no ARP entry for an address the client has not
     configured yet is exactly why the fallback exists" -- and this project has
-    already disproved that premise by measurement. `DhcpServer` documents it:
+    already disproved that premise by measurement. `DHCPServer` documents it:
     an L2 send to an address the client cannot answer ARP for is dropped by the
     kernel "with no error at all", which is how the original POSIX no-reply
     defect stayed hidden. So the retry never fired for the case it was written
@@ -373,7 +373,7 @@ def test_a_failed_unicast_is_not_escalated_to_a_broadcast() -> None:
             return len(data)
 
     sock = OnlyUnicastFails()
-    transport = UdpTransport(sock)  # type: ignore[arg-type]
+    transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     with pytest.raises(OSError):
         transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6)
@@ -386,7 +386,7 @@ def test_a_wildcard_destination_is_still_broadcast() -> None:
     yet", and the limited broadcast is the correct delivery for it -- measured
     against ISC dhclient, which saw none of the unicast OFFERs."""
     sock = FailingSocket()
-    transport = UdpTransport(sock)  # type: ignore[arg-type]
+    transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6)
 
@@ -415,7 +415,7 @@ class RecordingEndpoint:
 
 
 def _pinned(sock, endpoint, ifindex=3, local_ip="192.0.2.1"):
-    transport = PktInfoUdpTransport(sock, endpoint)  # type: ignore[arg-type]
+    transport = PktInfoUDPTransport(sock, endpoint)  # type: ignore[arg-type]
     transport.ifindex = ifindex
     transport.local_ip = IPv4(local_ip)
     return transport
@@ -519,7 +519,7 @@ def test_the_pin_names_exactly_the_receiving_address_and_interface() -> None:
 def test_no_local_address_means_no_pin() -> None:
     """With nothing to pin, the plain transport's rules apply unchanged."""
     sock, endpoint = FailingSocket(), RecordingEndpoint()
-    transport = PktInfoUdpTransport(sock, endpoint)  # type: ignore[arg-type]
+    transport = PktInfoUDPTransport(sock, endpoint)  # type: ignore[arg-type]
     transport.ifindex = 3
 
     transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6)
@@ -548,7 +548,7 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
     receiver.settimeout(2.0)
     sender = netimps.bind("0.0.0.0", 0)
     try:
-        transport = PktInfoUdpTransport(sender)
+        transport = PktInfoUDPTransport(sender)
         if not transport.endpoint.has_src_pinning:
             pytest.skip("no source pinning on this platform")
         transport.ifindex = loopback.index

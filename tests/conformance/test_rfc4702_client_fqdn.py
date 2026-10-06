@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp.options import DhcpOptions
+from pydhcp.options import DHCPOptions
 from pydhcp.options.type import ClientFqdn
 
 E = ClientFqdn.FLAG_E
@@ -99,7 +99,7 @@ def test_the_json_form_round_trips_a_partial_name() -> None:
 
 def test_a_message_option_with_a_partial_name_decodes() -> None:
     wire = bytes([81, 3 + len(HOST_EXAMPLE), E, 0, 0]) + HOST_EXAMPLE + b"\xff"
-    options = DhcpOptions()
+    options = DHCPOptions()
     options.decode(memoryview(bytearray(wire)))
     value = options.get(81)
     assert (value.name, value.partial) == ("host.example", True)

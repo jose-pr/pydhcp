@@ -5,13 +5,13 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _utils
 
 if _ty.TYPE_CHECKING:
-    from ..base import BaseDhcpOptionCode
+    from ..base import BaseDHCPOptionCode
 
 
-_DhcpOptionTypeT = _ty.TypeVar("_DhcpOptionTypeT", bound="DhcpOptionType")
+_DHCPOptionTypeT = _ty.TypeVar("_DHCPOptionTypeT", bound="DHCPOptionType")
 
 
-class DhcpOptionType:
+class DHCPOptionType:
     """Protocol for DHCP option payload codecs.
 
     Implementations decode with `_dhcp_read`, encode with `_dhcp_write`, and may
@@ -21,8 +21,8 @@ class DhcpOptionType:
 
     @classmethod
     def _dhcp_read(
-        cls: type[_DhcpOptionTypeT], option: memoryview
-    ) -> tuple[_DhcpOptionTypeT, int]:
+        cls: type[_DHCPOptionTypeT], option: memoryview
+    ) -> tuple[_DHCPOptionTypeT, int]:
         raise NotImplementedError()
 
     def _dhcp_write(self, buffer: bytearray) -> int:
@@ -42,8 +42,8 @@ class DhcpOptionType:
 
     @classmethod
     def _dhcp_decode(
-        cls: type[_DhcpOptionTypeT], option: _ty.Union[memoryview, bytes, bytearray]
-    ) -> _DhcpOptionTypeT:
+        cls: type[_DHCPOptionTypeT], option: _ty.Union[memoryview, bytes, bytearray]
+    ) -> _DHCPOptionTypeT:
         hint = cls._dhcp_len_hint()
         todecode = len(option)
         option = memoryview(option) if not isinstance(option, memoryview) else option
@@ -68,8 +68,8 @@ class DhcpOptionType:
         return decoded
 
 
-_T = _ty.TypeVar("_T", bound=DhcpOptionType)
-_C = _ty.TypeVar("_C", bound="BaseDhcpOptionCode")
+_T = _ty.TypeVar("_T", bound=DHCPOptionType)
+_C = _ty.TypeVar("_C", bound="BaseDHCPOptionCode")
 
 
 def hashable_payload(value: _ty.Any) -> _ty.Any:
@@ -94,7 +94,7 @@ def hashable_payload(value: _ty.Any) -> _ty.Any:
 _ListT = _ty.TypeVar("_ListT", bound="List[_ty.Any]")
 
 
-class List(DhcpOptionType, list[_T], metaclass=_utils.GenericMeta):
+class List(DHCPOptionType, list[_T], metaclass=_utils.GenericMeta):
     """Typed DHCP option list container."""
 
     _args_: _ty.ClassVar[tuple[_T]]
@@ -175,10 +175,10 @@ class RecordList(List[_T]):
         return _ty.cast(_T, _ty.cast(_ty.Any, ty)(first, second))
 
 
-_DhcpOptionCodesT = _ty.TypeVar("_DhcpOptionCodesT", bound="DhcpOptionCodes[_ty.Any]")
+_DHCPOptionCodesT = _ty.TypeVar("_DHCPOptionCodesT", bound="DHCPOptionCodes[_ty.Any]")
 
 
-class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
+class DHCPOptionCodes(List[_C]):  # type: ignore[type-var]
     """List of option codes used by parameter-request-list style options."""
 
     @classmethod
@@ -199,8 +199,8 @@ class DhcpOptionCodes(List[_C]):  # type: ignore[type-var]
 
     @classmethod
     def _dhcp_read(
-        cls: type[_DhcpOptionCodesT], option: memoryview
-    ) -> tuple[_DhcpOptionCodesT, int]:
+        cls: type[_DHCPOptionCodesT], option: memoryview
+    ) -> tuple[_DHCPOptionCodesT, int]:
         return cls(option.tolist()), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:

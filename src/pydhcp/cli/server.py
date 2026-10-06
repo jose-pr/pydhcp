@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing as _ty
 
-from ..server import DhcpServer
+from ..server import DHCPServer
 from ..lease import FileLeaseBackend, LeaseBackend
 from ..config import load_config
 from ._common import _Command
@@ -61,7 +61,7 @@ class Server(_Command):
             self._logger_.info("Persisting leases to %s", lease_file)
 
         self._logger_.info("Starting DHCP server, listening on: %s...", listen)
-        server = DhcpServer(
+        server = DHCPServer(
             listen=listen,
             per_interface=self.per_interface,
             lease_backend=backend,

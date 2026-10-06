@@ -4,7 +4,7 @@ Run: python pool_server.py [--async] [--relay-network CIDR] [--gate-chaddr HEX
          --gate-file PATH --ready-file PATH] [--status PATH] [--lease-seconds N]
 
 Listens on the wildcard at port 67 -- the path a real deployment uses. A stock
-`DhcpServer` allocates nothing for a client that asks for no address, so the
+`DHCPServer` allocates nothing for a client that asks for no address, so the
 pool is the override the documentation describes: the next free host from .100
 of the network the request belongs to (the relay's network when `giaddr` is
 set), on the subnet of the interface that holds the server identifier.
@@ -27,9 +27,9 @@ import time
 
 import datetime
 
-from pydhcp import AsyncDhcpServer, DhcpLease, DhcpServer
+from pydhcp import AsyncDHCPServer, DHCPLease, DHCPServer
 from pydhcp.network import IPv4, NetworkInterface, host_ip_interfaces
-from pydhcp.options import DhcpOptionCode, DhcpOptions
+from pydhcp.options import DHCPOptionCode, DHCPOptions
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--async", dest="use_async", action="store_true")
@@ -53,13 +53,13 @@ relay_network = (
 
 class Pool:
     def _options(self, network, router):
-        options = DhcpOptions()
-        options[DhcpOptionCode.SUBNET_MASK] = network.netmask
-        options[DhcpOptionCode.BROADCAST_ADDRESS] = network.broadcast_address
-        options[DhcpOptionCode.ROUTER] = [router]
-        options[DhcpOptionCode.DNS] = [router]
-        options[DhcpOptionCode.DOMAIN_NAME] = "lab.test"
-        options[DhcpOptionCode.INTERFACE_MTU] = 1400
+        options = DHCPOptions()
+        options[DHCPOptionCode.SUBNET_MASK] = network.netmask
+        options[DHCPOptionCode.BROADCAST_ADDRESS] = network.broadcast_address
+        options[DHCPOptionCode.ROUTER] = [router]
+        options[DHCPOptionCode.DNS] = [router]
+        options[DHCPOptionCode.DOMAIN_NAME] = "lab.test"
+        options[DHCPOptionCode.INTERFACE_MTU] = 1400
         return options
 
     def _private_lease(self, client_id, network, interface, router, commit):
@@ -77,7 +77,7 @@ class Pool:
                 expires = datetime.datetime.now() + datetime.timedelta(
                     seconds=args.lease_seconds
                 )
-                lease = DhcpLease(candidate, expires, self._options(network, router))
+                lease = DHCPLease(candidate, expires, self._options(network, router))
                 store[client_id] = lease
                 break
         return lease
@@ -124,24 +124,24 @@ class Pool:
             candidate = IPv4(str(network.network_address + host))
             if self._address_refusal(candidate, interface, client_id) is not None:
                 continue
-            options = DhcpOptions()
-            options[DhcpOptionCode.SUBNET_MASK] = network.netmask
-            options[DhcpOptionCode.BROADCAST_ADDRESS] = network.broadcast_address
-            options[DhcpOptionCode.ROUTER] = [router]
-            options[DhcpOptionCode.DNS] = [router]
-            options[DhcpOptionCode.DOMAIN_NAME] = "lab.test"
-            options[DhcpOptionCode.INTERFACE_MTU] = 1400
+            options = DHCPOptions()
+            options[DHCPOptionCode.SUBNET_MASK] = network.netmask
+            options[DHCPOptionCode.BROADCAST_ADDRESS] = network.broadcast_address
+            options[DHCPOptionCode.ROUTER] = [router]
+            options[DHCPOptionCode.DNS] = [router]
+            options[DHCPOptionCode.DOMAIN_NAME] = "lab.test"
+            options[DHCPOptionCode.INTERFACE_MTU] = 1400
             return self.lease_backend.allocate(
                 client_id, candidate, args.lease_seconds, options
             )
         return None
 
 
-class SyncPool(Pool, DhcpServer):
+class SyncPool(Pool, DHCPServer):
     pass
 
 
-class AsyncPool(Pool, AsyncDhcpServer):
+class AsyncPool(Pool, AsyncDHCPServer):
     pass
 
 

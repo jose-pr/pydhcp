@@ -8,7 +8,7 @@ import typing as _ty
 
 from . import enums as _enum
 from .. import network as _net, nvt as _nvt
-from ..options import BaseDhcpOptionCode, DhcpOptions, type as _type
+from ..options import BaseDHCPOptionCode, DHCPOptions, type as _type
 from ._encode import _MessageEncode
 
 
@@ -83,7 +83,7 @@ def _coerce_bootp_text(value: _ty.Any, field: str) -> str:
 
 
 def _coerce_option_value(
-    option_type: type[_type.DhcpOptionType],
+    option_type: type[_type.DHCPOptionType],
     value: _ty.Any,
 ) -> _ty.Any:
     if isinstance(value, str) and issubclass(option_type, _enum_base.Enum):
@@ -91,7 +91,7 @@ def _coerce_option_value(
     return value
 
 
-def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDhcpOptionCode]) -> int:
+def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDHCPOptionCode]) -> int:
     if isinstance(raw_code, int):
         return raw_code
     if isinstance(raw_code, str):
@@ -105,7 +105,7 @@ def _coerce_option_code(raw_code: _ty.Any, codemap: type[BaseDhcpOptionCode]) ->
 
 
 #: The class `from_mapping` is called on, which it constructs: typed as that
-#: class (`DhcpMessage` for `DhcpMessage.from_mapping`).
+#: class (`DHCPMessage` for `DHCPMessage.from_mapping`).
 _Mapped = _ty.TypeVar("_Mapped", bound="_MessageMapping")
 
 
@@ -137,7 +137,7 @@ class _MessageMapping(_MessageEncode):
                 decoded = option_type._dhcp_decode(value)
                 option_value = _enum_name(
                     decoded.__json__()
-                    if isinstance(decoded, _type.DhcpOptionType)
+                    if isinstance(decoded, _type.DHCPOptionType)
                     else decoded
                 )
                 if not self._survives_round_trip(code, option_value, value):
@@ -185,7 +185,7 @@ class _MessageMapping(_MessageEncode):
     ) -> bool:
         """Whether loading `option_value` back yields the original octets.
 
-        Goes through a `DhcpOptions` keyed by the *real* code and the same
+        Goes through a `DHCPOptions` keyed by the *real* code and the same
         codemap, because that is the path `from_mapping` takes. Probing under a
         different code silently measures a different codec -- code 0 is `PAD`,
         which is unregistered and falls back to `Bytes`, so everything looked
@@ -193,7 +193,7 @@ class _MessageMapping(_MessageEncode):
         """
         try:
             option_type = self.options._codemap.from_code(code).get_type()
-            probe = DhcpOptions(codemap=self.options._codemap)
+            probe = DHCPOptions(codemap=self.options._codemap)
             probe[code] = _coerce_option_value(option_type, option_value)
             return bytes(probe.get(code, decode=False) or b"") == bytes(original)
         except Exception:
@@ -213,7 +213,7 @@ class _MessageMapping(_MessageEncode):
             TypeError: `options` is not a mapping, or a field has the wrong type.
             ValueError: a field or option value cannot be coerced.
         """
-        options = DhcpOptions()
+        options = DHCPOptions()
         raw_options = data.get("options", {})
         if not isinstance(raw_options, _ty.Mapping):
             raise TypeError("options must be a mapping")
@@ -244,13 +244,13 @@ class _MessageMapping(_MessageEncode):
                 options[code] = raw_bytes
 
         return cls(
-            op=_coerce_enum_value(_enum.OpCode, data["op"]),
+            op=_coerce_enum_value(_enum.DHCPOpcode, data["op"]),
             htype=_coerce_enum_value(_enum.HardwareAddressType, data["htype"]),
             hlen=_coerce_int(data["hlen"]),
             hops=_coerce_int(data["hops"]),
             xid=_coerce_int(data["xid"]),
             secs=_dt.timedelta(seconds=_coerce_int(data["secs"])),
-            flags=_coerce_enum_value(_enum.Flags, data["flags"]),
+            flags=_coerce_enum_value(_enum.DHCPFlags, data["flags"]),
             ciaddr=_net.IPv4(data["ciaddr"]),
             yiaddr=_net.IPv4(data["yiaddr"]),
             siaddr=_net.IPv4(data["siaddr"]),

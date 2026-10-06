@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 
 from ._peers import dhclient
 from ._topo import RELAY_CLIENT_SIDE_MAC, ROLES_RELAYED, relayed
@@ -51,7 +51,7 @@ def test_dhclient_completes_dora_through_the_relay(lab, kind):
         message = frame.message()
         assert frame.dst_ip == net.server_ip
         assert str(message.giaddr) == net.relay_client_ip
-        assert DhcpOptionCode.RELAY_AGENT_INFORMATION in message.options
+        assert DHCPOptionCode.RELAY_AGENT_INFORMATION in message.options
 
     # Toward the client: out by the client's interface, from the relay's address
     # there, with option 82 gone.
@@ -60,7 +60,7 @@ def test_dhclient_completes_dora_through_the_relay(lab, kind):
     for frame in delivered:
         assert frame.src_mac == RELAY_CLIENT_SIDE_MAC
         assert frame.src_ip == net.relay_client_ip
-        assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in frame.message().options
+        assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in frame.message().options
 
     record_case(
         f"dhclient_{kind}_relay_dora",

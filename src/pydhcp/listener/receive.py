@@ -12,7 +12,12 @@ import netimps as _netimps
 from .. import network as _net
 from .interfaces import _resolve_interface
 from .spec import ListenSpec, _listen_uses_wildcard
-from .transport import BROADCAST_ADDRESS, PktInfoUdpTransport, Transport, UdpTransport
+from .transport import (
+    BROADCAST_ADDRESS,
+    PktInfoUDPTransport,
+    DHCPTransport,
+    UDPTransport,
+)
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -26,8 +31,8 @@ class _TruncatedDatagram(Exception):
     """
 
 
-class RequestContext(_ty.NamedTuple):
-    transport: Transport
+class DHCPRequestContext(_ty.NamedTuple):
+    transport: DHCPTransport
     interface: _net.NetworkInterface
     client: _net.SocketAddress
     client_mac: bytes
@@ -128,22 +133,22 @@ def _context_for(
     ifindex: "_ty.Optional[int]" = None,
     local_ip: "_ty.Optional[_net.IPv4]" = None,
     endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
-) -> RequestContext:
+) -> DHCPRequestContext:
     """Build the context for one received datagram.
 
     Shared by both listeners: duplicating it is what let the async half miss
     every fix the sync half gained. ``endpoint`` is the one the datagram was
     received through, reused for the pinned reply.
     """
-    transport: Transport
+    transport: DHCPTransport
     if ifindex is not None or local_ip is not None:
-        pkt_transport = PktInfoUdpTransport(sock, endpoint)
+        pkt_transport = PktInfoUDPTransport(sock, endpoint)
         pkt_transport.ifindex = ifindex
         pkt_transport.local_ip = local_ip
         transport = pkt_transport
     else:
-        transport = UdpTransport(sock)
-    return RequestContext(
+        transport = UDPTransport(sock)
+    return DHCPRequestContext(
         transport=transport,
         interface=_resolve_interface(sock, local_ip, ifindex),
         client=client,

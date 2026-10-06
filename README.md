@@ -32,14 +32,14 @@ base package.
 
 ### Synchronous Server
 ```python
-from pydhcp.server import DhcpServer
+from pydhcp.server import DHCPServer
 
-server = DhcpServer(listen="*")
+server = DHCPServer(listen="*")
 server.listen()
 ```
 
 The built-in server intentionally keeps allocation policy small. It renews existing leases
-and responds to client-requested addresses, while applications can subclass `DhcpServer`
+and responds to client-requested addresses, while applications can subclass `DHCPServer`
 or provide a custom lease backend for pools, reservations, and site-specific options.
 
 You can also bind explicit endpoints or multiple ports when you do not want wildcard behavior.
@@ -47,23 +47,23 @@ A socket bound to an address hears no broadcast on Linux, so this serves unicast
 tests, not clients that have no address yet:
 
 ```python
-server = DhcpServer(listen=[("127.0.0.1", [6767, 6768])], per_interface=True)
+server = DHCPServer(listen=[("127.0.0.1", [6767, 6768])], per_interface=True)
 server.listen()
 ```
 
 ### Asynchronous Server
 
-Every listener has an asyncio counterpart -- `AsyncDhcpListener`,
-`AsyncDhcpServer`, `AsyncDhcpRelay` and `AsyncDhcpCapture`. They are mixins over
+Every listener has an asyncio counterpart -- `AsyncDHCPListener`,
+`AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`. They are mixins over
 the same receive path rather than parallel implementations, so a fix reaches both
 halves; a test fails if any receive-path line is duplicated between them.
 
 ```python
 import asyncio
-from pydhcp.server import AsyncDhcpServer
+from pydhcp.server import AsyncDHCPServer
 
 async def main():
-    server = AsyncDhcpServer()
+    server = AsyncDHCPServer()
     await server.start()      # binds and starts receiving; returns immediately
     try:
         await asyncio.Event().wait()   # serve until cancelled (Ctrl-C)
@@ -80,13 +80,13 @@ the rest of your application.
 
 ### Basic Packet Client
 
-`DhcpClient` is a packet-level helper for tests and troubleshooting. It sends DHCP
+`DHCPClient` is a packet-level helper for tests and troubleshooting. It sends DHCP
 messages and queues matching replies, but it does not configure host network interfaces.
 
 ```python
-from pydhcp.client import DhcpClient
+from pydhcp.client import DHCPClient
 
-client = DhcpClient(listen=("127.0.0.1", 6768))
+client = DHCPClient(listen=("127.0.0.1", 6768))
 discover = client.build_discover(b"\x00\x11\x22\x33\x44\x55")
 client.send(discover, destination="127.0.0.1", port=6767)
 ```

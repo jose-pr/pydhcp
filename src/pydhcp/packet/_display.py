@@ -8,13 +8,13 @@ import typing as _ty
 
 from .. import nvt as _nvt
 from ..exceptions import NoClientIdentityError
-from ..options import BaseDhcpOptionCode, DhcpOptionCode, type as _type
+from ..options import BaseDHCPOptionCode, DHCPOptionCode, type as _type
 from ._mapping import _MessageMapping
 
 if _ty.TYPE_CHECKING:
     # Annotation only: the callback receives the public class, and importing
     # it at run time would be a cycle (message.py builds on this module).
-    from .message import DhcpMessage
+    from .message import DHCPMessage
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class _MessageDisplay(_MessageMapping):
     """`client_id`, `dumps`, `log_str`, `log` and `in`."""
 
     def client_id(
-        self, func: _ty.Optional[_ty.Callable[["DhcpMessage"], bytearray]] = None
+        self, func: _ty.Optional[_ty.Callable[["DHCPMessage"], bytearray]] = None
     ) -> str:
         """Stable identity for this client, used to key leases.
 
@@ -35,12 +35,12 @@ class _MessageDisplay(_MessageMapping):
         would take over each other's lease, and a RELEASE from either would free
         both.
         """
-        cid = self.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False)
+        cid = self.options.get(DHCPOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:
             if func:
                 # The layers are private and only ever composed into
-                # DhcpMessage, so every instance reaching here is one.
-                cid = func(_ty.cast("DhcpMessage", self))
+                # DHCPMessage, so every instance reaching here is one.
+                cid = func(_ty.cast("DHCPMessage", self))
             if not cid:
                 if not self.chaddr:
                     raise NoClientIdentityError(
@@ -51,7 +51,7 @@ class _MessageDisplay(_MessageMapping):
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()
 
-    def dumps(self, codemap: _ty.Optional[type[BaseDhcpOptionCode]] = None) -> str:
+    def dumps(self, codemap: _ty.Optional[type[BaseDHCPOptionCode]] = None) -> str:
         """A human-readable multi-line summary: header fields, then each option.
 
         What `log`/`log_str` and the CLI's ``--format summary`` print. Text fields go
@@ -119,7 +119,7 @@ class _MessageDisplay(_MessageMapping):
         )
 
     def __contains__(self, __key: object) -> bool:
-        """Whether the message carries option `__key` (a code or `DhcpOptionCode`)."""
+        """Whether the message carries option `__key` (a code or `DHCPOptionCode`)."""
         return self.options.__contains__(__key)
 
     def log(self, src: _ty.Any, dst: _ty.Any, level: int) -> None:

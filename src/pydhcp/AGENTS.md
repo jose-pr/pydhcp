@@ -9,10 +9,10 @@ project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 
 **`pydhcp/__init__.py` re-exports much of those subpackages, but not all of
 them** — the previous wording said "everything", and 17 documented or
-subpackage names are not importable from `pydhcp`, among them `DhcpMetrics`,
-`ListenSpec`, `load_config`, `main`, `DhcpMessageType`, `DhcpPort`, `Flags`,
-`HardwareAddressType`, `OpCode`, `host_ip_interfaces` and `WILDCARD_IPv4`.
-`from pydhcp import DhcpMessage` works; `from pydhcp import DhcpMessageType`
+subpackage names are not importable from `pydhcp`, among them `DHCPMetrics`,
+`ListenSpec`, `load_config`, `main`, `DHCPMessageType`, `DHCPPort`, `DHCPFlags`,
+`HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_IPv4`.
+`from pydhcp import DHCPMessage` works; `from pydhcp import DHCPMessageType`
 does not. Import from the owning module when a name is not in `__all__`
 (83 names today, `__version__` among them: the installed distribution's
 version, read from its metadata).
@@ -37,13 +37,13 @@ something else.
 - **`DHCPError(Exception)`** — the base of everything pydhcp raises on its
   own account.
 - **`DHCPDecodeError(DHCPError, ValueError)`** — octets that are not the
-  message or option they were read as. Every decoder (`DhcpMessage.decode`,
-  each option codec, `DhcpOptions.get`) raises it, and nothing else, for
+  message or option they were read as. Every decoder (`DHCPMessage.decode`,
+  each option codec, `DHCPOptions.get`) raises it, and nothing else, for
   malformed input.
 - **`DHCPValueError(DHCPError, ValueError)`** — a value a codec or message
   field cannot represent (an entry past 255 octets, a header field out of
   range).
-- **`NoClientIdentityError(DHCPError, ValueError)`** — `DhcpMessage.client_id()`
+- **`NoClientIdentityError(DHCPError, ValueError)`** — `DHCPMessage.client_id()`
   on a message with neither option 61 nor a hardware address.
 
 A caller's own mistake (a wrong argument type, a bad option code, a bad
@@ -56,7 +56,7 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
 `pydhcp.listener` itself, as before.
 
 
-- **`DhcpListener(listen=None, select_timeout=None, max_packet_size=None,
+- **`DHCPListener(listen=None, select_timeout=None, max_packet_size=None,
   per_interface=None)`** — synchronous, thread-based receive loop.
   `listen`: `None`/`"*"` (wildcard), a `"host:port"` string, an `IPv4`, a
   `(host, port_or_ports)` tuple, or a sequence of any of those (comma-joined
@@ -74,7 +74,7 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
   only unicast there, and an unconfigured client is served through the
   wildcard alone. `.bind()` logs a WARNING once per process when it binds such
   an address. Every instance
-  owns `self.metrics: DhcpMetrics` — there is no global metrics singleton.
+  owns `self.metrics: DHCPMetrics` — there is no global metrics singleton.
   - **`host:port` text is read strictly** (netimps' `split_host`): the port is
     ASCII digits only, and square brackets may enclose only an IPv6 literal.
     `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`, `"127.0.0.1:8_0"` and
@@ -119,7 +119,7 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     new port. Sockets are bound with `connreset=False`, so on Windows an ICMP
     error from an earlier reply does not surface on a later receive.
   - `.listen() -> None` — blocking receive loop; decodes each datagram,
-    resolves the receiving `NetworkInterface`, builds a `RequestContext`, and
+    resolves the receiving `NetworkInterface`, builds a `DHCPRequestContext`, and
     calls `self.handle(msg, context)`. Receive, decode and `handle()` failures
     are caught and reported separately (never `KeyboardInterrupt`) so one bad
     packet never kills the loop; only the `handle()` one carries a traceback.
@@ -152,18 +152,18 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     passed port 0 learns the ephemeral port it was given.
   - **`metrics.packets_dropped_truncated`** / **`metrics.packets_dropped_error`**
     — datagrams that did not fit `max_packet_size`, and datagrams lost to an
-    error anywhere in receive/decode/handle. They are `DhcpMetrics` fields, so
+    error anywhere in receive/decode/handle. They are `DHCPMetrics` fields, so
     `.snapshot()` reports them: they briefly landed as plain listener
-    attributes, which is the exact failure `DhcpMetrics.FIELDS` exists to
+    attributes, which is the exact failure `DHCPMetrics.FIELDS` exists to
     prevent — a counter incremented but absent from the snapshot.
   - `.handle(msg, context) -> None` — override point; base implementation is
     a no-op. Called for every successfully decoded packet.
-- **`AsyncDhcpListener(listen=None, max_packet_size=None,
+- **`AsyncDHCPListener(listen=None, max_packet_size=None,
   per_interface=None, max_queued=None)`** — `asyncio` counterpart, with the same receive path,
   the same packet-info wildcard routing and the same `listen` forms as
-  `DhcpListener`. `await .start()` binds and registers each socket with the
+  `DHCPListener`. `await .start()` binds and registers each socket with the
   event loop; `.stop()` unregisters and closes them. `.stop()` is **not** a
-  coroutine — it is reached through the inherited `DhcpListener` contract,
+  coroutine — it is reached through the inherited `DHCPListener` contract,
   where nobody awaits it — but `await .stop()` still works. Same `.handle()`
   override point and per-instance `self.metrics`.
   - **`.stop()` is safe to call from a handler**, which runs on the worker
@@ -190,10 +190,10 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     per `BACKLOG_LOG_INTERVAL_SECONDS` (60), the report carrying the count.
     **Stopping aborts, it does not drain**: queued datagrams are discarded,
     counted in the same counter and reported once at INFO; only the handler
-    already running finishes. `AsyncDhcpServer`, `AsyncDhcpRelay` and
-    `AsyncDhcpCapture` take the same `max_queued`.
+    already running finishes. `AsyncDHCPServer`, `AsyncDHCPRelay` and
+    `AsyncDHCPCapture` take the same `max_queued`.
   - `.bound_addresses`, `.REUSE_ADDRESS`, `.packets_dropped_truncated` and
-    `.packets_dropped_error` — as on `DhcpListener`, including the oversized
+    `.packets_dropped_error` — as on `DHCPListener`, including the oversized
     -datagram drop.
   - `await .wait() -> None` — returns when `.stop()` is called; returns
     immediately if never started. `.listen()` raises `NotImplementedError`
@@ -204,9 +204,9 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     without an error.
     `.stop()` cancels those tasks and then closes the sockets; `await .stop()`
     and `await .wait()` both return only once the sockets are closed.
-- **`Transport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
+- **`DHCPTransport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
   bytes) -> int`; base raises `NotImplementedError`.
-- **`UdpTransport(socket)`** — plain UDP send. A destination of `0.0.0.0`
+- **`UDPTransport(socket)`** — plain UDP send. A destination of `0.0.0.0`
   ("this client has no address yet") is sent to `255.255.255.255`, per
   RFC 2131 §4.1. A failed **unicast** retries as a broadcast (logged as a
   warning); a failed **broadcast** raises, since the retry would be the
@@ -217,20 +217,20 @@ A package split by responsibility (`transport`, `spec`, `interfaces`,
     RENEWING client at its own `ciaddr`, a relay at `giaddr`), where it puts
     the reply's `yiaddr`, `chaddr`, lease options and echoed
     `RELAY_AGENT_INFORMATION` in front of the whole segment. Deciding this
-    properly needs a signal from the caller that `Transport.send` does not
+    properly needs a signal from the caller that `DHCPTransport.send` does not
     currently carry.
-- **`PktInfoUdpTransport(socket, endpoint=None)`** — a transport that sends
+- **`PktInfoUDPTransport(socket, endpoint=None)`** — a transport that sends
   from a pinned source for wildcard sockets: `local_ip` is the source address
   and `ifindex` the interface (0/`None` pins the address alone). Pinning goes
   through `netimps.UDPEndpoint.send(src=...)` (`endpoint`, or one wrapping
   `socket`), which builds the control message for Linux, macOS and Windows
-  alike. Falls back to `UdpTransport.send` when `local_ip` isn't set or the
+  alike. Falls back to `UDPTransport.send` when `local_ip` isn't set or the
   endpoint reports no source pinning. If the pinned send itself **fails** (a
   stale `ifindex`, a `local_ip` no longer on that adapter) it retries once,
   unpinned, **to the same destination** — it does not go through
-  `UdpTransport.send`, so a failed unicast is never escalated into a broadcast
+  `UDPTransport.send`, so a failed unicast is never escalated into a broadcast
   here; the error propagates instead.
-- **`RequestContext`** (`NamedTuple`) — `transport: Transport`, `interface:
+- **`DHCPRequestContext`** (`NamedTuple`) — `transport: DHCPTransport`, `interface:
   NetworkInterface`, `client: SocketAddress`, `client_mac: bytes`,
   `ifindex: int | None = None`, `local_ip: IPv4 | None = None`. Handlers use
   `context.transport`/`context.interface` to reply out the same interface a
@@ -245,7 +245,7 @@ client build helpers below to keep the exchange unicast.
 
 ## Server (`server/`)
 
-A package. `DhcpServer` is composed of layers, each subclassing the last and
+A package. `DHCPServer` is composed of layers, each subclassing the last and
 each in its own module: `_state` (the constants below and per-instance state),
 `policy` (`acquire_lease`, `lease_seconds`, `release_lease`,
 `quarantine_address`, `get_inform_options`), `reply` (building and delivering
@@ -254,10 +254,10 @@ the reply) and `handlers` (`handle` and the `handle_*` methods). Import from
 a module global patches it in the layer that reads it (`pydhcp.server.policy`).
 
 
-- **`DhcpServer(listen=None, select_timeout=None, max_packet_size=None,
-  lease_backend=None, per_interface=None)`** (`DhcpListener` subclass) —
+- **`DHCPServer(listen=None, select_timeout=None, max_packet_size=None,
+  lease_backend=None, per_interface=None)`** (`DHCPListener` subclass) —
   `lease_backend` defaults to a fresh `InMemoryLeaseBackend()`.
-  - `.acquire_lease(client_id, server_id, msg, *, commit=True) -> DhcpLease | None` —
+  - `.acquire_lease(client_id, server_id, msg, *, commit=True) -> DHCPLease | None` —
     override point. **Runs on the server itself** (not a copy), on the handler
     thread (the one worker thread on the async server), so an attribute an
     override keeps — a counter for the next free host — is the server's own.
@@ -301,7 +301,7 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     *different* address than the client holds is ignored and counted in
     `releases_ignored`. Releasing on client identifier alone let a late or
     duplicated RELEASE for an old address delete the client's current binding.
-  - `.get_inform_options(server_id, msg) -> DhcpOptions` — override point for
+  - `.get_inform_options(server_id, msg) -> DHCPOptions` — override point for
     DHCPINFORM-only option sets (no address allocated). Same default set, and
     the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
   - **Host-address lookups use netimps' enumeration cache** (`cache=True`, a
@@ -330,14 +330,14 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     ask for — all of which used to write through to the lease backend. An
     `.acquire_lease()` override returning a lease whose options it also keeps
     a reference to is therefore safe.
-- **`AsyncDhcpServer(listen=None, max_packet_size=None, lease_backend=None,
-  per_interface=None, max_queued=None)`** — same allocation logic as `DhcpServer`, running on
-  `AsyncDhcpListener`.
+- **`AsyncDHCPServer(listen=None, max_packet_size=None, lease_backend=None,
+  per_interface=None, max_queued=None)`** — same allocation logic as `DHCPServer`, running on
+  `AsyncDHCPListener`.
 
 ## Client (`client.py`)
 
-- **`DhcpClient(listen=None, select_timeout=None, max_packet_size=None,
-  per_interface=None)`** (`DhcpListener` subclass) — packet-level client for
+- **`DHCPClient(listen=None, select_timeout=None, max_packet_size=None,
+  per_interface=None)`** (`DHCPListener` subclass) — packet-level client for
   tests/troubleshooting; does **not** configure OS network interfaces.
   - The five builders construct a message without sending it. `chaddr` is
     required positional bytes and `xid` defaults to a random 32-bit value on
@@ -346,16 +346,16 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     them. Three take a **required keyword-only** argument, and only the first
     two accept `broadcast`:
     - `.build_discover(chaddr, *, xid=None, client_identifier=None,
-      parameter_request_list=None, broadcast=True) -> DhcpMessage`
+      parameter_request_list=None, broadcast=True) -> DHCPMessage`
     - `.build_request(chaddr, *, xid=None, requested_ip=None,
       server_identifier=None, ciaddr=None, client_identifier=None,
-      parameter_request_list=None, broadcast=True) -> DhcpMessage`
+      parameter_request_list=None, broadcast=True) -> DHCPMessage`
     - `.build_inform(chaddr, *, ciaddr, xid=None, client_identifier=None,
-      parameter_request_list=None) -> DhcpMessage` — **`ciaddr` required**
+      parameter_request_list=None) -> DHCPMessage` — **`ciaddr` required**
     - `.build_release(chaddr, *, ciaddr, server_identifier=None, xid=None,
-      client_identifier=None) -> DhcpMessage` — **`ciaddr` required**
+      client_identifier=None) -> DHCPMessage` — **`ciaddr` required**
     - `.build_decline(chaddr, *, requested_ip, server_identifier=None,
-      xid=None, client_identifier=None) -> DhcpMessage` —
+      xid=None, client_identifier=None) -> DHCPMessage` —
       **`requested_ip` required**
 
     The asymmetry is RFC 2131, not an oversight: INFORM and RELEASE come from a
@@ -364,15 +364,15 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     sent by a client with no address, so none has a broadcast flag to set.
     `parameter_request_list` is accepted only where a reply carries options.
   - `.send(message, destination=IPv4("255.255.255.255"),
-    port=DhcpPort.SERVER) -> int` — binds lazily on first call, sends via a
-    fresh `UdpTransport`, and tracks the message's `(xid, chaddr)` in
+    port=DHCPPort.SERVER) -> int` — binds lazily on first call, sends via a
+    fresh `UDPTransport`, and tracks the message's `(xid, chaddr)` in
     `self._pending_keys` so `.handle()` only queues matching replies. A reply
     carrying a seen `xid` but another client's `chaddr` is ignored — the xid
     is in cleartext in a broadcast DISCOVER, so anyone on the segment can
-    read one (same key as `DhcpRelay._pending_key`).
+    read one (same key as `DHCPRelay._pending_key`).
   - `.discover_offer(chaddr, *, timeout=2.0, retries=2, destination=...,
     port=..., xid=None, client_identifier=None, parameter_request_list=None,
-    broadcast=True) -> DhcpMessage | None` — broadcasts
+    broadcast=True) -> DHCPMessage | None` — broadcasts
     DHCPDISCOVER (with retries) and returns the first DHCPOFFER, or `None`.
     **`timeout` is the *initial* retransmission interval, not a fixed one**:
     each retransmission waits twice as long as the last, randomized by ±1 s,
@@ -383,7 +383,7 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     previously hardcoded to 0.
   - `.dora(chaddr, *, timeout=2.0, retries=2, destination=..., port=...,
     xid=None, client_identifier=None, parameter_request_list=None,
-    broadcast=True) -> DhcpMessage | None` — full
+    broadcast=True) -> DHCPMessage | None` — full
     DISCOVER→OFFER→REQUEST→ACK exchange; returns the DHCPACK or `None`.
     **`broadcast` forwards to both the DISCOVER and the follow-up REQUEST**,
     as do `client_identifier` and `parameter_request_list` — RFC 2131 §4.2
@@ -393,7 +393,7 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
     REQUEST must echo it (§4.3.2). `secs` counts from the DISCOVER across both
     halves — §2 defines it as time since *acquisition* began, so the REQUEST
     does not restart the clock.
-  - `.next_reply(timeout=None) -> tuple[DhcpMessage, RequestContext] | None`
+  - `.next_reply(timeout=None) -> tuple[DHCPMessage, DHCPRequestContext] | None`
     / `.drain_replies() -> list[...]` — pull queued BOOTREPLY messages.
     A reply belonging to an exchange currently running in
     `.discover_offer()`/`.dora()` goes to that exchange and does **not** reach
@@ -417,15 +417,15 @@ a module global patches it in the layer that reads it (`pydhcp.server.policy`).
 
 **Gotcha**: `.dora()`/`.discover_offer()` require the listener's receive loop
 to actually be running (`client.start()`) — replies only reach the internal
-queue via `.handle()`, which the background thread calls. A `DhcpClient`
+queue via `.handle()`, which the background thread calls. A `DHCPClient`
 that's never started will always time out waiting for a reply.
 
 ## Relay (`relay.py`)
 
-- **`DhcpRelay(listen=None, server_addresses=(), max_hops=4,
+- **`DHCPRelay(listen=None, server_addresses=(), max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
   select_timeout=None, max_packet_size=None, per_interface=None)`**
-  (`DhcpListener` subclass) — RFC 1542 / RFC 2131 §4.1 / RFC 3046 relay
+  (`DHCPListener` subclass) — RFC 1542 / RFC 2131 §4.1 / RFC 3046 relay
   agent. `server_addresses` is required and non-empty (each entry an `IPv4`,
   a string, or a `(host, port)` tuple; bare entries default to port 67) —
   raises `ValueError` otherwise. `insert_relay_agent_info=True` adds option
@@ -441,18 +441,18 @@ that's never started will always time out waiting for a reply.
     forwarded -- RFC 1542 §4.1.1) and
     forwards `BOOTREPLY` back to the original client.
 
-- **`AsyncDhcpRelay(listen=None, server_addresses=(), max_hops=4,
+- **`AsyncDHCPRelay(listen=None, server_addresses=(), max_hops=4,
   insert_relay_agent_info=False, circuit_id=None, remote_id=None,
   trust_client_relay_agent_info=False, max_packet_size=None,
   per_interface=None, max_queued=None)`** — the same forwarding policy running on
-  `AsyncDhcpListener`, the way `AsyncDhcpServer` relates to `DhcpServer`.
-  `isinstance(x, DhcpRelay)` holds. Identical arguments minus `select_timeout`
+  `AsyncDHCPListener`, the way `AsyncDHCPServer` relates to `DHCPServer`.
+  `isinstance(x, DHCPRelay)` holds. Identical arguments minus `select_timeout`
   (the sync receive loop's poll interval, which asyncio has no use for), and
   both constructors share `_init_relay_state()`, so the `server_addresses` and
   `max_hops` validation cannot be enforced on one and not the other. Drive it
   with `await .start()` / `await .wait()` / `.stop()`.
   - `_pending_clients` is unguarded on both. What keeps it safe here is that
-    `AsyncDhcpListener` runs handlers on **one** worker thread, so `handle()`
+    `AsyncDHCPListener` runs handlers on **one** worker thread, so `handle()`
     is still serialised and in arrival order — the same guarantee the lease
     backends rely on. A handler pool would make this a data race.
 
@@ -462,7 +462,7 @@ that's never started will always time out waiting for a reply.
 
 **Gotcha**: a relay reply must not assume the client listens on well-known
 port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
-`DhcpRelay` tracks `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
+`DHCPRelay` tracks `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
 recorded on forward and read on reply, so clients on non-standard ports still
 get routed correctly; it falls back to port 68 when the exchange was never
 observed by this relay instance.
@@ -474,22 +474,22 @@ observed by this relay instance.
   also never replaced by a request from a *different* source address.
 - **Read, not consumed.** Every configured server sends its own reply, and they
   all belong to the same client, so the entry stays until
-  `DhcpRelay.PENDING_TTL_SECONDS` (60) rather than being popped by whichever
+  `DHCPRelay.PENDING_TTL_SECONDS` (60) rather than being popped by whichever
   arrives first.
 - **The entry is not only a port.** It also carries the ingress interface
   (`ifindex`/`local_ip`), which is what pins the reply back onto the client's
   segment on a wildcard bind — so a client on port 68 is recorded too, even
   though its port needs no lookup.
-- Bounded at `DhcpRelay.MAX_PENDING_CLIENTS` (1024), oldest evicted first, so
+- Bounded at `DHCPRelay.MAX_PENDING_CLIENTS` (1024), oldest evicted first, so
   exchanges whose replies never arrive cannot grow it without limit. An evicted
   entry costs the port-68 fallback and the interface pin. Raise either class
   attribute for a deployment with more exchanges genuinely in flight.
 
 ## Capture (`capture.py`)
 
-- **`DhcpCapture(listen=None, packet_filter=None, sink=None, hook=None,
+- **`DHCPCapture(listen=None, packet_filter=None, sink=None, hook=None,
   hook_fail_fast=False, select_timeout=None, max_packet_size=None,
-  per_interface=None)`** (`DhcpListener` subclass) — `packet_filter` is
+  per_interface=None)`** (`DHCPListener` subclass) — `packet_filter` is
   either a filter-expression string (compiled via `compile_capture_filter`)
   or a `Callable[[CaptureEvent], bool]`; `sink` gets every accepted event;
   `hook` also gets every accepted event but exceptions are only logged
@@ -499,8 +499,8 @@ observed by this relay instance.
   re-raising alone does not reach the caller, because `handle()` runs inside
   the listener's per-packet exception handler. `self.accepted_count` tracks
   how many events passed the filter.
-- **`CaptureEvent`** (frozen dataclass) — `message: DhcpMessage`, `context:
-  RequestContext`, `captured_at: datetime`. Properties: `.source` /
+- **`CaptureEvent`** (frozen dataclass) — `message: DHCPMessage`, `context:
+  DHCPRequestContext`, `captured_at: datetime`. Properties: `.source` /
   `.destination` (`SocketAddress`), `.message_type` (str name or `"UNKNOWN"`),
   `.client_id` (str), `.xid` (8-hex-digit str). `.format_filename(pattern,
   format) -> str` fills `{client_id}`/`{timestamp}`/`{msg_type}`/`{xid}`/
@@ -543,11 +543,11 @@ to satisfy `SocketAddress`; an IPv6-only interface isn't actually handled
 name-collision note at the top) — capture on an
 IPv6-only interface can break at runtime.
 
-- **`AsyncDhcpCapture(listen=None, packet_filter=None, sink=None, hook=None,
+- **`AsyncDHCPCapture(listen=None, packet_filter=None, sink=None, hook=None,
   hook_fail_fast=False, max_packet_size=None, per_interface=None,
   max_queued=None)`** — the same
-  filter/sink/hook policy running on `AsyncDhcpListener`.
-  `isinstance(x, DhcpCapture)` holds. Identical arguments minus
+  filter/sink/hook policy running on `AsyncDHCPListener`.
+  `isinstance(x, DHCPCapture)` holds. Identical arguments minus
   `select_timeout`, and both constructors share `_init_capture_state()`. Drive
   it with `await .start()` / `await .wait()` / `.stop()` rather than
   `.listen()`, and check `.hook_error` after `.wait()` returns.
@@ -555,25 +555,25 @@ IPv6-only interface can break at runtime.
     both, and the single handler worker is again the whole guarantee — the sink
     runs on it too, so a per-run budget such as the CLI's `--count` needs no
     lock and no library-side state of its own.
-  - `hook_fail_fast` stops the capture through `AsyncDhcpListener.stop()`,
+  - `hook_fail_fast` stops the capture through `AsyncDHCPListener.stop()`,
     called from that worker thread; see the `.stop()` note under
-    `AsyncDhcpListener` for why the close is deferred to the loop and is not
+    `AsyncDHCPListener` for why the close is deferred to the loop and is not
     complete by the time `handle()` re-raises.
 
 - **Type aliases** (`pydhcp.capture`, not re-exported from the top level, so
   import them from the module): **`CaptureSink = Callable[[CaptureEvent],
   None]`**, **`CaptureHook = Callable[[CaptureEvent], None]`**, and
   **`CapturePredicate = Callable[[CaptureEvent], bool]`** — the three callable
-  shapes `DhcpCapture`/`AsyncDhcpCapture` accept. A `packet_filter` string is
+  shapes `DHCPCapture`/`AsyncDHCPCapture` accept. A `packet_filter` string is
   compiled to a `CapturePredicate`; passing one directly skips the parser.
 
 ## Leases (`lease.py`)
 
-- **`DhcpLease`** (`NamedTuple`) — `ip: IPv4 | None`, `expires: datetime |
-  float` (`math.inf` for an infinite lease), `options: DhcpOptions`.
+- **`DHCPLease`** (`NamedTuple`) — `ip: IPv4 | None`, `expires: datetime |
+  float` (`math.inf` for an infinite lease), `options: DHCPOptions`.
 - **`LeaseBackend`** (`Protocol`) — `.allocate(client_id, ip, ttl,
-  options=None) -> DhcpLease | None`, `.lookup(client_id) -> DhcpLease |
-  None`, `.release(client_id) -> bool`, `.renew(client_id, ttl) -> DhcpLease
+  options=None) -> DHCPLease | None`, `.lookup(client_id) -> DHCPLease |
+  None`, `.release(client_id) -> bool`, `.renew(client_id, ttl) -> DHCPLease
   | None`. **`ttl: float`** — seconds, or `math.inf` for an infinite lease.
   It is `float` rather than `int` because that is what `math.inf` is and what
   the implementations have always accepted; an `int` still satisfies it.
@@ -622,11 +622,11 @@ IPv6-only interface can break at runtime.
 
 ## Metrics (`metrics.py`)
 
-- **`DhcpMetrics()`** — plain counters, one instance per listener/server/
+- **`DHCPMetrics()`** — plain counters, one instance per listener/server/
   client/relay/capture (`self.metrics`), never a module-level singleton.
   `.reset() -> None` zeroes all counters; `.snapshot() -> dict[str, int]`
   returns a plain dict copy.
-  - **`DhcpMetrics.FIELDS`** (class var) — the counter names, in snapshot
+  - **`DHCPMetrics.FIELDS`** (class var) — the counter names, in snapshot
     order, and the single source `__init__`/`.reset()`/`.snapshot()` all read.
     Add a counter here and it is initialised, reset and reported; the three
     used to repeat the list, which is how one gets incremented but never
@@ -648,7 +648,7 @@ IPv6-only interface can break at runtime.
 Not re-exported from the top-level package — import from `pydhcp.constants`.
 
 - **`BOOTP_MIN_PACKET_SIZE`** (300) — the minimal BOOTP message (RFC 951's
-  fixed header plus its 64-octet vend field). `DhcpMessage.encode()` pads to
+  fixed header plus its 64-octet vend field). `DHCPMessage.encode()` pads to
   it: RFC 1542 §2.1 has a relay agent check a datagram can hold this and
   "silently discard" it otherwise, so a shorter message is droppable, not
   merely unusual.
@@ -656,7 +656,7 @@ Not re-exported from the top-level package — import from `pydhcp.constants`.
   must accept (RFC 2131 §2), and `encode()`'s default `max_packetsize` — its
   default, not its minimum: `encode()` accepts anything from 269 up.
   Exceeding it needs the client's option 57 (`MAXIMUM_DHCP_MESSAGE_SIZE`);
-  `DhcpRelay._encode_for_forward` reads that option rather than shrinking a
+  `DHCPRelay._encode_for_forward` reads that option rather than shrinking a
   reply it is only forwarding.
 - **`UDP_MIN_PACKET_SIZE`** (28) — IPv4 + UDP headers, subtracted from a
   message-size limit to get the DHCP payload budget.
@@ -683,7 +683,7 @@ lossless on the wire and safe on a screen; use them rather than calling
 **Gotcha**: a string from `decode()` may hold surrogates, so
 `str.encode("utf-8")` on it raises and `json.dumps(..., ensure_ascii=False)`
 fails at write time. Anything rendering one must call `display()` first —
-`DhcpMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
+`DHCPMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
 
 ## Logging (`log.py`)
 
@@ -712,7 +712,7 @@ has its own module (`cli.interfaces`, `cli.server`, `cli.relay`, `cli.packet`,
 `cli.capture`, with `cli.capture_hook` for `--hook` loading and `cli._common`
 for the shared base). `from pydhcp.cli import ...` works for every name as
 before; patch a name where the command module looks it up
-(`pydhcp.cli.server.DhcpServer`, not `pydhcp.cli.DhcpServer`).
+(`pydhcp.cli.server.DHCPServer`, not `pydhcp.cli.DHCPServer`).
 
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both
@@ -751,11 +751,11 @@ stayed at the root level and the library's output never appeared.
   package metadata) for free. Not designed to be imported and called with
   custom `argv` — it parses `sys.argv` directly.
 - `Relay.server` has no CLI-level `required=True`: an empty/omitted
-  `--server` simply reaches `DhcpRelay(...)`, which already raises
-  `ValueError("DhcpRelay requires at least one server address")` — no need
+  `--server` simply reaches `DHCPRelay(...)`, which already raises
+  `ValueError("DHCPRelay requires at least one server address")` — no need
   to duplicate that validation at the argparse layer.
 - Each `--server` value is split by **`listener._split_host_port`**, the same
-  parser the `--listen` specs go through, and reaches `DhcpRelay` as a
+  parser the `--listen` specs go through, and reaches `DHCPRelay` as a
   `(host, port)` tuple with port 67 supplied when the argument names none.
   The CLI used to carry its own splitter, which disagreed with the listener's
   on anything with more than one colon. One difference from `--listen`: an

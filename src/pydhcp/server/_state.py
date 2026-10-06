@@ -1,4 +1,4 @@
-"""The state and policy constants every `DhcpServer` layer reads."""
+"""The state and policy constants every `DHCPServer` layer reads."""
 
 from __future__ import annotations
 
@@ -6,20 +6,20 @@ import typing as _ty
 
 from .. import network as _net
 from ..lease import LeaseBackend
-from ..listener import DhcpListener as _Base
+from ..listener import DHCPListener as _Base
 from ..packet import enums as _enum
 
 
 class _ServerState(_Base):
     """Constants and per-instance state shared by the server layers.
 
-    `DhcpServer` is composed of layers, each subclassing the last --
+    `DHCPServer` is composed of layers, each subclassing the last --
     `_ServerState`, `_LeasePolicy`, `_Replies`, `_Handlers` -- so each is
     type-checked against exactly what it uses. A subclass overriding a
-    constant or a method does so on `DhcpServer` as before.
+    constant or a method does so on `DHCPServer` as before.
     """
 
-    DEFAULT_PORTS = (_enum.DhcpPort.SERVER,)
+    DEFAULT_PORTS = (_enum.DHCPPort.SERVER,)
 
     #: How long a DHCPDECLINEd address stays out of the pool.
     DECLINE_QUARANTINE_SECONDS: float = 600.0
@@ -63,7 +63,7 @@ class _ServerState(_Base):
     ) -> None:
         """Set up the state every server variant needs.
 
-        AsyncDhcpServer cannot call this class's `__init__` (its own base takes a
+        AsyncDHCPServer cannot call this class's `__init__` (its own base takes a
         different argument set), so it re-implemented the body -- and then drifted
         from it: `_declined` was added here and not there, which made every
         DHCPDECLINE an AttributeError on the async server. One method both

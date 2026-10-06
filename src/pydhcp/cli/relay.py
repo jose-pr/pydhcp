@@ -6,8 +6,8 @@ import typing as _ty
 import duho
 
 from ..listener.spec import _split_host_port
-from ..relay import DEFAULT_MAX_HOPS, DhcpRelay
-from ..packet.enums import DhcpPort
+from ..relay import DEFAULT_MAX_HOPS, DHCPRelay
+from ..packet.enums import DHCPPort
 from ._common import _Command
 
 
@@ -31,7 +31,7 @@ def _parse_server_address(value: str) -> "tuple[str, int]":
             "a bare port has no server to forward to"
         )
     host, port = _split_host_port(text)
-    return host, int(DhcpPort.SERVER) if port is None else port
+    return host, int(DHCPPort.SERVER) if port is None else port
 
 
 class Relay(_Command):
@@ -76,7 +76,7 @@ class Relay(_Command):
         # and nothing enforced it: `_insert_relay_agent_info` returns early when
         # the flag is off, so `-s 10.0.0.1 --circuit-id 0a01` forwarded packets
         # with no option 82 and said nothing. Checked here rather than in
-        # DhcpRelay because the library documents these as independent kwargs
+        # DHCPRelay because the library documents these as independent kwargs
         # and tests construct it that way -- raising there is an API break.
         ignored = [
             flag
@@ -109,7 +109,7 @@ class Relay(_Command):
         # the upstream addresses and `max_hops`, so announcing first meant a bad
         # argument was reported *after* "Starting DHCP relay..." and read as a
         # runtime failure rather than as the argument error it is.
-        relay = DhcpRelay(
+        relay = DHCPRelay(
             listen=self.listen or "*",
             server_addresses=server_addresses,
             max_hops=self.max_hops,

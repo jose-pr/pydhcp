@@ -17,14 +17,14 @@ from typing import Any
 SRC_DIR = pathlib.Path(__file__).parent.parent / "src"
 sys.path.insert(0, SRC_DIR.as_posix())
 
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptions
+from pydhcp.options import DHCPOptions
 
 
 def build_options_payload(option_count: int) -> bytearray:
-    opts = DhcpOptions()
+    opts = DHCPOptions()
     for i in range(1, option_count + 1):
         opts[i] = bytearray([192, 168, 1, i])
     return opts.encode()
@@ -32,7 +32,7 @@ def build_options_payload(option_count: int) -> bytearray:
 
 def test_memory_usage() -> None:
     backend = InMemoryLeaseBackend()
-    options = DhcpOptions()
+    options = DHCPOptions()
     for i in range(1000):
         client_id = f"client-{i}"
         ip = IPv4("192.168.1.1")
@@ -44,16 +44,16 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
     p5 = memoryview(build_options_payload(5))
     p20 = memoryview(build_options_payload(20))
 
-    t0 = timeit.timeit(lambda: DhcpOptions().decode(p0), number=iterations)
-    t5 = timeit.timeit(lambda: DhcpOptions().decode(p5), number=iterations)
-    t20 = timeit.timeit(lambda: DhcpOptions().decode(p20), number=iterations)
+    t0 = timeit.timeit(lambda: DHCPOptions().decode(p0), number=iterations)
+    t5 = timeit.timeit(lambda: DHCPOptions().decode(p5), number=iterations)
+    t20 = timeit.timeit(lambda: DHCPOptions().decode(p20), number=iterations)
 
-    opts = DhcpOptions()
-    opts[DhcpOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
+    opts = DHCPOptions()
+    opts[DHCPOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
 
     def round_trip() -> None:
         encoded = opts.encode()
-        decoded = DhcpOptions()
+        decoded = DHCPOptions()
         decoded.decode(memoryview(encoded))
 
     trt = timeit.timeit(round_trip, number=iterations)

@@ -15,14 +15,14 @@ import pytest
 
 from conftest import DUPLICATE_UDP_BIND_ALLOWED, LOOPBACK_ALIAS_BINDABLE
 
-from pydhcp.listener import DhcpListener
+from pydhcp.listener import DHCPListener
 
 #: Read from `socket`, not from `pydhcp.listener`: the skips below are about
 #: what this platform has, not about what the module chose to re-export.
 SO_EXCLUSIVEADDRUSE = getattr(socket, "SO_EXCLUSIVEADDRUSE", None)
 
 
-class ReusingListener(DhcpListener):
+class ReusingListener(DHCPListener):
     """A listener that opts back into the old blanket `SO_REUSEADDR`."""
 
     REUSE_ADDRESS = True
@@ -39,7 +39,7 @@ def test_rebinding_keeps_the_ephemeral_port_and_the_socket() -> None:
     was closed and the listener moved from port 52908 to 52909, while every
     caller that had read `bound_addresses` was still aiming at 52908.
     """
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
         first_socket = listener._sockets[0]
@@ -62,7 +62,7 @@ def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
     """The matching change must not defeat the point of matching."""
     # Two *distinct* requests: `_parselisteners` deduplicates, so the same
     # ("127.0.0.1", 0) twice is one address, not two.
-    listener = DhcpListener(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
+    listener = DHCPListener(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
     listener.bind()
     try:
         assert len(listener._sockets) == 2
@@ -79,7 +79,7 @@ def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
 
 def test_a_closed_listener_gets_a_fresh_ephemeral_port() -> None:
     """Idempotence is per bind cycle: port 0 still means "any" after close()."""
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     first = listener.bound_addresses[0].port
     listener.close()
@@ -99,11 +99,11 @@ def test_a_second_listener_cannot_silently_take_a_bound_port() -> None:
     """Measured before the fix: the second bind *succeeded*, and then received
     nothing at all while the first listener got every datagram -- so another
     process quietly taking over a DHCP port looked like a clean start-up."""
-    first = DhcpListener(listen=("127.0.0.1", 0))
+    first = DHCPListener(listen=("127.0.0.1", 0))
     first.bind()
     try:
         port = first.bound_addresses[0].port
-        second = DhcpListener(listen=("127.0.0.1", port))
+        second = DHCPListener(listen=("127.0.0.1", port))
         with pytest.raises(OSError) as exc_info:
             second.bind()
         second.close()
@@ -153,7 +153,7 @@ def test_the_duplicate_bind_really_would_have_stolen_the_datagrams() -> None:
 
 
 def test_reuse_address_is_opt_in_and_reaches_the_socket() -> None:
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
         sock = listener._sockets[0]
@@ -183,7 +183,7 @@ def test_the_receive_buffer_is_grown_or_the_shortfall_is_reported(caplog) -> Non
     the listener said it did not."""
     import logging
 
-    class Grown(DhcpListener):
+    class Grown(DHCPListener):
         RECEIVE_BUFFER_SIZE = 256 * 1024
 
     listener = Grown(listen=("127.0.0.1", 0))
@@ -201,7 +201,7 @@ def test_the_receive_buffer_is_grown_or_the_shortfall_is_reported(caplog) -> Non
 
 
 def test_a_zero_receive_buffer_keeps_the_os_default() -> None:
-    class Default(DhcpListener):
+    class Default(DHCPListener):
         RECEIVE_BUFFER_SIZE = 0
 
     plain = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -219,7 +219,7 @@ def test_a_zero_receive_buffer_keeps_the_os_default() -> None:
 )
 def test_the_default_bind_asks_windows_for_exclusive_use() -> None:
     """Without this a *later* SO_REUSEADDR socket can still steal the port."""
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
         sock = listener._sockets[0]
@@ -273,7 +273,7 @@ def _held_port() -> "tuple[socket.socket, int]":
 def test_a_bind_that_fails_partway_closes_what_it_opened() -> None:
     """The first address binds and the second is held: nothing stays bound."""
     holder, port = _held_port()
-    listener = DhcpListener(listen=[("127.0.0.1", 0), ("127.0.0.1", port)])
+    listener = DHCPListener(listen=[("127.0.0.1", 0), ("127.0.0.1", port)])
     try:
         with pytest.raises(OSError):
             listener.bind()
@@ -288,7 +288,7 @@ def test_a_bind_that_fails_partway_closes_what_it_opened() -> None:
 def test_a_failed_bind_keeps_the_sockets_an_earlier_bind_opened() -> None:
     """Only what the failing call opened is closed; the listener is as it was."""
     holder, port = _held_port()
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
         before = listener.bound_addresses
@@ -307,7 +307,7 @@ def test_a_failed_bind_keeps_the_sockets_an_earlier_bind_opened() -> None:
 
 def test_with_a_listener_that_cannot_bind_holds_no_port() -> None:
     holder, port = _held_port()
-    listener = DhcpListener(listen=[("127.0.0.1", 0), ("127.0.0.1", port)])
+    listener = DHCPListener(listen=[("127.0.0.1", 0), ("127.0.0.1", port)])
     try:
         with pytest.raises(OSError):
             with listener:
@@ -368,7 +368,7 @@ def test_two_address_bound_sockets_are_warned_about_once(
 ) -> None:
     _platform(monkeypatch, True)
     address = _a_routable_host_address()
-    listeners = [DhcpListener(listen=(address, 0)), DhcpListener(listen=(address, 0))]
+    listeners = [DHCPListener(listen=(address, 0)), DHCPListener(listen=(address, 0))]
     try:
         with caplog.at_level(logging.WARNING, logger="pydhcp"):
             for listener in listeners:
@@ -388,7 +388,7 @@ def test_windows_hears_broadcast_on_an_address_so_it_is_not_warned_about(
 ) -> None:
     _platform(monkeypatch, False)
     address = _a_routable_host_address()
-    listener = DhcpListener(listen=(address, 0))
+    listener = DHCPListener(listen=(address, 0))
     try:
         with caplog.at_level(logging.WARNING, logger="pydhcp"):
             listener.bind()
@@ -404,8 +404,8 @@ def test_the_wildcard_and_loopback_are_not_warned_about(
 ) -> None:
     _platform(monkeypatch, True)
     listeners = [
-        DhcpListener(listen=("127.0.0.1", 0)),
-        DhcpListener(listen=("0.0.0.0", 0)),
+        DHCPListener(listen=("127.0.0.1", 0)),
+        DHCPListener(listen=("0.0.0.0", 0)),
     ]
     try:
         with caplog.at_level(logging.WARNING, logger="pydhcp"):

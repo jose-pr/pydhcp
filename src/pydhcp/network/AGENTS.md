@@ -81,12 +81,12 @@ of the installed package).
   backed by `netimps.iter_addresses()`. `cache` is netimps' enumeration cache:
   `False` enumerates now, `True` reuses an enumeration up to
   `netimps.INTERFACE_CACHE_TTL` (1 s) old, a number is that TTL in seconds.
-  Per-packet callers pass `True`; `DhcpListener.bind()` clears the cache.
+  Per-packet callers pass `True`; `DHCPListener.bind()` clears the cache.
   `filter=True` (default) excludes `LINK_LOCAL_V4` (APIPA) addresses;
   `filter=False` (falsy) includes everything; or pass a
-  `Callable[[NetworkInterface], bool]` predicate. Used by `DhcpListener`
+  `Callable[[NetworkInterface], bool]` predicate. Used by `DHCPListener`
   wildcard binding, the `pydhcp interfaces` CLI subcommand, and
-  `DhcpServer`'s subnet lookup in `acquire_lease`/`get_inform_options`.
+  `DHCPServer`'s subnet lookup in `acquire_lease`/`get_inform_options`.
   - `family` is `4` or `AF_INET`, `6` or `AF_INET6`, or `None`; anything else
     raises `ValueError`.
   - **`family=4` by default.** This is a DHCPv4 implementation and the previous

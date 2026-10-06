@@ -18,23 +18,23 @@ from unittest.mock import MagicMock
 
 import pydhcp.capture as capture_module
 import pydhcp.cli as cli_module
-from pydhcp import CaptureEvent, NetworkInterface, RequestContext
+from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
 from pydhcp.log import LOGGER
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.packet import DhcpMessageType
+from pydhcp.packet import DHCPMessageType
 
 from conftest import build_request
 
 
 def _event() -> CaptureEvent:
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=MagicMock(),
         interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
         client=SocketAddress(IPv4("10.0.0.50"), 68),
         client_mac=bytes.fromhex("001122334455"),
     )
     return CaptureEvent(
-        build_request(DhcpMessageType.DHCPDISCOVER),
+        build_request(DHCPMessageType.DHCPDISCOVER),
         context,
         _dt.datetime.now(tz=_dt.timezone.utc),
     )
@@ -191,13 +191,13 @@ def test_every_module_that_logs_does_so_on_its_own_logger() -> None:
 
 def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     """A server warning and a listener warning, one logger apart."""
-    from pydhcp import DhcpServer
+    from pydhcp import DHCPServer
     from pydhcp.listener import interfaces
-    from pydhcp.packet import OpCode
+    from pydhcp.packet import DHCPOpcode
 
-    reply = build_request(DhcpMessageType.DHCPOFFER)
-    reply.op = OpCode.BOOTREPLY
-    server = DhcpServer(listen=("127.0.0.1", 0))
+    reply = build_request(DHCPMessageType.DHCPOFFER)
+    reply.op = DHCPOpcode.BOOTREPLY
+    server = DHCPServer(listen=("127.0.0.1", 0))
 
     def emit() -> None:
         server.handle(reply, _event().context)

@@ -1,4 +1,4 @@
-from pydhcp.capture import DhcpCapture
+from pydhcp.capture import DHCPCapture
 from pydhcp.packet.structured import dump_message
 
 
@@ -8,7 +8,7 @@ def on_capture(event) -> None:
 
 
 def main() -> None:
-    capture = DhcpCapture(
+    capture = DHCPCapture(
         listen=("127.0.0.1", 6767),
         packet_filter="msg_type=DHCPDISCOVER",
         hook=on_capture,

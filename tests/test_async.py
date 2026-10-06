@@ -1,19 +1,19 @@
 import asyncio
 import socket
 import pytest
-from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpLease, DhcpOptions
-from pydhcp.packet import DhcpMessageType, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPLease, DHCPOptions
+from pydhcp.packet import DHCPMessageType, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import SocketAddress, IPv4
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 
 
-class MockAsyncDhcpServer(AsyncDhcpServer):
+class MockAsyncDHCPServer(AsyncDHCPServer):
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         from datetime import datetime, timedelta
 
-        options = DhcpOptions()
-        return DhcpLease(
+        options = DHCPOptions()
+        return DHCPLease(
             IPv4("127.0.0.1"), datetime.now() + timedelta(seconds=10), options
         )
 
@@ -23,7 +23,7 @@ def test_async_server_lifecycle():
         # Port 0, then read the port back: a fixed test port collides with
         # whatever else holds it, and on Windows the collision surfaces as
         # WSAEACCES rather than "address in use".
-        server = MockAsyncDhcpServer(listen=[("127.0.0.1", 0)])
+        server = MockAsyncDHCPServer(listen=[("127.0.0.1", 0)])
         await server.start()
         server_port = server.bound_addresses[0].port
 
@@ -34,7 +34,7 @@ def test_async_server_lifecycle():
         # Construct a DHCP DISCOVER message
         from datetime import timedelta
 
-        data = build_request(DhcpMessageType.DHCPDISCOVER, xid=0x3903F326).encode()
+        data = build_request(DHCPMessageType.DHCPDISCOVER, xid=0x3903F326).encode()
 
         loop = asyncio.get_running_loop()
         # Send the packet to the server
@@ -46,11 +46,11 @@ def test_async_server_lifecycle():
                 loop.run_in_executor(None, client_sock.recvfrom, 2048), timeout=20.0
             )
 
-            resp_msg = DhcpMessage.decode(resp_data)
-            assert resp_msg.op == OpCode.BOOTREPLY
+            resp_msg = DHCPMessage.decode(resp_data)
+            assert resp_msg.op == DHCPOpcode.BOOTREPLY
             assert (
-                resp_msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-                == DhcpMessageType.DHCPOFFER
+                resp_msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+                == DHCPMessageType.DHCPOFFER
             )
         finally:
             await server.stop()
@@ -59,18 +59,18 @@ def test_async_server_lifecycle():
     asyncio.run(run_test())
 
 
-# --- AsyncDhcpServer must honour the contract it inherits ---
+# --- AsyncDHCPServer must honour the contract it inherits ---
 
 
 def test_async_server_has_the_same_state_as_the_sync_one():
-    """AsyncDhcpServer cannot call DhcpServer.__init__, so it re-implemented the
+    """AsyncDHCPServer cannot call DHCPServer.__init__, so it re-implemented the
     body and drifted: _declined was added to one and not the other, making every
     DHCPDECLINE an AttributeError on the async server."""
     from pydhcp.network import IPv4
-    from pydhcp.server import AsyncDhcpServer, DhcpServer
+    from pydhcp.server import AsyncDHCPServer, DHCPServer
 
-    sync = DhcpServer(listen=("127.0.0.1", 0))
-    server = AsyncDhcpServer(listen=("127.0.0.1", 0))
+    sync = DHCPServer(listen=("127.0.0.1", 0))
+    server = AsyncDHCPServer(listen=("127.0.0.1", 0))
     try:
         missing = [
             name for name in ("lease_backend", "_declined") if not hasattr(server, name)
@@ -79,12 +79,12 @@ def test_async_server_has_the_same_state_as_the_sync_one():
         # and the state actually works, not just exists
         server.quarantine_address(IPv4("10.0.0.5"))
         assert IPv4("10.0.0.5") in server._declined
-        # Every attribute DhcpServer._init_server_state owns must be on both.
+        # Every attribute DHCPServer._init_server_state owns must be on both.
         # Listener internals legitimately differ (the async half has transports
         # instead of a select loop, a cancellation token and a SIGINT handler),
         # so this compares the server layer only.
-        server_state = set(vars(DhcpServer(listen=("127.0.0.1", 0)))) - set(
-            vars(AsyncDhcpServer(listen=("127.0.0.1", 0)))
+        server_state = set(vars(DHCPServer(listen=("127.0.0.1", 0)))) - set(
+            vars(AsyncDHCPServer(listen=("127.0.0.1", 0)))
         )
         assert server_state <= {
             "_cancellation_token",
@@ -98,15 +98,15 @@ def test_async_server_has_the_same_state_as_the_sync_one():
 
 
 def test_async_stop_works_without_await():
-    """stop() is reached through the inherited DhcpListener contract, where
+    """stop() is reached through the inherited DHCPListener contract, where
     nobody awaits it. As a coroutine it silently did nothing and left the ports
     bound, and mypy accepted the call."""
     import asyncio
 
-    from pydhcp.server import AsyncDhcpServer
+    from pydhcp.server import AsyncDHCPServer
 
     async def main():
-        server = AsyncDhcpServer(listen=("127.0.0.1", 0))
+        server = AsyncDHCPServer(listen=("127.0.0.1", 0))
         server.bind()
         assert server.bound_addresses
         server.stop()  # no await
@@ -119,10 +119,10 @@ def test_async_stop_still_supports_await():
     """The documented form in README and docs/index.md."""
     import asyncio
 
-    from pydhcp.server import AsyncDhcpServer
+    from pydhcp.server import AsyncDHCPServer
 
     async def main():
-        server = AsyncDhcpServer(listen=("127.0.0.1", 0))
+        server = AsyncDHCPServer(listen=("127.0.0.1", 0))
         server.bind()
         assert server.bound_addresses
         await server.stop()
@@ -141,11 +141,11 @@ def test_async_handler_does_not_run_on_the_event_loop() -> None:
     import asyncio
     import threading
 
-    from pydhcp.server import AsyncDhcpServer
+    from pydhcp.server import AsyncDHCPServer
 
     seen: dict = {}
 
-    class ThreadRecordingServer(AsyncDhcpServer):
+    class ThreadRecordingServer(AsyncDHCPServer):
         def handle(self, msg, context):
             seen["handler"] = threading.current_thread()
 
@@ -178,13 +178,13 @@ def test_async_handlers_stay_serialised() -> None:
     import threading
     import time
 
-    from pydhcp.server import AsyncDhcpServer
+    from pydhcp.server import AsyncDHCPServer
 
     overlaps = []
     active = []
     lock = threading.Lock()
 
-    class OverlapDetectingServer(AsyncDhcpServer):
+    class OverlapDetectingServer(AsyncDHCPServer):
         def handle(self, msg, context):
             with lock:
                 active.append(1)
@@ -216,7 +216,7 @@ def test_async_handlers_stay_serialised() -> None:
 
 
 def _discover_bytes() -> bytes:
-    return bytes(build_request(DhcpMessageType.DHCPDISCOVER, xid=0x5A5A5A5A).encode())
+    return bytes(build_request(DHCPMessageType.DHCPDISCOVER, xid=0x5A5A5A5A).encode())
 
 
 def test_async_listener_uses_the_same_receive_path_as_the_sync_one():
@@ -228,17 +228,17 @@ def test_async_listener_uses_the_same_receive_path_as_the_sync_one():
     async server never, while the identical sync server answered it. Verified
     against ISC dhclient 4.4.3 over a veth pair: nothing before, full DORA after.
     """
-    from pydhcp.listener import AsyncDhcpListener, DhcpListener
+    from pydhcp.listener import AsyncDHCPListener, DHCPListener
 
     for spec in ("*", ("*", 10067), None):
-        sync = DhcpListener(listen=spec)
+        sync = DHCPListener(listen=spec)
         expected = sync._pktinfo
         assert (
-            AsyncDhcpListener(listen=spec)._pktinfo == expected
+            AsyncDHCPListener(listen=spec)._pktinfo == expected
         ), f"listeners disagree about the receive path for {spec!r}"
         # And so the wildcard stays unexpanded in the same cases: expanding it is
         # precisely what loses the broadcasts on Linux.
-        assert (len(AsyncDhcpListener(listen=spec)._listen) == len(sync._listen)) or (
+        assert (len(AsyncDHCPListener(listen=spec)._listen) == len(sync._listen)) or (
             not expected
         )
 
@@ -247,16 +247,16 @@ def test_async_listener_builds_a_packet_info_context():
     """The received interface must reach the handler, not just the socket.
 
     _context_for is shared with the sync listener for this reason: the async
-    half previously built its own RequestContext and dropped ifindex/local_ip,
+    half previously built its own DHCPRequestContext and dropped ifindex/local_ip,
     so replies went out with whatever SERVER_IDENTIFIER the wildcard implied.
     """
-    from pydhcp.listener import PktInfoUdpTransport, UdpTransport, _context_for
+    from pydhcp.listener import PktInfoUDPTransport, UDPTransport, _context_for
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))
     try:
         plain = _context_for(sock, SocketAddress(IPv4("127.0.0.1"), 68), b"\x00" * 6)
-        assert type(plain.transport) is UdpTransport
+        assert type(plain.transport) is UDPTransport
         assert plain.ifindex is None and plain.local_ip is None
 
         routed = _context_for(
@@ -266,7 +266,7 @@ def test_async_listener_builds_a_packet_info_context():
             ifindex=7,
             local_ip=IPv4("127.0.0.1"),
         )
-        assert isinstance(routed.transport, PktInfoUdpTransport)
+        assert isinstance(routed.transport, PktInfoUDPTransport)
         assert routed.transport.ifindex == 7
         assert routed.transport.local_ip == IPv4("127.0.0.1")
         assert routed.ifindex == 7 and routed.local_ip == IPv4("127.0.0.1")
@@ -275,17 +275,17 @@ def test_async_listener_builds_a_packet_info_context():
 
 
 def test_async_wait_and_listen_do_not_raise_attributeerror():
-    """Both are reachable through the inherited DhcpListener contract.
+    """Both are reachable through the inherited DHCPListener contract.
 
-    AsyncDhcpListener.__init__ never sets `_cancellation_token`, so the sync
-    implementations it inherited through AsyncDhcpServer's MRO failed with
+    AsyncDHCPListener.__init__ never sets `_cancellation_token`, so the sync
+    implementations it inherited through AsyncDHCPServer's MRO failed with
     `AttributeError: _cancellation_token` several frames deep -- a bug report
     that says nothing about what to call instead.
     """
-    from pydhcp.server import AsyncDhcpServer
+    from pydhcp.server import AsyncDHCPServer
 
     async def main():
-        server = AsyncDhcpServer(listen=("127.0.0.1", 0))
+        server = AsyncDHCPServer(listen=("127.0.0.1", 0))
 
         # listen() says what to use, rather than dying on missing state.
         with pytest.raises(NotImplementedError, match="await start"):
@@ -321,7 +321,7 @@ def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
         reports: "list[dict[str, object]]" = []
         loop = asyncio.get_running_loop()
         loop.set_exception_handler(lambda _loop, context: reports.append(context))
-        server = MockAsyncDhcpServer(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
+        server = MockAsyncDHCPServer(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
         await server.start()
         try:
             keep, drop = server._tasks
@@ -344,9 +344,9 @@ def test_async_oversized_datagram_is_dropped_rather_than_half_decoded() -> None:
     async receive loop counts it without a platform-specific error branch."""
 
     async def run_test() -> "tuple[int, int, int]":
-        handled: "list[DhcpMessage]" = []
+        handled: "list[DHCPMessage]" = []
 
-        class Recording(MockAsyncDhcpServer):
+        class Recording(MockAsyncDHCPServer):
             def handle(self, msg, context) -> None:
                 handled.append(msg)
 

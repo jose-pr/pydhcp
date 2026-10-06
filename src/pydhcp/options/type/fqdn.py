@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from .base import DhcpOptionType
+from .base import DHCPOptionType
 from .domain import decode_domain_name, encode_domain_name
 
 _ClientFqdnT = _ty.TypeVar("_ClientFqdnT", bound="ClientFqdn")
 
 
-class ClientFqdn(DhcpOptionType):
+class ClientFqdn(DHCPOptionType):
     """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
 
     With the E bit the name is a fully qualified name (RFC 1035 labels and the

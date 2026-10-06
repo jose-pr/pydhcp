@@ -14,12 +14,18 @@ import typing as _ty
 from unittest.mock import Mock
 
 from conftest import build_request
-from pydhcp import DhcpLease, DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import (
+    DHCPLease,
+    DHCPMessage,
+    DHCPOptions,
+    NetworkInterface,
+    DHCPRequestContext,
+)
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType
-from pydhcp.server import DhcpServer
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType
+from pydhcp.server import DHCPServer
 
 SERVER = IPv4("10.0.0.1")
 
@@ -28,8 +34,8 @@ def _mac(n: int) -> bytes:
     return bytes([0x00, 0x11, 0x22, 0x33, 0x44, n])
 
 
-def _context(transport: Mock, mac: bytes) -> RequestContext:
-    return RequestContext(
+def _context(transport: Mock, mac: bytes) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=transport,
         interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
         client=SocketAddress("10.0.0.50", 68),
@@ -37,7 +43,7 @@ def _context(transport: Mock, mac: bytes) -> RequestContext:
     )
 
 
-class CounterPool(DhcpServer):
+class CounterPool(DHCPServer):
     """The smallest pool a user would write: the next free host in an attribute."""
 
     def __init__(self) -> None:
@@ -49,38 +55,38 @@ class CounterPool(DhcpServer):
         self,
         client_id: str,
         server_id: IPv4,
-        msg: DhcpMessage,
+        msg: DHCPMessage,
         *,
         commit: bool = True,
-    ) -> _ty.Optional[DhcpLease]:
+    ) -> _ty.Optional[DHCPLease]:
         self.calls.append((self, commit))
         existing = self.lease_backend.lookup(client_id)
         if existing is not None:
             return existing
         ip = IPv4(f"10.0.0.{self.next_host}")
         self.next_host += 1
-        return self.lease_backend.allocate(client_id, ip, 3600, DhcpOptions())
+        return self.lease_backend.allocate(client_id, ip, 3600, DHCPOptions())
 
 
-def _exchange(server: DhcpServer, n: int) -> "tuple[str, str]":
+def _exchange(server: DHCPServer, n: int) -> "tuple[str, str]":
     """DISCOVER then REQUEST for client `n`; the offered and the acked address."""
     transport = Mock(send=Mock(return_value=1))
     context = _context(transport, _mac(n))
     server.handle(
-        build_request(DhcpMessageType.DHCPDISCOVER, chaddr=_mac(n), xid=n), context
+        build_request(DHCPMessageType.DHCPDISCOVER, chaddr=_mac(n), xid=n), context
     )
-    offer = DhcpMessage.decode(transport.send.call_args.args[0])
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPREQUEST
-    options[DhcpOptionCode.REQUESTED_IP] = offer.yiaddr
-    options[DhcpOptionCode.SERVER_IDENTIFIER] = SERVER
+    offer = DHCPMessage.decode(transport.send.call_args.args[0])
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPREQUEST
+    options[DHCPOptionCode.REQUESTED_IP] = offer.yiaddr
+    options[DHCPOptionCode.SERVER_IDENTIFIER] = SERVER
     server.handle(
         build_request(
-            DhcpMessageType.DHCPREQUEST, options=options, chaddr=_mac(n), xid=n
+            DHCPMessageType.DHCPREQUEST, options=options, chaddr=_mac(n), xid=n
         ),
         context,
     )
-    ack = DhcpMessage.decode(transport.send.call_args.args[0])
+    ack = DHCPMessage.decode(transport.send.call_args.args[0])
     return str(offer.yiaddr), str(ack.yiaddr)
 
 
@@ -109,19 +115,19 @@ def test_the_override_runs_on_the_server_itself_and_is_told_what_kind_of_call() 
     context = _context(transport, _mac(1))
 
     server.handle(
-        build_request(DhcpMessageType.DHCPDISCOVER, chaddr=_mac(1), xid=1), context
+        build_request(DHCPMessageType.DHCPDISCOVER, chaddr=_mac(1), xid=1), context
     )
     assert [commit for _who, commit in server.calls] == [False]
 
     server.calls.clear()
-    offer = DhcpMessage.decode(transport.send.call_args.args[0])
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPREQUEST
-    options[DhcpOptionCode.REQUESTED_IP] = offer.yiaddr
-    options[DhcpOptionCode.SERVER_IDENTIFIER] = SERVER
+    offer = DHCPMessage.decode(transport.send.call_args.args[0])
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPREQUEST
+    options[DHCPOptionCode.REQUESTED_IP] = offer.yiaddr
+    options[DHCPOptionCode.SERVER_IDENTIFIER] = SERVER
     server.handle(
         build_request(
-            DhcpMessageType.DHCPREQUEST, options=options, chaddr=_mac(1), xid=1
+            DHCPMessageType.DHCPREQUEST, options=options, chaddr=_mac(1), xid=1
         ),
         context,
     )

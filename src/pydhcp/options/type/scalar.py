@@ -7,12 +7,12 @@ from ... import nvt as _nvt
 from ...network import HardwareAddressType as _HardwareAddressType
 
 
-from .base import DhcpOptionType
+from .base import DHCPOptionType
 
 _BytesT = _ty.TypeVar("_BytesT", bound="Bytes")
 
 
-class Bytes(DhcpOptionType, bytes):
+class Bytes(DHCPOptionType, bytes):
     """Opaque byte payload."""
 
     def __new__(
@@ -46,7 +46,7 @@ class Bytes(DhcpOptionType, bytes):
 _UriListT = _ty.TypeVar("_UriListT", bound="UriList")
 
 
-class UriList(DhcpOptionType, list[str]):
+class UriList(DHCPOptionType, list[str]):
     """List of UTF-8 URIs encoded as repeated U16-length-prefixed entries."""
 
     def __init__(self, *items: _ty.Any):
@@ -109,7 +109,7 @@ class UriList(DhcpOptionType, list[str]):
 _StringT = _ty.TypeVar("_StringT", bound="String")
 
 
-class String(DhcpOptionType, str):
+class String(DHCPOptionType, str):
     """RFC 2132 NVT-ASCII string with null termination on the wire.
 
     Octets that are not valid UTF-8 are preserved rather than replaced, so a
@@ -154,7 +154,7 @@ class OctetString(String):
 _BooleanT = _ty.TypeVar("_BooleanT", bound="Boolean")
 
 
-class Boolean(DhcpOptionType, int):
+class Boolean(DHCPOptionType, int):
     """Boolean option encoded as a single octet."""
 
     def __new__(cls: type[_BooleanT], val: _ty.Any) -> _BooleanT:
@@ -186,7 +186,7 @@ class Boolean(DhcpOptionType, int):
 _FlagT = _ty.TypeVar("_FlagT", bound="Flag")
 
 
-class Flag(DhcpOptionType):
+class Flag(DHCPOptionType):
     """Zero-length presence option.
 
     Some options carry their whole meaning in being present at all -- RFC 4039's
@@ -237,7 +237,7 @@ _BaseFixedLengthIntegerT = _ty.TypeVar(
 )
 
 
-class BaseFixedLengthInteger(DhcpOptionType, int):
+class BaseFixedLengthInteger(DHCPOptionType, int):
     NUMBER_OF_BYTES: int
     SIGNED: bool = False
 
@@ -359,7 +359,7 @@ class ClientIdentifier(Bytes):
 _OptionOverloadT = _ty.TypeVar("_OptionOverloadT", bound="OptionOverload")
 
 
-class OptionOverload(DhcpOptionType, _enum.IntFlag):
+class OptionOverload(DHCPOptionType, _enum.IntFlag):
     """RFC 2132 option-overload selector."""
 
     NONE = 0

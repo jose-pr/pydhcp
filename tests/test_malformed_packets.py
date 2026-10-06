@@ -1,26 +1,26 @@
 import pytest
 from datetime import timedelta
 import logging
-from pydhcp.packet.message import DhcpMessage
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptions
+from pydhcp.options import DHCPOptions
 
 
 def get_valid_packet_bytes() -> bytearray:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
-    msg = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    msg = DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=0x3903F326,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -40,7 +40,7 @@ def test_invalid_hlen():
     with pytest.raises(
         ValueError, match="Hardware address length 17 exceeds maximum of 16"
     ):
-        DhcpMessage.decode(packet)
+        DHCPMessage.decode(packet)
 
 
 def test_packet_shorter_than_fixed_header():
@@ -48,7 +48,7 @@ def test_packet_shorter_than_fixed_header():
         ValueError,
         match="too short for DHCP fixed header: got 10 bytes, need at least 236",
     ):
-        DhcpMessage.decode(bytearray(10))
+        DHCPMessage.decode(bytearray(10))
 
 
 def test_packet_shorter_than_magic_cookie():
@@ -56,7 +56,7 @@ def test_packet_shorter_than_magic_cookie():
         ValueError,
         match="too short for DHCP magic cookie at offset 236: got 238 bytes, need at least 240",
     ):
-        DhcpMessage.decode(bytearray(238))
+        DHCPMessage.decode(bytearray(238))
 
 
 def test_unnamed_htype_decodes_without_warning_noise(caplog):
@@ -69,7 +69,7 @@ def test_unnamed_htype_decodes_without_warning_noise(caplog):
     # Modify htype (offset 1) to a value with no IANA name, e.g. 99
     packet[1] = 99
     with caplog.at_level(logging.WARNING):
-        decoded = DhcpMessage.decode(packet)
+        decoded = DHCPMessage.decode(packet)
 
     assert decoded.htype == 99
     assert "Unknown hardware type" not in caplog.text
@@ -81,7 +81,7 @@ def test_invalid_magic_cookie():
     # Magic cookie is at offset 236 to 240. Let's modify it.
     packet[236:240] = b"\x00\x00\x00\x00"
     with pytest.raises(ValueError, match="Invalid magic cookie at offset 236"):
-        DhcpMessage.decode(packet)
+        DHCPMessage.decode(packet)
 
 
 def test_truncated_options(caplog):
@@ -99,7 +99,7 @@ def test_truncated_options(caplog):
     packet = packet[:end] + truncated_option
 
     with caplog.at_level(logging.WARNING):
-        decoded = DhcpMessage.decode(packet)
+        decoded = DHCPMessage.decode(packet)
 
     assert f"Option 1 at offset {end} claims 4 bytes but only 0 available" in (
         caplog.text
@@ -110,12 +110,12 @@ def test_truncated_options(caplog):
     # options that decoded cleanly. Only the log line was asserted before, so
     # a decoder that returned a blank message, or dropped every option, or
     # kept reading past the end, would have passed.
-    assert decoded.op is OpCode.BOOTREQUEST
+    assert decoded.op is DHCPOpcode.BOOTREQUEST
     assert decoded.xid == 0x3903F326
     assert decoded.chaddr == b"\x00\x11\x22\x33\x44\x55"
     assert (
-        decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        == DhcpMessageType.DHCPDISCOVER
+        decoded.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+        == DHCPMessageType.DHCPDISCOVER
     )
 
     # And what the truncated option itself becomes: **dropped**, because it
@@ -131,8 +131,8 @@ def test_truncated_options(caplog):
     # A truncation that supplies *some* octets still keeps them: only the empty
     # case is unusable, and dropping every truncated option would discard the
     # value this leniency exists to preserve.
-    assert DhcpOptionCode.SUBNET_MASK not in decoded.options
-    assert decoded.options.get(DhcpOptionCode.SUBNET_MASK, decode=False) is None
+    assert DHCPOptionCode.SUBNET_MASK not in decoded.options
+    assert decoded.options.get(DHCPOptionCode.SUBNET_MASK, decode=False) is None
     assert [code for code, _ in decoded.options.items(decoded=False)] == [
-        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
+        int(DHCPOptionCode.DHCP_MESSAGE_TYPE),
     ]

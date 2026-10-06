@@ -3,21 +3,27 @@ import ipaddress
 from datetime import datetime, timedelta
 from unittest.mock import Mock
 
-from pydhcp import DhcpLease, DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp import (
+    DHCPLease,
+    DHCPMessage,
+    DHCPOptions,
+    NetworkInterface,
+    DHCPRequestContext,
+)
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.server import DhcpServer
+from pydhcp.server import DHCPServer
 from conftest import build_request
 
 
-def _message(message_type: DhcpMessageType) -> DhcpMessage:
+def _message(message_type: DHCPMessageType) -> DHCPMessage:
     return build_request(message_type)
 
 
-def _context(transport: Mock) -> RequestContext:
-    return RequestContext(
+def _context(transport: Mock) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=transport,
         interface=NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/24")),
         client=SocketAddress("127.0.0.1", 68),
@@ -25,14 +31,14 @@ def _context(transport: Mock) -> RequestContext:
     )
 
 
-def _lan_context(transport: Mock) -> RequestContext:
+def _lan_context(transport: Mock) -> DHCPRequestContext:
     """A context that is NOT loopback.
 
     Loopback is a special case for reply delivery -- no ARP to fail, and POSIX
     refuses a broadcast from a 127.0.0.1-bound socket -- so the broadcast rule
     has to be asserted on a normal segment.
     """
-    return RequestContext(
+    return DHCPRequestContext(
         transport=transport,
         interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
         client=SocketAddress("10.0.0.50", 68),
@@ -41,12 +47,12 @@ def _lan_context(transport: Mock) -> RequestContext:
 
 
 def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
-    class FixedLeaseServer(DhcpServer):
+    class FixedLeaseServer(DHCPServer):
         def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-            options = DhcpOptions()
-            options[DhcpOptionCode.ROUTER] = [IPv4("127.0.0.1")]
-            options[DhcpOptionCode.DNS] = [IPv4("1.1.1.1")]
-            return DhcpLease(
+            options = DHCPOptions()
+            options[DHCPOptionCode.ROUTER] = [IPv4("127.0.0.1")]
+            options[DHCPOptionCode.DNS] = [IPv4("1.1.1.1")]
+            return DHCPLease(
                 IPv4("127.0.0.10"),
                 datetime.now() + timedelta(seconds=3600),
                 options,
@@ -54,39 +60,39 @@ def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
 
     transport = Mock()
     server = FixedLeaseServer()
-    server.handle(_message(DhcpMessageType.DHCPDISCOVER), _context(transport))
+    server.handle(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
 
     data, dest, port, _ = transport.send.call_args.args
-    response = DhcpMessage.decode(data)
+    response = DHCPMessage.decode(data)
     # Unicast here because this exchange is over loopback, where there is no ARP
     # to fail and POSIX refuses a broadcast anyway. On a real segment the same
     # reply is broadcast -- see test_reply_to_an_unconfigured_client_is_broadcast.
     assert dest == IPv4("127.0.0.10")
     assert port == 68
     assert response.yiaddr == IPv4("127.0.0.10")
-    assert response.options.get(DhcpOptionCode.DNS) == [IPv4("1.1.1.1")]
+    assert response.options.get(DHCPOptionCode.DNS) == [IPv4("1.1.1.1")]
 
 
 def test_inform_can_customize_options_without_allocating_address() -> None:
-    class InformOnlyServer(DhcpServer):
+    class InformOnlyServer(DHCPServer):
         def get_inform_options(self, server_id, msg):
-            options = DhcpOptions()
-            options[DhcpOptionCode.DNS] = [IPv4("9.9.9.9")]
+            options = DHCPOptions()
+            options[DHCPOptionCode.DNS] = [IPv4("9.9.9.9")]
             return options
 
     transport = Mock()
     server = InformOnlyServer()
-    server.handle(_message(DhcpMessageType.DHCPINFORM), _context(transport))
+    server.handle(_message(DHCPMessageType.DHCPINFORM), _context(transport))
 
     data, dest, port, _ = transport.send.call_args.args
-    response = DhcpMessage.decode(data)
+    response = DHCPMessage.decode(data)
     assert dest == IPv4("255.255.255.255")
     assert port == 68
     assert response.yiaddr == IPv4("0.0.0.0")
-    assert response.options.get(DhcpOptionCode.DNS) == [IPv4("9.9.9.9")]
+    assert response.options.get(DHCPOptionCode.DNS) == [IPv4("9.9.9.9")]
 
 
-class _BackendServer(DhcpServer):
+class _BackendServer(DHCPServer):
     """Server whose `acquire_lease` only consults the lease backend.
 
     The stock `acquire_lease` needs a real host interface owning `server_id`,
@@ -101,20 +107,20 @@ class _BackendServer(DhcpServer):
 
 def _seeded_backend(client_id: str) -> InMemoryLeaseBackend:
     backend = InMemoryLeaseBackend()
-    options = DhcpOptions()
-    options[DhcpOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
-    options[DhcpOptionCode.ROUTER] = [IPv4("127.0.0.1")]
-    options[DhcpOptionCode.DNS] = [IPv4("1.1.1.1")]
+    options = DHCPOptions()
+    options[DHCPOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
+    options[DHCPOptionCode.ROUTER] = [IPv4("127.0.0.1")]
+    options[DHCPOptionCode.DNS] = [IPv4("1.1.1.1")]
     backend.allocate(client_id, IPv4("127.0.0.10"), 3600, options)
     return backend
 
 
 def test_parameter_request_list_filtering_does_not_delete_lease_options() -> None:
-    msg = _message(DhcpMessageType.DHCPDISCOVER)
+    msg = _message(DHCPMessageType.DHCPDISCOVER)
     # Ask for SUBNET_MASK only: pre-fix this filter wrote through to the lease
     # and permanently deleted ROUTER/DNS from the backend.
-    msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
-        [int(DhcpOptionCode.SUBNET_MASK)]
+    msg.options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
+        [int(DHCPOptionCode.SUBNET_MASK)]
     )
     client_id = msg.client_id()
     backend = _seeded_backend(client_id)
@@ -124,21 +130,21 @@ def test_parameter_request_list_filtering_does_not_delete_lease_options() -> Non
 
     stored = backend.lookup(client_id)
     assert stored is not None
-    assert DhcpOptionCode.ROUTER in stored.options
-    assert DhcpOptionCode.DNS in stored.options
-    assert DhcpOptionCode.SUBNET_MASK in stored.options
+    assert DHCPOptionCode.ROUTER in stored.options
+    assert DHCPOptionCode.DNS in stored.options
+    assert DHCPOptionCode.SUBNET_MASK in stored.options
     # Response-only bookkeeping must never be persisted into the lease.
-    assert DhcpOptionCode.DHCP_MESSAGE_TYPE not in stored.options
-    assert DhcpOptionCode.SERVER_IDENTIFIER not in stored.options
-    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME not in stored.options
-    assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in stored.options
+    assert DHCPOptionCode.DHCP_MESSAGE_TYPE not in stored.options
+    assert DHCPOptionCode.SERVER_IDENTIFIER not in stored.options
+    assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME not in stored.options
+    assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in stored.options
 
 
 def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
-    msg = _message(DhcpMessageType.DHCPREQUEST)
-    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("127.0.0.10")
+    msg = _message(DHCPMessageType.DHCPREQUEST)
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.10")
     relay_info = bytearray(b"\x01\x04port")
-    msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
+    msg.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = relay_info
     client_id = msg.client_id()
     backend = _seeded_backend(client_id)
     seeded = backend.lookup(client_id)
@@ -151,9 +157,9 @@ def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
 
     # The echo reaches the wire ...
     data, _dest, _port, _ = transport.send.call_args.args
-    response = DhcpMessage.decode(data)
+    response = DHCPMessage.decode(data)
     assert (
-        response.options.get(DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False)
+        response.options.get(DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=False)
         == relay_info
     )
     # ... but the stored lease is byte-for-byte what it was before the exchange.
@@ -163,34 +169,34 @@ def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
 
 
 def test_inform_does_not_strip_lease_time_from_the_stored_lease() -> None:
-    msg = _message(DhcpMessageType.DHCPINFORM)
+    msg = _message(DHCPMessageType.DHCPINFORM)
     client_id = msg.client_id()
     backend = _seeded_backend(client_id)
     seeded = backend.lookup(client_id)
     assert seeded is not None
-    seeded.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
+    seeded.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
 
     server = _BackendServer(lease_backend=backend)
     server.handle(msg, _context(Mock()))
 
     stored = backend.lookup(client_id)
     assert stored is not None
-    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in stored.options
+    assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME in stored.options
 
 
 # --- DHCPNAK construction and delivery (RFC 2131 4.3.2 / Table 3) ---
 
 
-class _NakServer(DhcpServer):
+class _NakServer(DHCPServer):
     """Refuses every request, so _filter_and_send takes the NAK path."""
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        return DhcpLease(
-            IPv4("10.0.0.10"), datetime.now() + timedelta(seconds=3600), DhcpOptions()
+        return DHCPLease(
+            IPv4("10.0.0.10"), datetime.now() + timedelta(seconds=3600), DHCPOptions()
         )
 
 
-def _nak_request(giaddr: str = "0.0.0.0", requested: str = "10.0.0.99") -> DhcpMessage:
+def _nak_request(giaddr: str = "0.0.0.0", requested: str = "10.0.0.99") -> DHCPMessage:
     """A SELECTING DHCPREQUEST asking for an address the server will not grant.
 
     The server identifier names this server, which is what puts the request in
@@ -198,16 +204,16 @@ def _nak_request(giaddr: str = "0.0.0.0", requested: str = "10.0.0.99") -> DhcpM
     server has no record of must be answered with silence, not a NAK
     (RFC 2131 4.3.2).
     """
-    msg = _message(DhcpMessageType.DHCPREQUEST)
-    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4(requested)
-    msg.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("127.0.0.1")
+    msg = _message(DHCPMessageType.DHCPREQUEST)
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4(requested)
+    msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4("127.0.0.1")
     msg.giaddr = IPv4(giaddr)
     return msg
 
 
-def _sent(transport: Mock) -> tuple[DhcpMessage, str, int]:
+def _sent(transport: Mock) -> tuple[DHCPMessage, str, int]:
     data, dest, port, _ = transport.send.call_args.args
-    return DhcpMessage.decode(bytearray(data)), str(dest), port
+    return DHCPMessage.decode(bytearray(data)), str(dest), port
 
 
 def test_nak_is_broadcast_when_giaddr_is_zero() -> None:
@@ -218,7 +224,7 @@ def test_nak_is_broadcast_when_giaddr_is_zero() -> None:
 
     reply, dest, _port = _sent(transport)
     assert (
-        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPNAK
+        reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPNAK
     )
     assert dest == "255.255.255.255"
 
@@ -234,8 +240,8 @@ def test_nak_carries_no_address_and_no_lease_time() -> None:
     assert reply.yiaddr == IPv4("0.0.0.0")
     assert reply.ciaddr == IPv4("0.0.0.0")
     assert reply.siaddr == IPv4("0.0.0.0")
-    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
-    assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
+    assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
+    assert reply.options.get(DHCPOptionCode.SERVER_IDENTIFIER) is not None
 
 
 def test_nak_through_a_relay_sets_the_broadcast_bit() -> None:
@@ -248,7 +254,7 @@ def test_nak_through_a_relay_sets_the_broadcast_bit() -> None:
     reply, dest, port = _sent(transport)
     assert dest == "10.0.0.1"
     assert port == 67
-    assert reply.flags is Flags.BROADCAST
+    assert reply.flags is DHCPFlags.BROADCAST
 
 
 # --- RFC 3046 2.2: the option 82 echo survives the request-list filter ---
@@ -258,32 +264,32 @@ def test_relay_agent_information_is_echoed_even_when_a_request_list_is_sent() ->
     """Practically every client sends option 55, and the echo was filtered out by
     it -- so relays that validate the echo dropped every reply."""
 
-    class LeaseServer(DhcpServer):
+    class LeaseServer(DHCPServer):
         def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-            return DhcpLease(
+            return DHCPLease(
                 IPv4("10.0.0.10"),
                 datetime.now() + timedelta(seconds=3600),
-                DhcpOptions(),
+                DHCPOptions(),
             )
 
-    msg = _message(DhcpMessageType.DHCPDISCOVER)
-    msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = bytearray(b"\x01\x04port")
-    msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
-        [DhcpOptionCode.SUBNET_MASK, DhcpOptionCode.ROUTER]
+    msg = _message(DHCPMessageType.DHCPDISCOVER)
+    msg.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = bytearray(b"\x01\x04port")
+    msg.options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
+        [DHCPOptionCode.SUBNET_MASK, DHCPOptionCode.ROUTER]
     )
     transport = Mock()
     LeaseServer().handle(msg, _context(transport))
 
     reply, _dest, _port = _sent(transport)
     assert reply.options.get(
-        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=False
+        DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=False
     ) == bytearray(b"\x01\x04port")
     # The machinery options survive too, or the reply is not a usable DHCP message.
     assert (
-        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+        reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPOFFER
     )
-    assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
-    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME in reply.options
+    assert reply.options.get(DHCPOptionCode.SERVER_IDENTIFIER) is not None
+    assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME in reply.options
 
 
 def _reply_option_codes(transport: Mock) -> set:
@@ -306,9 +312,9 @@ def test_reply_carries_exactly_the_requested_options_and_the_machinery() -> None
     type, server identifier, lease time), so the expected set is exactly the
     request list plus those.
     """
-    msg = _message(DhcpMessageType.DHCPDISCOVER)
-    msg.options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
-        [int(DhcpOptionCode.SUBNET_MASK), int(DhcpOptionCode.ROUTER)]
+    msg = _message(DHCPMessageType.DHCPDISCOVER)
+    msg.options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
+        [int(DHCPOptionCode.SUBNET_MASK), int(DHCPOptionCode.ROUTER)]
     )
     backend = _seeded_backend(msg.client_id())
     transport = Mock()
@@ -316,11 +322,11 @@ def test_reply_carries_exactly_the_requested_options_and_the_machinery() -> None
     _BackendServer(lease_backend=backend).handle(msg, _context(transport))
 
     assert _reply_option_codes(transport) == {
-        int(DhcpOptionCode.SUBNET_MASK),
-        int(DhcpOptionCode.ROUTER),
-        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
-        int(DhcpOptionCode.SERVER_IDENTIFIER),
-        int(DhcpOptionCode.IP_ADDRESS_LEASE_TIME),
+        int(DHCPOptionCode.SUBNET_MASK),
+        int(DHCPOptionCode.ROUTER),
+        int(DHCPOptionCode.DHCP_MESSAGE_TYPE),
+        int(DHCPOptionCode.SERVER_IDENTIFIER),
+        int(DHCPOptionCode.IP_ADDRESS_LEASE_TIME),
     }
 
 
@@ -331,20 +337,20 @@ def test_a_client_that_sends_no_request_list_is_told_everything() -> None:
     everything" and "the filter dropped nothing" cannot both pass. RFC 2131
     3.5: absent a request list the server supplies the parameters it has.
     """
-    msg = _message(DhcpMessageType.DHCPDISCOVER)
-    assert DhcpOptionCode.PARAMETER_REQUEST_LIST not in msg.options
+    msg = _message(DHCPMessageType.DHCPDISCOVER)
+    assert DHCPOptionCode.PARAMETER_REQUEST_LIST not in msg.options
     backend = _seeded_backend(msg.client_id())
     transport = Mock()
 
     _BackendServer(lease_backend=backend).handle(msg, _context(transport))
 
     assert _reply_option_codes(transport) == {
-        int(DhcpOptionCode.SUBNET_MASK),
-        int(DhcpOptionCode.ROUTER),
-        int(DhcpOptionCode.DNS),
-        int(DhcpOptionCode.DHCP_MESSAGE_TYPE),
-        int(DhcpOptionCode.SERVER_IDENTIFIER),
-        int(DhcpOptionCode.IP_ADDRESS_LEASE_TIME),
+        int(DHCPOptionCode.SUBNET_MASK),
+        int(DHCPOptionCode.ROUTER),
+        int(DHCPOptionCode.DNS),
+        int(DHCPOptionCode.DHCP_MESSAGE_TYPE),
+        int(DHCPOptionCode.SERVER_IDENTIFIER),
+        int(DHCPOptionCode.IP_ADDRESS_LEASE_TIME),
     }
 
 
@@ -355,8 +361,8 @@ def test_init_reboot_from_an_unknown_client_is_answered_with_silence() -> None:
     """RFC 2131 4.3.2: with no record of the client the server MUST remain
     silent. Answering makes it a rogue server for clients that belong to another
     server on the same segment."""
-    msg = _message(DhcpMessageType.DHCPREQUEST)
-    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.99")  # no server id
+    msg = _message(DHCPMessageType.DHCPREQUEST)
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.99")  # no server id
     transport = Mock()
 
     _NakServer().handle(msg, _context(transport))
@@ -367,8 +373,8 @@ def test_init_reboot_from_an_unknown_client_is_answered_with_silence() -> None:
 def test_init_reboot_from_a_known_client_is_answered() -> None:
     """The silence rule keys on having no record, not on the message shape."""
     server = _NakServer()
-    msg = _message(DhcpMessageType.DHCPREQUEST)
-    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
+    msg = _message(DHCPMessageType.DHCPREQUEST)
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
     server.lease_backend.allocate(msg.client_id(), IPv4("10.0.0.10"), 3600)
     transport = Mock()
 
@@ -376,7 +382,7 @@ def test_init_reboot_from_a_known_client_is_answered() -> None:
 
     reply, _dest, _port = _sent(transport)
     assert (
-        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+        reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
     )
 
 
@@ -384,14 +390,14 @@ def test_inform_does_not_create_a_lease() -> None:
     """RFC 2131 4.3.5: an INFORM client already has its address and is asking
     only for configuration. Allocating let an INFORM flood grow the store."""
 
-    class AllocatingServer(DhcpServer):
+    class AllocatingServer(DHCPServer):
         """Allocates through the backend, as the stock acquire_lease does."""
 
         def acquire_lease(self, client_id, server_id, msg, *, commit=True):
             return self.lease_backend.allocate(client_id, IPv4("10.0.0.10"), 3600)
 
     server = AllocatingServer()
-    msg = _message(DhcpMessageType.DHCPINFORM)
+    msg = _message(DHCPMessageType.DHCPINFORM)
     msg.ciaddr = IPv4("10.0.0.77")
     transport = Mock()
 
@@ -399,10 +405,10 @@ def test_inform_does_not_create_a_lease() -> None:
 
     reply, _dest, _port = _sent(transport)
     assert (
-        reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+        reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
     )
     assert reply.yiaddr == IPv4("0.0.0.0")
-    assert DhcpOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
+    assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
     assert server.lease_backend.lookup(msg.client_id()) is None
 
 
@@ -412,12 +418,12 @@ def test_inform_uses_the_documented_allocation_free_hook() -> None:
 
     class InformServer(_NakServer):
         def get_inform_options(self, server_id, msg):
-            options = DhcpOptions()
-            options[DhcpOptionCode.DNS] = [IPv4("9.9.9.9")]
+            options = DHCPOptions()
+            options[DHCPOptionCode.DNS] = [IPv4("9.9.9.9")]
             return options
 
     server = InformServer()
-    msg = _message(DhcpMessageType.DHCPINFORM)
+    msg = _message(DHCPMessageType.DHCPINFORM)
     msg.ciaddr = IPv4("10.0.0.77")
     server.lease_backend.allocate(msg.client_id(), IPv4("10.0.0.10"), 3600)
     transport = Mock()
@@ -425,13 +431,13 @@ def test_inform_uses_the_documented_allocation_free_hook() -> None:
     server.handle(msg, _context(transport))
 
     reply, _dest, _port = _sent(transport)
-    assert reply.options.get(DhcpOptionCode.DNS) == [IPv4("9.9.9.9")]
+    assert reply.options.get(DHCPOptionCode.DNS) == [IPv4("9.9.9.9")]
 
 
 # --- Stock allocator safety (RFC 2131 4.3.1/4.3.3) ---
 
 
-class _LoopbackServer(DhcpServer):
+class _LoopbackServer(DHCPServer):
     """Stock allocator, but with a served interface that exists in tests.
 
     The real acquire_lease resolves server_id against the host's interfaces;
@@ -443,7 +449,7 @@ class _LoopbackServer(DhcpServer):
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         interface = NetworkInterface("test0", self.NETWORK)
-        requested = msg.options.get(DhcpOptionCode.REQUESTED_IP)
+        requested = msg.options.get(DHCPOptionCode.REQUESTED_IP)
         ip = IPv4(str(requested)) if requested is not None else msg.ciaddr
         refusal = self._address_refusal(ip, interface, client_id)
         if refusal is not None:
@@ -451,10 +457,10 @@ class _LoopbackServer(DhcpServer):
         return self.lease_backend.allocate(client_id, ip, 3600)
 
 
-def _request_for(ip: str, client: bytes = b"\x01\x02\x03") -> DhcpMessage:
-    msg = _message(DhcpMessageType.DHCPDISCOVER)
-    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4(ip)
-    msg.options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(client)
+def _request_for(ip: str, client: bytes = b"\x01\x02\x03") -> DHCPMessage:
+    msg = _message(DHCPMessageType.DHCPDISCOVER)
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4(ip)
+    msg.options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(client)
     return msg
 
 
@@ -507,8 +513,8 @@ def test_declined_address_is_quarantined_and_not_reoffered() -> None:
     server = _LoopbackServer()
     server.lease_backend.allocate("client-a", IPv4("10.0.0.50"), 3600)
 
-    decline = _message(DhcpMessageType.DHCPDECLINE)
-    decline.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")
+    decline = _message(DHCPMessageType.DHCPDECLINE)
+    decline.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")
     server.handle(decline, _context(Mock()))
 
     assert IPv4("10.0.0.50") in server._declined
@@ -545,7 +551,7 @@ def test_client_identifier_is_echoed() -> None:
 
     reply, _dest, _port = _sent(transport)
     assert reply.options.get(
-        DhcpOptionCode.CLIENT_IDENTIFIER, decode=False
+        DHCPOptionCode.CLIENT_IDENTIFIER, decode=False
     ) == bytearray(b"\x01\xaa\xbb")
 
 
@@ -559,7 +565,7 @@ def test_reply_to_an_unconfigured_client_is_broadcast() -> None:
     the client saw none of them.
     """
     transport = Mock()
-    msg = _message(DhcpMessageType.DHCPDISCOVER)  # flags=UNICAST, ciaddr=0
+    msg = _message(DHCPMessageType.DHCPDISCOVER)  # flags=UNICAST, ciaddr=0
     _NakServer().handle(msg, _lan_context(transport))
 
     _reply, dest, _port = _sent(transport)
@@ -571,7 +577,7 @@ def test_reply_over_loopback_is_unicast() -> None:
     broadcast from a socket bound to 127.0.0.1 -- which hung this suite on Linux
     while it passed on Windows."""
     transport = Mock()
-    _NakServer().handle(_message(DhcpMessageType.DHCPDISCOVER), _context(transport))
+    _NakServer().handle(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
 
     _reply, dest, _port = _sent(transport)
     assert dest == "10.0.0.10"
@@ -584,7 +590,7 @@ def test_unicast_to_unconfigured_client_can_be_opted_into() -> None:
         UNICAST_TO_UNCONFIGURED_CLIENT = True
 
     transport = Mock()
-    L2Server().handle(_message(DhcpMessageType.DHCPDISCOVER), _lan_context(transport))
+    L2Server().handle(_message(DHCPMessageType.DHCPDISCOVER), _lan_context(transport))
 
     _reply, dest, _port = _sent(transport)
     assert dest == "10.0.0.10"
@@ -593,9 +599,9 @@ def test_unicast_to_unconfigured_client_can_be_opted_into() -> None:
 def test_configured_client_still_gets_a_unicast_reply() -> None:
     """ciaddr set means the client holds the address and ARP resolves."""
     transport = Mock()
-    msg = _message(DhcpMessageType.DHCPREQUEST)
-    msg.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("127.0.0.1")
-    msg.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
+    msg = _message(DHCPMessageType.DHCPREQUEST)
+    msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4("127.0.0.1")
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
     msg.ciaddr = IPv4("10.0.0.10")
     _NakServer().handle(msg, _context(transport))
 
@@ -609,10 +615,10 @@ def test_configured_client_still_gets_a_unicast_reply() -> None:
 def _discover_requesting(seconds=None):
     from pydhcp.options import type as _optype
 
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     if seconds is not None:
-        options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = _optype.U32(seconds)
+        options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = _optype.U32(seconds)
     return build_request(options=options, xid=0x1234)
 
 
@@ -622,7 +628,7 @@ def test_client_cannot_choose_its_own_lease_length():
     There was no policy: the requested value went straight to the backend, so a
     client asking for 0xFFFFFFFE held the address until 2162.
     """
-    server = DhcpServer(listen=("127.0.0.1", 0))
+    server = DHCPServer(listen=("127.0.0.1", 0))
     try:
         assert server.lease_seconds(_discover_requesting(None)) == (
             server.DEFAULT_LEASE_SECONDS
@@ -649,10 +655,10 @@ def test_infinity_sentinel_is_infinity_not_136_years():
     """
     import math
 
-    class Permissive(DhcpServer):
+    class Permissive(DHCPServer):
         ALLOW_INFINITE_LEASE = True
 
-    denied = DhcpServer(listen=("127.0.0.1", 0))
+    denied = DHCPServer(listen=("127.0.0.1", 0))
     allowed = Permissive(listen=("127.0.0.1", 0))
     try:
         # Default policy: not granted, but clamped -- never a 136-year lease.
@@ -670,7 +676,7 @@ def test_infinity_sentinel_is_infinity_not_136_years():
 def test_lease_policy_is_overridable():
     """The knobs are the supported way to change it, not editing the method."""
 
-    class Corporate(DhcpServer):
+    class Corporate(DHCPServer):
         DEFAULT_LEASE_SECONDS = 7200
         MIN_LEASE_SECONDS = 300
         MAX_LEASE_SECONDS = 4 * 3600
@@ -694,24 +700,24 @@ def test_base_server_does_not_claim_to_be_a_router_or_resolver():
     """
     interface = _servable_interface()
 
-    server = DhcpServer(listen=("127.0.0.1", 0))
+    server = DHCPServer(listen=("127.0.0.1", 0))
     try:
         wanted = _free_host_in(interface)
         lease = server.acquire_lease(
             "client-a", interface.ip, _discover_requesting_ip(wanted)
         )
         assert lease is not None
-        assert DhcpOptionCode.ROUTER not in lease.options
-        assert DhcpOptionCode.DNS not in lease.options
+        assert DHCPOptionCode.ROUTER not in lease.options
+        assert DHCPOptionCode.DNS not in lease.options
         # what it does know first-hand is still offered
-        assert DhcpOptionCode.SUBNET_MASK in lease.options
-        assert DhcpOptionCode.BROADCAST_ADDRESS in lease.options
+        assert DHCPOptionCode.SUBNET_MASK in lease.options
+        assert DHCPOptionCode.BROADCAST_ADDRESS in lease.options
 
         inform = server.get_inform_options(
             interface.ip, _discover_requesting_ip(wanted)
         )
-        assert DhcpOptionCode.ROUTER not in inform
-        assert DhcpOptionCode.DNS not in inform
+        assert DHCPOptionCode.ROUTER not in inform
+        assert DHCPOptionCode.DNS not in inform
     finally:
         server.close()
 
@@ -726,7 +732,7 @@ def test_relayed_client_on_another_subnet_is_refused_not_misconfigured():
     """
     interface = _servable_interface()
 
-    server = DhcpServer(listen=("127.0.0.1", 0))
+    server = DHCPServer(listen=("127.0.0.1", 0))
     try:
         msg = _discover_requesting_ip("192.0.2.50")
         msg.giaddr = IPv4("192.0.2.1")
@@ -738,17 +744,17 @@ def test_relayed_client_on_another_subnet_is_refused_not_misconfigured():
 def _discover_requesting_ip(ip):
     from pydhcp.options import type as _optype
 
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    options[DhcpOptionCode.REQUESTED_IP] = _optype.IPv4Address(ip)
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    options[DHCPOptionCode.REQUESTED_IP] = _optype.IPv4Address(ip)
+    return DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=0x1234,
         secs=timedelta(0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),

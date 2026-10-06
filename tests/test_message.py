@@ -2,29 +2,29 @@ import json
 import logging
 import pytest
 from datetime import timedelta
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.packet.message import DhcpMessage
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.packet.message import DHCPMessage
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptions
+from pydhcp.options import DHCPOptions
 
 
 def test_message_encode_decode():
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
-    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray([1, 0, 17, 34, 51, 68, 85])
-    options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray([1, 3, 6, 15])
+    options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray([1, 0, 17, 34, 51, 68, 85])
+    options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray([1, 3, 6, 15])
 
-    msg = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    msg = DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=0x3903F326,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -38,8 +38,8 @@ def test_message_encode_decode():
     encoded = msg.encode()
     assert len(encoded) >= 240
 
-    decoded = DhcpMessage.decode(encoded)
-    assert decoded.op == OpCode.BOOTREQUEST
+    decoded = DHCPMessage.decode(encoded)
+    assert decoded.op == DHCPOpcode.BOOTREQUEST
     assert decoded.xid == 0x3903F326
     # Exactly, not as a prefix: `chaddr` is a 16-octet field on the wire and
     # `decode` trims it back to `hlen`. `startswith` passed just as happily on
@@ -47,25 +47,25 @@ def test_message_encode_decode():
     # identifier derived from it would carry ten trailing zeros.
     assert decoded.chaddr == b"\x00\x11\x22\x33\x44\x55"
     assert (
-        decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        == DhcpMessageType.DHCPDISCOVER
+        decoded.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+        == DHCPMessageType.DHCPDISCOVER
     )
 
 
 def test_message_edge_cases():
     # Message with sname and file populated
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPOFFER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPOFFER.value]
     )
-    msg = DhcpMessage(
-        op=OpCode.BOOTREPLY,
+    msg = DHCPMessage(
+        op=DHCPOpcode.BOOTREPLY,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=1,
         xid=0x11112222,
         secs=timedelta(seconds=5),
-        flags=Flags.BROADCAST,
+        flags=DHCPFlags.BROADCAST,
         ciaddr=IPv4("192.168.1.5"),
         yiaddr=IPv4("192.168.1.10"),
         siaddr=IPv4("192.168.1.1"),
@@ -76,7 +76,7 @@ def test_message_edge_cases():
         options=options,
     )
     encoded = msg.encode()
-    decoded = DhcpMessage.decode(encoded)
+    decoded = DHCPMessage.decode(encoded)
     # Exactly, not as a prefix: `sname` and `file` are NUL-padded 64- and
     # 128-octet fields, and `startswith` accepted the padded form. A boot file
     # name carrying 114 trailing NULs is what a PXE client would then fetch.
@@ -84,7 +84,7 @@ def test_message_edge_cases():
     assert decoded.file == "boot-file-path"
     assert decoded.hops == 1
     assert decoded.secs == timedelta(seconds=5)
-    assert decoded.flags == Flags.BROADCAST
+    assert decoded.flags == DHCPFlags.BROADCAST
     assert decoded.ciaddr == IPv4("192.168.1.5")
     assert decoded.yiaddr == IPv4("192.168.1.10")
     assert decoded.siaddr == IPv4("192.168.1.1")
@@ -101,19 +101,19 @@ def test_message_edge_cases():
 
 
 def _discover_with(code, payload):
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
     options[code] = bytearray(payload)
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    return DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=0x11223344,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -129,8 +129,8 @@ def _discover_with(code, payload):
     "code,payload,label",
     [
         (224, b"\x01\x02\x03", "site-specific code with no enum member (RFC 3942)"),
-        (DhcpOptionCode.ROUTER, b"\x01\x02", "truncated ROUTER payload"),
-        (DhcpOptionCode.RAPID_COMMIT, b"", "zero-length RAPID_COMMIT (RFC 4039)"),
+        (DHCPOptionCode.ROUTER, b"\x01\x02", "truncated ROUTER payload"),
+        (DHCPOptionCode.RAPID_COMMIT, b"", "zero-length RAPID_COMMIT (RFC 4039)"),
     ],
 )
 def test_dumps_tolerates_undecodable_options(code, payload, label):
@@ -179,20 +179,20 @@ def test_encode_clears_a_stale_option_overload():
     decode moves the real sname/file out of the overloaded fields, so a stale 52
     tells the receiver to parse literal text as options.
     """
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPACK.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPACK.value]
     )
-    options[DhcpOptionCode.OPTION_OVERLOAD] = bytearray([3])
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    options[DHCPOptionCode.OPTION_OVERLOAD] = bytearray([3])
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.options = options
     message.sname = "10.0.0.5"
     message.file = "pxelinux.0"
 
     wire = bytes(message.encode())
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
 
-    assert DhcpOptionCode.OPTION_OVERLOAD not in decoded.options
+    assert DHCPOptionCode.OPTION_OVERLOAD not in decoded.options
     assert decoded.sname == "10.0.0.5"
     assert decoded.file == "pxelinux.0"
 
@@ -205,13 +205,13 @@ def test_encode_raises_rather_than_dropping_options_that_do_not_fit():
     size accounting is correct, but leftover was previously discarded there
     without inspection.
     """
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPACK.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPACK.value]
     )
     for index in range(12):
         options[200 + index] = bytearray(b"X" * 250)
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.options = options
 
     with pytest.raises(OverflowError):
@@ -221,20 +221,20 @@ def test_encode_raises_rather_than_dropping_options_that_do_not_fit():
 def test_decode_tolerates_non_utf8_sname_and_file():
     """RFC 2131 says NVT ASCII, but senders put other encodings there. Rejecting
     the field threw away the whole packet, message type and client id included."""
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytearray(message.encode())
     # Splice latin-1 bytes into the sname (offset 44) and file (offset 108) fields.
     wire[44:52] = b"caf\xe9-srv"
     wire[108:116] = b"b\xfcte.cfg"
 
-    decoded = DhcpMessage.decode(wire)
+    decoded = DHCPMessage.decode(wire)
 
-    assert decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == (
-        DhcpMessageType.DHCPDISCOVER
+    assert decoded.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == (
+        DHCPMessageType.DHCPDISCOVER
     )
     assert decoded.sname and decoded.file
 
@@ -248,14 +248,14 @@ def test_non_utf8_sname_and_file_survive_a_re_encode():
     64/128-octet width it was truncated as well. The client then asks its TFTP
     server for a file that does not exist.
     """
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytearray(message.encode())
     sname = b"caf\xe9-srv"
     file = b"b\xfcte.cfg"
     wire[44:108] = sname.ljust(64, b"\x00")
     wire[108:236] = file.ljust(128, b"\x00")
 
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
     out = bytes(decoded.encode())
 
     assert out[44:108] == sname.ljust(64, b"\x00"), "sname octets were not preserved"
@@ -270,12 +270,12 @@ def test_non_utf8_sname_and_file_survive_a_re_encode():
 
 def test_valid_utf8_sname_is_unchanged_by_the_preserving_path():
     """The ordinary case must not move."""
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytearray(message.encode())
     name = "münchen-srv".encode("utf-8")
     wire[44:108] = name.ljust(64, b"\x00")
 
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
 
     assert decoded.sname == "münchen-srv"
     assert bytes(decoded.encode())[44:108] == name.ljust(64, b"\x00")
@@ -293,21 +293,21 @@ def test_unidentifiable_client_does_not_collide_with_every_other_one():
     """
     from pydhcp.exceptions import NoClientIdentityError
 
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytearray(message.encode())
     wire[2] = 0  # hlen
 
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
     assert decoded.chaddr == b""
     with pytest.raises(NoClientIdentityError):
         decoded.client_id()
 
     # The legal IPoIB shape -- hlen 0, htype 32, option 61 present -- still works.
-    ipoib = _discover_with(DhcpOptionCode.CLIENT_IDENTIFIER, b"\xff\x01\x02\x03")
+    ipoib = _discover_with(DHCPOptionCode.CLIENT_IDENTIFIER, b"\xff\x01\x02\x03")
     wire = bytearray(ipoib.encode())
     wire[1] = 32
     wire[2] = 0
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
     assert decoded.htype == 32
     assert decoded.client_id() == "FF:01:02:03"
 
@@ -318,16 +318,16 @@ def test_unnamed_htype_survives_a_mapping_round_trip():
     Emitting None there put a null where a string belongs, and from_mapping()
     could not read its own output back.
     """
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytearray(message.encode())
     wire[1] = 99
 
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
     mapping = decoded.to_mapping()
 
     assert mapping["htype"] == "HTYPE_99"
     json.dumps(mapping)
-    assert DhcpMessage.from_mapping(mapping).htype == 99
+    assert DHCPMessage.from_mapping(mapping).htype == 99
 
 
 def test_encoded_messages_meet_the_bootp_minimum():
@@ -339,7 +339,7 @@ def test_encoded_messages_meet_the_bootp_minimum():
     NAK, measured at 244-250 octets -- while ISC dhclient was measured padding to
     exactly 300 on the wire.
     """
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
 
     wire = bytes(message.encode())
     assert len(wire) == 300
@@ -348,10 +348,10 @@ def test_encoded_messages_meet_the_bootp_minimum():
     end = wire.index(0xFF, 240)
     assert set(wire[end + 1 :]) == {0}, "padding must be PAD octets, after END"
     assert (
-        DhcpMessage.decode(bytearray(wire)).options.get(
-            DhcpOptionCode.DHCP_MESSAGE_TYPE
+        DHCPMessage.decode(bytearray(wire)).options.get(
+            DHCPOptionCode.DHCP_MESSAGE_TYPE
         )
-        == DhcpMessageType.DHCPDISCOVER
+        == DHCPMessageType.DHCPDISCOVER
     )
 
     # A message that is already long enough is not touched.
@@ -376,9 +376,9 @@ def test_min_legal_size_is_the_rfc2131_capability_floor():
     ipv4_and_udp = 20 + 8
 
     assert const.UDP_MIN_PACKET_SIZE == ipv4_and_udp
-    assert DhcpMessage.MIN_LEGAL_SIZE == const.DHCP_MIN_LEGAL_PACKET_SIZE - ipv4_and_udp
-    assert DhcpMessage.MIN_LEGAL_SIZE == 548
-    assert DhcpMessage.MIN_LEGAL_SIZE - fixed_header == 312
+    assert DHCPMessage.MIN_LEGAL_SIZE == const.DHCP_MIN_LEGAL_PACKET_SIZE - ipv4_and_udp
+    assert DHCPMessage.MIN_LEGAL_SIZE == 548
+    assert DHCPMessage.MIN_LEGAL_SIZE - fixed_header == 312
 
 
 def test_decode_applies_no_minimum_size():
@@ -388,7 +388,7 @@ def test_decode_applies_no_minimum_size():
     consistency checks, not a decoder; 6 of the 13 realistic corpus packets are
     under 300 octets, so enforcing a floor here would reject real traffic.
     """
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     wire = bytes(message.encode())
     end = wire.index(0xFF, 240)
 
@@ -396,7 +396,7 @@ def test_decode_applies_no_minimum_size():
         short = bytearray(wire[:size])
         if short[-1] != 0xFF:
             short[-1] = 0xFF
-        decoded = DhcpMessage.decode(short)
+        decoded = DHCPMessage.decode(short)
         assert decoded.xid == message.xid, f"{size}-octet message was not decoded"
 
     assert len(bytes(message.encode())) == 300, "what we send is still padded"
@@ -425,7 +425,7 @@ def _wire_overload_flag(wire):
             index += 1
             continue
         length = data[index + 1]
-        if code == int(DhcpOptionCode.OPTION_OVERLOAD):
+        if code == int(DHCPOptionCode.OPTION_OVERLOAD):
             return data[index + 2]
         index += 2 + length
     return None
@@ -433,14 +433,14 @@ def _wire_overload_flag(wire):
 
 def _overloading_message(count, payload_size):
     """A message whose options force `encode(576)` to overload sname/file."""
-    options = DhcpOptions()
-    options[DhcpOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPACK.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPACK.value]
     )
     for index in range(count):
         options[200 + index] = bytearray(b"X" * payload_size)
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.options = options
     message.sname = "tftp.example.test"
     message.file = "pxelinux.0"
@@ -459,17 +459,17 @@ def test_message_type_leads_the_options_field_whether_or_not_we_overload():
     """
     # Non-overload: option 53 is inserted last, so only the reordering can put
     # it first.
-    options = DhcpOptions()
-    options[DhcpOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
-    options[DhcpOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\xfe")
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPACK.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.SERVER_IDENTIFIER] = bytearray(b"\x0a\x00\x00\x01")
+    options[DHCPOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\xfe")
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPACK.value]
     )
-    plain = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    plain = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     plain.options = options
 
     wire = bytes(plain.encode())
-    assert _first_option_code(wire) == int(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+    assert _first_option_code(wire) == int(DHCPOptionCode.DHCP_MESSAGE_TYPE)
     assert wire[241:243] == b"\x01\x05", "53 must carry its own length and payload"
 
     # Overload, both flavours. OPTION_OVERLOAD is written after the reordering
@@ -481,18 +481,18 @@ def test_message_type_leads_the_options_field_whether_or_not_we_overload():
     ):
         message = _overloading_message(count, payload_size)
         wire = bytes(message.encode(576))
-        decoded = DhcpMessage.decode(bytearray(wire))
+        decoded = DHCPMessage.decode(bytearray(wire))
 
         assert (
             _wire_overload_flag(wire) == expected
         ), f"{count}x{payload_size} did not overload as expected"
         assert (
-            DhcpOptionCode.OPTION_OVERLOAD not in decoded.options
+            DHCPOptionCode.OPTION_OVERLOAD not in decoded.options
         ), "decode consumes option 52; leaving it makes the message lie"
-        assert _first_option_code(wire) == int(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        assert _first_option_code(wire) == int(DHCPOptionCode.DHCP_MESSAGE_TYPE)
         assert (
-            decoded.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-            == DhcpMessageType.DHCPACK
+            decoded.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+            == DHCPMessageType.DHCPACK
         )
 
 
@@ -506,7 +506,7 @@ def test_encode_refuses_a_size_it_cannot_honour_instead_of_substituting_576():
     the END octet -- and is NOT 576: RFC 2132 s9.10's 576 constrains what a
     client may advertise in option 57, not this API.
     """
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
 
     for refused in (0, -1, 1, 100, 267, 268):
         with pytest.raises(ValueError) as excinfo:
@@ -529,7 +529,7 @@ def test_over_long_sname_and_file_are_refused_rather_than_truncated():
     2026-09-20: a 100-character sname and a 200-character file both encoded
     "successfully" at 300 octets, carrying only the first 64 and 128 octets.
     """
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
 
     message.sname = "s" * 65
     with pytest.raises(ValueError, match="sname"):
@@ -565,7 +565,7 @@ def test_overloading_still_moves_a_long_sname_and_file_into_options():
     message = _overloading_message(2, 220)
 
     wire = message.encode(576)
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
 
     assert _wire_overload_flag(wire) == 3, "sname and file"
     assert bytes(wire)[44:108] != b"tftp.example.test".ljust(
@@ -591,13 +591,13 @@ def test_an_overloaded_message_round_trips():
     # legitimately gains two options -- a round-trip comparison would fail for
     # a reason that is not the defect. Overflowing with plain options isolates
     # it, and is what hypothesis generated.
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPACK.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPACK.value]
     )
     options[200] = bytearray(b"X" * 220)
     options[201] = bytearray(b"X" * 220)
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.options = options
     message.sname = ""
     message.file = ""
@@ -605,7 +605,7 @@ def test_an_overloaded_message_round_trips():
     wire = message.encode(576)
     assert _wire_overload_flag(wire) == 3, "the fixture must actually overload"
 
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
     assert decoded.to_mapping() == message.to_mapping()
 
     # And it survives a second pass: the re-encode overloads again off the
@@ -613,24 +613,24 @@ def test_an_overloaded_message_round_trips():
     assert _wire_overload_flag(decoded.encode(576)) == 3
 
 
-def _pxe_shaped_reply(search_payload: int) -> DhcpMessage:
+def _pxe_shaped_reply(search_payload: int) -> DHCPMessage:
     """The property test's falsifying message, with ASCII of the same octet
     lengths: a 56-octet `sname`, an empty `file`, and options totalling
     ``183 + search_payload`` octets with code/length -- 308 at 125, one over
     the 576-octet budget once END is counted."""
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPOFFER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPOFFER.value]
     )
-    options[DhcpOptionCode.SUBNET_MASK] = bytearray(b"\xff\xff\xff\x00")
-    options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = bytearray(b"\x00\x00\x0e\x10")
-    options[DhcpOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\x01" * 16)
-    options[DhcpOptionCode.HOSTNAME] = bytearray(b"h" * 56)
-    options[DhcpOptionCode.DOMAIN_SEARCH] = bytearray(b"\x03abc\x00" * 25)[
+    options[DHCPOptionCode.SUBNET_MASK] = bytearray(b"\xff\xff\xff\x00")
+    options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = bytearray(b"\x00\x00\x0e\x10")
+    options[DHCPOptionCode.ROUTER] = bytearray(b"\x0a\x00\x00\x01" * 16)
+    options[DHCPOptionCode.HOSTNAME] = bytearray(b"h" * 56)
+    options[DHCPOptionCode.DOMAIN_SEARCH] = bytearray(b"\x03abc\x00" * 25)[
         :search_payload
     ]
-    options[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = bytearray(b"v" * 40)
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    options[DHCPOptionCode.VENDOR_SPECIFIC_INFORMATION] = bytearray(b"v" * 40)
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.options = options
     message.sname = "s" * 56
     message.file = ""
@@ -649,11 +649,11 @@ def test_an_occupied_sname_is_not_relocated_when_the_empty_file_suffices():
     message = _pxe_shaped_reply(125)
 
     wire = bytes(message.encode(576))
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
 
     assert _wire_overload_flag(wire) == 1, "file only"
     assert wire[44:108] == b"s" * 56 + bytes(8), "sname must stay in its own field"
-    assert DhcpOptionCode.TFTP_SERVER not in decoded.options
+    assert DHCPOptionCode.TFTP_SERVER not in decoded.options
     assert decoded.to_mapping() == message.to_mapping()
 
 
@@ -663,7 +663,7 @@ def test_one_octet_under_the_budget_needs_no_overload_at_all():
     wire = bytes(message.encode(576))
 
     assert _wire_overload_flag(wire) is None
-    assert DhcpMessage.decode(bytearray(wire)).to_mapping() == message.to_mapping()
+    assert DHCPMessage.decode(bytearray(wire)).to_mapping() == message.to_mapping()
 
 
 def test_an_occupied_field_is_still_relocated_when_nothing_cheaper_fits():
@@ -673,7 +673,7 @@ def test_an_occupied_field_is_still_relocated_when_nothing_cheaper_fits():
     message.file = "pxelinux.0"
 
     wire = bytes(message.encode(576))
-    decoded = DhcpMessage.decode(bytearray(wire))
+    decoded = DHCPMessage.decode(bytearray(wire))
 
     assert _wire_overload_flag(wire) in (1, 2, 3)
     assert decoded.sname == "s" * 56
@@ -696,7 +696,7 @@ def test_out_of_range_header_fields_name_the_field():
         ("xid", 2**32),
         ("xid", -1),
     ):
-        message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+        message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
         setattr(message, field, value)
         with pytest.raises(ValueError, match=field):
             message.encode()
@@ -704,18 +704,18 @@ def test_out_of_range_header_fields_name_the_field():
     # hlen is bounded by 16, not 255: chaddr is a 16-octet field, so a larger
     # hlen has the receiver read past it into sname. decode() already rejected
     # it with the same bound, so hlen=17 encoded happily and would not decode.
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.hlen = 17
     with pytest.raises(ValueError, match="hlen"):
         message.encode()
     message.hlen = 16
     message.chaddr = b"\xaa" * 16
-    assert DhcpMessage.decode(bytearray(message.encode())).hlen == 16
+    assert DHCPMessage.decode(bytearray(message.encode())).hlen == 16
 
     # secs is clamped, not rejected: it is elapsed time the client reports, and
     # an overlong one is not a caller error.
-    message = _discover_with(DhcpOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
+    message = _discover_with(DHCPOptionCode.SERVER_IDENTIFIER, b"\x0a\x00\x00\x01")
     message.secs = timedelta(seconds=100_000)
-    assert DhcpMessage.decode(bytearray(message.encode())).secs == timedelta(
+    assert DHCPMessage.decode(bytearray(message.encode())).secs == timedelta(
         seconds=0xFFFF
     )

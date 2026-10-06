@@ -8,7 +8,7 @@ import typing as _ty
 from ..exceptions import DHCPDecodeError
 from . import enums as _enum
 from .. import network as _net
-from ..options import DhcpOptionCode, DhcpOptions, type as _type
+from ..options import DHCPOptionCode, DHCPOptions, type as _type
 from ._fields import (
     _MessageFields,
     _FIXED_HEADER_SIZE,
@@ -18,7 +18,7 @@ from ._fields import (
 )
 
 #: The class `decode` is called on: it constructs `cls(...)`, so
-#: `DhcpMessage.decode` is typed `DhcpMessage` and a subclass's is typed as
+#: `DHCPMessage.decode` is typed `DHCPMessage` and a subclass's is typed as
 #: that subclass.
 _Decoded = _ty.TypeVar("_Decoded", bound="_MessageDecode")
 
@@ -74,7 +74,7 @@ class _MessageDecode(_MessageFields):
                 f"Hardware address length {hlen} exceeds maximum of 16"
             )
         try:
-            op = _enum.OpCode(op)
+            op = _enum.DHCPOpcode(op)
         except ValueError as exc:
             raise DHCPDecodeError(str(exc)) from exc
         # Never rewritten: an unnamed type keeps its octet, so a relay forwards
@@ -82,7 +82,7 @@ class _MessageDecode(_MessageFields):
         # packet, which let one client flood the log.
         htype = _enum.HardwareAddressType(htype)
         secs = _dt.timedelta(seconds=secs)
-        flags = _enum.Flags(flags & _enum.Flags.BROADCAST.value)
+        flags = _enum.DHCPFlags(flags & _enum.DHCPFlags.BROADCAST.value)
         ciaddr = _net.IPv4(ciaddr)
         yiaddr = _net.IPv4(yiaddr)
         siaddr = _net.IPv4(siaddr)
@@ -96,7 +96,7 @@ class _MessageDecode(_MessageFields):
                 f"Invalid magic cookie at offset 236: expected {cls.MAGIC_COOKIE.hex()}, got {data[236:240].hex()}"
             )
 
-        options = DhcpOptions()
+        options = DHCPOptions()
         remaining_opts = options.decode(data[240:], base_offset=240)
         if remaining_opts and remaining_opts[0] != 255:
             raise DHCPDecodeError(
@@ -104,7 +104,7 @@ class _MessageDecode(_MessageFields):
             )
 
         overload = options.get(
-            DhcpOptionCode.OPTION_OVERLOAD,
+            DHCPOptionCode.OPTION_OVERLOAD,
             default=_type.OptionOverload.NONE,
             decode=_type.OptionOverload,
         )
@@ -138,8 +138,8 @@ class _MessageDecode(_MessageFields):
         # relay forwarding a decoded reply does not tell the receiver to parse
         # sname/file as options. Dropping it here means that compensation is
         # no longer load-bearing.
-        if int(DhcpOptionCode.OPTION_OVERLOAD) in options:
-            del options[int(DhcpOptionCode.OPTION_OVERLOAD)]
+        if int(DHCPOptionCode.OPTION_OVERLOAD) in options:
+            del options[int(DHCPOptionCode.OPTION_OVERLOAD)]
 
         sname_str: str = ""
         if sname_raw is not None:
@@ -153,12 +153,12 @@ class _MessageDecode(_MessageFields):
             # longer matches the one that was encoded. Consume it, so the pair
             # stays inverse.
             tftp_val = options.get(
-                DhcpOptionCode.TFTP_SERVER, default="", decode=_type.String
+                DHCPOptionCode.TFTP_SERVER, default="", decode=_type.String
             )
             if tftp_val is not None:
                 sname_str = str(tftp_val)
-            if int(DhcpOptionCode.TFTP_SERVER) in options:
-                del options[int(DhcpOptionCode.TFTP_SERVER)]
+            if int(DHCPOptionCode.TFTP_SERVER) in options:
+                del options[int(DHCPOptionCode.TFTP_SERVER)]
 
         file_str: str = ""
         if file_raw is not None:
@@ -168,17 +168,17 @@ class _MessageDecode(_MessageFields):
             # `file` to free the field for option fragments, so decode takes
             # it back out rather than reporting it in both places.
             bootfile_val = options.get(
-                DhcpOptionCode.BOOTFILE_NAME, default="", decode=_type.String
+                DHCPOptionCode.BOOTFILE_NAME, default="", decode=_type.String
             )
             if bootfile_val is not None:
                 file_str = str(bootfile_val)
-            if int(DhcpOptionCode.BOOTFILE_NAME) in options:
-                del options[int(DhcpOptionCode.BOOTFILE_NAME)]
+            if int(DHCPOptionCode.BOOTFILE_NAME) in options:
+                del options[int(DHCPOptionCode.BOOTFILE_NAME)]
 
         # opts -> file -> sname
 
-        # `cls`, not `DhcpMessage`: this is a classmethod, and hardcoding the
-        # base made every subclass decode to a plain `DhcpMessage` while
+        # `cls`, not `DHCPMessage`: this is a classmethod, and hardcoding the
+        # base made every subclass decode to a plain `DHCPMessage` while
         # `from_mapping` (which already used `cls`) returned the subclass.
         return cls(
             op,

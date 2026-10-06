@@ -12,7 +12,7 @@ from duho import Meta
 from ..capture import (
     UNIQUE_FILENAME_FIELDS,
     CaptureEvent,
-    DhcpCapture,
+    DHCPCapture,
     validate_filename_pattern,
 )
 from ._common import CAPTURE_FORMATS, _Command
@@ -222,7 +222,7 @@ class Capture(_Command):
                     f"--output extension when --format is not given."
                 )
             state: "dict[str, _ty.Any]" = {"first": True, "count": 0}
-            capture: DhcpCapture
+            capture: DHCPCapture
 
             def sink(event: CaptureEvent) -> None:
                 _write_capture_record(
@@ -237,7 +237,7 @@ class Capture(_Command):
                     capture.stop()
 
             hook = _load_capture_hook(self.hook, packet_format, self.hook_fail_fast)
-            capture = DhcpCapture(
+            capture = DHCPCapture(
                 listen=self.listen or "*",
                 packet_filter=self.packet_filter,
                 sink=sink,

@@ -18,7 +18,7 @@ LOGGER = _logging.getLogger(__name__)
 BROADCAST_ADDRESS = "255.255.255.255"
 
 
-class Transport:
+class DHCPTransport:
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
@@ -40,7 +40,7 @@ def _dest_string(dest: _net.IPv4) -> str:
     return BROADCAST_ADDRESS if dest == _net.WILDCARD_IPv4 else str(dest)
 
 
-class UdpTransport(Transport):
+class UDPTransport(DHCPTransport):
     def __init__(self, socket: _socket.socket):
         self.socket = socket
 
@@ -84,7 +84,7 @@ class UdpTransport(Transport):
         return self._send_to(data, _dest_string(dest), port)
 
 
-class PktInfoUdpTransport(UdpTransport):
+class PktInfoUDPTransport(UDPTransport):
     """A transport that sends from a pinned interface and source address.
 
     For a wildcard socket: the reply leaves from the address and interface the

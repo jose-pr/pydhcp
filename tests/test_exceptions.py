@@ -76,4 +76,4 @@ def test_the_old_name_is_gone() -> None:
 def test_a_decode_error_is_a_value_error_and_a_package_error() -> None:
     for catches in (ValueError, DHCPError):
         with pytest.raises(catches):
-            pydhcp.DhcpMessage.decode(b"\x00" * 10)
+            pydhcp.DHCPMessage.decode(b"\x00" * 10)

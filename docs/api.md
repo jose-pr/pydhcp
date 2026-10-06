@@ -2,45 +2,45 @@
 
 This section provides references for the primary classes in the `pydhcp` package.
 
-## DhcpMessage
+## DHCPMessage
 
-::: pydhcp.packet.message.DhcpMessage
+::: pydhcp.packet.message.DHCPMessage
     options:
       # Defined in layers in pydhcp.packet (fields, decode, encode, mapping,
       # display); without this the page would show nothing inherited.
       inherited_members: true
 
-## DhcpOptions
+## DHCPOptions
 
-::: pydhcp.options.DhcpOptions
+::: pydhcp.options.DHCPOptions
 
-## DhcpOptionCode
+## DHCPOptionCode
 
 The standard IANA option-code registry: an `IntEnum` whose members carry, in their own
 docstrings, the RFC text that defines each option. Codes without a member resolve to an
 opaque pseudo-member (`get_type()` returns `Bytes`, `label()` reports `UNKNOWN`) rather
 than raising, so an unknown code never costs a client its lease.
 
-::: pydhcp.options.DhcpOptionCode
+::: pydhcp.options.DHCPOptionCode
     options:
       # Load-bearing, measured 2026-09-20: without it only the 82 members that carry an
       # RFC docstring render and the other 81 codes vanish from the registry listing.
       members: true
 
-## BaseDhcpOptionCode
+## BaseDHCPOptionCode
 
-The base any custom code map subclasses; pass one to `DhcpOptions(codemap=...)` to
+The base any custom code map subclasses; pass one to `DHCPOptions(codemap=...)` to
 serve a private or vendor option space instead of the IANA registry above.
 
-::: pydhcp.options.BaseDhcpOptionCode
+::: pydhcp.options.BaseDHCPOptionCode
     options:
-      # Same reason as DhcpOptionCode: nothing on this class carries a docstring, so
+      # Same reason as DHCPOptionCode: nothing on this class carries a docstring, so
       # without `members: true` the heading renders with no body at all.
       members: true
 
-## DhcpOption
+## DHCPOption
 
-::: pydhcp.options.DhcpOption
+::: pydhcp.options.DHCPOption
     options:
       members: true
 
@@ -48,61 +48,61 @@ serve a private or vendor option space instead of the IANA registry above.
 
 ::: pydhcp.options.type
 
-## DhcpServer
+## DHCPServer
 
-::: pydhcp.server.DhcpServer
+::: pydhcp.server.DHCPServer
     options:
       # The server is composed of layered classes in pydhcp.server; without this
       # the page would show only __init__.
       inherited_members: true
 
-## DhcpClient
+## DHCPClient
 
-::: pydhcp.client.DhcpClient
+::: pydhcp.client.DHCPClient
 
-## DhcpRelay
+## DHCPRelay
 
-::: pydhcp.relay.DhcpRelay
+::: pydhcp.relay.DHCPRelay
 
-## DhcpCapture
+## DHCPCapture
 
-::: pydhcp.capture.DhcpCapture
+::: pydhcp.capture.DHCPCapture
 
 ## CaptureEvent
 
 ::: pydhcp.capture.CaptureEvent
 
-## AsyncDhcpServer
+## AsyncDHCPServer
 
-::: pydhcp.server.AsyncDhcpServer
+::: pydhcp.server.AsyncDHCPServer
     options:
       # The server is composed of layered classes in pydhcp.server; without this
       # the page would show only __init__.
       inherited_members: true
 
-## AsyncDhcpRelay
+## AsyncDHCPRelay
 
-::: pydhcp.relay.AsyncDhcpRelay
+::: pydhcp.relay.AsyncDHCPRelay
 
-## AsyncDhcpCapture
+## AsyncDHCPCapture
 
-::: pydhcp.capture.AsyncDhcpCapture
+::: pydhcp.capture.AsyncDHCPCapture
 
-## DhcpListener
+## DHCPListener
 
-::: pydhcp.listener.DhcpListener
+::: pydhcp.listener.DHCPListener
 
-## AsyncDhcpListener
+## AsyncDHCPListener
 
-::: pydhcp.listener.AsyncDhcpListener
+::: pydhcp.listener.AsyncDHCPListener
 
-## DhcpMetrics
+## DHCPMetrics
 
-Every `DhcpListener` (and therefore `DhcpServer`, `DhcpClient`) owns its own `metrics: DhcpMetrics`
+Every `DHCPListener` (and therefore `DHCPServer`, `DHCPClient`) owns its own `metrics: DHCPMetrics`
 instance — counters are per-instance, not global, so running multiple listeners in one process
 (e.g. in tests) never cross-contaminates counts. Call `.snapshot()` for a plain `dict[str, int]`.
 
-::: pydhcp.metrics.DhcpMetrics
+::: pydhcp.metrics.DHCPMetrics
 
 ## pydhcp.client
 

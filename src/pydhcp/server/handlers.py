@@ -7,11 +7,11 @@ import typing as _ty
 
 from .. import network as _net
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
-from ..lease import DhcpLease
-from ..listener import RequestContext
-from ..options import DhcpOptionCode, type as _type
+from ..lease import DHCPLease
+from ..listener import DHCPRequestContext
+from ..options import DHCPOptionCode, type as _type
 from ..packet import enums as _enum
-from ..packet.message import DhcpMessage
+from ..packet.message import DHCPMessage
 from math import inf as _inf
 from .reply import _Replies
 
@@ -23,10 +23,10 @@ class _Handlers(_Replies):
 
     def handle(
         self,
-        msg: DhcpMessage,
-        context: RequestContext,
+        msg: DHCPMessage,
+        context: DHCPRequestContext,
     ) -> None:
-        if msg.op != _enum.OpCode.BOOTREQUEST:
+        if msg.op != _enum.DHCPOpcode.BOOTREQUEST:
             LOGGER.warning(
                 f"[XID={msg.xid:08x}] Received a reply msg from {context.client} ignoring it."
             )
@@ -39,15 +39,15 @@ class _Handlers(_Replies):
             # every other such client shares.
             LOGGER.warning(f"[XID={msg.xid:08x}] Ignoring unidentifiable client: {e}")
             return
-        # Decoded once, and guarded. `DhcpMessageType` has no pseudo-member for
+        # Decoded once, and guarded. `DHCPMessageType` has no pseudo-member for
         # an unassigned value, so option 53 = 99 raised straight out of
         # `handle()`. The listener's catch-all caught it, but its log line
         # carries no XID, client or type -- so the one packet an operator would
         # want to identify produced the one message that cannot identify it.
         try:
-            msg_ty = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+            msg_ty = msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
         except DHCPDecodeError as e:
-            raw = msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE, decode=False)
+            raw = msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE, decode=False)
             LOGGER.warning(
                 f"[XID={msg.xid:08x}] Dropping a message from "
                 f"{context.client}|{client_id} with an unusable DHCP message "
@@ -69,14 +69,14 @@ class _Handlers(_Replies):
             "[XID=%08x] Received %s from %s", msg.xid, msg_ty_name, context.client.ip
         )
         server_id: _ty.Optional[_net.IPv4] = msg.options.get(
-            DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
+            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address
         )
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
 
         if server_id is not None and not self._is_our_server_id(
             server_id, actual_server_id
         ):
-            if msg_ty is _enum.DhcpMessageType.DHCPREQUEST:
+            if msg_ty is _enum.DHCPMessageType.DHCPREQUEST:
                 # The client selected a different server, so give the
                 # reservation back (RFC 2131 4.3.2).
                 if self.release_lease(client_id, server_id, msg):
@@ -87,22 +87,22 @@ class _Handlers(_Replies):
                 )
             return
 
-        if msg_ty is _enum.DhcpMessageType.DHCPDISCOVER:
+        if msg_ty is _enum.DHCPMessageType.DHCPDISCOVER:
             self.handle_discover(msg, context)
-        elif msg_ty is _enum.DhcpMessageType.DHCPREQUEST:
+        elif msg_ty is _enum.DHCPMessageType.DHCPREQUEST:
             self.handle_request(msg, context)
-        elif msg_ty is _enum.DhcpMessageType.DHCPDECLINE:
+        elif msg_ty is _enum.DHCPMessageType.DHCPDECLINE:
             self.handle_decline(msg, context)
-        elif msg_ty is _enum.DhcpMessageType.DHCPRELEASE:
+        elif msg_ty is _enum.DHCPMessageType.DHCPRELEASE:
             self.handle_release(msg, context)
-        elif msg_ty is _enum.DhcpMessageType.DHCPINFORM:
+        elif msg_ty is _enum.DHCPMessageType.DHCPINFORM:
             self.handle_inform(msg, context)
         else:
             LOGGER.warning(
                 f"[XID={msg.xid:08x}] Received a DHCP Message with message type: {msg_ty} from: {context.client}|{client_id} at: {actual_server_id}, which we don't handle"
             )
 
-    def handle_discover(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle_discover(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDISCOVER by offering a lease returned from `acquire_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
@@ -118,11 +118,11 @@ class _Handlers(_Replies):
             )
             return
         resp = self._create_response(
-            msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPOFFER
+            msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPOFFER
         )
-        self._filter_and_send(msg, resp, context, _enum.DhcpMessageType.DHCPOFFER)
+        self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPOFFER)
 
-    def handle_request(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle_request(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPREQUEST by ACKing or NAKing the lease returned from `acquire_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
@@ -136,9 +136,9 @@ class _Handlers(_Replies):
         # makes the server answer for clients that belong to another server on
         # the same segment, i.e. behave as a rogue.
         if (
-            msg.options.get(DhcpOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address)
+            msg.options.get(DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4Address)
             is None
-            and msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address)
+            and msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address)
             is not None
             and msg.ciaddr == _net.WILDCARD_IPv4
             and self.lease_backend.lookup(client_id) is None
@@ -159,12 +159,12 @@ class _Handlers(_Replies):
             )
             return
         ip_req: _ty.Optional[_net.IPv4] = msg.options.get(
-            DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
         if not ip_req:
             ip_req = msg.ciaddr
         if ip_req == lease.ip and self._has_time_left(lease):
-            resp_ty = _enum.DhcpMessageType.DHCPACK
+            resp_ty = _enum.DHCPMessageType.DHCPACK
             # Only now is anything agreed, so this is where the lease time the
             # ACK advertises is actually committed.
             committed = self.acquire_lease(
@@ -176,11 +176,11 @@ class _Handlers(_Replies):
             # A lease with no time left NAKs rather than ACKing nothing: the
             # client is told to start over, which is recoverable, instead of
             # being handed an ACK with no address in it.
-            resp_ty = _enum.DhcpMessageType.DHCPNAK
+            resp_ty = _enum.DHCPMessageType.DHCPNAK
         resp = self._create_response(msg, lease, actual_server_id, resp_ty)
         self._filter_and_send(msg, resp, context, resp_ty)
 
-    def handle_decline(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
@@ -188,7 +188,7 @@ class _Handlers(_Replies):
             f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}"
         )
         declined: _ty.Optional[_net.IPv4] = msg.options.get(
-            DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
         if declined is None and msg.ciaddr != _net.WILDCARD_IPv4:
             declined = msg.ciaddr
@@ -204,7 +204,7 @@ class _Handlers(_Replies):
         self.metrics.leases_declined += 1
         self.release_lease(client_id, actual_server_id, msg)
 
-    def handle_release(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle_release(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPRELEASE, but only for the address the client actually holds."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
@@ -229,7 +229,7 @@ class _Handlers(_Replies):
         if self.release_lease(client_id, actual_server_id, msg):
             self.metrics.leases_released += 1
 
-    def handle_inform(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle_inform(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPINFORM without requiring address allocation."""
         client_id = msg.client_id()
         actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
@@ -240,15 +240,15 @@ class _Handlers(_Replies):
         # so an INFORM flood grew the lease store -- and bypassed the
         # allocation-free hook documented for exactly this path whenever a
         # binding happened to exist.
-        lease = DhcpLease(
+        lease = DHCPLease(
             _net.WILDCARD_IPv4,
             _inf,
             self.get_inform_options(actual_server_id, msg),
         )
         resp = self._create_response(
-            msg, lease, actual_server_id, _enum.DhcpMessageType.DHCPACK
+            msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPACK
         )
-        if DhcpOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
-            del resp.options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME]
+        if DHCPOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
+            del resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME]
         resp.yiaddr = _net.WILDCARD_IPv4
-        self._filter_and_send(msg, resp, context, _enum.DhcpMessageType.DHCPACK)
+        self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPACK)

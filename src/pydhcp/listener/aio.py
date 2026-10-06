@@ -13,12 +13,12 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import constants as _const, network as _net
-from ..metrics import DhcpMetrics
+from ..metrics import DHCPMetrics
 from ..packet import enums as _enum
-from ..packet.message import DhcpMessage
+from ..packet.message import DHCPMessage
 from .binding import _bind_sockets, _close_socket
 from .receive import (
-    RequestContext,
+    DHCPRequestContext,
     _TruncatedDatagram,
     _arrival,
     _context_for,
@@ -29,10 +29,10 @@ from .spec import ListenSpec, _parselisteners
 LOGGER = _logging.getLogger(__name__)
 
 
-class AsyncDhcpListener:
-    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
+class AsyncDHCPListener:
+    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DHCPPort)
 
-    #: As on `DhcpListener`; see `_bind_sockets`.
+    #: As on `DHCPListener`; see `_bind_sockets`.
     REUSE_ADDRESS: bool = False
 
     #: Receive buffer to ask the OS for on every listening socket, in octets;
@@ -85,15 +85,15 @@ class AsyncDhcpListener:
         )
         self._per_interface = per_interface
         self._sockets: list[_socket.socket] = []
-        #: As on `DhcpListener`.
+        #: As on `DHCPListener`.
         self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
         #: One receive task per socket; see `_receive`.
         self._tasks: "list[_asyncio.Task[None]]" = []
         self._loop: _ty.Optional[_asyncio.AbstractEventLoop] = None
         self._stopped: _ty.Optional[_asyncio.Event] = None
         self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
-        self.metrics = DhcpMetrics()
-        #: As on `DhcpListener`.
+        self.metrics = DHCPMetrics()
+        #: As on `DHCPListener`.
         self.packets_dropped_truncated = 0
         self.packets_dropped_error = 0
 
@@ -220,11 +220,11 @@ class AsyncDhcpListener:
         if self._closing:  # stop() was called after this was queued
             self.metrics.packets_dropped_backlog += 1
             return
-        # Split for the same reason as `DhcpListener._receive_one`: a packet the
+        # Split for the same reason as `DHCPListener._receive_one`: a packet the
         # peer malformed and a bug in a `handle()` override are different
         # events, and only the second one's traceback is worth keeping.
         try:
-            msg = DhcpMessage.decode(memoryview(data))
+            msg = DHCPMessage.decode(memoryview(data))
         except Exception as e:
             self.metrics.packets_dropped_error += 1
             LOGGER.warning(
@@ -268,7 +268,7 @@ class AsyncDhcpListener:
                 continue
         return tuple(addresses)
 
-    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         pass
 
     def bind(self) -> None:
@@ -285,7 +285,7 @@ class AsyncDhcpListener:
     async def wait(self) -> None:
         """Block until `stop()` is called.
 
-        The sync counterpart is `DhcpListener.wait()`, and reaching *that* one
+        The sync counterpart is `DHCPListener.wait()`, and reaching *that* one
         through the inherited contract raised `AttributeError: _cancellation_token`
         -- the async constructor never sets one. A coroutine is the honest shape
         here: waiting synchronously inside the loop that has to run the handlers
@@ -299,12 +299,12 @@ class AsyncDhcpListener:
     def listen(self) -> None:
         """Not available: the async listener is driven by its event loop.
 
-        Inherited from `DhcpListener` through `AsyncDhcpServer`'s MRO, where it
+        Inherited from `DHCPListener` through `AsyncDHCPServer`'s MRO, where it
         used to fail with `AttributeError: _cancellation_token` several frames
         deep instead of saying what to call.
         """
         raise NotImplementedError(
-            "AsyncDhcpListener has no blocking listen(); "
+            "AsyncDHCPListener has no blocking listen(); "
             "use `await start()` and then `await wait()`."
         )
 
@@ -330,13 +330,13 @@ class AsyncDhcpListener:
         Deliberately not a coroutine, even though `await listener.stop()` is the
         documented form and still works. The work here is entirely synchronous,
         and as `async def` this silently did nothing whenever it was reached
-        through the inherited `DhcpListener` contract: `server.stop()` returned a
+        through the inherited `DHCPListener` contract: `server.stop()` returned a
         coroutine nobody awaited, so the server kept running with its ports
         bound, and mypy accepted it. Returning an already-finished future keeps
         the `await` form working from inside a running loop.
 
         Called from the handler worker thread -- which is exactly what
-        `DhcpCapture.hook_fail_fast` and the capture CLI's `--count` sink do --
+        `DHCPCapture.hook_fail_fast` and the capture CLI's `--count` sink do --
         the close is handed back to the event loop instead of being run inline.
         Nothing it touches is thread-safe: `Task.cancel()` and
         `asyncio.Event.set()` both finish through `loop.call_soon`, which

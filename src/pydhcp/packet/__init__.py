@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from .enums import (
-    DhcpMessageType as DhcpMessageType,
-    OpCode as OpCode,
-    DhcpPort as DhcpPort,
-    Flags as Flags,
+    DHCPMessageType as DHCPMessageType,
+    DHCPOpcode as DHCPOpcode,
+    DHCPPort as DHCPPort,
+    DHCPFlags as DHCPFlags,
     HardwareAddressType as HardwareAddressType,
 )
-from .message import DhcpMessage as DhcpMessage
+from .message import DHCPMessage as DHCPMessage
 from .structured import (
     dump_mapping as dump_mapping,
     dump_message as dump_message,
@@ -16,12 +16,12 @@ from .structured import (
 )
 
 __all__ = [
-    "DhcpMessageType",
-    "OpCode",
-    "DhcpPort",
-    "Flags",
+    "DHCPMessageType",
+    "DHCPOpcode",
+    "DHCPPort",
+    "DHCPFlags",
     "HardwareAddressType",
-    "DhcpMessage",
+    "DHCPMessage",
     "dump_mapping",
     "dump_message",
     "load_mapping",

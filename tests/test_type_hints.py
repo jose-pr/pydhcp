@@ -6,7 +6,7 @@ under `TYPE_CHECKING` fails there with a `TypeError` or `NameError` while a
 type checker is content. The walk covers every class and function a public
 module exports, each class's methods, properties and class-level fields.
 
-`DhcpOptions` also shadows the builtin `type` through its star import of the
+`DHCPOptions` also shadows the builtin `type` through its star import of the
 `type` subpackage, so its annotations are checked by name as well.
 """
 
@@ -18,7 +18,7 @@ import typing
 
 import pytest
 
-from pydhcp.options import DhcpOptions
+from pydhcp.options import DHCPOptions
 
 #: Modules that declare `__all__`: the walk covers what it lists.
 _WITH_ALL = [
@@ -119,7 +119,7 @@ def test_every_public_annotation_resolves() -> None:
 
 @pytest.mark.parametrize("member", ["__init__", "get", "items"])
 def test_the_option_bag_annotations_can_be_evaluated(member: str) -> None:
-    hints = typing.get_type_hints(getattr(DhcpOptions, member))
+    hints = typing.get_type_hints(getattr(DHCPOptions, member))
     assert hints, f"{member} resolved to no hints at all"
 
 

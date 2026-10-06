@@ -8,7 +8,7 @@ import typing as _ty
 
 from duho import Meta
 
-from ..packet.message import DhcpMessage
+from ..packet.message import DHCPMessage
 from ..packet.structured import dump_message, load_message
 from ._common import PACKET_FORMATS, _Command
 
@@ -62,7 +62,7 @@ class Packet(_Command):
                 payload_text = pathlib.Path(self.input).read_text(encoding="utf-8")
 
             if self.mode:
-                packet = DhcpMessage.decode(
+                packet = DHCPMessage.decode(
                     bytearray.fromhex(
                         "".join(ch for ch in payload_text if ch not in " \t\r\n:")
                     )

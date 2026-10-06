@@ -744,15 +744,15 @@ def test_sip_servers_rejects_bad_encodings_and_lengths():
 
 def test_name_service_search_is_a_list_of_option_codes():
     """RFC 2937 s3: 16-bit name service option codes, not domain names."""
-    from pydhcp.options import DhcpOptions, DhcpOptionCode
+    from pydhcp.options import DHCPOptions, DHCPOptionCode
 
-    options = DhcpOptions()
-    options[DhcpOptionCode.NAME_SERVICE_SEARCH] = [6, 44]
+    options = DHCPOptions()
+    options[DHCPOptionCode.NAME_SERVICE_SEARCH] = [6, 44]
 
     assert bytes(
-        options.get(DhcpOptionCode.NAME_SERVICE_SEARCH, decode=False)
+        options.get(DHCPOptionCode.NAME_SERVICE_SEARCH, decode=False)
     ) == bytes([0x00, 0x06, 0x00, 0x2C])
-    assert options.get(DhcpOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
+    assert options.get(DHCPOptionCode.NAME_SERVICE_SEARCH) == [6, 44]
 
 
 # --- The shared uncompressed-name helpers (options/type/domain.py) ---
@@ -911,9 +911,9 @@ def test_rfc_wire_forms_decode_and_round_trip(code, payload, expected):
     before the packet reaches a handler, so one unparseable option dropped the
     whole message.
     """
-    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options import DHCPOptionCode
 
-    codec = DhcpOptionCode(code).get_type()
+    codec = DHCPOptionCode(code).get_type()
     value = codec._dhcp_decode(payload)
 
     def plain(item):
@@ -932,10 +932,10 @@ def test_status_code_carries_its_optional_message():
     Registered as a bare U8, a reply carrying the message was the wrong size
     and could not be decoded at all.
     """
-    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options import DHCPOptionCode
     from pydhcp.options.type import StatusCode
 
-    codec = DhcpOptionCode(151).get_type()
+    codec = DHCPOptionCode(151).get_type()
     assert codec is StatusCode
 
     with_message = codec._dhcp_decode(b"\x01busy")
@@ -961,12 +961,12 @@ def test_dns_name_options_are_label_sequences_not_dotted_text():
     As `String` they decoded to the raw label bytes rather than to a name, and
     emitted dotted text a conforming receiver cannot parse.
     """
-    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options import DHCPOptionCode
     from pydhcp.options.type import DomainName
 
     wire = b"\x07example\x03com\x00"
     for code in (147, 213):
-        codec = DhcpOptionCode(code).get_type()
+        codec = DHCPOptionCode(code).get_type()
         assert codec is DomainName
         assert str(codec._dhcp_decode(wire)) == "example.com"
         assert DomainName("example.com")._dhcp_encode() == wire
@@ -983,10 +983,10 @@ def test_vendor_class_identifier_keeps_binary_payloads():
     embedded and CPE firmware sends decoded to the empty string and a server
     had nothing left to match on.
     """
-    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options import DHCPOptionCode
     from pydhcp.options.type import OctetString
 
-    codec = DhcpOptionCode(60).get_type()
+    codec = DHCPOptionCode(60).get_type()
     assert codec is OctetString
 
     binary = bytes.fromhex("00000de9fffe")

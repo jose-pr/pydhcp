@@ -124,14 +124,14 @@ class Frame(_ty.NamedTuple):
     payload: bytes
 
     def message(self) -> _ty.Any:
-        from pydhcp import DhcpMessage
+        from pydhcp import DHCPMessage
 
-        return DhcpMessage.decode(self.payload)
+        return DHCPMessage.decode(self.payload)
 
     def type_name(self) -> str:
-        from pydhcp.options import DhcpOptionCode
+        from pydhcp.options import DHCPOptionCode
 
-        value = self.message().options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        value = self.message().options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
         return getattr(value, "name", str(value))
 
 

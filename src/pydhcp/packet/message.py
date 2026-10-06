@@ -1,6 +1,6 @@
 """The DHCP wire message.
 
-`DhcpMessage` is defined in layers -- fields, decode, encode, mapping, display --
+`DHCPMessage` is defined in layers -- fields, decode, encode, mapping, display --
 each in a private module of `pydhcp.packet`; import it from here.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from ._display import _MessageDisplay
 
 
-class DhcpMessage(_MessageDisplay):
+class DHCPMessage(_MessageDisplay):
     """A DHCPv4 message (RFC 2131 s2): the fixed BOOTP header, then options.
 
     The fields, `decode`/`encode`, `to_mapping`/`from_mapping`, `client_id` and
@@ -19,4 +19,4 @@ class DhcpMessage(_MessageDisplay):
     """
 
 
-__all__ = ["DhcpMessage"]
+__all__ = ["DHCPMessage"]

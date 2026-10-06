@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing as _ty
 from ...exceptions import DHCPDecodeError
-from .base import DhcpOptionType
+from .base import DHCPOptionType
 from .domain import (
     MAX_NAME_OCTETS,
     decode_domain_name,
@@ -21,7 +21,7 @@ MAX_POINTER_HOPS = 127
 _DomainListT = _ty.TypeVar("_DomainListT", bound="DomainList")
 
 
-class DomainList(DhcpOptionType, list[str]):
+class DomainList(DHCPOptionType, list[str]):
     """RFC 1035 domain-name list with compression support.
 
     Normalizes like `List[T]` does, and for the same reason. With no
@@ -285,7 +285,7 @@ class UncompressedDomainList(DomainList):
 _DomainNameT = _ty.TypeVar("_DomainNameT", bound="DomainName")
 
 
-class DomainName(DhcpOptionType, str):
+class DomainName(DHCPOptionType, str):
     """A single uncompressed RFC 1035 name, as an option payload.
 
     Options 147 (RFC 8973 s5.2) and 213 (RFC 5986 s3.2) carry a label sequence,

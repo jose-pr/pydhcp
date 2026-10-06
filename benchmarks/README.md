@@ -35,8 +35,8 @@ Metric names are suite-qualified, so one result file can hold every suite.
 A realistic `DHCPDISCOVER` (message type, client identifier, a 14-entry
 parameter request list) encoded once at import and reused.
 
-- `parse.decode_packet` — `DhcpMessage.decode` over that payload.
-- `parse.encode_packet` — `DhcpMessage.encode` back to bytes.
+- `parse.decode_packet` — `DHCPMessage.decode` over that payload.
+- `parse.encode_packet` — `DHCPMessage.encode` back to bytes.
 
 ### `options` — `bench_options.py`
 

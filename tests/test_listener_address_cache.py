@@ -5,8 +5,8 @@ host adapter for every packet, to answer a question whose answer only changes
 when the host's addresses do. Measured on this box before any cache:
 
     host_ip_interfaces(), the server's filtered form   1181 us
-    DhcpServer.handle() on a DHCPDISCOVER              1539 us   (77% of it)
-    DhcpServer.handle() on a DHCPINFORM                1497 us
+    DHCPServer.handle() on a DHCPDISCOVER              1539 us   (77% of it)
+    DHCPServer.handle() on a DHCPINFORM                1497 us
 
 pydhcp first fixed that with its own per-bind caches; they are now netimps'
 enumeration cache (`cache=True`, a one-second TTL), which a bind also clears.
@@ -25,13 +25,18 @@ import pytest
 from conftest import build_request
 from pydhcp import network as net
 from pydhcp import server as server_module
-from pydhcp.listener import AsyncDhcpListener, DhcpListener, RequestContext, Transport
-from pydhcp.options import DhcpOptionCode, DhcpOptions
-from pydhcp.packet import DhcpMessageType
-from pydhcp.server import DhcpServer
+from pydhcp.listener import (
+    AsyncDHCPListener,
+    DHCPListener,
+    DHCPRequestContext,
+    DHCPTransport,
+)
+from pydhcp.options import DHCPOptionCode, DHCPOptions
+from pydhcp.packet import DHCPMessageType
+from pydhcp.server import DHCPServer
 
 
-class Silent(Transport):
+class Silent(DHCPTransport):
     """A transport that accepts everything and sends nothing."""
 
     def __init__(self) -> None:
@@ -51,8 +56,8 @@ def served_interface():
     pytest.skip("no non-loopback IPv4 interface to serve from")
 
 
-def _context(interface) -> RequestContext:
-    return RequestContext(
+def _context(interface) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=Silent(),
         interface=interface,
         client=net.SocketAddress(net.IPv4("0.0.0.0"), 68),
@@ -64,10 +69,10 @@ def test_twenty_packets_cost_at_most_one_enumeration(
     served_interface, enumerations
 ) -> None:
     """It used to be twenty: one full enumeration per DISCOVER."""
-    server = DhcpServer(listen=("127.0.0.1", 0))
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    options[DhcpOptionCode.REQUESTED_IP] = net.IPv4(
+    server = DHCPServer(listen=("127.0.0.1", 0))
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    options[DHCPOptionCode.REQUESTED_IP] = net.IPv4(
         str(list(served_interface.network.hosts())[5])
     )
     context = _context(served_interface)
@@ -81,9 +86,9 @@ def test_twenty_packets_cost_at_most_one_enumeration(
 def test_a_second_dhcpinform_enumerates_nothing(served_interface, enumerations) -> None:
     """The finding recorded two enumerations per DHCPINFORM. Measured, it was
     one -- and the second packet now costs none."""
-    server = DhcpServer(listen=("127.0.0.1", 0))
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPINFORM
+    server = DHCPServer(listen=("127.0.0.1", 0))
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPINFORM
     context = _context(served_interface)
     inform = build_request(options=options, ciaddr=net.IPv4(str(served_interface.ip)))
 
@@ -104,19 +109,19 @@ def test_binding_forces_a_fresh_enumeration(enumerations) -> None:
     netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
     assert len(enumerations) == 1, "the cache did not hold"
 
-    DhcpListener(listen=("127.0.0.1", 0)).__enter__().close()
+    DHCPListener(listen=("127.0.0.1", 0)).__enter__().close()
     netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
 
     assert len(enumerations) == 2, "bind() left the old enumeration in place"
 
 
 def test_an_async_bind_forces_it_too(enumerations) -> None:
-    """`AsyncDhcpServer`'s MRO resolves `bind()` to `AsyncDhcpListener`, so an
-    invalidation hung off `DhcpServer.bind` would never have run for it."""
+    """`AsyncDHCPServer`'s MRO resolves `bind()` to `AsyncDHCPListener`, so an
+    invalidation hung off `DHCPServer.bind` would never have run for it."""
     import netimps
 
     netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
-    listener = AsyncDhcpListener(listen=("127.0.0.1", 0))
+    listener = AsyncDHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
         netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
@@ -137,13 +142,13 @@ def test_a_synthetic_interface_is_still_refused() -> None:
     synthetic = net.NetworkInterface(
         "unknown[203.0.113.9]", ipaddress.IPv4Interface("203.0.113.9/32")
     )
-    server = DhcpServer(listen=("127.0.0.1", 0))
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    options[DhcpOptionCode.REQUESTED_IP] = net.IPv4("203.0.113.20")
+    server = DHCPServer(listen=("127.0.0.1", 0))
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    options[DHCPOptionCode.REQUESTED_IP] = net.IPv4("203.0.113.20")
 
     transport = Silent()
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=transport,
         interface=synthetic,
         client=net.SocketAddress(net.IPv4("0.0.0.0"), 68),

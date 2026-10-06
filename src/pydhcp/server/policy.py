@@ -9,9 +9,9 @@ import time as _time
 import typing as _ty
 
 from .. import constants as _const, network as _net
-from ..lease import DhcpLease, LeaseBackend
-from ..options import DhcpOptionCode, DhcpOptions, type as _type
-from ..packet.message import DhcpMessage
+from ..lease import DHCPLease, LeaseBackend
+from ..options import DHCPOptionCode, DHCPOptions, type as _type
+from ..packet.message import DHCPMessage
 from math import inf as _inf
 from ._state import _ServerState
 
@@ -81,7 +81,7 @@ class _NonExtendingBackend:
     def __init__(self, inner: LeaseBackend) -> None:
         self._inner = inner
 
-    def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]:
+    def lookup(self, client_id: str) -> _ty.Optional[DHCPLease]:
         return self._inner.lookup(client_id)
 
     def allocate(
@@ -89,11 +89,11 @@ class _NonExtendingBackend:
         client_id: str,
         ip: _net.IPv4,
         ttl: float,
-        options: _ty.Optional[DhcpOptions] = None,
-    ) -> _ty.Optional[DhcpLease]:
+        options: _ty.Optional[DHCPOptions] = None,
+    ) -> _ty.Optional[DHCPLease]:
         return self._inner.allocate(client_id, ip, ttl, options)
 
-    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]:
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DHCPLease]:
         """Report the binding as it stands, unextended and unwritten.
 
         Returning the very object `lookup` gave is what lets `acquire_lease`
@@ -112,7 +112,7 @@ class _NonExtendingBackend:
 class _LeasePolicy(_ServerState):
     """Allocation, lease time, address ownership, quarantine and release."""
 
-    def lease_seconds(self, msg: DhcpMessage) -> float:
+    def lease_seconds(self, msg: DHCPMessage) -> float:
         """Lease length to grant for `msg`, applying this server's policy.
 
         RFC 2131 s4.3.1 lets the server honour a client's requested lease time
@@ -128,7 +128,7 @@ class _LeasePolicy(_ServerState):
         Override this, or set the class attributes, to change the policy.
         """
         requested = msg.options.get(
-            DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
+            DHCPOptionCode.IP_ADDRESS_LEASE_TIME, decode=_type.U32
         )
         if requested is None:
             return float(self.DEFAULT_LEASE_SECONDS)
@@ -164,7 +164,7 @@ class _LeasePolicy(_ServerState):
         return bool(_netimps.is_local_address(server_id, cache=True))
 
     @staticmethod
-    def _has_time_left(lease: DhcpLease) -> bool:
+    def _has_time_left(lease: DHCPLease) -> bool:
         """Whether `lease` still has a lease time worth advertising.
 
         `_create_response` sets yiaddr and option 51 only when the remaining
@@ -188,10 +188,10 @@ class _LeasePolicy(_ServerState):
         self,
         client_id: str,
         server_id: _net.IPv4,
-        msg: DhcpMessage,
+        msg: DHCPMessage,
         *,
         commit: bool = True,
-    ) -> _ty.Optional[DhcpLease]:
+    ) -> _ty.Optional[DHCPLease]:
         """Return a lease for a client message.
 
         This is the extension point for address pools, reservations, policy
@@ -238,7 +238,7 @@ class _LeasePolicy(_ServerState):
             return existing
 
         requested_ip = msg.options.get(
-            DhcpOptionCode.REQUESTED_IP, decode=_type.IPv4Address
+            DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4Address
         )
         ttl = self.lease_seconds(msg)
 
@@ -258,9 +258,9 @@ class _LeasePolicy(_ServerState):
             )
             return None
 
-        options = DhcpOptions()
-        options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
-        options[DhcpOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
+        options = DHCPOptions()
+        options[DHCPOptionCode.SUBNET_MASK] = _server.network.netmask
+        options[DHCPOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
         # No ROUTER and no DNS. They used to be set to this host's own address,
         # which is a guess and usually a wrong one: running the server on an
         # ordinary machine then told every client to send all off-link traffic
@@ -331,7 +331,7 @@ class _LeasePolicy(_ServerState):
             self._declined.popitem(last=False)
 
     def release_lease(
-        self, client_id: str, server_id: _net.IPv4, msg: DhcpMessage
+        self, client_id: str, server_id: _net.IPv4, msg: DHCPMessage
     ) -> bool:
         """Release any lease associated with `client_id`; True if one went away.
 
@@ -346,17 +346,17 @@ class _LeasePolicy(_ServerState):
         """
         return self.lease_backend.release(client_id)
 
-    def get_inform_options(self, server_id: _net.IPv4, msg: DhcpMessage) -> DhcpOptions:
+    def get_inform_options(self, server_id: _net.IPv4, msg: DHCPMessage) -> DHCPOptions:
         """Return configuration options for DHCPINFORM responses.
 
         DHCPINFORM does not allocate an address. Override this method when clients
         should receive site-specific options without touching lease allocation.
         """
-        options = DhcpOptions()
+        options = DHCPOptions()
         _server = _servable_interface(server_id)
         if _server is not None:
-            options[DhcpOptionCode.SUBNET_MASK] = _server.network.netmask
-            options[DhcpOptionCode.BROADCAST_ADDRESS] = (
+            options[DHCPOptionCode.SUBNET_MASK] = _server.network.netmask
+            options[DHCPOptionCode.BROADCAST_ADDRESS] = (
                 _server.network.broadcast_address
             )
             # As in `acquire_lease`: this host is not known to be a router or a

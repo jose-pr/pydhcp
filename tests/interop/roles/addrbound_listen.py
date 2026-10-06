@@ -17,13 +17,13 @@ import json
 import sys
 import time
 
-from pydhcp import DhcpListener
+from pydhcp import DHCPListener
 
 address, base, seconds = sys.argv[1], int(sys.argv[2]), float(sys.argv[3])
 KINDS = {0xB1: "limited_broadcast", 0xB2: "subnet_broadcast", 0xC0: "unicast"}
 
 
-class Counting(DhcpListener):
+class Counting(DHCPListener):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.seen: "collections.Counter[str]" = collections.Counter()

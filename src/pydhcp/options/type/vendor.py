@@ -4,7 +4,7 @@ import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from .base import DhcpOptionType, RecordList, hashable_payload
+from .base import DHCPOptionType, RecordList, hashable_payload
 from .scalar import Bytes
 
 _LengthPrefixedOpaqueListT = _ty.TypeVar(
@@ -12,7 +12,7 @@ _LengthPrefixedOpaqueListT = _ty.TypeVar(
 )
 
 
-class _LengthPrefixedOpaqueList(DhcpOptionType, list[_ty.Any]):
+class _LengthPrefixedOpaqueList(DHCPOptionType, list[_ty.Any]):
     def __init__(self, *items: _ty.Any):
         if len(items) == 1 and isinstance(items[0], list):
             self.extend(items[0])
@@ -79,7 +79,7 @@ class UserClass(_LengthPrefixedOpaqueList):
     """RFC 3004 user-class opaque byte list."""
 
 
-class TlvOption(DhcpOptionType):
+class TlvOption(DHCPOptionType):
     def __init__(
         self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]
     ) -> None:
@@ -158,7 +158,7 @@ _ViVendorSpecificInformationRecordT = _ty.TypeVar(
 )
 
 
-class ViVendorSpecificInformationRecord(DhcpOptionType):
+class ViVendorSpecificInformationRecord(DHCPOptionType):
     def __init__(
         self,
         enterprise_number: int,
@@ -221,7 +221,7 @@ _ViVendorClassRecordT = _ty.TypeVar(
 )
 
 
-class ViVendorClassRecord(DhcpOptionType):
+class ViVendorClassRecord(DHCPOptionType):
     def __init__(self, enterprise_number: int, value: _ty.Any) -> None:
         self.enterprise_number = int(enterprise_number)
         if isinstance(value, UserClass):

@@ -6,7 +6,7 @@ import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import nvt as _nvt
 from ...network import IPv4 as _IP
-from .base import DhcpOptionType
+from .base import DHCPOptionType
 from .domain import decode_domain_name, encode_domain_name
 from collections.abc import Iterable
 
@@ -16,7 +16,7 @@ from .domains import UncompressedDomainList
 _RdnssSelectionT = _ty.TypeVar("_RdnssSelectionT", bound="RdnssSelection")
 
 
-class RdnssSelection(DhcpOptionType):
+class RdnssSelection(DHCPOptionType):
     """RFC 6731 RDNSS selection payload."""
 
     def __init__(
@@ -97,7 +97,7 @@ class RdnssSelection(DhcpOptionType):
 _SipServersT = _ty.TypeVar("_SipServersT", bound="SipServers")
 
 
-class SipServers(DhcpOptionType):
+class SipServers(DHCPOptionType):
     """RFC 3361 SIP servers: an encoding octet, then names or addresses.
 
     Encoding 0 is a list of RFC 1035 names, encoding 1 a list of IPv4 addresses.
@@ -213,7 +213,7 @@ class SipServers(DhcpOptionType):
 _StatusCodeT = _ty.TypeVar("_StatusCodeT", bound="StatusCode")
 
 
-class StatusCode(DhcpOptionType):
+class StatusCode(DHCPOptionType):
     """RFC 6926 s6.2.2 status: one code octet, then an optional UTF-8 message.
 
     Registered as a bare `U8` the message made the option the wrong size, so a
@@ -271,7 +271,7 @@ class StatusCode(DhcpOptionType):
 _PcpServerListT = _ty.TypeVar("_PcpServerListT", bound="PcpServerList")
 
 
-class PcpServerList(DhcpOptionType, list[list[str]]):
+class PcpServerList(DHCPOptionType, list[list[str]]):
     """RFC 7291 s4 PCP servers: one or more length-prefixed address lists.
 
     Each entry is a List-Length octet giving the octet count, then that many

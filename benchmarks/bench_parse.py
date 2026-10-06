@@ -18,34 +18,34 @@ from typing import Any
 SRC_DIR = pathlib.Path(__file__).parent.parent / "src"
 sys.path.insert(0, SRC_DIR.as_posix())
 
-from pydhcp.packet import DhcpMessageType
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import Flags
+from pydhcp.packet import DHCPMessageType
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPFlags
 from pydhcp.packet import HardwareAddressType
-from pydhcp.packet import OpCode
-from pydhcp.packet.message import DhcpMessage
+from pydhcp.packet import DHCPOpcode
+from pydhcp.packet.message import DHCPMessage
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptions
+from pydhcp.options import DHCPOptions
 
 
 def build_benchmark_payload() -> bytes:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
-    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray([1, 0, 17, 34, 51, 68, 85])
-    options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
+    options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray([1, 0, 17, 34, 51, 68, 85])
+    options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
         [1, 3, 6, 15, 31, 33, 43, 44, 46, 47, 119, 121, 249, 252]
     )
 
-    msg = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    msg = DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=0x3903F326,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -65,12 +65,12 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
     payload_mv = memoryview(PAYLOAD_BYTES)
 
     def test_decode() -> None:
-        DhcpMessage.decode(payload_mv)
+        DHCPMessage.decode(payload_mv)
 
     decode_time = timeit.timeit(test_decode, number=iterations)
     decode_ops_per_sec = iterations / decode_time
 
-    msg = DhcpMessage.decode(payload_mv)
+    msg = DHCPMessage.decode(payload_mv)
 
     def test_encode() -> None:
         msg.encode()

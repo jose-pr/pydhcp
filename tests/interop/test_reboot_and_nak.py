@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 
 from ._peers import dhclient
 from ._topo import single
@@ -65,7 +65,7 @@ def test_a_nak_to_a_client_that_sent_no_client_identifier_is_accepted(lab):
 
     requests = [f for f in frames if f.sport == 68]
     assert requests[0].type_name() == "DHCPREQUEST"
-    assert DhcpOptionCode.CLIENT_IDENTIFIER not in requests[0].message().options
+    assert DHCPOptionCode.CLIENT_IDENTIFIER not in requests[0].message().options
     assert [f for f in frames if f.type_name() == "DHCPNAK"], [
         f.type_name() for f in frames
     ]
@@ -83,7 +83,7 @@ def test_a_nak_carries_no_client_identifier_the_client_did_not_send(lab):
 
     naks = [f for f in frames if f.type_name() == "DHCPNAK"]
     assert naks, [f.type_name() for f in frames]
-    assert DhcpOptionCode.CLIENT_IDENTIFIER not in naks[0].message().options
+    assert DHCPOptionCode.CLIENT_IDENTIFIER not in naks[0].message().options
 
 
 def _reboot(lab, *server_args):

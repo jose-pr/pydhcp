@@ -1,4 +1,4 @@
-"""Regression tests for the `DhcpMessage` decode/mapping nits fixed on this branch.
+"""Regression tests for the `DHCPMessage` decode/mapping nits fixed on this branch.
 
 Each test pins a behaviour that was measured wrong before the fix; the measured
 "before" value is named in the test so a future reader can tell a regression
@@ -11,11 +11,11 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from pydhcp.packet.message import DhcpMessage
+from pydhcp.packet.message import DHCPMessage
 from pydhcp.packet.structured import load_message
 
 
-def _sample_message() -> DhcpMessage:
+def _sample_message() -> DHCPMessage:
     header = (
         bytes([1, 1, 6, 0])
         + bytes.fromhex("12345678")
@@ -27,20 +27,20 @@ def _sample_message() -> DhcpMessage:
         + bytes(128)
     )
     packet = header + bytes([99, 130, 83, 99]) + bytes([53, 1, 1, 255])
-    return DhcpMessage.decode(packet)
+    return DHCPMessage.decode(packet)
 
 
-class _SubMessage(DhcpMessage):
+class _SubMessage(DHCPMessage):
     """A subclass carrying no extra state, so only its identity is observable."""
 
 
 def test_decode_returns_the_subclass_not_the_base() -> None:
-    # `decode` is a classmethod but built `DhcpMessage(...)` by name, so every
+    # `decode` is a classmethod but built `DHCPMessage(...)` by name, so every
     # subclass decoded to the base while `from_mapping` (already `cls(...)`)
-    # returned the subclass. Measured before the fix: DhcpMessage / _SubMessage.
+    # returned the subclass. Measured before the fix: DHCPMessage / _SubMessage.
     raw = bytes(_sample_message().encode())
     assert type(_SubMessage.decode(raw)) is _SubMessage
-    assert type(DhcpMessage.decode(raw)) is DhcpMessage
+    assert type(DHCPMessage.decode(raw)) is DHCPMessage
 
 
 def test_decode_and_from_mapping_agree_on_type() -> None:
@@ -61,14 +61,14 @@ def test_int_chaddr_names_the_yaml_quoting_cause() -> None:
     data = dict(_sample_message().to_mapping())
     data["chaddr"] = yaml.safe_load("chaddr: 10:20:30:40:50:55\n")["chaddr"]
     with pytest.raises(TypeError, match="quote it"):
-        DhcpMessage.from_mapping(data)
+        DHCPMessage.from_mapping(data)
 
 
 def test_non_text_chaddr_still_rejected() -> None:
     data = dict(_sample_message().to_mapping())
     data["chaddr"] = ["not", "text"]
     with pytest.raises(TypeError, match="text or bytes-like"):
-        DhcpMessage.from_mapping(data)
+        DHCPMessage.from_mapping(data)
 
 
 @pytest.mark.parametrize("field", ["sname", "file"])
@@ -77,7 +77,7 @@ def test_null_bootp_text_is_empty_not_the_string_none(field: str) -> None:
     # encoded packet carried a bogus server name / boot filename with no error.
     data = dict(_sample_message().to_mapping())
     data[field] = None
-    message = DhcpMessage.from_mapping(data)
+    message = DHCPMessage.from_mapping(data)
     assert getattr(message, field) == ""
 
 
@@ -107,4 +107,4 @@ def test_non_text_bootp_field_is_rejected_rather_than_stringified(field: str) ->
     data = dict(_sample_message().to_mapping())
     data[field] = ["a", "b"]
     with pytest.raises(TypeError, match=f"{field} must be text or null"):
-        DhcpMessage.from_mapping(data)
+        DHCPMessage.from_mapping(data)

@@ -11,12 +11,12 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import constants as _const, network as _net
-from ..metrics import DhcpMetrics
+from ..metrics import DHCPMetrics
 from ..packet import enums as _enum
-from ..packet.message import DhcpMessage
+from ..packet.message import DHCPMessage
 from .binding import _bind_sockets, _close_socket
 from .receive import (
-    RequestContext,
+    DHCPRequestContext,
     _TruncatedDatagram,
     _arrival,
     _context_for,
@@ -27,8 +27,8 @@ from .spec import ListenSpec, _parselisteners
 LOGGER = _logging.getLogger(__name__)
 
 
-class DhcpListener:
-    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DhcpPort)
+class DHCPListener:
+    DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DHCPPort)
 
     #: Whether to set ``SO_REUSEADDR`` on every listening socket. Off: see
     #: `_bind_sockets` for what sharing a DHCP port actually looks like when it
@@ -66,7 +66,7 @@ class DhcpListener:
         self._previous_sigint: _ty.Optional[_ty.Any] = None
         self._select_timeout = select_timeout or 1
         self._cancellation_token: _thread.Event | None = None
-        self.metrics = DhcpMetrics()
+        self.metrics = DHCPMetrics()
 
     @property
     def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
@@ -93,7 +93,7 @@ class DhcpListener:
                 continue
         return tuple(addresses)
 
-    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         pass
 
     def bind(self) -> None:
@@ -123,7 +123,7 @@ class DhcpListener:
         self._sockets.clear()
         self._restore_sigint_handler()
 
-    def __enter__(self) -> "DhcpListener":
+    def __enter__(self) -> "DHCPListener":
         self.bind()
         return self
 
@@ -262,7 +262,7 @@ class DhcpListener:
             return
 
         try:
-            msg = DhcpMessage.decode(raw)
+            msg = DHCPMessage.decode(raw)
         except Exception as e:
             # The sender's fault, and routine on a shared segment: a warning
             # with the facts, not an error with a traceback of our own decoder.
@@ -284,7 +284,7 @@ class DhcpListener:
             # Ours, almost always: `handle()` is the documented override point.
             # exc_info is the whole value here -- the class name and str of, say,
             # a KeyError deep in a lease backend say nothing about where it came
-            # from. `DhcpCapture.hook_fail_fast` relies on this staying a catch
+            # from. `DHCPCapture.hook_fail_fast` relies on this staying a catch
             # rather than a propagate.
             self.metrics.packets_dropped_error += 1
             LOGGER.error(
@@ -315,7 +315,7 @@ class DhcpListener:
                     break
                 for sock in rlist:
                     if token.is_set():
-                        # A handler can stop the listener -- `DhcpCapture`'s
+                        # A handler can stop the listener -- `DHCPCapture`'s
                         # `--count` sink and `hook_fail_fast` both do -- and
                         # this loop then kept draining the rest of the ready
                         # set. Measured: `capture --count 1` wrote 3 records in

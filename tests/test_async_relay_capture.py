@@ -1,4 +1,4 @@
-"""`AsyncDhcpRelay` / `AsyncDhcpCapture`: the parts a shared test cannot reach.
+"""`AsyncDHCPRelay` / `AsyncDHCPCapture`: the parts a shared test cannot reach.
 
 The forwarding, filter and hook *policy* is tested against both classes at once
 by the `relay_class` / `capture_class` fixtures in `tests/test_relay.py` and
@@ -6,7 +6,7 @@ by the `relay_class` / `capture_class` fixtures in `tests/test_relay.py` and
 a real event loop and real sockets -- plus the structural guard that says the
 async halves are a mixin and not a copy.
 
-That guard is the point of this file. `AsyncDhcpServer` was originally written
+That guard is the point of this file. `AsyncDHCPServer` was originally written
 as a copy of the sync constructor, `bind()` and receive path; a hardcoded
 `_pktinfo = False` then left the async listener receiving *nothing at all* on
 Linux while every unit test passed. A green suite is not evidence that the two
@@ -27,16 +27,16 @@ import typing as _ty
 import pytest
 
 from pydhcp import (
-    AsyncDhcpCapture,
-    AsyncDhcpRelay,
-    DhcpCapture,
-    DhcpMessage,
-    DhcpOptions,
-    DhcpRelay,
+    AsyncDHCPCapture,
+    AsyncDHCPRelay,
+    DHCPCapture,
+    DHCPMessage,
+    DHCPOptions,
+    DHCPRelay,
 )
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from conftest import CHADDR, build_request
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "pydhcp"
@@ -110,36 +110,36 @@ _RECEIVE_PATH = (
     "_context_for",
     "_resolve_interface",
     "_parselisteners",
-    "DhcpListener.listen",
-    "DhcpListener.bind",
-    "AsyncDhcpListener._receive",
-    "AsyncDhcpListener._dispatch_received",
-    "AsyncDhcpListener._handle_datagram",
-    "AsyncDhcpListener.bind",
-    "AsyncDhcpListener.start",
-    "AsyncDhcpListener.stop",
-    "AsyncDhcpListener._close_endpoints",
+    "DHCPListener.listen",
+    "DHCPListener.bind",
+    "AsyncDHCPListener._receive",
+    "AsyncDHCPListener._dispatch_received",
+    "AsyncDHCPListener._handle_datagram",
+    "AsyncDHCPListener.bind",
+    "AsyncDHCPListener.start",
+    "AsyncDHCPListener.stop",
+    "AsyncDHCPListener._close_endpoints",
 )
 
 #: The policy each async class inherits rather than restates.
 _POLICY = {
     "relay.py": (
-        "DhcpRelay.handle",
-        "DhcpRelay._forward_to_servers",
-        "DhcpRelay._forward_to_client",
-        "DhcpRelay._init_relay_state",
-        "DhcpRelay._record_pending",
-        "DhcpRelay._lookup_pending",
-        "DhcpRelay._expire_pending",
-        "DhcpRelay._client_transport",
-        "DhcpRelay._routed_transport",
-        "DhcpRelay._encode_for_forward",
-        "DhcpRelay._insert_relay_agent_info",
-        "DhcpRelay._pending_key",
+        "DHCPRelay.handle",
+        "DHCPRelay._forward_to_servers",
+        "DHCPRelay._forward_to_client",
+        "DHCPRelay._init_relay_state",
+        "DHCPRelay._record_pending",
+        "DHCPRelay._lookup_pending",
+        "DHCPRelay._expire_pending",
+        "DHCPRelay._client_transport",
+        "DHCPRelay._routed_transport",
+        "DHCPRelay._encode_for_forward",
+        "DHCPRelay._insert_relay_agent_info",
+        "DHCPRelay._pending_key",
     ),
     "capture.py": (
-        "DhcpCapture.handle",
-        "DhcpCapture._init_capture_state",
+        "DHCPCapture.handle",
+        "DHCPCapture._init_capture_state",
     ),
 }
 
@@ -168,7 +168,7 @@ def _shared_corpus(module: str) -> "set[str]":
 
 @pytest.mark.parametrize(
     "module, async_class",
-    [("relay.py", "AsyncDhcpRelay"), ("capture.py", "AsyncDhcpCapture")],
+    [("relay.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
 )
 def test_the_async_class_copies_no_receive_path_or_policy_line(
     module: str, async_class: str
@@ -187,7 +187,7 @@ def test_the_async_class_copies_no_receive_path_or_policy_line(
 
 @pytest.mark.parametrize(
     "module, async_class",
-    [("relay.py", "AsyncDhcpRelay"), ("capture.py", "AsyncDhcpCapture")],
+    [("relay.py", "AsyncDHCPRelay"), ("capture.py", "AsyncDHCPCapture")],
 )
 def test_the_async_class_never_names_a_receive_path_helper(
     module: str, async_class: str
@@ -210,8 +210,8 @@ def test_the_async_class_never_names_a_receive_path_helper(
 @pytest.mark.parametrize(
     "module, async_class, state_init",
     [
-        ("relay.py", "AsyncDhcpRelay", "_init_relay_state"),
-        ("capture.py", "AsyncDhcpCapture", "_init_capture_state"),
+        ("relay.py", "AsyncDHCPRelay", "_init_relay_state"),
+        ("capture.py", "AsyncDHCPCapture", "_init_capture_state"),
     ],
 )
 def test_the_async_class_is_only_a_constructor_and_a_handle(
@@ -221,7 +221,7 @@ def test_the_async_class_is_only_a_constructor_and_a_handle(
 
     `__init__` must delegate its state to the same method the sync constructor
     calls -- the `_init_server_state` shape. Re-implementing the body is how
-    `AsyncDhcpServer` lost `_declined` and made every DHCPDECLINE an
+    `AsyncDHCPServer` lost `_declined` and made every DHCPDECLINE an
     AttributeError.
     """
     tree, _lines = _module(module)
@@ -251,7 +251,7 @@ def test_the_two_constructors_accept_the_same_arguments() -> None:
     """
     import inspect
 
-    for sync, asyncy in ((DhcpRelay, AsyncDhcpRelay), (DhcpCapture, AsyncDhcpCapture)):
+    for sync, asyncy in ((DHCPRelay, AsyncDHCPRelay), (DHCPCapture, AsyncDHCPCapture)):
         expected = [
             name
             for name in inspect.signature(sync.__init__).parameters
@@ -268,8 +268,8 @@ def test_the_two_constructors_accept_the_same_arguments() -> None:
 @pytest.mark.parametrize(
     "sync, asyncy, kwargs",
     [
-        (DhcpRelay, AsyncDhcpRelay, {"server_addresses": ["192.0.2.1"]}),
-        (DhcpCapture, AsyncDhcpCapture, {}),
+        (DHCPRelay, AsyncDHCPRelay, {"server_addresses": ["192.0.2.1"]}),
+        (DHCPCapture, AsyncDHCPCapture, {}),
     ],
 )
 def test_the_async_class_holds_the_same_state_as_the_sync_one(
@@ -292,20 +292,20 @@ def test_the_async_class_holds_the_same_state_as_the_sync_one(
 
 
 def test_the_async_relay_keeps_the_relays_ports_not_the_listeners() -> None:
-    """`AsyncDhcpListener.DEFAULT_PORTS` comes first in the MRO.
+    """`AsyncDHCPListener.DEFAULT_PORTS` comes first in the MRO.
 
     Left to it, an async relay would also bind the client port 68 and start
     relaying its own forwarded replies.
     """
-    assert AsyncDhcpRelay.DEFAULT_PORTS == DhcpRelay.DEFAULT_PORTS
-    assert AsyncDhcpRelay(server_addresses=["192.0.2.1"]).DEFAULT_PORTS == (67,)
+    assert AsyncDHCPRelay.DEFAULT_PORTS == DHCPRelay.DEFAULT_PORTS
+    assert AsyncDHCPRelay(server_addresses=["192.0.2.1"]).DEFAULT_PORTS == (67,)
 
 
 @pytest.mark.parametrize(
     "asyncy, sync, kwargs",
     [
-        (AsyncDhcpRelay, DhcpRelay, {"server_addresses": ["192.0.2.1"]}),
-        (AsyncDhcpCapture, DhcpCapture, {}),
+        (AsyncDHCPRelay, DHCPRelay, {"server_addresses": ["192.0.2.1"]}),
+        (AsyncDHCPCapture, DHCPCapture, {}),
     ],
 )
 def test_the_async_class_agrees_about_the_receive_path(
@@ -328,22 +328,22 @@ def test_the_async_class_agrees_about_the_receive_path(
 
 def _discover_bytes(xid: int = 0x5150F00D, chaddr: bytes = CHADDR) -> bytes:
     return bytes(
-        build_request(DhcpMessageType.DHCPDISCOVER, xid=xid, chaddr=chaddr).encode()
+        build_request(DHCPMessageType.DHCPDISCOVER, xid=xid, chaddr=chaddr).encode()
     )
 
 
 def _offer(xid: int, chaddr: bytes, giaddr: str) -> bytes:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPOFFER
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPOFFER
     return bytes(
-        DhcpMessage(
-            op=OpCode.BOOTREPLY,
+        DHCPMessage(
+            op=DHCPOpcode.BOOTREPLY,
             htype=HardwareAddressType.ETHERNET,
             hlen=6,
             hops=1,
             xid=xid,
             secs=dt.timedelta(seconds=0),
-            flags=Flags.UNICAST,
+            flags=DHCPFlags.UNICAST,
             # ciaddr, so the relay unicasts back rather than broadcasting from a
             # loopback-bound socket -- which POSIX refuses outright.
             ciaddr=IPv4("127.0.0.1"),
@@ -379,7 +379,7 @@ def test_async_relay_forwards_a_request_and_its_reply_over_real_sockets() -> Non
         upstream.bind(("127.0.0.1", 0))
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.bind(("127.0.0.1", 0))  # deliberately not port 68
-        relay = AsyncDhcpRelay(
+        relay = AsyncDHCPRelay(
             listen=("127.0.0.1", 0),
             server_addresses=[("127.0.0.1", upstream.getsockname()[1])],
         )
@@ -389,7 +389,7 @@ def test_async_relay_forwards_a_request_and_its_reply_over_real_sockets() -> Non
             client.sendto(_discover_bytes(xid=xid), ("127.0.0.1", relay_port))
 
             data, _addr = await _recv(upstream)
-            forwarded = DhcpMessage.decode(data)
+            forwarded = DHCPMessage.decode(data)
             assert forwarded.hops == 1, "the relay must count itself"
             assert forwarded.giaddr == IPv4("127.0.0.1"), forwarded.giaddr
             assert forwarded.xid == xid
@@ -399,8 +399,8 @@ def test_async_relay_forwards_a_request_and_its_reply_over_real_sockets() -> Non
                 ("127.0.0.1", relay_port),
             )
             reply_data, _from = await _recv(client)
-            reply = DhcpMessage.decode(reply_data)
-            assert reply.op == OpCode.BOOTREPLY
+            reply = DHCPMessage.decode(reply_data)
+            assert reply.op == DHCPOpcode.BOOTREPLY
             assert reply.xid == xid
             # The handler worker counts *after* its send returns, so the reply
             # can reach this thread first; give the increment a moment.
@@ -421,7 +421,7 @@ def test_async_capture_records_a_packet_off_the_wire() -> None:
     events: list = []
 
     async def main() -> None:
-        capture = AsyncDhcpCapture(
+        capture = AsyncDHCPCapture(
             listen=("127.0.0.1", 0),
             packet_filter="msg_type=DHCPDISCOVER",
             sink=events.append,
@@ -450,7 +450,7 @@ def test_async_capture_filter_rejects_on_the_wire_too() -> None:
     events: list = []
     handled = threading.Event()
 
-    class Probe(AsyncDhcpCapture):
+    class Probe(AsyncDHCPCapture):
         def handle(self, msg, context):
             super().handle(msg, context)
             handled.set()
@@ -484,7 +484,7 @@ def test_async_capture_hook_fail_fast_actually_stops_the_loop() -> None:
     """The path the plan singles out, on a live loop.
 
     `hook_fail_fast` calls `stop()` from the handler *worker thread*, and
-    nothing `AsyncDhcpListener.stop()` touches is thread-safe: `remove_reader`,
+    nothing `AsyncDHCPListener.stop()` touches is thread-safe: `remove_reader`,
     `transport.close()` and `Event.set()` all finish through `loop.call_soon`,
     which queues a callback without waking the loop. Measured before the fix
     (a handler calling `stop()` on its worker): Linux's selector loop never
@@ -499,7 +499,7 @@ def test_async_capture_hook_fail_fast_actually_stops_the_loop() -> None:
         raise RuntimeError("boom")
 
     async def main() -> None:
-        capture = AsyncDhcpCapture(
+        capture = AsyncDHCPCapture(
             listen=("127.0.0.1", 0), hook=bad_hook, hook_fail_fast=True
         )
         await capture.start()
@@ -532,7 +532,7 @@ def test_async_relay_state_is_only_touched_by_one_thread() -> None:
     seen = threading.Event()
     count = 12
 
-    class Probe(AsyncDhcpRelay):
+    class Probe(AsyncDHCPRelay):
         def handle(self, msg, context):
             threads.add(threading.current_thread().ident)
             super().handle(msg, context)

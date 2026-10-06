@@ -20,7 +20,7 @@ import time
 import pytest
 
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request, running, wait_bound
-from pydhcp.listener import DhcpListener
+from pydhcp.listener import DHCPListener
 
 # --- tests-6: the receive loop releases its sockets ---
 
@@ -30,7 +30,7 @@ def test_the_receive_loop_closes_its_sockets_on_the_way_out() -> None:
     nulled the cancellation token. Measured across three test modules before
     the fix: 7 sockets still open at the end of the session, every one of them
     holding a UDP port a later bind could not have."""
-    listener = DhcpListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener = DHCPListener(listen=("127.0.0.1", 0), select_timeout=0.05)
     thread = listener.start()
     assert thread is not None
     wait_bound(listener)
@@ -53,7 +53,7 @@ def test_the_receive_loop_closes_its_sockets_on_the_way_out() -> None:
 
 def test_a_closed_listener_can_be_started_again() -> None:
     """Closing on the way out must not make the listener single-use."""
-    listener = DhcpListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener = DHCPListener(listen=("127.0.0.1", 0), select_timeout=0.05)
     with running(listener):
         first = listener.bound_addresses[0]
     assert listener.bound_addresses == ()
@@ -73,7 +73,7 @@ def test_the_receive_thread_does_not_strand_the_sigint_handler() -> None:
     able to give it back. Ctrl-C would then be swallowed by a dead listener.
     """
     original = signal.getsignal(signal.SIGINT)
-    listener = DhcpListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+    listener = DHCPListener(listen=("127.0.0.1", 0), select_timeout=0.05)
     thread = listener.start()
     assert thread is not None
     installed = signal.getsignal(signal.SIGINT)
@@ -96,9 +96,9 @@ def test_the_receive_thread_does_not_strand_the_sigint_handler() -> None:
 _FORGETFUL = """
 import sys
 sys.path.insert(0, {src!r})
-from pydhcp.listener import DhcpListener
+from pydhcp.listener import DHCPListener
 
-listener = DhcpListener(listen=("127.0.0.1", 0), select_timeout=0.05)
+listener = DHCPListener(listen=("127.0.0.1", 0), select_timeout=0.05)
 listener.start()
 print("started", flush=True)
 """
@@ -140,7 +140,7 @@ def _src_dir():
 # --- transport-33: a handler's stop() ends the turn, not just the loop ---
 
 
-class StoppingListener(DhcpListener):
+class StoppingListener(DHCPListener):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.handled = 0
@@ -192,7 +192,7 @@ def test_a_handler_that_stops_is_not_called_again_in_the_same_turn() -> None:
 # --- transport-27: wait() reads the token once per turn ---
 
 
-class _VanishingToken(DhcpListener):
+class _VanishingToken(DHCPListener):
     """A listener whose token disappears between two reads.
 
     The real window is the receive thread executing `listen()`'s
@@ -242,7 +242,7 @@ def test_start_raises_the_bind_error_on_the_callers_thread() -> None:
     from netimps import AddressInUseError
 
     holder, port = _held_port()
-    listener = DhcpListener(
+    listener = DHCPListener(
         listen=[("127.0.0.1", 0), ("127.0.0.1", port)], select_timeout=0.05
     )
     caught: "list[BaseException]" = []
@@ -272,7 +272,7 @@ def test_start_raises_the_bind_error_on_the_callers_thread() -> None:
 def test_listen_clears_its_token_when_the_bind_fails() -> None:
     """`listen()` run on the caller's thread: the failure ends it cleanly."""
     holder, port = _held_port()
-    listener = DhcpListener(listen=("127.0.0.1", port), select_timeout=0.05)
+    listener = DHCPListener(listen=("127.0.0.1", port), select_timeout=0.05)
     try:
         with pytest.raises(OSError):
             listener.listen()

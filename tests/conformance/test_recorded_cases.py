@@ -19,10 +19,10 @@ import typing as _ty
 
 import pytest
 
-from pydhcp import DhcpMessage
+from pydhcp import DHCPMessage
 
 CASE_FILES = sorted((pathlib.Path(__file__).parent / "cases").glob("*/case.json"))
-#: The IP datagram size `DhcpMessage.encode` is given: the RFC 2131 s2 minimum
+#: The IP datagram size `DHCPMessage.encode` is given: the RFC 2131 s2 minimum
 #: unless the recorded message was larger.
 MIN_DATAGRAM = 576
 IP_UDP_OVERHEAD = 28
@@ -60,7 +60,7 @@ def test_a_case_says_what_it_records(path):
     ids=lambda v: v if isinstance(v, str) else None,
 )
 def test_every_recorded_datagram_decodes(name, index, datagram):
-    DhcpMessage.decode(bytes.fromhex(datagram["payload"]))
+    DHCPMessage.decode(bytes.fromhex(datagram["payload"]))
 
 
 @pytest.mark.parametrize(
@@ -70,7 +70,7 @@ def test_every_recorded_datagram_decodes(name, index, datagram):
 )
 def test_what_pydhcp_sent_encodes_to_the_same_octets(name, index, datagram):
     wire = bytes.fromhex(datagram["payload"])
-    message = DhcpMessage.decode(wire)
+    message = DHCPMessage.decode(wire)
 
     again = message.encode(max(MIN_DATAGRAM, len(wire) + IP_UDP_OVERHEAD))
 
@@ -89,6 +89,6 @@ def test_a_case_holds_nothing_from_the_machine_that_recorded_it(name, index, dat
         assert address.is_private or address == ipaddress.ip_address(
             "255.255.255.255"
         ), end
-    message = DhcpMessage.decode(bytes.fromhex(datagram["payload"]))
+    message = DHCPMessage.decode(bytes.fromhex(datagram["payload"]))
     # Bit 1 of the first octet marks a locally administered address.
     assert message.chaddr[0] & 0x02, message.chaddr.hex()

@@ -1,18 +1,18 @@
 from __future__ import annotations
 import typing as _ty
 
-from .type import Bytes, DhcpOptionType
+from .type import Bytes, DHCPOptionType
 
 
-class BaseDhcpOptionCode:
-    def get_type(self) -> "type[DhcpOptionType]":
+class BaseDHCPOptionCode:
+    def get_type(self) -> "type[DHCPOptionType]":
         return Bytes
 
     def label(self) -> str:
         return "UNKNOWN"
 
     @classmethod
-    def from_code(cls, code: int) -> "BaseDhcpOptionCode":
+    def from_code(cls, code: int) -> "BaseDHCPOptionCode":
         return cls(code)  # type: ignore[call-arg]
 
     def __int__(self) -> int:
@@ -44,16 +44,16 @@ class BaseDhcpOptionCode:
         return self.label()
 
     @classmethod
-    def normalize(cls, code: int, value: object) -> DhcpOption:
+    def normalize(cls, code: int, value: object) -> DHCPOption:
         _code = cls.from_code(code)
-        return DhcpOption(_code, _code.get_type()(value))  # type: ignore[call-arg]
+        return DHCPOption(_code, _code.get_type()(value))  # type: ignore[call-arg]
 
     @classmethod
-    def decode(cls, code: int, value: bytearray) -> DhcpOption:
+    def decode(cls, code: int, value: bytearray) -> DHCPOption:
         _code = cls.from_code(code)
-        return DhcpOption(_code, _code.get_type()._dhcp_decode(value))
+        return DHCPOption(_code, _code.get_type()._dhcp_decode(value))
 
 
-class DhcpOption(_ty.NamedTuple):
-    code: _ty.Union[int, "BaseDhcpOptionCode"]
-    value: "DhcpOptionType"
+class DHCPOption(_ty.NamedTuple):
+    code: _ty.Union[int, "BaseDHCPOptionCode"]
+    value: "DHCPOptionType"

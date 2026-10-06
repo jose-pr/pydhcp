@@ -1,15 +1,15 @@
-from pydhcp.client import DhcpClient
-from pydhcp.options import DhcpOptionCode
+from pydhcp.client import DHCPClient
+from pydhcp.options import DHCPOptionCode
 
 
 def main() -> None:
-    client = DhcpClient(listen=("127.0.0.1", 6768))
+    client = DHCPClient(listen=("127.0.0.1", 6768))
     discover = client.build_discover(
         b"\x00\x11\x22\x33\x44\x55",
         parameter_request_list=[
-            DhcpOptionCode.SUBNET_MASK,
-            DhcpOptionCode.ROUTER,
-            DhcpOptionCode.DNS,
+            DHCPOptionCode.SUBNET_MASK,
+            DHCPOptionCode.ROUTER,
+            DHCPOptionCode.DNS,
         ],
     )
     client.send(discover, destination="127.0.0.1", port=6767)

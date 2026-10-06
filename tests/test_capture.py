@@ -7,17 +7,17 @@ from datetime import datetime, timezone
 import pytest
 
 from pydhcp import (
-    AsyncDhcpCapture,
+    AsyncDHCPCapture,
     CaptureEvent,
-    DhcpCapture,
-    DhcpMessage,
-    DhcpOptions,
+    DHCPCapture,
+    DHCPMessage,
+    DHCPOptions,
     NetworkInterface,
-    RequestContext,
+    DHCPRequestContext,
 )
 from pydhcp.capture import compile_capture_filter
-from pydhcp.packet import DhcpMessageType, Flags
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4, SocketAddress
 from conftest import build_request
 
@@ -28,11 +28,11 @@ CHADDR = b"\x00\x11\x22\x33\x44\x55"
 ALPHA_CHADDR = bytes.fromhex("68f7d8e51e83")
 
 
-@pytest.fixture(params=[DhcpCapture, AsyncDhcpCapture], ids=["sync", "async"])
+@pytest.fixture(params=[DHCPCapture, AsyncDHCPCapture], ids=["sync", "async"])
 def capture_class(request):
     """Every capture-policy test runs against both captures.
 
-    Parametrized rather than duplicated: `AsyncDhcpCapture` takes the same
+    Parametrized rather than duplicated: `AsyncDHCPCapture` takes the same
     arguments minus `select_timeout`, and `handle()` is ordinary synchronous
     code on both -- on the async listener it runs on the handler worker thread,
     not on the event loop, so calling it directly here is the same call the
@@ -47,19 +47,19 @@ class _Transport:
 
 
 def _message(
-    message_type: DhcpMessageType = DhcpMessageType.DHCPDISCOVER,
+    message_type: DHCPMessageType = DHCPMessageType.DHCPDISCOVER,
     chaddr: bytes = CHADDR,
-) -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
-    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + chaddr)
+) -> DHCPMessage:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = message_type
+    options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + chaddr)
     return build_request(
-        options=options, xid=0x1234ABCD, flags=Flags.BROADCAST, chaddr=chaddr
+        options=options, xid=0x1234ABCD, flags=DHCPFlags.BROADCAST, chaddr=chaddr
     )
 
 
-def _context() -> RequestContext:
-    return RequestContext(
+def _context() -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=_Transport(),
         interface=NetworkInterface("eth-test", ipaddress.IPv4Interface("192.0.2.1/24")),
         client=SocketAddress("192.0.2.55", 68),
@@ -68,7 +68,7 @@ def _context() -> RequestContext:
     )
 
 
-def _event(message: DhcpMessage | None = None) -> CaptureEvent:
+def _event(message: DHCPMessage | None = None) -> CaptureEvent:
     return CaptureEvent(
         message=message or _message(),
         context=_context(),
@@ -240,10 +240,10 @@ def test_capture_event_formats_safe_filenames() -> None:
     ) == ("out/01_00_11_22_33_44_55/20260714T123015.000000Z_DHCPDISCOVER_1234ABCD.json")
 
 
-class _ForgedIdentityMessage(DhcpMessage):
+class _ForgedIdentityMessage(DHCPMessage):
     """A message whose rendered client identity is attacker-chosen text.
 
-    `DhcpMessage.client_id()` hex-encodes option 61, so today a real client
+    `DHCPMessage.client_id()` hex-encodes option 61, so today a real client
     cannot get a `/` or a `..` into it however it crafts the option -- checked,
     and worth knowing rather than assuming. But `format_filename` is what
     stands between a remote value and a path, `_sanitize_filename_value` exists
@@ -428,7 +428,7 @@ def test_dhcp_capture_sync_fail_fast_sets_the_cancellation_token() -> None:
 
     import threading
 
-    capture = DhcpCapture(
+    capture = DHCPCapture(
         listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
     )
     # listen() creates this; the token is what stop() acts on, so the loop has to

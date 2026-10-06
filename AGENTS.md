@@ -18,8 +18,8 @@ current with the code in the same commit that changes it.
 
 ```
 src/pydhcp/        the package (src layout — an editable install or PYTHONPATH is needed)
-  packet/          DhcpMessage, enums, structured formats
-  options/         DhcpOptions, DhcpOptionCode, type/ payload codecs (incl. ccc.py)
+  packet/          DHCPMessage, enums, structured formats
+  options/         DHCPOptions, DHCPOptionCode, type/ payload codecs (incl. ccc.py)
   network/         addresses and host interface discovery
   listener/        listeners and transports, one module per responsibility
   cli/             the `pydhcp` command: App in __init__, one module per subcommand
@@ -104,7 +104,7 @@ send; keep it that way.
   lines. Split by responsibility into a package rather than letting one file
   grow, and keep the package's `__init__` re-exporting the names callers
   already import, so a split never moves a public import path. One deliberate
-  exception: `options/code.py` is the `DhcpOptionCode` enum, ~830 lines of
+  exception: `options/code.py` is the `DHCPOptionCode` enum, ~830 lines of
   RFC-documented members, and an `Enum`'s members cannot be split across
   modules. A class too big for one module becomes layers, each subclassing the
   last (see `server/` and `packet/_*.py`).

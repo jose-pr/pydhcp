@@ -9,11 +9,11 @@ import string as _string
 import typing as _ty
 
 from . import network as _net
-from .listener import AsyncDhcpListener, DhcpListener, ListenSpec, RequestContext
-from .options import DhcpOptionCode
+from .listener import AsyncDHCPListener, DHCPListener, ListenSpec, DHCPRequestContext
+from .options import DHCPOptionCode
 from .exceptions import NoClientIdentityError
-from .packet.message import DhcpMessage
-from .options import DhcpOptionType
+from .packet.message import DHCPMessage
+from .options import DHCPOptionType
 
 #: This module's logger, a child of the package logger `pydhcp` (which
 #: `.listener` above has already imported, installing its `NullHandler`).
@@ -40,8 +40,8 @@ _HEX_SEPARATOR_RE = _re.compile(r"[:.-]")
 
 @_data.dataclass(frozen=True)
 class CaptureEvent:
-    message: DhcpMessage
-    context: RequestContext
+    message: DHCPMessage
+    context: DHCPRequestContext
     captured_at: _dt.datetime
 
     @property
@@ -68,7 +68,7 @@ class CaptureEvent:
 
     @property
     def message_type(self) -> str:
-        value = self.message.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
+        value = self.message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
         if value is None:
             return "UNKNOWN"
         return value.name if hasattr(value, "name") else str(value)
@@ -174,7 +174,7 @@ def compile_capture_filter(text: _ty.Optional[str]) -> CapturePredicate:
     return predicate
 
 
-class DhcpCapture(DhcpListener):
+class DHCPCapture(DHCPListener):
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -208,10 +208,10 @@ class DhcpCapture(DhcpListener):
     ) -> None:
         """Set up the state every capture variant needs.
 
-        `AsyncDhcpCapture` cannot call this class's `__init__` (its own base
+        `AsyncDHCPCapture` cannot call this class's `__init__` (its own base
         takes a different argument set), so one method both constructors call is
-        what keeps the two from drifting -- the way `AsyncDhcpServer` drifted
-        from `DhcpServer` until `_init_server_state` existed.
+        what keeps the two from drifting -- the way `AsyncDHCPServer` drifted
+        from `DHCPServer` until `_init_server_state` existed.
         """
         self.packet_filter = (
             compile_capture_filter(packet_filter)
@@ -228,7 +228,7 @@ class DhcpCapture(DhcpListener):
         self.hook_error: _ty.Optional[BaseException] = None
         self.accepted_count = 0
 
-    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         event = CaptureEvent(
             message=msg,
             context=context,
@@ -255,20 +255,20 @@ class DhcpCapture(DhcpListener):
                     raise
 
 
-class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
-    """`DhcpCapture`'s filter/sink/hook policy on the asyncio listener.
+class AsyncDHCPCapture(AsyncDHCPListener, DHCPCapture):  # type: ignore[misc]
+    """`DHCPCapture`'s filter/sink/hook policy on the asyncio listener.
 
-    Mixed the way `AsyncDhcpServer` is: no receive-path code is repeated here,
+    Mixed the way `AsyncDHCPServer` is: no receive-path code is repeated here,
     so the packet-info wildcard path, the interface resolution and the bind
     diagnostics are the same ones the sync capture uses.
 
     `accepted_count`, `hook_error` and anything a `sink` keeps are unguarded,
-    exactly as on `DhcpCapture`. What keeps them safe is that
-    `AsyncDhcpListener` runs handlers on a single worker thread -- including
+    exactly as on `DHCPCapture`. What keeps them safe is that
+    `AsyncDHCPListener` runs handlers on a single worker thread -- including
     the sink, so the capture CLI's `--count` budget needs no lock and no
     library-side state of its own.
 
-    `hook_fail_fast` stops the capture through `AsyncDhcpListener.stop()`,
+    `hook_fail_fast` stops the capture through `AsyncDHCPListener.stop()`,
     which is not a coroutine and is called from that worker thread; it hands
     the close back to the event loop rather than touching it from off-thread.
     """
@@ -284,7 +284,7 @@ class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
         per_interface: _ty.Optional[bool] = None,
         max_queued: _ty.Optional[int] = None,
     ) -> None:
-        AsyncDhcpListener.__init__(
+        AsyncDHCPListener.__init__(
             self,
             listen=listen,
             max_packet_size=max_packet_size,
@@ -298,10 +298,10 @@ class AsyncDhcpCapture(AsyncDhcpListener, DhcpCapture):  # type: ignore[misc]
             hook_fail_fast=hook_fail_fast,
         )
 
-    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
-        # Both bases define handle() and AsyncDhcpListener's no-op comes first
+    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
+        # Both bases define handle() and AsyncDHCPListener's no-op comes first
         # in the MRO; without this the capture would record nothing.
-        DhcpCapture.handle(self, msg, context)
+        DHCPCapture.handle(self, msg, context)
 
 
 def _sanitize_filename_value(value: str) -> str:
@@ -324,7 +324,7 @@ def _compile_clause(key: str, value: str) -> CapturePredicate:
         xid = _filter_int(key, value, base=0)
         return lambda event: event.message.xid == xid
     if key == "client_id":
-        # `DhcpMessage.client_id()` always returns colon-separated hex, so
+        # `DHCPMessage.client_id()` always returns colon-separated hex, so
         # stripping separators cannot corrupt a free-form identifier -- while
         # `pydhcp interfaces` prints hardware addresses uppercase-hyphenated
         # (`MACAddress.__str__`, e.g. 68-F7-D8-E5-1E-83), which was the one form
@@ -355,7 +355,7 @@ def _compile_clause(key: str, value: str) -> CapturePredicate:
         option_key = key[len("option.") :]
         if not option_key.isdigit():
             try:
-                DhcpOptionCode[option_key]
+                DHCPOptionCode[option_key]
             except KeyError:
                 raise ValueError(
                     f"Unsupported DHCP option filter key: {key!r}"
@@ -386,17 +386,17 @@ def _filter_ip(key: str, value: str) -> _net.IPv4:
         ) from None
 
 
-def _option_value(message: DhcpMessage, key: str) -> _ty.Optional[str]:
-    raw_code: int | DhcpOptionCode
+def _option_value(message: DHCPMessage, key: str) -> _ty.Optional[str]:
+    raw_code: int | DHCPOptionCode
     if key.isdigit():
         raw_code = int(key)
     else:
-        raw_code = DhcpOptionCode[key]
+        raw_code = DHCPOptionCode[key]
     value = message.options.get(raw_code)
     if value is None:
         return None
     if isinstance(value, _enum_base.Enum):
         return value.name
-    if isinstance(value, DhcpOptionType):
+    if isinstance(value, DHCPOptionType):
         return str(value.__json__())
     return str(value)

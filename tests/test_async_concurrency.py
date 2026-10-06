@@ -3,19 +3,19 @@ from __future__ import annotations
 import asyncio
 import socket
 import time
-from pydhcp import AsyncDhcpServer, DhcpMessage, DhcpOptions
+from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPOptions
 from pydhcp.options.type import IPv4Address
-from pydhcp.packet import DhcpMessageType
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet import DHCPMessageType
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
 from conftest import build_request
 
 
-class MockAsyncServerForConcurrency(AsyncDhcpServer):
+class MockAsyncServerForConcurrency(AsyncDHCPServer):
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=IPv4Address)
+        requested_ip = msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=IPv4Address)
         ip = requested_ip if requested_ip else IPv4("127.0.0.1")
-        options = DhcpOptions()
+        options = DHCPOptions()
         return self.lease_backend.allocate(client_id, ip, 3600, options)
 
 
@@ -42,9 +42,9 @@ async def run_client(client_id_int: int, server_port: int):
     assert protocol.transport is not None
 
     # 1. Send DISCOVER
-    opts = DhcpOptions()
-    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    opts[DhcpOptionCode.CLIENT_IDENTIFIER] = mac
+    opts = DHCPOptions()
+    opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    opts[DHCPOptionCode.CLIENT_IDENTIFIER] = mac
 
     discover = build_request(options=opts, xid=1000 + client_id_int, chaddr=mac)
 
@@ -53,24 +53,24 @@ async def run_client(client_id_int: int, server_port: int):
 
     # Recv OFFER
     data, addr = await asyncio.wait_for(protocol.queue.get(), timeout=10.0)
-    offer = DhcpMessage.decode(data)
+    offer = DHCPMessage.decode(data)
     assert (
-        offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+        offer.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPOFFER
     )
 
     # 2. Send REQUEST
-    req_opts = DhcpOptions()
-    req_opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPREQUEST
-    req_opts[DhcpOptionCode.REQUESTED_IP] = offer.yiaddr
-    req_opts[DhcpOptionCode.CLIENT_IDENTIFIER] = mac
+    req_opts = DHCPOptions()
+    req_opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPREQUEST
+    req_opts[DHCPOptionCode.REQUESTED_IP] = offer.yiaddr
+    req_opts[DHCPOptionCode.CLIENT_IDENTIFIER] = mac
 
     request = build_request(options=req_opts, xid=2000 + client_id_int, chaddr=mac)
     protocol.transport.sendto(request.encode(), ("127.0.0.1", server_port))
 
     # Recv ACK
     data, addr = await asyncio.wait_for(protocol.queue.get(), timeout=10.0)
-    ack = DhcpMessage.decode(data)
-    assert ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+    ack = DHCPMessage.decode(data)
+    assert ack.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
     latency = time.perf_counter() - start_time
 
     transport.close()

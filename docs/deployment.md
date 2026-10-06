@@ -10,7 +10,7 @@
 4. Pass `--lease-file /var/lib/pydhcp/leases.json` if you need stable client
    assignment across restarts. Without it the server keeps leases in memory
    only, and every client renumbers when the process restarts.
-5. Implement address-pool policy in a `DhcpServer` subclass or custom lease backend before serving a real network.
+5. Implement address-pool policy in a `DHCPServer` subclass or custom lease backend before serving a real network.
 
 The built-in server is a base implementation, not a full IPAM system. It is useful for
 simple deployments, tests, and custom services, but production pools, reservations, and

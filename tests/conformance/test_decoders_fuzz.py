@@ -12,7 +12,7 @@ import typing as _ty
 
 import pytest
 
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.options import type as t
 
 SEEDS = [
@@ -35,7 +35,7 @@ SEEDS = [
 def _codecs() -> "list[type]":
     found: "dict[type, None]" = {}
     for code in range(1, 255):
-        found[DhcpOptionCode(code).get_type()] = None
+        found[DHCPOptionCode(code).get_type()] = None
     # Opt-in codecs the registry does not bind.
     for extra in (t.UserClass, t.EncapsulatedOptions, t.DomainName):
         found[extra] = None

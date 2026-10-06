@@ -4,27 +4,27 @@ import pytest
 import ipaddress
 from unittest.mock import Mock
 from pydhcp import (
-    DhcpServer,
-    DhcpMessage,
-    DhcpOptions,
-    RequestContext,
+    DHCPServer,
+    DHCPMessage,
+    DHCPOptions,
+    DHCPRequestContext,
     NetworkInterface,
 )
-from pydhcp.packet import DhcpMessageType, Flags, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import SocketAddress, IPv4
 from conftest import FixedLeaseServer, build_request, running
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 
 
-class MockDhcpServer(FixedLeaseServer):
+class MockDHCPServer(FixedLeaseServer):
     LEASE_SECONDS = 10
 
 
 @pytest.fixture
 def run_dora_server():
-    with running(MockDhcpServer(listen=[("127.0.0.1", 0)])) as server:
+    with running(MockDHCPServer(listen=[("127.0.0.1", 0)])) as server:
         yield server
 
 
@@ -36,27 +36,27 @@ def test_dora_sequence(run_dora_server):
 
     try:
         # 1. Send DISCOVER
-        opts = DhcpOptions()
-        opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+        opts = DHCPOptions()
+        opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
         discover = build_request(options=opts, chaddr=CHADDR)
         client.sendto(discover.encode(), ("127.0.0.1", server_port))
 
         # 2. Recv OFFER
         data, addr = client.recvfrom(2048)
-        offer = DhcpMessage.decode(data)
-        assert offer.op == OpCode.BOOTREPLY
+        offer = DHCPMessage.decode(data)
+        assert offer.op == DHCPOpcode.BOOTREPLY
         assert (
-            offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-            == DhcpMessageType.DHCPOFFER
+            offer.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+            == DHCPMessageType.DHCPOFFER
         )
         assert offer.yiaddr == IPv4("127.0.0.1")
 
         # 3. Send REQUEST
-        req_opts = DhcpOptions()
-        req_opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPREQUEST
-        req_opts[DhcpOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
-        req_opts[DhcpOptionCode.SERVER_IDENTIFIER] = offer.options.get(
-            DhcpOptionCode.SERVER_IDENTIFIER
+        req_opts = DHCPOptions()
+        req_opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPREQUEST
+        req_opts[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
+        req_opts[DHCPOptionCode.SERVER_IDENTIFIER] = offer.options.get(
+            DHCPOptionCode.SERVER_IDENTIFIER
         )
 
         request = build_request(options=req_opts, chaddr=CHADDR)
@@ -64,10 +64,10 @@ def test_dora_sequence(run_dora_server):
 
         # 4. Recv ACK
         data, addr = client.recvfrom(2048)
-        ack = DhcpMessage.decode(data)
-        assert ack.op == OpCode.BOOTREPLY
+        ack = DHCPMessage.decode(data)
+        assert ack.op == DHCPOpcode.BOOTREPLY
         assert (
-            ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+            ack.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
         )
         assert ack.yiaddr == IPv4("127.0.0.1")
 
@@ -78,12 +78,12 @@ def test_dora_sequence(run_dora_server):
 
 
 def test_routing_rfc2131():
-    server = MockDhcpServer()
+    server = MockDHCPServer()
     transport_mock = Mock()
     interface = NetworkInterface(
         "eth0", ipaddress.IPv4Interface(("127.0.0.1", 24)), None
     )
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=transport_mock,
         interface=interface,
         client=SocketAddress("127.0.0.1", 68),
@@ -91,8 +91,8 @@ def test_routing_rfc2131():
     )
 
     # Test case 1: giaddr set (should send to giaddr on port 67)
-    opts = DhcpOptions()
-    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    opts = DHCPOptions()
+    opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     msg = build_request(options=opts, giaddr=IPv4("192.168.1.1"), chaddr=CHADDR)
 
     server.handle(msg, context)
@@ -114,7 +114,7 @@ def test_routing_rfc2131():
     # Test case 3: broadcast flag set (should send to 255.255.255.255 on port 68)
     transport_mock.reset_mock()
     msg.ciaddr = IPv4("0.0.0.0")
-    msg.flags = Flags.BROADCAST
+    msg.flags = DHCPFlags.BROADCAST
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("255.255.255.255")
@@ -122,25 +122,25 @@ def test_routing_rfc2131():
 
 
 def test_relay_agent_information_echoed_in_reply():
-    from pydhcp.packet.message import DhcpMessage as _DhcpMessage
+    from pydhcp.packet.message import DHCPMessage as _DHCPMessage
     from pydhcp.options.type import RelayAgentInformation, TlvOption
 
-    server = MockDhcpServer()
+    server = MockDHCPServer()
     transport_mock = Mock()
     interface = NetworkInterface(
         "eth0", ipaddress.IPv4Interface(("127.0.0.1", 24)), None
     )
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=transport_mock,
         interface=interface,
         client=SocketAddress("127.0.0.1", 68),
         client_mac=b"\x11\x22\x33\x44\x55\x66",
     )
 
-    opts = DhcpOptions()
-    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    opts = DHCPOptions()
+    opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     relay_info = RelayAgentInformation([TlvOption(1, b"circuit-id")])
-    opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = relay_info
+    opts[DHCPOptionCode.RELAY_AGENT_INFORMATION] = relay_info
     msg = build_request(options=opts, giaddr=IPv4("192.168.1.1"), chaddr=CHADDR)
 
     server.handle(msg, context)
@@ -148,14 +148,14 @@ def test_relay_agent_information_echoed_in_reply():
     assert args[1] == IPv4("192.168.1.1")
     assert args[2] == 67
 
-    reply = _DhcpMessage.decode(memoryview(args[0]))
+    reply = _DHCPMessage.decode(memoryview(args[0]))
     replied_relay_info = reply.options.get(
-        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+        DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
     )
     assert replied_relay_info == relay_info
 
 
-class MockDhcpServerWithBackend(DhcpServer):
+class MockDHCPServerWithBackend(DHCPServer):
     DEFAULT_PORTS = (6767,)
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
@@ -164,7 +164,7 @@ class MockDhcpServerWithBackend(DhcpServer):
         existing = self.lease_backend.lookup(client_id)
         if existing:
             requested_ttl = msg.options.get(
-                DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=U32
+                DHCPOptionCode.IP_ADDRESS_LEASE_TIME, decode=U32
             )
             ttl = int(requested_ttl) if requested_ttl is not None else 3600
             renewed = self.lease_backend.renew(client_id, ttl)
@@ -172,17 +172,17 @@ class MockDhcpServerWithBackend(DhcpServer):
                 return renewed
             return existing
 
-        requested_ip = msg.options.get(DhcpOptionCode.REQUESTED_IP, decode=IPv4Address)
+        requested_ip = msg.options.get(DHCPOptionCode.REQUESTED_IP, decode=IPv4Address)
         requested_ttl = msg.options.get(
-            DhcpOptionCode.IP_ADDRESS_LEASE_TIME, decode=U32
+            DHCPOptionCode.IP_ADDRESS_LEASE_TIME, decode=U32
         )
         ttl = int(requested_ttl) if requested_ttl is not None else 3600
 
         ip = requested_ip if requested_ip else IPv4("127.0.0.1")
-        options = DhcpOptions()
-        options[DhcpOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
-        options[DhcpOptionCode.ROUTER] = [server_id]
-        options[DhcpOptionCode.DNS] = [server_id]
+        options = DHCPOptions()
+        options[DHCPOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
+        options[DHCPOptionCode.ROUTER] = [server_id]
+        options[DHCPOptionCode.DNS] = [server_id]
 
         return self.lease_backend.allocate(client_id, ip, ttl, options)
 
@@ -192,7 +192,7 @@ def test_dora_with_lease_persistence(tmp_path):
 
     filepath = str(tmp_path / "dora_leases.json")
     backend = FileLeaseBackend(filepath=filepath)
-    server = MockDhcpServerWithBackend(listen=[("127.0.0.1", 0)], lease_backend=backend)
+    server = MockDHCPServerWithBackend(listen=[("127.0.0.1", 0)], lease_backend=backend)
 
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
@@ -202,19 +202,19 @@ def test_dora_with_lease_persistence(tmp_path):
         server_port = server.bound_addresses[0].port
 
         # 1. Send DISCOVER
-        opts = DhcpOptions()
-        opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-        opts[DhcpOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
+        opts = DHCPOptions()
+        opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+        opts[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
         discover = build_request(options=opts, chaddr=CHADDR)
         client.sendto(discover.encode(), ("127.0.0.1", server_port))
 
         # 2. Recv OFFER
         data, addr = client.recvfrom(2048)
-        offer = DhcpMessage.decode(data)
-        assert offer.op == OpCode.BOOTREPLY
+        offer = DHCPMessage.decode(data)
+        assert offer.op == DHCPOpcode.BOOTREPLY
         assert (
-            offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-            == DhcpMessageType.DHCPOFFER
+            offer.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+            == DHCPMessageType.DHCPOFFER
         )
         assert offer.yiaddr == IPv4("127.0.0.1")
 
@@ -225,11 +225,11 @@ def test_dora_with_lease_persistence(tmp_path):
         assert lease.ip == IPv4("127.0.0.1")
 
         # 3. Send REQUEST
-        req_opts = DhcpOptions()
-        req_opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPREQUEST
-        req_opts[DhcpOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
-        req_opts[DhcpOptionCode.SERVER_IDENTIFIER] = offer.options.get(
-            DhcpOptionCode.SERVER_IDENTIFIER
+        req_opts = DHCPOptions()
+        req_opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPREQUEST
+        req_opts[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.1")
+        req_opts[DHCPOptionCode.SERVER_IDENTIFIER] = offer.options.get(
+            DHCPOptionCode.SERVER_IDENTIFIER
         )
 
         request = build_request(options=req_opts, chaddr=CHADDR)
@@ -237,10 +237,10 @@ def test_dora_with_lease_persistence(tmp_path):
 
         # 4. Recv ACK
         data, addr = client.recvfrom(2048)
-        ack = DhcpMessage.decode(data)
-        assert ack.op == OpCode.BOOTREPLY
+        ack = DHCPMessage.decode(data)
+        assert ack.op == DHCPOpcode.BOOTREPLY
         assert (
-            ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPACK
+            ack.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
         )
         assert ack.yiaddr == IPv4("127.0.0.1")
 

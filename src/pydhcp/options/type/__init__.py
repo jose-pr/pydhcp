@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from .base import (
-    DhcpOptionType as DhcpOptionType,
+    DHCPOptionType as DHCPOptionType,
     List as List,
     RecordList as RecordList,
-    DhcpOptionCodes as DhcpOptionCodes,
+    DHCPOptionCodes as DHCPOptionCodes,
 )
 
 # The submodule order below is alphabetical and carries no meaning. It used to
@@ -90,10 +90,10 @@ from .vendor import (
 )
 
 __all__ = [
-    "DhcpOptionType",
+    "DHCPOptionType",
     "List",
     "RecordList",
-    "DhcpOptionCodes",
+    "DHCPOptionCodes",
     "IPv4Address",
     "ClasslessRoute",
     "PolicyFilter",

@@ -3,7 +3,7 @@ import enum as _enum
 import typing as _ty
 
 from ..exceptions import DHCPDecodeError
-from ..options.type import DhcpOptionType
+from ..options.type import DHCPOptionType
 
 # `htype` is a message-header field, so this is its documented home and stays
 # part of `pydhcp.packet`'s surface -- but the enum itself lives in
@@ -14,24 +14,24 @@ from ..options.type import DhcpOptionType
 from ..network import HardwareAddressType as HardwareAddressType
 
 __all__ = [
-    "DhcpMessageType",
-    "OpCode",
-    "DhcpPort",
-    "Flags",
+    "DHCPMessageType",
+    "DHCPOpcode",
+    "DHCPPort",
+    "DHCPFlags",
     "HardwareAddressType",
 ]
 
 
-_DhcpMessageTypeT = _ty.TypeVar("_DhcpMessageTypeT", bound="DhcpMessageType")
+_DHCPMessageTypeT = _ty.TypeVar("_DHCPMessageTypeT", bound="DHCPMessageType")
 
 
-class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
+class DHCPMessageType(DHCPOptionType, _enum.IntEnum):
     """DHCP message types"""
 
     @classmethod
     def _dhcp_read(
-        cls: type[_DhcpMessageTypeT], option: memoryview
-    ) -> tuple[_DhcpMessageTypeT, int]:
+        cls: type[_DHCPMessageTypeT], option: memoryview
+    ) -> tuple[_DHCPMessageTypeT, int]:
         option_part = option[:1]
         if len(option_part) != 1:
             raise DHCPDecodeError(
@@ -114,7 +114,7 @@ class DhcpMessageType(DhcpOptionType, _enum.IntEnum):
     DHCPTLS = 18
 
 
-class OpCode(_enum.IntEnum):
+class DHCPOpcode(_enum.IntEnum):
     """Specifies if the message originates from a server or client"""
 
     BOOTREQUEST = 1
@@ -123,12 +123,12 @@ class OpCode(_enum.IntEnum):
     """DHCP message sent from a server to a client."""
 
 
-class DhcpPort(_enum.IntEnum):
+class DHCPPort(_enum.IntEnum):
     SERVER = 67
     CLIENT = 68
 
 
-class Flags(_enum.Flag):
+class DHCPFlags(_enum.Flag):
     UNICAST = 0
     BROADCAST = 1 << 15
     """Set by client that cant listen to unicast response as it doesnt have an ip yet"""

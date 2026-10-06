@@ -12,7 +12,7 @@ import pathlib
 import signal
 import threading
 
-from pydhcp import AsyncDhcpRelay, DhcpRelay
+from pydhcp import AsyncDHCPRelay, DHCPRelay
 
 parser = argparse.ArgumentParser()
 parser.add_argument("server")
@@ -37,7 +37,7 @@ def report(relay) -> None:
 
 
 async def run_async() -> None:
-    relay = AsyncDhcpRelay(**options)
+    relay = AsyncDHCPRelay(**options)
     done = asyncio.Event()
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, done.set)
     await relay.start()
@@ -50,7 +50,7 @@ async def run_async() -> None:
 
 
 def run_sync() -> None:
-    relay = DhcpRelay(**options)
+    relay = DHCPRelay(**options)
     done = threading.Event()
     signal.signal(signal.SIGTERM, lambda *_: done.set())
     relay.start()

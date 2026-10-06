@@ -8,9 +8,9 @@ hypothesis = pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, given, settings, strategies as st
 
 from pydhcp.network import IPv4, IPv4Network
-from pydhcp.options import DhcpOptionCode, DhcpOptions
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.packet.message import DhcpMessage
+from pydhcp.options import DHCPOptionCode, DHCPOptions
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.packet.message import DHCPMessage
 from pydhcp.options.type import (
     U8,
     U16,
@@ -233,35 +233,35 @@ def _nvt_field(max_octets: int):
 
 
 @st.composite
-def _option_bags(draw) -> DhcpOptions:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = draw(st.sampled_from(DhcpMessageType))
-    options[DhcpOptionCode.SUBNET_MASK] = IPv4(draw(_ADDRESS))
-    options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = draw(st.integers(0, 0xFFFFFFFF))
+def _option_bags(draw) -> DHCPOptions:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = draw(st.sampled_from(DHCPMessageType))
+    options[DHCPOptionCode.SUBNET_MASK] = IPv4(draw(_ADDRESS))
+    options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = draw(st.integers(0, 0xFFFFFFFF))
     routers = draw(st.lists(_ADDRESS, max_size=16))
     if routers:
-        options[DhcpOptionCode.ROUTER] = routers
+        options[DHCPOptionCode.ROUTER] = routers
     hostname = draw(_nvt_field(60))
     if hostname:
-        options[DhcpOptionCode.HOSTNAME] = hostname
+        options[DHCPOptionCode.HOSTNAME] = hostname
     search = draw(st.lists(_domains(), max_size=3))
     if search:
-        options[DhcpOptionCode.DOMAIN_SEARCH] = search
+        options[DHCPOptionCode.DOMAIN_SEARCH] = search
     vendor = draw(
         st.one_of(st.binary(max_size=16), st.binary(min_size=40, max_size=64))
     )
     if vendor:
-        options[DhcpOptionCode.VENDOR_SPECIFIC_INFORMATION] = vendor
+        options[DHCPOptionCode.VENDOR_SPECIFIC_INFORMATION] = vendor
     return options
 
 
 @given(_option_bags())
-def test_option_bag_round_trip(options: DhcpOptions) -> None:
+def test_option_bag_round_trip(options: DHCPOptions) -> None:
     """A bag of options survives its own wire form, payloads and order alike."""
     encoded = options.encode()
     assert encoded[-1] == 255
 
-    decoded = DhcpOptions()
+    decoded = DHCPOptions()
     decoded.decode(memoryview(encoded))
 
     assert list(decoded.items(decoded=False)) == list(options.items(decoded=False))
@@ -269,10 +269,10 @@ def test_option_bag_round_trip(options: DhcpOptions) -> None:
 
 
 @st.composite
-def _messages(draw) -> DhcpMessage:
+def _messages(draw) -> DHCPMessage:
     chaddr = draw(st.binary(min_size=0, max_size=16))
-    return DhcpMessage(
-        op=draw(st.sampled_from([OpCode.BOOTREQUEST, OpCode.BOOTREPLY])),
+    return DHCPMessage(
+        op=draw(st.sampled_from([DHCPOpcode.BOOTREQUEST, DHCPOpcode.BOOTREPLY])),
         htype=HardwareAddressType.ETHERNET,
         hlen=len(chaddr),
         hops=draw(st.integers(0, 255)),
@@ -281,7 +281,7 @@ def _messages(draw) -> DhcpMessage:
         # rather than wrapping, so a larger value is a deliberate clamp and not
         # a round trip to assert.
         secs=timedelta(seconds=draw(st.integers(0, 0xFFFF))),
-        flags=draw(st.sampled_from([Flags.UNICAST, Flags.BROADCAST])),
+        flags=draw(st.sampled_from([DHCPFlags.UNICAST, DHCPFlags.BROADCAST])),
         ciaddr=IPv4(draw(_ADDRESS)),
         yiaddr=IPv4(draw(_ADDRESS)),
         siaddr=IPv4(draw(_ADDRESS)),
@@ -295,7 +295,7 @@ def _messages(draw) -> DhcpMessage:
 
 
 @given(_messages())
-def test_dhcp_message_round_trip(message: DhcpMessage) -> None:
+def test_dhcp_message_round_trip(message: DHCPMessage) -> None:
     """A whole packet survives `encode()` -> `decode()` -> `encode()`.
 
     Nothing in this module reached the message layer, so the fixed header, the
@@ -304,7 +304,7 @@ def test_dhcp_message_round_trip(message: DhcpMessage) -> None:
     hand-written examples in test_message.py.
     """
     encoded = message.encode()
-    restored = DhcpMessage.decode(encoded)
+    restored = DHCPMessage.decode(encoded)
 
     # The decoded view of every header field and every option.
     assert restored.to_mapping() == message.to_mapping()

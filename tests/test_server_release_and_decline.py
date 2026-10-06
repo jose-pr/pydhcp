@@ -5,12 +5,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from pydhcp import DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContext
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType
-from pydhcp.server import DhcpServer
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType
+from pydhcp.server import DHCPServer
 from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
@@ -19,22 +19,22 @@ IFACE_B = ipaddress.IPv4Interface("10.0.0.2/24")
 
 
 def _message(
-    message_type: DhcpMessageType,
+    message_type: DHCPMessageType,
     ciaddr: str = "0.0.0.0",
     server_id: "IPv4 | None" = None,
     requested_ip: "IPv4 | None" = None,
-) -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
+) -> DHCPMessage:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = message_type
     if server_id is not None:
-        options[DhcpOptionCode.SERVER_IDENTIFIER] = server_id
+        options[DHCPOptionCode.SERVER_IDENTIFIER] = server_id
     if requested_ip is not None:
-        options[DhcpOptionCode.REQUESTED_IP] = requested_ip
+        options[DHCPOptionCode.REQUESTED_IP] = requested_ip
     return build_request(options=options, ciaddr=IPv4(ciaddr))
 
 
-def _context(interface: ipaddress.IPv4Interface) -> RequestContext:
-    return RequestContext(
+def _context(interface: ipaddress.IPv4Interface) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=Mock(send=Mock(return_value=1)),
         interface=NetworkInterface("eth0", interface),
         client=SocketAddress("10.0.0.50", 68),
@@ -43,13 +43,13 @@ def _context(interface: ipaddress.IPv4Interface) -> RequestContext:
 
 
 @pytest.fixture
-def server() -> DhcpServer:
-    return DhcpServer(lease_backend=InMemoryLeaseBackend())
+def server() -> DHCPServer:
+    return DHCPServer(lease_backend=InMemoryLeaseBackend())
 
 
-def _seed(server: DhcpServer, ip: str = "10.0.0.50") -> str:
-    client_id = _message(DhcpMessageType.DHCPREQUEST).client_id()
-    server.lease_backend.allocate(client_id, IPv4(ip), 3600.0, DhcpOptions())
+def _seed(server: DHCPServer, ip: str = "10.0.0.50") -> str:
+    client_id = _message(DHCPMessageType.DHCPREQUEST).client_id()
+    server.lease_backend.allocate(client_id, IPv4(ip), 3600.0, DHCPOptions())
     return client_id
 
 
@@ -57,7 +57,7 @@ def test_release_naming_another_address_is_ignored(server) -> None:
     """A late RELEASE for an old address must not delete the current binding."""
     client_id = _seed(server, "10.0.0.50")
     server.handle_release(
-        _message(DhcpMessageType.DHCPRELEASE, ciaddr="10.0.0.99"), _context(IFACE_A)
+        _message(DHCPMessageType.DHCPRELEASE, ciaddr="10.0.0.99"), _context(IFACE_A)
     )
     assert server.lease_backend.lookup(client_id) is not None
     assert server.metrics.releases_ignored == 1
@@ -67,7 +67,7 @@ def test_release_naming_another_address_is_ignored(server) -> None:
 def test_release_for_the_held_address_still_works(server) -> None:
     client_id = _seed(server, "10.0.0.50")
     server.handle_release(
-        _message(DhcpMessageType.DHCPRELEASE, ciaddr="10.0.0.50"), _context(IFACE_A)
+        _message(DHCPMessageType.DHCPRELEASE, ciaddr="10.0.0.50"), _context(IFACE_A)
     )
     assert server.lease_backend.lookup(client_id) is None
     assert server.metrics.leases_released == 1
@@ -78,7 +78,7 @@ def test_decline_counts_as_a_decline_not_a_release(server) -> None:
     """A DECLINE means the address was already in use -- the opposite of a release."""
     _seed(server, "10.0.0.50")
     server.handle_decline(
-        _message(DhcpMessageType.DHCPDECLINE, requested_ip=IPv4("10.0.0.50")),
+        _message(DHCPMessageType.DHCPDECLINE, requested_ip=IPv4("10.0.0.50")),
         _context(IFACE_A),
     )
     assert server.metrics.leases_declined == 1
@@ -113,7 +113,7 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
     # The client selected address A; this is B's copy of the same broadcast.
     server.handle(
         _message(
-            DhcpMessageType.DHCPREQUEST,
+            DHCPMessageType.DHCPREQUEST,
             server_id=IPv4("10.0.0.1"),
             requested_ip=IPv4("10.0.0.50"),
         ),
@@ -153,7 +153,7 @@ def test_a_genuinely_foreign_server_id_still_reclaims(server, monkeypatch) -> No
 
     server.handle(
         _message(
-            DhcpMessageType.DHCPREQUEST,
+            DHCPMessageType.DHCPREQUEST,
             server_id=IPv4("192.0.2.77"),
             requested_ip=IPv4("10.0.0.50"),
         ),

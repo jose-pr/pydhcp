@@ -10,22 +10,22 @@ from datetime import timedelta
 
 import pytest
 
-from pydhcp import DhcpMessage, DhcpOptions
-from pydhcp.lease import DhcpLease, InMemoryLeaseBackend
+from pydhcp import DHCPMessage, DHCPOptions
+from pydhcp.lease import DHCPLease, InMemoryLeaseBackend
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType, OpCode
-from pydhcp.server import DhcpServer
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPOpcode
+from pydhcp.server import DHCPServer
 from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
 SERVER_ID = IPv4("10.0.0.1")
 
 
-def _request() -> DhcpMessage:
+def _request() -> DHCPMessage:
     """A request whose sender filled in fields that are not its to choose."""
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     return build_request(
         options=options,
         hops=3,
@@ -40,18 +40,18 @@ def _request() -> DhcpMessage:
 
 
 @pytest.fixture
-def server() -> DhcpServer:
-    return DhcpServer(lease_backend=InMemoryLeaseBackend())
+def server() -> DHCPServer:
+    return DHCPServer(lease_backend=InMemoryLeaseBackend())
 
 
 @pytest.fixture
-def lease() -> DhcpLease:
-    return DhcpLease(IPv4("10.0.0.50"), float("inf"), DhcpOptions())
+def lease() -> DHCPLease:
+    return DHCPLease(IPv4("10.0.0.50"), float("inf"), DHCPOptions())
 
 
 @pytest.mark.parametrize(
     "resp_ty",
-    [DhcpMessageType.DHCPOFFER, DhcpMessageType.DHCPACK, DhcpMessageType.DHCPNAK],
+    [DHCPMessageType.DHCPOFFER, DHCPMessageType.DHCPACK, DHCPMessageType.DHCPNAK],
 )
 def test_next_server_fields_are_never_the_clients(server, lease, resp_ty) -> None:
     """siaddr/sname/file name the next bootstrap server -- the server's choice.
@@ -69,7 +69,7 @@ def test_next_server_fields_are_never_the_clients(server, lease, resp_ty) -> Non
 def test_offer_carries_no_ciaddr(server, lease) -> None:
     """Table 3: ciaddr is 0 in a DHCPOFFER."""
     resp = server._create_response(
-        _request(), lease, SERVER_ID, DhcpMessageType.DHCPOFFER
+        _request(), lease, SERVER_ID, DHCPMessageType.DHCPOFFER
     )
     assert resp.ciaddr == IPv4("0.0.0.0")
 
@@ -82,14 +82,14 @@ def test_ack_still_echoes_ciaddr(server, lease) -> None:
     ciaddr and expects it back.
     """
     resp = server._create_response(
-        _request(), lease, SERVER_ID, DhcpMessageType.DHCPACK
+        _request(), lease, SERVER_ID, DHCPMessageType.DHCPACK
     )
     assert resp.ciaddr == IPv4("203.0.113.9")
 
 
 @pytest.mark.parametrize(
     "resp_ty",
-    [DhcpMessageType.DHCPOFFER, DhcpMessageType.DHCPACK, DhcpMessageType.DHCPNAK],
+    [DHCPMessageType.DHCPOFFER, DHCPMessageType.DHCPACK, DHCPMessageType.DHCPNAK],
 )
 def test_giaddr_is_echoed_so_a_relay_can_route_the_reply(
     server, lease, resp_ty
@@ -107,10 +107,10 @@ def test_giaddr_is_echoed_so_a_relay_can_route_the_reply(
 
 @pytest.mark.parametrize(
     "resp_ty",
-    [DhcpMessageType.DHCPOFFER, DhcpMessageType.DHCPACK, DhcpMessageType.DHCPNAK],
+    [DHCPMessageType.DHCPOFFER, DHCPMessageType.DHCPACK, DHCPMessageType.DHCPNAK],
 )
 def test_hops_and_secs_are_reset(server, lease, resp_ty) -> None:
     resp = server._create_response(_request(), lease, SERVER_ID, resp_ty)
     assert resp.hops == 0
     assert resp.secs == timedelta(0)
-    assert resp.op is OpCode.BOOTREPLY
+    assert resp.op is DHCPOpcode.BOOTREPLY

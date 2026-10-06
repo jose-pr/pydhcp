@@ -13,13 +13,13 @@ import pytest
 
 from pydhcp import config
 from pydhcp.network import SocketAddress
-from pydhcp.options import DhcpOptionCode, DhcpOptions
+from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.options.type import DomainList, OptionOverload
-from pydhcp.options.type.base import DhcpOptionCodes
+from pydhcp.options.type.base import DHCPOptionCodes
 from pydhcp.options.type.ccc import CccProvisioningServerAddress
 from pydhcp.options.type.addresses import IPv4Address
 from pydhcp.options.type.scalar import U32
-from pydhcp.packet import DhcpMessageType
+from pydhcp.packet import DHCPMessageType
 from pydhcp.packet import message as _message
 from pydhcp.packet import structured
 
@@ -36,11 +36,11 @@ def test_socket_address_without_a_port_explains_itself() -> None:
 
 def test_option_code_over_one_octet_names_the_value() -> None:
     # Reached only through a codemap whose constructor rejects the value:
-    # `DhcpOptionCode(256)` raises, so `_normalize` falls through to the
-    # one-octet range check. Measured, not assumed -- a `DhcpOptionCodes[int]`
+    # `DHCPOptionCode(256)` raises, so `_normalize` falls through to the
+    # one-octet range check. Measured, not assumed -- a `DHCPOptionCodes[int]`
     # returns early on `isinstance(256, int)` and never reaches the branch.
-    DhcpOptionCode.ensure_registered()
-    codes = DhcpOptionCodes[DhcpOptionCode]  # type: ignore[index]
+    DHCPOptionCode.ensure_registered()
+    codes = DHCPOptionCodes[DHCPOptionCode]  # type: ignore[index]
     with pytest.raises(ValueError) as exc:
         codes._normalize(256)
     assert "256" in _message_of(exc)
@@ -67,7 +67,7 @@ def test_option_overload_empty_payload_is_described() -> None:
 
 def test_message_type_empty_payload_is_described() -> None:
     with pytest.raises(ValueError) as exc:
-        DhcpMessageType._dhcp_read(memoryview(b""))
+        DHCPMessageType._dhcp_read(memoryview(b""))
     assert _message_of(exc).strip() != ""
 
 
@@ -101,7 +101,7 @@ def test_partial_encode_errors_name_the_offending_value(
 ) -> None:
     # Both sites were placeholder-free f-strings ("Invalid Options Word Size"),
     # which named the condition but never the value that tripped it.
-    options = DhcpOptions()
+    options = DHCPOptions()
     call = {"maxsize": 576, "word_size": 1}
     call.update(kwargs)  # type: ignore[arg-type]
     with pytest.raises(ValueError) as exc:

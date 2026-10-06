@@ -18,13 +18,13 @@ import time
 import pytest
 
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
-from pydhcp import DhcpServer
+from pydhcp import DHCPServer
 import netimps
 
-from pydhcp.listener import AsyncDhcpListener, DhcpListener, _pktinfo_supported
+from pydhcp.listener import AsyncDHCPListener, DHCPListener, _pktinfo_supported
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessage, DhcpMessageType
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessage, DHCPMessageType
 
 #: Where netimps documents packet info as supported. Anywhere else the tests
 #: that need it skip -- but here they must not, or a broken probe would switch
@@ -46,7 +46,7 @@ def test_packet_info_is_available_where_netimps_supports_it() -> None:
     )
 
 
-class _Recording(DhcpListener):
+class _Recording(DHCPListener):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.contexts: list = []
@@ -102,10 +102,10 @@ def test_every_wildcard_spelling_takes_the_packet_info_path(spec) -> None:
     skip packet info and expand into one socket per address -- which on Linux
     hears no broadcast DISCOVER at all."""
     assert _pktinfo_supported(spec, None), spec
-    assert DhcpListener(listen=spec)._pktinfo, spec
+    assert DHCPListener(listen=spec)._pktinfo, spec
 
 
-def _exchange_discover(server_port: int) -> "DhcpMessage | None":
+def _exchange_discover(server_port: int) -> "DHCPMessage | None":
     """Send one DISCOVER over loopback and return the reply, if any.
 
     The client is bound to the wildcard: over loopback the server unicasts the
@@ -116,14 +116,14 @@ def _exchange_discover(server_port: int) -> "DhcpMessage | None":
     client.bind(("0.0.0.0", 0))
     client.settimeout(2.0)
     try:
-        discover = build_request(DhcpMessageType.DHCPDISCOVER)
-        discover.options[DhcpOptionCode.REQUESTED_IP] = IPv4("127.0.0.50")
+        discover = build_request(DHCPMessageType.DHCPDISCOVER)
+        discover.options[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.50")
         client.sendto(discover.encode(), ("127.0.0.1", server_port))
         try:
             data, _ = client.recvfrom(4096)
         except socket.timeout:
             return None
-        return DhcpMessage.decode(data)
+        return DHCPMessage.decode(data)
     finally:
         client.close()
 
@@ -139,7 +139,7 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     it resolved a synthetic /32 interface with nothing in it to lease, and the
     server received the DISCOVER and stayed silent. Only an allocation and a
     reply prove the path works."""
-    server = DhcpServer(listen=spec, select_timeout=0.05)
+    server = DHCPServer(listen=spec, select_timeout=0.05)
     server.bind()
     port = server.bound_addresses[0].port
     thread = server.start()
@@ -152,10 +152,10 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
 
     assert server.metrics.leases_allocated == 1, server.metrics.snapshot()
     assert reply is not None, "the server allocated but no reply arrived"
-    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is (
-        DhcpMessageType.DHCPOFFER
+    assert reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is (
+        DHCPMessageType.DHCPOFFER
     )
-    assert reply.options.get(DhcpOptionCode.SERVER_IDENTIFIER) == IPv4("127.0.0.1")
+    assert reply.options.get(DHCPOptionCode.SERVER_IDENTIFIER) == IPv4("127.0.0.1")
 
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux semantics")
@@ -197,7 +197,7 @@ def test_the_async_listener_learns_where_a_datagram_arrived() -> None:
     `add_reader` does not exist and the old fallback could carry no packet
     info at all."""
 
-    class Recording(AsyncDhcpListener):
+    class Recording(AsyncDHCPListener):
         def __init__(self, *args, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.contexts: list = []

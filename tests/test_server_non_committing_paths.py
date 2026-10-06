@@ -12,12 +12,12 @@ from unittest.mock import Mock
 
 import pytest
 
-from pydhcp import DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContext
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType
-from pydhcp.server import DhcpServer
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType
+from pydhcp.server import DHCPServer
 from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
@@ -25,21 +25,21 @@ SERVED = ipaddress.IPv4Interface("10.0.0.1/24")
 
 
 def _message(
-    message_type: DhcpMessageType,
+    message_type: DHCPMessageType,
     requested_ip: "IPv4 | None" = None,
     lease_time: "int | None" = None,
-) -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
+) -> DHCPMessage:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = message_type
     if requested_ip is not None:
-        options[DhcpOptionCode.REQUESTED_IP] = requested_ip
+        options[DHCPOptionCode.REQUESTED_IP] = requested_ip
     if lease_time is not None:
-        options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = lease_time
+        options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = lease_time
     return build_request(options=options)
 
 
-def _context(transport: Mock) -> RequestContext:
-    return RequestContext(
+def _context(transport: Mock) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=transport,
         interface=NetworkInterface("eth0", SERVED),
         client=SocketAddress("10.0.0.50", 68),
@@ -47,7 +47,7 @@ def _context(transport: Mock) -> RequestContext:
     )
 
 
-class _ServedServer(DhcpServer):
+class _ServedServer(DHCPServer):
     """A server whose served interface is fixed, so no host config is needed.
 
     `acquire_lease` resolves the serving interface through
@@ -77,21 +77,21 @@ def backend() -> InMemoryLeaseBackend:
     return InMemoryLeaseBackend()
 
 
-def _client_id(msg: DhcpMessage) -> str:
+def _client_id(msg: DHCPMessage) -> str:
     return msg.client_id()
 
 
 def test_discover_does_not_extend_an_existing_lease(backend) -> None:
     """The measured repro: option 51 = 999999 on a DISCOVER moved expiry 12 days."""
     server = _ServedServer(backend)
-    seed = _message(DhcpMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
+    seed = _message(DHCPMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
     lease = server.acquire_lease(_client_id(seed), IPv4("10.0.0.1"), seed)
     assert lease is not None
     before = backend.lookup(_client_id(seed))
     assert before is not None
 
     renewed_before = server.metrics.leases_renewed
-    probe = _message(DhcpMessageType.DHCPDISCOVER, lease_time=999999)
+    probe = _message(DHCPMessageType.DHCPDISCOVER, lease_time=999999)
     server.handle_discover(probe, _context(Mock(send=Mock(return_value=1))))
 
     after = backend.lookup(_client_id(probe))
@@ -102,7 +102,7 @@ def test_discover_does_not_extend_an_existing_lease(backend) -> None:
 
 def test_a_naked_request_leaves_the_binding_untouched(backend) -> None:
     server = _ServedServer(backend)
-    seed = _message(DhcpMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
+    seed = _message(DHCPMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
     assert server.acquire_lease(_client_id(seed), IPv4("10.0.0.1"), seed) is not None
     before = backend.lookup(_client_id(seed))
     assert before is not None
@@ -110,7 +110,7 @@ def test_a_naked_request_leaves_the_binding_untouched(backend) -> None:
     transport = Mock(send=Mock(return_value=1))
     # Asking for a different address than the one held: this is NAKed.
     wrong = _message(
-        DhcpMessageType.DHCPREQUEST,
+        DHCPMessageType.DHCPREQUEST,
         requested_ip=IPv4("10.0.0.77"),
         lease_time=999999,
     )
@@ -125,14 +125,14 @@ def test_a_naked_request_leaves_the_binding_untouched(backend) -> None:
 def test_an_acked_request_still_commits_the_renewal(backend) -> None:
     """The other half: suppressing the probe must not stop a real renewal."""
     server = _ServedServer(backend)
-    seed = _message(DhcpMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
+    seed = _message(DHCPMessageType.DHCPREQUEST, requested_ip=IPv4("10.0.0.50"))
     assert server.acquire_lease(_client_id(seed), IPv4("10.0.0.1"), seed) is not None
     before = backend.lookup(_client_id(seed))
     assert before is not None
 
     renewed_before = server.metrics.leases_renewed
     good = _message(
-        DhcpMessageType.DHCPREQUEST,
+        DHCPMessageType.DHCPREQUEST,
         requested_ip=IPv4("10.0.0.50"),
         lease_time=7200,
     )

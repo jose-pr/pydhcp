@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp import DhcpRelay
+from pydhcp import DHCPRelay
 
 from ._topo import RELAY_CLIENT_SIDE_MAC, relayed, two_homed
 
@@ -201,7 +201,7 @@ def test_a_reply_leaves_by_the_clients_interface(lab):
 def test_a_reply_still_leaves_by_the_clients_interface_after_a_forged_flood(lab):
     # One request more than the relay remembers (the real client's is the
     # oldest entry), each from a different client.
-    tap_client, tap_server = _relayed_exchange(lab, DhcpRelay.MAX_PENDING_CLIENTS + 1)
+    tap_client, tap_server = _relayed_exchange(lab, DHCPRelay.MAX_PENDING_CLIENTS + 1)
 
     assert [f.src_mac for f in _offers(tap_client)] == [RELAY_CLIENT_SIDE_MAC]
     assert [f for f in _offers(tap_server) if f.src_ip == "10.98.0.1"] == []

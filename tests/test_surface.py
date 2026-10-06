@@ -12,10 +12,10 @@ import typing
 import pytest
 
 EXPECTED_ROOT = [
-    "AsyncDhcpCapture",
-    "AsyncDhcpListener",
-    "AsyncDhcpRelay",
-    "AsyncDhcpServer",
+    "AsyncDHCPCapture",
+    "AsyncDHCPListener",
+    "AsyncDHCPRelay",
+    "AsyncDHCPServer",
     "CaptureEvent",
     "CccApReqApRepBackoffRetry",
     "CccApReqApRepBackoffRetrySubOption",
@@ -42,21 +42,23 @@ EXPECTED_ROOT = [
     "CccTicketGrantingServerUtilizationSubOption",
     "ClasslessRoute",
     "ClientIdentifier",
+    "DHCPCapture",
+    "DHCPClient",
     "DHCPDecodeError",
     "DHCPError",
+    "DHCPLease",
+    "DHCPListener",
+    "DHCPMessage",
+    "DHCPOption",
+    "DHCPOptionCode",
+    "DHCPOptionCodes",
+    "DHCPOptionType",
+    "DHCPOptions",
+    "DHCPRelay",
+    "DHCPRequestContext",
+    "DHCPServer",
+    "DHCPTransport",
     "DHCPValueError",
-    "DhcpCapture",
-    "DhcpClient",
-    "DhcpLease",
-    "DhcpListener",
-    "DhcpMessage",
-    "DhcpOption",
-    "DhcpOptionCode",
-    "DhcpOptionCodes",
-    "DhcpOptionType",
-    "DhcpOptions",
-    "DhcpRelay",
-    "DhcpServer",
     "DomainList",
     "FileLeaseBackend",
     "IPv4",
@@ -72,19 +74,17 @@ EXPECTED_ROOT = [
     "NetworkInterface",
     "NoClientIdentityError",
     "OptionOverload",
-    "PktInfoUdpTransport",
+    "PktInfoUDPTransport",
     "PolicyFilter",
     "RdnssSelection",
     "RelayAgentInformation",
-    "RequestContext",
     "SocketAddress",
     "StaticRoute",
     "TlvOption",
-    "Transport",
     "U16",
     "U32",
     "U8",
-    "UdpTransport",
+    "UDPTransport",
     "UncompressedDomainList",
     "UriList",
     "UserClass",
@@ -120,17 +120,17 @@ EXPECTED_EXCEPTIONS = [
 ]
 
 EXPECTED_LISTENER = [
-    "AsyncDhcpListener",
+    "AsyncDHCPListener",
     "BROADCAST_ADDRESS",
-    "DhcpListener",
+    "DHCPListener",
+    "DHCPRequestContext",
+    "DHCPTransport",
     "ListenAddress",
     "ListenBinding",
     "ListenPort",
     "ListenSpec",
-    "PktInfoUdpTransport",
-    "RequestContext",
-    "Transport",
-    "UdpTransport",
+    "PktInfoUDPTransport",
+    "UDPTransport",
 ]
 
 EXPECTED_OPTIONS_TYPE = [
@@ -163,8 +163,8 @@ EXPECTED_OPTIONS_TYPE = [
     "ClasslessRoute",
     "ClientFqdn",
     "ClientIdentifier",
-    "DhcpOptionCodes",
-    "DhcpOptionType",
+    "DHCPOptionCodes",
+    "DHCPOptionType",
     "DomainList",
     "DomainName",
     "EncapsulatedOptions",
@@ -203,12 +203,12 @@ EXPECTED_OPTIONS_TYPE = [
 ]
 
 EXPECTED_PACKET = [
-    "DhcpMessage",
-    "DhcpMessageType",
-    "DhcpPort",
-    "Flags",
+    "DHCPFlags",
+    "DHCPMessage",
+    "DHCPMessageType",
+    "DHCPOpcode",
+    "DHCPPort",
     "HardwareAddressType",
-    "OpCode",
     "dump_mapping",
     "dump_message",
     "load_mapping",
@@ -216,20 +216,20 @@ EXPECTED_PACKET = [
 ]
 
 EXPECTED_PACKET_ENUMS = [
-    "DhcpMessageType",
-    "DhcpPort",
-    "Flags",
+    "DHCPFlags",
+    "DHCPMessageType",
+    "DHCPOpcode",
+    "DHCPPort",
     "HardwareAddressType",
-    "OpCode",
 ]
 
 EXPECTED_PACKET_MESSAGE = [
-    "DhcpMessage",
+    "DHCPMessage",
 ]
 
 EXPECTED_SERVER = [
-    "AsyncDhcpServer",
-    "DhcpServer",
+    "AsyncDHCPServer",
+    "DHCPServer",
 ]
 
 SURFACE = {

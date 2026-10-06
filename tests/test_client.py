@@ -6,22 +6,22 @@ from datetime import timedelta
 from unittest.mock import Mock
 
 from pydhcp import (
-    DhcpClient,
-    DhcpMessage,
-    DhcpOptions,
+    DHCPClient,
+    DHCPMessage,
+    DHCPOptions,
     NetworkInterface,
-    RequestContext,
+    DHCPRequestContext,
 )
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4, SocketAddress
 from conftest import FixedLeaseServer, running
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"
 
 
-def _context() -> RequestContext:
-    return RequestContext(
+def _context() -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/24")),
         client=SocketAddress("127.0.0.1", 67),
@@ -30,18 +30,18 @@ def _context() -> RequestContext:
 
 
 def _reply(
-    xid: int, message_type: DhcpMessageType = DhcpMessageType.DHCPOFFER
-) -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
-    return DhcpMessage(
-        op=OpCode.BOOTREPLY,
+    xid: int, message_type: DHCPMessageType = DHCPMessageType.DHCPOFFER
+) -> DHCPMessage:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = message_type
+    return DHCPMessage(
+        op=DHCPOpcode.BOOTREPLY,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=xid,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("192.0.2.10"),
         siaddr=IPv4("192.0.2.1"),
@@ -53,7 +53,7 @@ def _reply(
     )
 
 
-def _assert_round_trips(message: DhcpMessage, message_type: DhcpMessageType) -> None:
+def _assert_round_trips(message: DHCPMessage, message_type: DHCPMessageType) -> None:
     """Assert the *whole* message survives the wire, not three fields of it.
 
     Comparing only `op`, `chaddr` and the message type left everything else
@@ -62,26 +62,26 @@ def _assert_round_trips(message: DhcpMessage, message_type: DhcpMessageType) -> 
     five builder tests would still pass. `to_mapping()` is the full, decoded
     form of both header and options, so one comparison covers all of it.
     """
-    restored = DhcpMessage.decode(message.encode())
-    assert restored.op == OpCode.BOOTREQUEST
-    assert restored.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == message_type
+    restored = DHCPMessage.decode(message.encode())
+    assert restored.op == DHCPOpcode.BOOTREQUEST
+    assert restored.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == message_type
     assert restored.to_mapping() == message.to_mapping()
 
 
 def test_client_builds_standard_request_messages() -> None:
-    client = DhcpClient(listen=("127.0.0.1", 6768))
+    client = DHCPClient(listen=("127.0.0.1", 6768))
 
     discover = client.build_discover(
         CHADDR,
         xid=0x12345678,
         client_identifier=b"\x01" + CHADDR,
-        parameter_request_list=[DhcpOptionCode.SUBNET_MASK, DhcpOptionCode.ROUTER],
+        parameter_request_list=[DHCPOptionCode.SUBNET_MASK, DHCPOptionCode.ROUTER],
     )
-    assert discover.flags == Flags.BROADCAST
+    assert discover.flags == DHCPFlags.BROADCAST
     assert discover.options.get(
-        DhcpOptionCode.CLIENT_IDENTIFIER, decode=False
+        DHCPOptionCode.CLIENT_IDENTIFIER, decode=False
     ) == bytearray(b"\x01" + CHADDR)
-    _assert_round_trips(discover, DhcpMessageType.DHCPDISCOVER)
+    _assert_round_trips(discover, DHCPMessageType.DHCPDISCOVER)
 
     request = client.build_request(
         CHADDR,
@@ -89,32 +89,32 @@ def test_client_builds_standard_request_messages() -> None:
         requested_ip=IPv4("192.0.2.10"),
         server_identifier="192.0.2.1",
     )
-    assert request.options.get(DhcpOptionCode.REQUESTED_IP) == IPv4("192.0.2.10")
-    assert request.options.get(DhcpOptionCode.SERVER_IDENTIFIER) == IPv4("192.0.2.1")
-    _assert_round_trips(request, DhcpMessageType.DHCPREQUEST)
+    assert request.options.get(DHCPOptionCode.REQUESTED_IP) == IPv4("192.0.2.10")
+    assert request.options.get(DHCPOptionCode.SERVER_IDENTIFIER) == IPv4("192.0.2.1")
+    _assert_round_trips(request, DHCPMessageType.DHCPREQUEST)
 
     inform = client.build_inform(CHADDR, ciaddr="192.0.2.20", xid=0x1234567A)
     assert inform.ciaddr == IPv4("192.0.2.20")
-    assert DhcpOptionCode.REQUESTED_IP not in inform.options
-    _assert_round_trips(inform, DhcpMessageType.DHCPINFORM)
+    assert DHCPOptionCode.REQUESTED_IP not in inform.options
+    _assert_round_trips(inform, DHCPMessageType.DHCPINFORM)
 
     release = client.build_release(
         CHADDR, ciaddr="192.0.2.20", server_identifier="192.0.2.1"
     )
-    assert release.flags == Flags.UNICAST
-    _assert_round_trips(release, DhcpMessageType.DHCPRELEASE)
+    assert release.flags == DHCPFlags.UNICAST
+    _assert_round_trips(release, DHCPMessageType.DHCPRELEASE)
 
     decline = client.build_decline(
         CHADDR, requested_ip="192.0.2.30", server_identifier="192.0.2.1"
     )
-    assert decline.options.get(DhcpOptionCode.REQUESTED_IP) == IPv4("192.0.2.30")
-    _assert_round_trips(decline, DhcpMessageType.DHCPDECLINE)
+    assert decline.options.get(DHCPOptionCode.REQUESTED_IP) == IPv4("192.0.2.30")
+    _assert_round_trips(decline, DHCPMessageType.DHCPDECLINE)
 
 
 def test_client_queues_matching_bootreply() -> None:
     seen = []
 
-    class RecordingClient(DhcpClient):
+    class RecordingClient(DHCPClient):
         def on_reply(self, msg, context):
             seen.append((msg, context))
 
@@ -134,18 +134,18 @@ def test_client_queues_matching_bootreply() -> None:
 
 
 def test_client_send_uses_bound_udp_transport(monkeypatch) -> None:
-    client = DhcpClient(listen=("127.0.0.1", 6768))
+    client = DHCPClient(listen=("127.0.0.1", 6768))
     socket = object()
     client._sockets.append(socket)  # type: ignore[arg-type]
     transport = Mock()
     transport.send.return_value = 300
-    monkeypatch.setattr("pydhcp.client.UdpTransport", lambda sock: transport)
+    monkeypatch.setattr("pydhcp.client.UDPTransport", lambda sock: transport)
 
     message = client.build_discover(CHADDR, xid=0xCAFEBABE)
 
     assert client.send(message, destination="192.0.2.1", port=6767) == 300
     data, dest, port, mac = transport.send.call_args.args
-    assert DhcpMessage.decode(data).xid == 0xCAFEBABE
+    assert DHCPMessage.decode(data).xid == 0xCAFEBABE
     assert dest == IPv4("192.0.2.1")
     assert port == 6767
     assert mac == CHADDR
@@ -157,7 +157,7 @@ def test_client_dora_against_real_server() -> None:
     with running(server):
         server_port = server.bound_addresses[0].port
 
-        with running(DhcpClient(listen=("127.0.0.1", 0))) as client:
+        with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
             ack = client.dora(
                 CHADDR,
                 timeout=2.0,
@@ -168,8 +168,8 @@ def test_client_dora_against_real_server() -> None:
             )
             assert ack is not None
             assert (
-                ack.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-                == DhcpMessageType.DHCPACK
+                ack.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+                == DHCPMessageType.DHCPACK
             )
             assert ack.yiaddr == IPv4("127.0.0.1")
 
@@ -188,7 +188,7 @@ def test_client_discover_offer_receives_a_real_offer() -> None:
     with running(server):
         server_port = server.bound_addresses[0].port
 
-        with running(DhcpClient(listen=("127.0.0.1", 0))) as client:
+        with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
             offer = client.discover_offer(
                 CHADDR,
                 timeout=2.0,
@@ -200,12 +200,12 @@ def test_client_discover_offer_receives_a_real_offer() -> None:
 
     assert offer is not None
     assert (
-        offer.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) == DhcpMessageType.DHCPOFFER
+        offer.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPOFFER
     )
-    assert offer.op == OpCode.BOOTREPLY
+    assert offer.op == DHCPOpcode.BOOTREPLY
     assert offer.chaddr == CHADDR
     assert offer.yiaddr == IPv4("127.0.0.1")
-    assert offer.options.get(DhcpOptionCode.SERVER_IDENTIFIER) is not None
+    assert offer.options.get(DHCPOptionCode.SERVER_IDENTIFIER) is not None
     # Exchanges are cleaned up even on the success path.
     assert client._pending_keys == set()
 
@@ -223,7 +223,7 @@ def test_client_discover_offer_times_out_when_nothing_answers() -> None:
         silent.bind(("127.0.0.1", 0))
         silent_port = silent.getsockname()[1]
 
-        with running(DhcpClient(listen=("127.0.0.1", 0))) as client:
+        with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
             offer = client.discover_offer(
                 CHADDR,
                 timeout=0.2,
@@ -236,10 +236,10 @@ def test_client_discover_offer_times_out_when_nothing_answers() -> None:
         # The datagram really was sent and really did arrive -- otherwise the
         # None above would be the old tautology in a new costume.
         silent.settimeout(1.0)
-        received = DhcpMessage.decode(bytearray(silent.recv(2048)))
+        received = DHCPMessage.decode(bytearray(silent.recv(2048)))
         assert (
-            received.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-            == DhcpMessageType.DHCPDISCOVER
+            received.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+            == DHCPMessageType.DHCPDISCOVER
         )
     finally:
         silent.close()
@@ -252,17 +252,17 @@ def test_client_discover_offer_times_out_when_nothing_answers() -> None:
 
 
 def _canned_offer(xid, chaddr=CHADDR):
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPOFFER
-    options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("10.0.0.1")
-    return DhcpMessage(
-        op=OpCode.BOOTREPLY,
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPOFFER
+    options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4("10.0.0.1")
+    return DHCPMessage(
+        op=DHCPOpcode.BOOTREPLY,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=xid,
         secs=timedelta(0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("10.0.0.50"),
         siaddr=IPv4("0.0.0.0"),
@@ -274,7 +274,7 @@ def _canned_offer(xid, chaddr=CHADDR):
     )
 
 
-class _RecordingClient(DhcpClient):
+class _RecordingClient(DHCPClient):
     """Captures what would go on the wire; answers a DISCOVER with an OFFER."""
 
     def __init__(self, *args, offer_has_server_id=True, **kwargs):
@@ -285,12 +285,12 @@ class _RecordingClient(DhcpClient):
     def send(self, message, destination=IPv4("255.255.255.255"), port=67):
         self.sent.append(message)
         self._pending_keys.add(self._pending_key(message))
-        if message.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is (
-            DhcpMessageType.DHCPDISCOVER
+        if message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is (
+            DHCPMessageType.DHCPDISCOVER
         ):
             offer = _canned_offer(message.xid)
             if not self.offer_has_server_id:
-                del offer.options[int(DhcpOptionCode.SERVER_IDENTIFIER)]
+                del offer.options[int(DHCPOptionCode.SERVER_IDENTIFIER)]
             self.handle(offer, None)
         return 0
 
@@ -304,7 +304,7 @@ def test_dora_repeats_the_client_id_and_parameter_list_in_the_request():
     allocated separately.
     """
     cid = b"\xff\xde\xad\xbe\xef"
-    prl = [DhcpOptionCode.SUBNET_MASK, DhcpOptionCode.ROUTER]
+    prl = [DHCPOptionCode.SUBNET_MASK, DHCPOptionCode.ROUTER]
 
     client = _RecordingClient(listen=("127.0.0.1", 0))
     client.dora(
@@ -316,14 +316,14 @@ def test_dora_repeats_the_client_id_and_parameter_list_in_the_request():
     )
 
     assert len(client.sent) == 2, [
-        str(m.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)) for m in client.sent
+        str(m.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)) for m in client.sent
     ]
     discover, request = client.sent
-    assert request.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is (
-        DhcpMessageType.DHCPREQUEST
+    assert request.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is (
+        DHCPMessageType.DHCPREQUEST
     )
-    assert request.options.get(DhcpOptionCode.CLIENT_IDENTIFIER, decode=False) == cid
-    assert request.options.get(DhcpOptionCode.PARAMETER_REQUEST_LIST, decode=False)
+    assert request.options.get(DHCPOptionCode.CLIENT_IDENTIFIER, decode=False) == cid
+    assert request.options.get(DHCPOptionCode.PARAMETER_REQUEST_LIST, decode=False)
     # and the two messages are the same client as far as a server is concerned
     assert request.client_id() == discover.client_id()
 
@@ -337,8 +337,8 @@ def test_dora_refuses_an_offer_without_a_server_identifier():
     client = _RecordingClient(listen=("127.0.0.1", 0), offer_has_server_id=False)
 
     assert client.dora(CHADDR, timeout=0.2, retries=0) is None
-    types = [m.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) for m in client.sent]
-    assert DhcpMessageType.DHCPREQUEST not in types
+    types = [m.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) for m in client.sent]
+    assert DHCPMessageType.DHCPREQUEST not in types
 
 
 def test_client_reply_queue_is_bounded_and_counts_what_it_drops():
@@ -347,7 +347,7 @@ def test_client_reply_queue_is_bounded_and_counts_what_it_drops():
     That is deliberate, but it used to be an unbounded queue: on a busy segment
     with nobody calling drain_replies(), memory grew without limit.
     """
-    client = DhcpClient(listen=("127.0.0.1", 0))
+    client = DHCPClient(listen=("127.0.0.1", 0))
     context = Mock()
 
     for index in range(client.MAX_QUEUED_REPLIES + 50):
@@ -378,11 +378,11 @@ def test_pending_keys_do_not_accumulate_across_exchanges():
 
 def _canned_ack(xid, chaddr=CHADDR):
     ack = _canned_offer(xid, chaddr)
-    ack.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPACK
+    ack.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPACK
     return ack
 
 
-class _StubbedClockClient(DhcpClient):
+class _StubbedClockClient(DHCPClient):
     """A client whose clock only moves when the exchange waits.
 
     Nothing here sleeps. Backoff measured by living through it would cost the
@@ -407,10 +407,10 @@ class _StubbedClockClient(DhcpClient):
     def send(self, message, destination=IPv4("255.255.255.255"), port=67):
         self.secs_sent.append(int(message.secs.total_seconds()))
         self._pending_keys.add(self._pending_key(message))
-        message_type = message.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        if self.answer and message_type is DhcpMessageType.DHCPDISCOVER:
+        message_type = message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+        if self.answer and message_type is DHCPMessageType.DHCPDISCOVER:
             self.handle(_canned_offer(message.xid), None)
-        elif self.answer and message_type is DhcpMessageType.DHCPREQUEST:
+        elif self.answer and message_type is DHCPMessageType.DHCPREQUEST:
             self.handle(_canned_ack(message.xid), None)
         return 0
 
@@ -428,7 +428,7 @@ class _StubbedClockClient(DhcpClient):
                 msg, _context = waiter.get_nowait()
             except queue.Empty:
                 return None
-            if msg.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is msg_type:
+            if msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is msg_type:
                 return msg
 
 
@@ -466,7 +466,7 @@ def test_retransmission_interval_is_jittered_within_the_rfc_band():
     exists to break up. Both directions: a mode that only ever shortens the
     delay is not the RFC's.
     """
-    client = DhcpClient(listen=("127.0.0.1", 0))
+    client = DHCPClient(listen=("127.0.0.1", 0))
 
     draws = [next(client._retransmit_intervals(4.0, 0)) for _ in range(64)]
 
@@ -479,7 +479,7 @@ def test_retransmission_interval_is_capped_at_the_rfc_maximum():
     """§4.1: doubling continues "up to a maximum of 64 seconds", randomized
     around that maximum -- not clamped one-sidedly below it, which would
     re-synchronise backed-off clients exactly where they spend their time."""
-    client = DhcpClient(listen=("127.0.0.1", 0))
+    client = DHCPClient(listen=("127.0.0.1", 0))
 
     late = list(client._retransmit_intervals(2.0, 20))[6:]
 
@@ -494,7 +494,7 @@ def test_a_first_interval_above_the_cap_is_held_at_the_cap():
     The schedule is capped, so the first wait is the cap (randomized around it)
     rather than an error raised before anything is sent.
     """
-    client = DhcpClient(listen=("127.0.0.1", 0))
+    client = DHCPClient(listen=("127.0.0.1", 0))
 
     for timeout, retries in ((65.0, 1), (120.0, 0), (1000.0, 2)):
         waits = list(client._retransmit_intervals(timeout, retries))
@@ -504,7 +504,7 @@ def test_a_first_interval_above_the_cap_is_held_at_the_cap():
 
 
 def test_a_subclass_cap_below_the_timeout_is_honoured():
-    class Impatient(DhcpClient):
+    class Impatient(DHCPClient):
         RETRANSMIT_MAX_INTERVAL = 10.0
 
     waits = list(Impatient(listen=("127.0.0.1", 0))._retransmit_intervals(30.0, 1))
@@ -550,12 +550,12 @@ class _NakOnRequestClient(_StubbedClockClient):
     def send(self, message, destination=IPv4("255.255.255.255"), port=67):
         self.secs_sent.append(int(message.secs.total_seconds()))
         self._pending_keys.add(self._pending_key(message))
-        message_type = message.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE)
-        if message_type is DhcpMessageType.DHCPDISCOVER:
+        message_type = message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+        if message_type is DHCPMessageType.DHCPDISCOVER:
             self.handle(_canned_offer(message.xid), None)
-        elif message_type is DhcpMessageType.DHCPREQUEST:
+        elif message_type is DHCPMessageType.DHCPREQUEST:
             nak = _canned_offer(message.xid)
-            nak.options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPNAK
+            nak.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPNAK
             self.naks_delivered += 1
             self.handle(nak, None)
         return 0
@@ -592,12 +592,12 @@ def test_handle_ignores_a_bootrequest():
     arrives here too. Queued as replies they would be handed to `on_reply` and
     to any waiting exchange whose (xid, chaddr) they happened to match.
     """
-    client = DhcpClient(listen=("127.0.0.1", 0))
-    seen: list[DhcpMessage] = []
+    client = DHCPClient(listen=("127.0.0.1", 0))
+    seen: list[DHCPMessage] = []
     client.on_reply = lambda msg, context: seen.append(msg)  # type: ignore[method-assign]
 
     request = _canned_offer(0xAABBCCDD)
-    request.op = OpCode.BOOTREQUEST
+    request.op = DHCPOpcode.BOOTREQUEST
     client.handle(request, _context())
 
     assert client.next_reply(timeout=0) is None
@@ -606,7 +606,7 @@ def test_handle_ignores_a_bootrequest():
 
     # The very same message as a reply is accepted, so the rejection above is
     # the `op` check and not some other mismatch.
-    request.op = OpCode.BOOTREPLY
+    request.op = DHCPOpcode.BOOTREPLY
     client.handle(request, _context())
     assert seen == [request]
 
@@ -621,9 +621,9 @@ def test_reply_with_a_foreign_chaddr_is_ignored():
 
     Measured: 'foreign-chaddr reply queued: True'. The xid is in cleartext in a
     broadcast DISCOVER, so any host on the segment can read one and answer it —
-    the same reasoning as `DhcpRelay._pending_key`.
+    the same reasoning as `DHCPRelay._pending_key`.
     """
-    client = DhcpClient(listen=("127.0.0.1", 0))
+    client = DHCPClient(listen=("127.0.0.1", 0))
     client._pending_keys.add((0xAABBCCDD, CHADDR))
     context = _context()
 
@@ -646,7 +646,7 @@ def test_concurrent_exchanges_each_receive_their_own_reply():
     started = {CHADDR: threading.Event(), OTHER_CHADDR: threading.Event()}
     results = {}
 
-    class _TwoExchangeClient(DhcpClient):
+    class _TwoExchangeClient(DHCPClient):
         def send(self, message, destination=IPv4("255.255.255.255"), port=67):
             self._pending_keys.add(self._pending_key(message))
             sent[message.chaddr] = message

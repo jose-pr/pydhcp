@@ -2,7 +2,7 @@
 
 `src/pydhcp/AGENTS.md` is the API header a consuming agent reads *instead of*
 the source, so a signature that drifts there is worse than an undocumented one:
-it is confidently wrong. It had collapsed the five `DhcpClient.build_*`
+it is confidently wrong. It had collapsed the five `DHCPClient.build_*`
 builders into a single signature that was wrong for three of them — it offered
 `broadcast` to builders that do not take it, and omitted the required
 keyword-only argument that each of those three does.
@@ -17,7 +17,7 @@ import re
 
 import pytest
 
-from pydhcp.client import DhcpClient
+from pydhcp.client import DHCPClient
 
 HEADER = pathlib.Path(__file__).resolve().parents[1] / "src" / "pydhcp" / "AGENTS.md"
 
@@ -36,7 +36,7 @@ def header_text() -> str:
 
 
 def _required_keyword_only(name: str) -> set:
-    params = inspect.signature(getattr(DhcpClient, name)).parameters
+    params = inspect.signature(getattr(DHCPClient, name)).parameters
     return {
         p.name
         for p in params.values()
@@ -45,7 +45,7 @@ def _required_keyword_only(name: str) -> set:
 
 
 def _accepts(name: str, arg: str) -> bool:
-    return arg in inspect.signature(getattr(DhcpClient, name)).parameters
+    return arg in inspect.signature(getattr(DHCPClient, name)).parameters
 
 
 @pytest.mark.parametrize("name", BUILDERS)
@@ -62,7 +62,7 @@ def test_the_header_names_every_required_keyword_only_argument(
 ) -> None:
     required = _required_keyword_only(name)
     # The documented signature for this builder, up to its closing paren.
-    m = re.search(rf"\.{name}\((.*?)\) -> DhcpMessage", header_text, re.S)
+    m = re.search(rf"\.{name}\((.*?)\) -> DHCPMessage", header_text, re.S)
     assert m, f"no documented signature for {name}"
     documented = m.group(1)
     for arg in required:
@@ -75,7 +75,7 @@ def test_the_header_names_every_required_keyword_only_argument(
 def test_the_header_offers_broadcast_only_where_it_exists(name, header_text) -> None:
     """The specific error this test exists for: `broadcast=True` was documented
     on all five; only two take it."""
-    m = re.search(rf"\.{name}\((.*?)\) -> DhcpMessage", header_text, re.S)
+    m = re.search(rf"\.{name}\((.*?)\) -> DHCPMessage", header_text, re.S)
     assert m, f"no documented signature for {name}"
     documented_broadcast = "broadcast" in m.group(1)
     assert documented_broadcast == _accepts(name, "broadcast"), (

@@ -4,10 +4,10 @@ import datetime as dt
 import logging
 import sys
 
-from pydhcp import DhcpOptions, DhcpServer, log, network
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet.message import DhcpMessage
-from pydhcp.server import DhcpLease
+from pydhcp import DHCPOptions, DHCPServer, log, network
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet.message import DHCPMessage
+from pydhcp.server import DHCPLease
 
 LOGGER = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -19,17 +19,17 @@ LOGGER.addHandler(handler)
 log.LOGGER.setLevel(logging.DEBUG)
 
 
-class ExampleDhcpServer(DhcpServer):
+class ExampleDHCPServer(DHCPServer):
     offset = 60
 
     def acquire_lease(
         self,
         client_id: str,
         server_id: network.IPv4,
-        msg: DhcpMessage,
+        msg: DHCPMessage,
         *,
         commit: bool = True,
-    ) -> DhcpLease | None:
+    ) -> DHCPLease | None:
         lease = super().acquire_lease(client_id, server_id, msg, commit=commit)
         if lease is not None:
             return lease
@@ -49,16 +49,16 @@ class ExampleDhcpServer(DhcpServer):
         if ip is None:
             return None
 
-        options = DhcpOptions()
-        options[DhcpOptionCode.ROUTER] = server_interface.network.network_address + 1
-        options[DhcpOptionCode.DNS] = [
+        options = DHCPOptions()
+        options[DHCPOptionCode.ROUTER] = server_interface.network.network_address + 1
+        options[DHCPOptionCode.DNS] = [
             server_interface.network.network_address + 1,
             "8.8.8.8",
             "1.1.1.1",
         ]
-        return DhcpLease(ip, dt.datetime.now() + dt.timedelta(hours=1), options)
+        return DHCPLease(ip, dt.datetime.now() + dt.timedelta(hours=1), options)
 
 
 if __name__ == "__main__":
-    dhcpd = ExampleDhcpServer()
+    dhcpd = ExampleDHCPServer()
     dhcpd.listen()

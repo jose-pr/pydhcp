@@ -10,15 +10,15 @@ import typing as _ty
 from math import inf as _inf
 
 from .network import IPv4
-from .options import DhcpOptions
+from .options import DHCPOptions
 
 LOGGER = _logging.getLogger(__name__)
 
 
-class DhcpLease(_ty.NamedTuple):
+class DHCPLease(_ty.NamedTuple):
     ip: _ty.Optional[IPv4]
     expires: _ty.Union[_dt.datetime, float]
-    options: DhcpOptions
+    options: DHCPOptions
 
 
 class LeaseBackend(_ty.Protocol):
@@ -36,14 +36,14 @@ class LeaseBackend(_ty.Protocol):
         client_id: str,
         ip: IPv4,
         ttl: float,
-        options: _ty.Optional[DhcpOptions] = None,
-    ) -> _ty.Optional[DhcpLease]: ...
+        options: _ty.Optional[DHCPOptions] = None,
+    ) -> _ty.Optional[DHCPLease]: ...
 
-    def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]: ...
+    def lookup(self, client_id: str) -> _ty.Optional[DHCPLease]: ...
 
     def release(self, client_id: str) -> bool: ...
 
-    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]: ...
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DHCPLease]: ...
 
 
 class InMemoryLeaseBackend:
@@ -70,7 +70,7 @@ class InMemoryLeaseBackend:
     MAX_LEASES = 10_000
 
     def __init__(self) -> None:
-        self._leases: _ty.Dict[str, DhcpLease] = {}
+        self._leases: _ty.Dict[str, DHCPLease] = {}
         #: Re-entrant: `lookup_by_ip` and `renew` call `lookup` while holding it.
         self._lock = _threading.RLock()
         #: New clients turned away because the store was full. Visible so an
@@ -83,12 +83,12 @@ class InMemoryLeaseBackend:
         client_id: str,
         ip: IPv4,
         ttl: float,
-        options: _ty.Optional[DhcpOptions] = None,
-    ) -> _ty.Optional[DhcpLease]:
+        options: _ty.Optional[DHCPOptions] = None,
+    ) -> _ty.Optional[DHCPLease]:
         expires = (
             _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
         )
-        lease = DhcpLease(ip=ip, expires=expires, options=options or DhcpOptions())
+        lease = DHCPLease(ip=ip, expires=expires, options=options or DHCPOptions())
         with self._lock:
             if client_id not in self._leases and not self._make_room():
                 self._report_full()
@@ -131,7 +131,7 @@ class InMemoryLeaseBackend:
                 del self._leases[client_id]
         return len(self._leases) < self.MAX_LEASES
 
-    def lookup(self, client_id: str) -> _ty.Optional[DhcpLease]:
+    def lookup(self, client_id: str) -> _ty.Optional[DHCPLease]:
         with self._lock:
             lease = self._leases.get(client_id)
             if lease is None:
@@ -175,7 +175,7 @@ class InMemoryLeaseBackend:
                 return True
             return False
 
-    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]:
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DHCPLease]:
         with self._lock:
             lease = self.lookup(client_id)
             if lease is None:
@@ -183,7 +183,7 @@ class InMemoryLeaseBackend:
             expires = (
                 _dt.datetime.now() + _dt.timedelta(seconds=ttl) if ttl != _inf else _inf
             )
-            renewed = DhcpLease(ip=lease.ip, expires=expires, options=lease.options)
+            renewed = DHCPLease(ip=lease.ip, expires=expires, options=lease.options)
             self._leases[client_id] = renewed
             return renewed
 
@@ -246,13 +246,13 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                 else:
                     expires = _inf
 
-                opts = DhcpOptions()
+                opts = DHCPOptions()
                 opts_data = lease_data.get("options", {})
                 for code_str, val_hex in opts_data.items():
                     code = int(code_str)
                     opts[code] = bytearray.fromhex(val_hex)
 
-                self._leases[client_id] = DhcpLease(
+                self._leases[client_id] = DHCPLease(
                     ip=ip, expires=expires, options=opts
                 )
         except Exception as e:
@@ -387,8 +387,8 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         client_id: str,
         ip: IPv4,
         ttl: float,
-        options: _ty.Optional[DhcpOptions] = None,
-    ) -> _ty.Optional[DhcpLease]:
+        options: _ty.Optional[DHCPOptions] = None,
+    ) -> _ty.Optional[DHCPLease]:
         lease = super().allocate(client_id, ip, ttl, options)
         if lease:
             self._save()
@@ -400,7 +400,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
             self._save()
         return res
 
-    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DhcpLease]:
+    def renew(self, client_id: str, ttl: float) -> _ty.Optional[DHCPLease]:
         lease = super().renew(client_id, ttl)
         if lease:
             self._save()

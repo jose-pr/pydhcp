@@ -12,8 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp.options import DhcpOptions
-from pydhcp.options.code import DhcpOptionCode
+from pydhcp.options import DHCPOptions
+from pydhcp.options.code import DHCPOptionCode
 from pydhcp.options.type import DomainList, RdnssSelection, UncompressedDomainList
 
 #: A list whose second name is a suffix-match for the first, so a compressing
@@ -53,8 +53,8 @@ def test_bcmcs_domain_names_are_written_uncompressed() -> None:
     `SHARED_SUFFIX` as `COMPRESSED` -- the second name ending in a pointer a
     conforming receiver has no obligation to resolve.
     """
-    options = DhcpOptions()
-    options[DhcpOptionCode.BCMCS_DOMAIN_NAME_LIST] = SHARED_SUFFIX
+    options = DHCPOptions()
+    options[DHCPOptionCode.BCMCS_DOMAIN_NAME_LIST] = SHARED_SUFFIX
 
     payload = bytes(options.get(88, decode=False))
     assert not _has_pointer(payload), f"option 88 still compresses: {payload!r}"
@@ -69,8 +69,8 @@ def test_rdnss_selection_domains_are_written_uncompressed() -> None:
     domain names in DHCP "MUST NOT be stored in compressed form, as described
     in section 4.1.4 of RFC 1035".
     """
-    options = DhcpOptions()
-    options[DhcpOptionCode.RDNSS_SELECTION] = RdnssSelection(
+    options = DHCPOptions()
+    options[DHCPOptionCode.RDNSS_SELECTION] = RdnssSelection(
         0, "10.0.0.1", "10.0.0.2", SHARED_SUFFIX
     )
 
@@ -93,10 +93,10 @@ def test_the_search_list_still_compresses() -> None:
     per option, not a blanket ban, and this is the half that must not move.
     """
     for code in (
-        DhcpOptionCode.DOMAIN_SEARCH,
-        DhcpOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS,
+        DHCPOptionCode.DOMAIN_SEARCH,
+        DHCPOptionCode.SIP_UA_CONFIG_SERVICE_DOMAINS,
     ):
-        options = DhcpOptions()
+        options = DHCPOptions()
         options[code] = SHARED_SUFFIX
         payload = bytes(options.get(int(code), decode=False))
         assert payload == COMPRESSED, f"option {int(code)} stopped compressing"
@@ -109,7 +109,7 @@ def test_a_compressed_payload_is_still_accepted_on_receive() -> None:
     unambiguously inside the option, and refusing it would turn a readable
     packet into a decode failure.
     """
-    options = DhcpOptions()
+    options = DHCPOptions()
     options.decode(
         memoryview(bytearray(b"\x58" + bytes([len(COMPRESSED)]) + COMPRESSED))
     )
@@ -160,8 +160,8 @@ def test_assigning_a_bare_string_to_the_search_list() -> None:
     pointed at the name rather than at the argument. It now stores one
     domain.
     """
-    options = DhcpOptions()
-    options[DhcpOptionCode.DOMAIN_SEARCH] = "example.com"
+    options = DHCPOptions()
+    options[DHCPOptionCode.DOMAIN_SEARCH] = "example.com"
     assert list(options.get(119)) == ["example.com"]
     assert bytes(options.get(119, decode=False)) == b"\x07example\x03com\x00"
 

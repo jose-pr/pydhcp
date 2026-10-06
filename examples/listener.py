@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from pydhcp import DhcpListener, log
+from pydhcp import DHCPListener, log
 
 LOGGER = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -16,6 +16,6 @@ log.LOGGER.setLevel(logging.DEBUG)
 if __name__ == "__main__":
     # The wildcard hears the broadcasts of every segment; per_interface=True
     # would bind addresses, which hear none on Linux.
-    listener = DhcpListener(listen="*")
+    listener = DHCPListener(listen="*")
     listener.start()
     listener.wait()

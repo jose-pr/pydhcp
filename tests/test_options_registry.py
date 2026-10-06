@@ -1,6 +1,6 @@
 """The lazy option-type registry: load ordering, retry, and who wins.
 
-`DhcpOptionCode.ensure_registered()` imports `options/registry.py` the first
+`DHCPOptionCode.ensure_registered()` imports `options/registry.py` the first
 time a codec is looked up. The three properties pinned here are the ones the
 obvious implementation does not have, and all three were measured failing:
 
@@ -30,7 +30,7 @@ import pydhcp
 import pydhcp.options as _options
 import pydhcp.options.registry as _registry
 from pydhcp.options import code as _code
-from pydhcp.options.code import DhcpOptionCode
+from pydhcp.options.code import DHCPOptionCode
 
 #: The tree under test, so a subprocess imports the same one pytest did rather
 #: than whatever an editable install happens to point at.
@@ -69,13 +69,13 @@ def test_a_failed_registry_import_is_retried(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.delattr(_options, "registry")
 
     with pytest.raises(ImportError):
-        DhcpOptionCode.ensure_registered()
+        DHCPOptionCode.ensure_registered()
     assert _code._REGISTRY_LOADED is False, "a failed import was recorded as loaded"
     assert _code._REGISTRY_LOADING is False, "the in-progress guard was not cleared"
 
     monkeypatch.setitem(sys.modules, "pydhcp.options.registry", _registry)
     monkeypatch.setattr(_options, "registry", _registry, raising=False)
-    DhcpOptionCode.ensure_registered()
+    DHCPOptionCode.ensure_registered()
     assert _code._REGISTRY_LOADED is True, "the retry did not take"
 
 
@@ -92,17 +92,17 @@ def test_the_loaded_flag_is_not_published_while_the_registry_runs() -> None:
         import sys
         import pydhcp.options as opts
         from pydhcp.options import code as c
-        from pydhcp.options.code import DhcpOptionCode
+        from pydhcp.options.code import DHCPOptionCode
 
         seen = []
-        original = DhcpOptionCode.register_type
+        original = DHCPOptionCode.register_type
 
         def spy(self, optiontype):
             seen.append(c._REGISTRY_LOADED)
             return original(self, optiontype)
 
-        DhcpOptionCode.register_type = spy
-        DhcpOptionCode.ensure_registered()
+        DHCPOptionCode.register_type = spy
+        DHCPOptionCode.ensure_registered()
         print(len(seen), any(seen), c._REGISTRY_LOADED)
         """)
     count, published_early, loaded_after = out.split()
@@ -123,22 +123,22 @@ def test_a_registration_made_before_the_lazy_load_survives_it() -> None:
     """
     out = _run("""
         from pydhcp.options import code as c
-        from pydhcp.options.code import DhcpOptionCode
+        from pydhcp.options.code import DHCPOptionCode
         from pydhcp.options.type import Bytes
 
         class MyDnsCodec(Bytes):
             pass
 
         assert not c._REGISTRY_LOADED, "the registry loaded too early to test this"
-        DhcpOptionCode.DNS.register_type(MyDnsCodec)
-        print(DhcpOptionCode.DNS.get_type().__name__)
+        DHCPOptionCode.DNS.register_type(MyDnsCodec)
+        print(DHCPOptionCode.DNS.get_type().__name__)
         """)
     assert out == "MyDnsCodec", f"the lazy load replaced the caller's codec: {out}"
 
 
 def test_registering_a_non_codec_still_raises_before_anything_is_written() -> None:
     """The type check stays ahead of the registry load and of `_CODEMAP`."""
-    before = DhcpOptionCode.DOMAIN_NAME.get_type()
+    before = DHCPOptionCode.DOMAIN_NAME.get_type()
     with pytest.raises(TypeError):
-        DhcpOptionCode.DOMAIN_NAME.register_type(int)  # type: ignore[arg-type]
-    assert DhcpOptionCode.DOMAIN_NAME.get_type() is before
+        DHCPOptionCode.DOMAIN_NAME.register_type(int)  # type: ignore[arg-type]
+    assert DHCPOptionCode.DOMAIN_NAME.get_type() is before

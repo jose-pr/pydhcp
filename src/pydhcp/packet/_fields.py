@@ -10,7 +10,7 @@ import typing as _ty
 from ..exceptions import DHCPValueError
 from . import enums as _enum
 from .. import constants as _const, network as _net, nvt as _nvt
-from ..options import DhcpOptions
+from ..options import DHCPOptions
 
 _NULL = 0x00.to_bytes(1, "big")
 
@@ -107,9 +107,9 @@ def _decode_bootp_field(raw: memoryview, field: str) -> str:
 
 @_data.dataclass
 class _MessageFields:
-    """The fields and class constants of `DhcpMessage` -- the dataclass itself.
+    """The fields and class constants of `DHCPMessage` -- the dataclass itself.
 
-    `DhcpMessage` is this class plus layers of behaviour, each subclassing the
+    `DHCPMessage` is this class plus layers of behaviour, each subclassing the
     last (`_MessageDecode`, `_MessageEncode`, `_MessageMapping`,
     `_MessageDisplay`), so the fields are declared exactly once.
     """
@@ -134,7 +134,7 @@ class _MessageFields:
     MAGIC_COOKIE: _ty.ClassVar[bytes] = 0x63825363.to_bytes(4, "big")
     """The first four octets of the 'options' field of the DHCP message decimal values: 99, 130, 83 and 99"""
 
-    op: _enum.OpCode  # One byte
+    op: _enum.DHCPOpcode  # One byte
     """Message op code / message type"""
     htype: _enum.HardwareAddressType
     """Hardware address type, see ARP section in "Assigned Numbers" RFC"""
@@ -149,7 +149,7 @@ class _MessageFields:
     secs: _dt.timedelta  # 2 bytes
     """Filled in by client, seconds elapsed since client
     began address acquisition or renewal process."""
-    flags: _enum.Flags  # 2 bytes
+    flags: _enum.DHCPFlags  # 2 bytes
     """Only use for the BROADCAST flag in clients"""
     ciaddr: _net.IPv4
     """Client IP address; only filled in if client is in
@@ -171,7 +171,7 @@ class _MessageFields:
     """Boot file name, null terminated string; "generic"
     name or null in DHCPDISCOVER, fully qualified
     directory-path name in DHCPOFFER."""
-    options: DhcpOptions
+    options: DHCPOptions
     """Optional parameters field."""
 
     #: Key marking an option written as raw hex because its decoded form does

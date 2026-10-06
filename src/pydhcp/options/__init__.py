@@ -3,18 +3,18 @@ from __future__ import annotations
 import logging as _logging
 import typing as _ty
 import builtins as _builtins
-from .base import BaseDhcpOptionCode as BaseDhcpOptionCode, DhcpOption as DhcpOption
-from .type import DhcpOptionType as DhcpOptionType
+from .base import BaseDHCPOptionCode as BaseDHCPOptionCode, DHCPOption as DHCPOption
+from .type import DHCPOptionType as DHCPOptionType
 from .type import *  # noqa: F403
-from .code import DhcpOptionCode as DhcpOptionCode
+from .code import DHCPOptionCode as DHCPOptionCode
 from .. import constants as _const
 from .._utils import MISSING as _MISSING
 from math import inf as _inf
 
 LOGGER = _logging.getLogger(__name__)
 
-T = _ty.TypeVar("T", bound=DhcpOptionType)
-C = _ty.TypeVar("C", bound=BaseDhcpOptionCode)
+T = _ty.TypeVar("T", bound=DHCPOptionType)
+C = _ty.TypeVar("C", bound=BaseDHCPOptionCode)
 _R = _ty.TypeVar("_R")
 
 #: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
@@ -55,21 +55,21 @@ def _check_code(key: _ty.Any) -> int:
     return code
 
 
-class DhcpOptions(_ty.MutableMapping[int, bytearray]):
+class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     """The option bag: a mutable mapping of option code to **raw** payload.
 
     Two members deliberately do not mean what `MutableMapping` says they mean,
     and both `type: ignore[override]`s below mark exactly that:
 
     * **`get()` decodes; `[]` does not.** `options[53]` is
-      `bytearray(b'\\x05')`, `options.get(53)` is `DhcpMessageType.DHCPACK`.
+      `bytearray(b'\\x05')`, `options.get(53)` is `DHCPMessageType.DHCPACK`.
       Everything the ABC supplies -- `values()`, `pop()`, `setdefault()`,
       `popitem()`, `update()`, and `dict(options)` -- routes through
       `__getitem__`, so all of it yields raw `bytearray`s like `[]`, not
       decoded values like `get()`. Reach for `get(code, decode=False)` when you
       want the bytes and you want to say so.
     * **`items()` returns a `list`, not a view.** The decoded form has to build
-      `DhcpOption` pairs, so there is nothing to keep a live view of; only
+      `DHCPOption` pairs, so there is nothing to keep a live view of; only
       `items(decoded=False)` is the ABC's `ItemsView`.
 
     This asymmetry is the API, not drift: `get(..., decode=...)` is the
@@ -80,13 +80,13 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     """
 
     def __init__(
-        self, codemap: _ty.Optional[_builtins.type[BaseDhcpOptionCode]] = None
+        self, codemap: _ty.Optional[_builtins.type[BaseDHCPOptionCode]] = None
     ) -> None:
         if codemap is None:
-            codemap = DhcpOptionCode
+            codemap = DHCPOptionCode
         self._codemap = codemap
-        if codemap is DhcpOptionCode:
-            DhcpOptionCode.ensure_registered()
+        if codemap is DHCPOptionCode:
+            DHCPOptionCode.ensure_registered()
         self._options: _ty.OrderedDict[int, bytearray] = _ty.OrderedDict()
 
     def __repr__(self) -> str:
@@ -121,7 +121,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
                 # moment anything decodes it, moving the failure out of this
                 # deliberately lenient decoder and into whatever handler touches
                 # the value. Measured -- a DHCPREQUEST ending in the two bytes
-                # `50 04` made `DhcpServer.handle` raise "IPv4Address payload
+                # `50 04` made `DHCPServer.handle` raise "IPv4Address payload
                 # must be exactly 4 octets, got 0", from any sender.
                 LOGGER.warning(
                     f"Option {code} at offset {offset} claims {length} bytes but only {remaining} available"
@@ -141,7 +141,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
     def partial_encode(
         self, maxsize: _ty.Optional[float], word_size: int = 1
-    ) -> tuple[bytearray, _ty.Optional["DhcpOptions"]]:
+    ) -> tuple[bytearray, _ty.Optional["DHCPOptions"]]:
         """Encode up to `maxsize` octets, returning the bytes and the leftovers.
 
         `word_size` pads the END marker out to a multiple of that many octets,
@@ -206,7 +206,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
         options.extend(endbytes)
         if _extraoptions:
-            leftover = DhcpOptions(self._codemap)
+            leftover = DHCPOptions(self._codemap)
             leftover._options = _extraoptions
         else:
             leftover = None
@@ -216,14 +216,14 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         encoded, _ = self.partial_encode(None, word_size)
         return encoded
 
-    def copy(self) -> "DhcpOptions":
+    def copy(self) -> "DHCPOptions":
         """Return an independent copy sharing no mutable state with `self`.
 
         The codemap is preserved and every payload is copied into a fresh
         `bytearray`, so mutating either container (or a payload handed out by
         `get(..., decode=False)`) cannot write through to the other.
         """
-        copied = DhcpOptions(self._codemap)
+        copied = DHCPOptions(self._codemap)
         copied._options = _ty.OrderedDict(
             (code, bytearray(value)) for code, value in self._options.items()
         )
@@ -234,7 +234,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
 
     # Deliberate ABC deviation -- see the class docstring. `Mapping.get` is
     # declared to return the mapping's value type (`bytearray`); this one
-    # decodes by default and returns a `DhcpOptionType`.
+    # decodes by default and returns a `DHCPOptionType`.
     @_ty.overload  # type: ignore[override]
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _builtins.type[T]
@@ -252,7 +252,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     @_ty.overload
     def get(
         self, __key: int, default: _ty.Any = None, *, decode: _ty.Literal[True]
-    ) -> _ty.Optional[DhcpOptionType]: ...
+    ) -> _ty.Optional[DHCPOptionType]: ...
 
     @_ty.overload
     def get(
@@ -262,14 +262,14 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
     @_ty.overload
     def get(
         self, __key: int, default: _ty.Any = None
-    ) -> _ty.Optional[DhcpOptionType]: ...
+    ) -> _ty.Optional[DHCPOptionType]: ...
 
     def get(
         self,
         __key: int,
         default: _ty.Any = None,
         decode: _ty.Union[
-            bool, _builtins.type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
+            bool, _builtins.type[DHCPOptionType], _ty.Callable[[bytearray], _ty.Any]
         ] = True,
     ) -> _ty.Any:
         value = self._options.get(__key, _MISSING)
@@ -278,7 +278,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         assert isinstance(value, bytearray)
         if decode:
             target_decoder: _ty.Union[
-                _builtins.type[DhcpOptionType], _ty.Callable[[bytearray], _ty.Any]
+                _builtins.type[DHCPOptionType], _ty.Callable[[bytearray], _ty.Any]
             ]
             if decode is True:
                 target_decoder = self._codemap.from_code(__key).get_type()
@@ -286,7 +286,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
                 target_decoder = decode
 
             if isinstance(target_decoder, _builtins.type) and issubclass(
-                target_decoder, DhcpOptionType
+                target_decoder, DHCPOptionType
             ):
                 return target_decoder._dhcp_decode(value)
             return _ty.cast(_ty.Callable[[bytearray], _ty.Any], target_decoder)(value)
@@ -294,18 +294,18 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
             return value
 
     def _ensuretype(
-        self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]
-    ) -> DhcpOption:
-        if isinstance(option, DhcpOption):
+        self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]
+    ) -> DHCPOption:
+        if isinstance(option, DHCPOption):
             return option
         return self._codemap.normalize(*option)
 
-    def append(self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]) -> None:
+    def append(self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
         code = _check_code(int(opt.code))
         opt.value._dhcp_write(self._options.setdefault(code, bytearray()))
 
-    def replace(self, option: _ty.Union[DhcpOption, tuple[int, _ty.Any]]) -> None:
+    def replace(self, option: _ty.Union[DHCPOption, tuple[int, _ty.Any]]) -> None:
         opt = self._ensuretype(option)
         self[int(opt.code)] = opt.value
 
@@ -326,7 +326,7 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
           reference, so the caller kept a live handle on the stored option and
           later mutations of their own buffer silently rewrote it. Every other
           accepted type was already copied, which made the exception invisible
-          until a `bytearray` happened to be reused. `DhcpOptions.copy()` exists
+          until a `bytearray` happened to be reused. `DHCPOptions.copy()` exists
           because that same aliasing bit the server's lease path.
 
         Assigning an existing key keeps its position: `OrderedDict` only
@@ -339,10 +339,10 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         receiver.
         """
         key = _check_code(__key)
-        if not isinstance(__value, (bytes, memoryview, bytearray, DhcpOptionType)):
+        if not isinstance(__value, (bytes, memoryview, bytearray, DHCPOptionType)):
             __value = self._codemap.from_code(key).get_type()(__value)  # type: ignore[call-arg]
         data = bytearray()
-        if isinstance(__value, DhcpOptionType):
+        if isinstance(__value, DHCPOptionType):
             __value._dhcp_write(data)
         else:
             data.extend(__value)
@@ -358,25 +358,25 @@ class DhcpOptions(_ty.MutableMapping[int, bytearray]):
         return self._options.__iter__()
 
     # Deliberate ABC deviation -- see the class docstring. The decoded forms
-    # return a `list[DhcpOption]`, not an `ItemsView`: decoding builds new pairs,
+    # return a `list[DHCPOption]`, not an `ItemsView`: decoding builds new pairs,
     # so there is no live view to hand back, and the old `ItemsView` annotation
     # promised `.mapping` and set operations that the list has never had. Only
     # `decoded=False` is the mapping's own view.
     @_ty.overload  # type: ignore[override]
-    def items(self) -> list[DhcpOption]: ...
+    def items(self) -> list[DHCPOption]: ...
 
     @_ty.overload
     def items(self, decoded: _ty.Literal[False]) -> _ty.ItemsView[int, bytearray]: ...
 
     @_ty.overload
-    def items(self, decoded: _ty.Literal[True]) -> list[DhcpOption]: ...
+    def items(self, decoded: _ty.Literal[True]) -> list[DHCPOption]: ...
 
     @_ty.overload
-    def items(self, decoded: _builtins.type[C]) -> list[DhcpOption]: ...
+    def items(self, decoded: _builtins.type[C]) -> list[DHCPOption]: ...
 
     def items(
-        self, decoded: _ty.Union[bool, _builtins.type[BaseDhcpOptionCode]] = True
-    ) -> _ty.Union[list[DhcpOption], _ty.ItemsView[int, bytearray]]:
+        self, decoded: _ty.Union[bool, _builtins.type[BaseDHCPOptionCode]] = True
+    ) -> _ty.Union[list[DHCPOption], _ty.ItemsView[int, bytearray]]:
         raw = self._options.items()
         if not decoded:
             return raw

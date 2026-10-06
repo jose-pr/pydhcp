@@ -21,15 +21,15 @@ import typing as _ty
 import pytest
 
 from conftest import build_request
-from pydhcp import AsyncDhcpServer
-from pydhcp.capture import AsyncDhcpCapture
-from pydhcp.listener import AsyncDhcpListener
-from pydhcp.relay import AsyncDhcpRelay
+from pydhcp import AsyncDHCPServer
+from pydhcp.capture import AsyncDHCPCapture
+from pydhcp.listener import AsyncDHCPListener
+from pydhcp.relay import AsyncDHCPRelay
 
 PAYLOAD = build_request().encode()
 
 
-class Blocked(AsyncDhcpListener):
+class Blocked(AsyncDHCPListener):
     """A listener whose handler waits to be released."""
 
     def __init__(self, *args: _ty.Any, **kwargs: _ty.Any) -> None:
@@ -148,15 +148,15 @@ def test_stopping_discards_the_queue_without_errors(
 
 
 def test_the_bound_has_a_default_and_is_a_constructor_option() -> None:
-    assert AsyncDhcpListener.MAX_QUEUED_DATAGRAMS == 1024
-    assert AsyncDhcpListener(listen=("127.0.0.1", 0))._max_queued == 1024
+    assert AsyncDHCPListener.MAX_QUEUED_DATAGRAMS == 1024
+    assert AsyncDHCPListener(listen=("127.0.0.1", 0))._max_queued == 1024
     for made in (
-        AsyncDhcpListener(listen=("127.0.0.1", 0), max_queued=7),
-        AsyncDhcpServer(listen=("127.0.0.1", 0), max_queued=7),
-        AsyncDhcpRelay(
+        AsyncDHCPListener(listen=("127.0.0.1", 0), max_queued=7),
+        AsyncDHCPServer(listen=("127.0.0.1", 0), max_queued=7),
+        AsyncDHCPRelay(
             listen=("127.0.0.1", 0), server_addresses=["127.0.0.1"], max_queued=7
         ),
-        AsyncDhcpCapture(listen=("127.0.0.1", 0), max_queued=7),
+        AsyncDHCPCapture(listen=("127.0.0.1", 0), max_queued=7),
     ):
         assert made._max_queued == 7
 
@@ -164,4 +164,4 @@ def test_the_bound_has_a_default_and_is_a_constructor_option() -> None:
 @pytest.mark.parametrize("bad", [0, -1, 1.5, True])
 def test_the_bound_must_be_a_positive_integer(bad: _ty.Any) -> None:
     with pytest.raises(ValueError, match="max_queued"):
-        AsyncDhcpListener(listen=("127.0.0.1", 0), max_queued=bad)
+        AsyncDHCPListener(listen=("127.0.0.1", 0), max_queued=bad)

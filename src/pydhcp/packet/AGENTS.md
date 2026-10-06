@@ -9,26 +9,26 @@ top-level package header.
 
 ## Message (`message.py`)
 
-`DhcpMessage` is defined in layers, each a private module of `pydhcp.packet`
+`DHCPMessage` is defined in layers, each a private module of `pydhcp.packet`
 subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
-`_encode`, `_mapping` and `_display`. Import `DhcpMessage` from
+`_encode`, `_mapping` and `_display`. Import `DHCPMessage` from
 `pydhcp.packet.message` (or `pydhcp.packet`) as before;
 `decode`/`from_mapping` are typed to return the class they are called on.
 
-- **`DhcpMessage`** (dataclass) — the full DHCPv4 wire message. Fields:
-  `op: OpCode`, `htype: HardwareAddressType`, `hlen: int`, `hops: int`,
-  `xid: int`, `secs: datetime.timedelta`, `flags: Flags`, `ciaddr: IPv4`,
+- **`DHCPMessage`** (dataclass) — the full DHCPv4 wire message. Fields:
+  `op: DHCPOpcode`, `htype: HardwareAddressType`, `hlen: int`, `hops: int`,
+  `xid: int`, `secs: datetime.timedelta`, `flags: DHCPFlags`, `ciaddr: IPv4`,
   `yiaddr: IPv4`, `siaddr: IPv4`, `giaddr: IPv4`, `chaddr: bytes` (≤16
   bytes), `sname: str` (≤64 bytes encoded), `file: str` (≤128 bytes
-  encoded), `options: DhcpOptions`. `MAGIC_COOKIE` (class var, 4 bytes) and
+  encoded), `options: DHCPOptions`. `MAGIC_COOKIE` (class var, 4 bytes) and
   `MIN_LEGAL_SIZE` (class var) are also exposed. **`MIN_LEGAL_SIZE`** is
   548 — the smallest DHCP message every implementation must be able to
   handle, per RFC 2131 §2: `576 − 20 (IPv4) − 8 (UDP) = 548`, of which
   `548 − 236 (fixed header) = 312` is the options field clients "MUST be
   prepared to receive". It is a floor on *capability*, not on any packet, so
   nothing enforces it — see `.decode()` below.
-  - **`DhcpMessage.decode(data: bytes | bytearray | memoryview) ->
-    DhcpMessage`** — parses a wire packet. Raises `DHCPDecodeError` for a
+  - **`DHCPMessage.decode(data: bytes | bytearray | memoryview) ->
+    DHCPMessage`** — parses a wire packet. Raises `DHCPDecodeError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
     a missing `0xFF` (END) options terminator, or an `op` that is neither
     request nor reply. An `htype` with no IANA name
@@ -49,7 +49,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     - **`ValueError`** if `max_packetsize` is below **269** (the overhead
       plus the END octet), **including an explicit `0`** — it is not
       rewritten to the default. 576 is *not* a lower bound here: RFC 2132
-      §9.10's minimum constrains the client's option 57, which `DhcpServer`
+      §9.10's minimum constrains the client's option 57, which `DHCPServer`
       clamps on receipt, and `encode(280)` is a legitimate call. Carrying
       any option at all needs 272.
     - **`DHCPValueError`** naming the field if `hops` (0–255), `hlen` (0–**16**,
@@ -78,15 +78,15 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     with PAD octets (after END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC
     1542 §2.1 lets a relay agent require — never past a `max_packetsize`
     smaller than that.
-  - **`.to_mapping() -> dict[str, Any]`** / **`DhcpMessage.from_mapping(data:
-    Mapping[str, Any]) -> DhcpMessage`** — structured round-trip to/from a
+  - **`.to_mapping() -> dict[str, Any]`** / **`DHCPMessage.from_mapping(data:
+    Mapping[str, Any]) -> DHCPMessage`** — structured round-trip to/from a
     plain dict. Option keys are the option's label when it has one, else its
     **numeric code** as a string (every unnamed code shares the label
     `"UNKNOWN"`, so using it collided them onto one key).
     - The round trip is **byte-exact**: each option is loaded back at dump
       time, and one whose readable form does not reproduce the original
       octets is written as **`{"hex": "..."}`** instead
-      (`DhcpMessage.HEX_VALUE_KEY`). That covers text holding a non-UTF-8
+      (`DHCPMessage.HEX_VALUE_KEY`). That covers text holding a non-UTF-8
       octet, a payload the codec normalises, and a length the codec does not
       preserve. The form survives JSON, YAML, TOML and INI alike.
     - Integer options serialize as plain `int`, not as the `U16`/`U32`
@@ -99,7 +99,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     **`NoClientIdentityError`** (`pydhcp.exceptions`; a `ValueError`) when the message has
     none of those — `chaddr` is empty and there is no option 61 — rather
     than returning the hardware-type octet alone, which every such client
-    would share. `DhcpServer` drops such a message; `CaptureEvent.client_id`
+    would share. `DHCPServer` drops such a message; `CaptureEvent.client_id`
     reports `"UNKNOWN"`.
   - **`.dumps(codemap=None) -> str`** — human-readable multi-line summary
     (used by `.log_str()`/`.log()` and the CLI's `--format summary`).
@@ -117,19 +117,19 @@ to corrupt silently rather than fail:
   `None` now means empty, and a non-text value raises instead of being
   stringified.
 
-**`DhcpMessage.decode()` honours `cls`**, so a subclass decodes to itself — it
-used to hard-code `DhcpMessage(...)` while `from_mapping` already used `cls`.
-The annotation still says `-> DhcpMessage` on both; tightening them to `Self`
+**`DHCPMessage.decode()` honours `cls`**, so a subclass decodes to itself — it
+used to hard-code `DHCPMessage(...)` while `from_mapping` already used `cls`.
+The annotation still says `-> DHCPMessage` on both; tightening them to `Self`
 is a separate typing decision.
 
 ## Enums (`enums.py`)
 
-- **`DhcpMessageType`** (`IntEnum` + `DhcpOptionType` codec) —
+- **`DHCPMessageType`** (`IntEnum` + `DHCPOptionType` codec) —
   `DHCPDISCOVER`..`DHCPTLS` (1–18); registered as the codec for
-  `DhcpOptionCode.DHCP_MESSAGE_TYPE`.
-- **`OpCode`** (`IntEnum`) — `BOOTREQUEST = 1`, `BOOTREPLY = 2`.
-- **`DhcpPort`** (`IntEnum`) — `SERVER = 67`, `CLIENT = 68`.
-- **`Flags`** (`Flag`) — `UNICAST = 0`, `BROADCAST = 1 << 15`.
+  `DHCPOptionCode.DHCP_MESSAGE_TYPE`.
+- **`DHCPOpcode`** (`IntEnum`) — `BOOTREQUEST = 1`, `BOOTREPLY = 2`.
+- **`DHCPPort`** (`IntEnum`) — `SERVER = 67`, `CLIENT = 68`.
+- **`DHCPFlags`** (`Flag`) — `UNICAST = 0`, `BROADCAST = 1 << 15`.
 - **`HardwareAddressType`** (`IntEnum`) — **defined in `pydhcp.network`** and
   re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
   the spelling to use for the `htype` header field. It lives one layer down
@@ -138,9 +138,9 @@ is a separate typing decision.
 
 ## Structured (de)serialization (`structured.py`)
 
-- **`load_message(text: str, format: str) -> DhcpMessage`** /
-  **`dump_message(message: DhcpMessage, format: str) -> str`** — round-trip
-  a `DhcpMessage` through a structured text format. `format` is one of
+- **`load_message(text: str, format: str) -> DHCPMessage`** /
+  **`dump_message(message: DHCPMessage, format: str) -> str`** — round-trip
+  a `DHCPMessage` through a structured text format. `format` is one of
   `"json"`, `"yaml"`, `"toml"`, `"ini"` (case-insensitive); anything else
   raises `ValueError`. `"toml"` requires Python 3.11+ (`tomllib`) or the
   optional `tomli`/`tomli-w` packages (`pydhcp[toml]`) — raises
@@ -148,7 +148,7 @@ is a separate typing decision.
 - **`load_mapping(text: str, format: str) -> dict[str, Any]`** /
   **`dump_mapping(data: dict[str, Any], format: str) -> str`** — the
   lower-level mapping (de)serializers `load_message`/`dump_message` build
-  on; useful when you want `DhcpMessage.from_mapping`/`.to_mapping()`
+  on; useful when you want `DHCPMessage.from_mapping`/`.to_mapping()`
   control over the intermediate dict.
 
 **Gotcha**: the INI loader/dumper sets `ConfigParser.optionxform = str`

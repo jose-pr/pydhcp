@@ -6,13 +6,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from pydhcp import DhcpMessage, DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContext
 from pydhcp import constants as const
-from pydhcp.lease import DhcpLease, InMemoryLeaseBackend
+from pydhcp.lease import DHCPLease, InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType
-from pydhcp.server import DhcpServer
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType
+from pydhcp.server import DHCPServer
 from conftest import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
@@ -20,17 +20,17 @@ SERVED = ipaddress.IPv4Interface("10.0.0.1/24")
 
 
 def _message(
-    message_type: DhcpMessageType, max_size: "int | None" = None
-) -> DhcpMessage:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
+    message_type: DHCPMessageType, max_size: "int | None" = None
+) -> DHCPMessage:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = message_type
     if max_size is not None:
-        options[DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE] = max_size
+        options[DHCPOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE] = max_size
     return build_request(options=options)
 
 
-def _context(transport: Mock) -> RequestContext:
-    return RequestContext(
+def _context(transport: Mock) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=transport,
         interface=NetworkInterface("eth0", SERVED),
         client=SocketAddress("10.0.0.50", 68),
@@ -38,7 +38,7 @@ def _context(transport: Mock) -> RequestContext:
     )
 
 
-class _FixedLeaseServer(DhcpServer):
+class _FixedLeaseServer(DHCPServer):
     """Returns a lease with a caller-chosen expiry, bypassing the allocator.
 
     `lease_seconds` enforces MIN_LEASE_SECONDS, so the base server can never
@@ -51,7 +51,7 @@ class _FixedLeaseServer(DhcpServer):
         self._expires = expires
 
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
-        return DhcpLease(IPv4("10.0.0.50"), self._expires, DhcpOptions())
+        return DHCPLease(IPv4("10.0.0.50"), self._expires, DHCPOptions())
 
 
 def _sent(transport: Mock) -> bytes:
@@ -69,16 +69,16 @@ def test_a_max_size_below_the_rfc_minimum_still_gets_a_reply(advertised) -> None
     server = _FixedLeaseServer(datetime.now() + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(
-        _message(DhcpMessageType.DHCPDISCOVER, max_size=advertised), _context(transport)
+        _message(DHCPMessageType.DHCPDISCOVER, max_size=advertised), _context(transport)
     )
     data = _sent(transport)
     assert len(data) >= const.BOOTP_MIN_PACKET_SIZE
     # Decodes as a real OFFER rather than whatever fit in the tiny budget.
     assert (
-        DhcpMessage.decode(bytearray(data)).options.get(
-            DhcpOptionCode.DHCP_MESSAGE_TYPE
+        DHCPMessage.decode(bytearray(data)).options.get(
+            DHCPOptionCode.DHCP_MESSAGE_TYPE
         )
-        is DhcpMessageType.DHCPOFFER
+        is DHCPMessageType.DHCPOFFER
     )
 
 
@@ -87,7 +87,7 @@ def test_a_large_advertised_size_is_left_alone() -> None:
     server = _FixedLeaseServer(datetime.now() + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
     server.handle_discover(
-        _message(DhcpMessageType.DHCPDISCOVER, max_size=9000), _context(transport)
+        _message(DHCPMessageType.DHCPDISCOVER, max_size=9000), _context(transport)
     )
     assert _sent(transport)
 
@@ -96,15 +96,15 @@ def test_lease_time_is_rounded_up_not_truncated() -> None:
     """A 3600-second lease went out as 3599 -- a different number than granted."""
     server = _FixedLeaseServer(datetime.now() + timedelta(seconds=3600))
     transport = Mock(send=Mock(return_value=1))
-    server.handle_discover(_message(DhcpMessageType.DHCPDISCOVER), _context(transport))
-    offer = DhcpMessage.decode(bytearray(_sent(transport)))
-    assert int(offer.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME)) == 3600
+    server.handle_discover(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
+    offer = DHCPMessage.decode(bytearray(_sent(transport)))
+    assert int(offer.options.get(DHCPOptionCode.IP_ADDRESS_LEASE_TIME)) == 3600
 
 
 def test_an_expired_lease_produces_no_offer() -> None:
     server = _FixedLeaseServer(datetime.now() - timedelta(seconds=1))
     transport = Mock(send=Mock(return_value=1))
-    server.handle_discover(_message(DhcpMessageType.DHCPDISCOVER), _context(transport))
+    server.handle_discover(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
     assert not transport.send.called, "offered a lease with no time left"
 
 
@@ -112,15 +112,15 @@ def test_an_expired_lease_naks_a_request_instead_of_acking_nothing() -> None:
     """Measured before: a DHCPACK with yiaddr 0.0.0.0 and no option 51."""
     server = _FixedLeaseServer(datetime.now() - timedelta(seconds=1))
     transport = Mock(send=Mock(return_value=1))
-    request = _message(DhcpMessageType.DHCPREQUEST)
-    request.options[DhcpOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")
+    request = _message(DHCPMessageType.DHCPREQUEST)
+    request.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")
     # With no server identifier this is INIT-REBOOT, and a server with no
     # record of the client MUST stay silent (RFC 2131 4.3.2) -- a different,
     # already-correct path. Name the server so the SELECTING branch is reached.
-    request.options[DhcpOptionCode.SERVER_IDENTIFIER] = IPv4("10.0.0.1")
+    request.options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4("10.0.0.1")
     server.handle_request(request, _context(transport))
 
-    reply = DhcpMessage.decode(bytearray(_sent(transport)))
-    assert reply.options.get(DhcpOptionCode.DHCP_MESSAGE_TYPE) is (
-        DhcpMessageType.DHCPNAK
+    reply = DHCPMessage.decode(bytearray(_sent(transport)))
+    assert reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is (
+        DHCPMessageType.DHCPNAK
     )

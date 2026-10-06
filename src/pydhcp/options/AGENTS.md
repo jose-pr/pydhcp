@@ -12,19 +12,19 @@ of the installed package).
 
 ## Container (`__init__.py`)
 
-- **`DhcpOptions(codemap=None)`** (`MutableMapping[int, bytearray]`) — the
-  option bag carried by `DhcpMessage.options`.
+- **`DHCPOptions(codemap=None)`** (`MutableMapping[int, bytearray]`) — the
+  option bag carried by `DHCPMessage.options`.
   - **`get()` decodes; `[]` does not.** `options[53]` is
     `bytearray(b"\x05")` while `options.get(53)` is
-    `DhcpMessageType.DHCPACK` — deliberately, and the only asymmetry in the
+    `DHCPMessageType.DHCPACK` — deliberately, and the only asymmetry in the
     container. Everything inherited from `MutableMapping` goes through
     `__getitem__`, so `dict(options)`, `.values()`, `.pop()`, `.setdefault()`
     and `.popitem()` all yield **raw `bytearray`s**, like `[]` and not like
     `.get()`. Write `get(code, decode=False)` when you want the bytes.
     `.items()` is the other deviation: see below. `codemap` defaults to
-  `DhcpOptionCode`; pass a custom `BaseDhcpOptionCode` subclass to change
+  `DHCPOptionCode`; pass a custom `BaseDHCPOptionCode` subclass to change
   code→type resolution. `__setitem__`/`__getitem__` key on the raw `int`
-  code; values may be set as a `DhcpOptionType`, `bytes`/`bytearray`/
+  code; values may be set as a `DHCPOptionType`, `bytes`/`bytearray`/
   `memoryview`, or any value the registered codec's constructor accepts.
   `__setitem__` is **atomic** — a codec that raises leaves the previous
   value (or the key's absence) untouched rather than an emptied option —
@@ -41,31 +41,31 @@ of the installed package).
   deliberately **not** checked: receive stays liberal and already treats 0
   and 255 as framing.
   - **`.get(key, default=None, *, decode=True) -> Any`** — `decode=True`
-    (default) uses the code's registered `DhcpOptionType`; `decode=False`
-    returns the raw `bytearray`; `decode=<type[DhcpOptionType]>` or
+    (default) uses the code's registered `DHCPOptionType`; `decode=False`
+    returns the raw `bytearray`; `decode=<type[DHCPOptionType]>` or
     `decode=<Callable[[bytearray], T]>` overrides the codec explicitly.
-  - **`.items(decoded=True) -> list[DhcpOption]`** — `decoded=True` (default)
-    or a codemap type returns a **`list`** of `DhcpOption` `(code, value)`
+  - **`.items(decoded=True) -> list[DHCPOption]`** — `decoded=True` (default)
+    or a codemap type returns a **`list`** of `DHCPOption` `(code, value)`
     pairs, freshly decoded; `decoded=False` returns the mapping's own
     `ItemsView[int, bytearray]` of raw payloads. Only the raw form is a live
     view — the decoded form builds new pairs, so it has no `.mapping` and no
     set operations.
   - **`.append(option)`** / **`.replace(option)`** — `option` is a
-    `DhcpOption` or `(code, value)` tuple; `.append` concatenates onto any
+    `DHCPOption` or `(code, value)` tuple; `.append` concatenates onto any
     existing bytes for that code (RFC 3396 long-option splitting on
     decode/reassembly), `.replace` overwrites.
   - **`.decode(options: memoryview, base_offset=0) -> memoryview`** — parses
     a raw TLV options buffer into `self`, returning any unconsumed tail
-    (used internally by `DhcpMessage.decode` for the options field and, on
+    (used internally by `DHCPMessage.decode` for the options field and, on
     **RFC 2132 §9.3** option overload, the `file`/`sname` fields — that is
     option 52, a different mechanism from the RFC 3396 long-option
     splitting cited above). Malformed lengths log a
     warning rather than raising.
   - **`.encode(word_size=1) -> bytearray`** / **`.partial_encode(maxsize,
-    word_size=1) -> tuple[bytearray, DhcpOptions | None]`** — serialize to
+    word_size=1) -> tuple[bytearray, DHCPOptions | None]`** — serialize to
     TLV bytes; `partial_encode` stops once `maxsize` is reached and returns
-    the leftover options as a second `DhcpOptions`, used by
-    `DhcpMessage.encode`'s RFC 3396 packing.
+    the leftover options as a second `DHCPOptions`, used by
+    `DHCPMessage.encode`'s RFC 3396 packing.
     **`word_size`** pads the END marker to a multiple of that many octets, so
     the options field finishes on a word boundary — at 4, END is
     `ff 00 00 00` rather than a bare `ff` — and reserves that much room when
@@ -73,7 +73,7 @@ of the installed package).
     it is there for a caller writing into a fixed-layout buffer read
     word-aligned, which is a property of that consumer and not of DHCP. RFC
     2131 requires no alignment.
-  - **`.copy() -> DhcpOptions`** — independent copy: same codemap, every
+  - **`.copy() -> DHCPOptions`** — independent copy: same codemap, every
     payload copied into a fresh `bytearray`. Use this before handing an
     options bag to code that mutates it (a response pipeline, an encoder);
     a plain assignment aliases the container *and* its payload buffers, so
@@ -85,17 +85,17 @@ of the installed package).
 
 ## Option codes (`code.py`, `base.py`)
 
-- **`DhcpOptionCode`** (`IntEnum` + `BaseDhcpOptionCode`) — the standard
+- **`DHCPOptionCode`** (`IntEnum` + `BaseDHCPOptionCode`) — the standard
   IANA option-code registry (`PAD`=0 … `END`=255 and everything in
   between), each member RFC-documented in its docstring. `.label() -> str`
-  returns the enum member name (or `BaseDhcpOptionCode.label()`'s
+  returns the enum member name (or `BaseDHCPOptionCode.label()`'s
   `"UNKNOWN"` fallback for an unregistered raw int). `.register_type(ty:
-  type[DhcpOptionType]) -> None` binds a codec to a specific member;
-  `.get_type() -> type[DhcpOptionType]` resolves it (calling
-  `.ensure_registered()` first). `DhcpOptionCode.ensure_registered()` lazily
+  type[DHCPOptionType]) -> None` binds a codec to a specific member;
+  `.get_type() -> type[DHCPOptionType]` resolves it (calling
+  `.ensure_registered()` first). `DHCPOptionCode.ensure_registered()` lazily
   imports `options/registry.py`, which calls `.register_type(...)` for every
-  standard option — this runs automatically the first time a `DhcpOptions`
-  keyed by `DhcpOptionCode` is constructed or a lookup is made, so
+  standard option — this runs automatically the first time a `DHCPOptions`
+  keyed by `DHCPOptionCode` is constructed or a lookup is made, so
   application code never needs to call it directly. Unregistered codes
   (`PAD`, `END`, and any code without a `registry.py` entry) fall back to
   `Bytes` (opaque).
@@ -106,32 +106,32 @@ of the installed package).
   `registry.py` has finished, so a concurrent `get_type()` never sees the
   `Bytes` placeholder for a code being registered, and an import that
   *raises* is retried on the next call instead of being remembered as done.
-- **`BaseDhcpOptionCode`** — protocol/base for a custom code enum:
+- **`BaseDHCPOptionCode`** — protocol/base for a custom code enum:
   `.get_type()`, `.label()`, `.from_code(code: int)` (classmethod,
-  constructs/looks up a code value), `.normalize(code, value) -> DhcpOption`,
-  `.decode(code, value: bytearray) -> DhcpOption`. Subclass this (instead of
-  `DhcpOptionCode`) to build an application-specific option-code enum with
-  its own codec bindings, and pass it as `DhcpOptions(codemap=...)`.
+  constructs/looks up a code value), `.normalize(code, value) -> DHCPOption`,
+  `.decode(code, value: bytearray) -> DHCPOption`. Subclass this (instead of
+  `DHCPOptionCode`) to build an application-specific option-code enum with
+  its own codec bindings, and pass it as `DHCPOptions(codemap=...)`.
   `int(code)` is the `value` attribute (an `IntEnum` member has one) or, for
   an `int` subclass, its own integer identity; a subclass with **neither**
   raises `TypeError` rather than answering `0`, which is PAD. `repr()` never
   raises, so such a code still prints as `[000]UNKNOWN` while you debug it.
-- **`DhcpOption`** (`NamedTuple[code: int | BaseDhcpOptionCode, value:
-  DhcpOptionType]`) — one decoded/normalized option pair, as returned by
-  `.decode`/`.normalize` and accepted by `DhcpOptions.append`/`.replace`.
+- **`DHCPOption`** (`NamedTuple[code: int | BaseDHCPOptionCode, value:
+  DHCPOptionType]`) — one decoded/normalized option pair, as returned by
+  `.decode`/`.normalize` and accepted by `DHCPOptions.append`/`.replace`.
 
 **Gotcha**: `PAD` and `END` are intentionally never registered — they're
 zero-length wire markers, not payload-bearing codecs. They are also not
-storable: `options[0]` / `options[255]` raise, see `DhcpOptions` above.
+storable: `options[0]` / `options[255]` raise, see `DHCPOptions` above.
 
 **Gotcha**: option 43 (`VENDOR_SPECIFIC_INFORMATION`) is registered as
 opaque `Bytes` by default — TLV parsing is opt-in via `TlvOption`, not
 automatic. Option 125 is enterprise-number records, not generic TLVs. The
-local `DhcpOptionCode.GRD` alias is IANA option 212 (`OPTION_6RD`).
+local `DHCPOptionCode.GRD` alias is IANA option 212 (`OPTION_6RD`).
 
 ## Option payload codecs (`pydhcp.options.type`)
 
-Every codec implements the `DhcpOptionType` protocol: `_dhcp_read(option:
+Every codec implements the `DHCPOptionType` protocol: `_dhcp_read(option:
 memoryview) -> tuple[Self, int]` (classmethod decode + bytes consumed),
 `_dhcp_write(buffer: bytearray) -> int` (encode + bytes written), optional
 `_dhcp_len_hint() -> int | None` (fixed-size codecs only), and `__json__()`
@@ -146,8 +146,8 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 mutable `list` subclasses and so are deliberately **not** hashable — build a
 `tuple` from one if you need a key.
 
-- **`DhcpOptionType`** — the base protocol above.
-- **`List[T]`** (generic, subscript with a `DhcpOptionType`, e.g.
+- **`DHCPOptionType`** — the base protocol above.
+- **`List[T]`** (generic, subscript with a `DHCPOptionType`, e.g.
   `List[IPv4Address]`) — a homogeneous repeated-record list; items are
   normalized through `T(...)` on append/extend/`__setitem__`.
 - **`RecordList[T]`** (`List[T]` subclass) — the same container for a record
@@ -158,7 +158,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   `ViVendorSpecificInformation`, `ViVendorClass`, `MoSIpv4AddressList`,
   `MoSFqdnList` and `CccOption` are all `RecordList` subclasses. Subclass a
   subscripted form — `class MyOption(RecordList[MyRecord])`.
-- **`DhcpOptionCodes[C]`** (`List[C]` subclass) — a list of raw option-code
+- **`DHCPOptionCodes[C]`** (`List[C]` subclass) — a list of raw option-code
   ints, used for `PARAMETER_REQUEST_LIST`-style options; falls back to a
   plain `int` (≤255) when the code type can't construct the item.
 
@@ -249,7 +249,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   this package is liberal on receive.
   *Gotcha*: this is chosen by the **registry**, so `options[88] = [...]`
   gets it. Assigning an explicit `DomainList(...)` instance to option 88
-  bypasses the registry (any `DhcpOptionType` is written as given) and
+  bypasses the registry (any `DHCPOptionType` is written as given) and
   compresses — pass a plain list, or `UncompressedDomainList`.
 - **`ClientFqdn(name="", flags=0, rcode1=0, rcode2=0, partial=False)`** — RFC 4702
   client FQDN (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/
@@ -301,7 +301,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   default; wrap with `TlvOption`/`EncapsulatedOptions` for structured TLV
   access).
 - **`RelayAgentInformation`** — option 82 payload; constructed from a list
-  of `(sub-code: int, value: bytes)` tuples (see `DhcpRelay`'s
+  of `(sub-code: int, value: bytes)` tuples (see `DHCPRelay`'s
   `insert_relay_agent_info`).
 - **`ViVendorSpecificInformationRecord`** / **`ViVendorSpecificInformation`**
   — RFC 3925 vendor-identifying vendor-specific info (enterprise-number-

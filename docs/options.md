@@ -1,35 +1,35 @@
 # Common DHCP Options
 
-This page shows the typed option workflow: assign native Python values to `DhcpOptions`, let the registered option type do the encoding, and inspect decoded values with `repr()`.
+This page shows the typed option workflow: assign native Python values to `DHCPOptions`, let the registered option type do the encoding, and inspect decoded values with `repr()`.
 
 ## Single IPv4 option
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.SERVER_IDENTIFIER] = "192.0.2.1"
+options = DHCPOptions()
+options[DHCPOptionCode.SERVER_IDENTIFIER] = "192.0.2.1"
 ```
 
 ## List of IPv4 addresses
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.DNS] = ["192.0.2.53", "192.0.2.54"]
+options = DHCPOptions()
+options[DHCPOptionCode.DNS] = ["192.0.2.53", "192.0.2.54"]
 ```
 
 ## Boolean and presence options
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.ALL_SUBNETS_ARE_LOCAL] = True
+options = DHCPOptions()
+options[DHCPOptionCode.ALL_SUBNETS_ARE_LOCAL] = True
 ```
 
 Some options carry their meaning purely by being present. RFC 4039 defines
@@ -37,31 +37,31 @@ Rapid Commit as "Code 80, Len 0", so it encodes no payload; delete the option
 to express absence rather than assigning a false value.
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.RAPID_COMMIT] = True
+options = DHCPOptions()
+options[DHCPOptionCode.RAPID_COMMIT] = True
 ```
 
 ## Fixed-width integer option
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
+options = DHCPOptions()
+options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
 ```
 
 ## String option
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.HOSTNAME] = "workstation-01"
+options = DHCPOptions()
+options[DHCPOptionCode.HOSTNAME] = "workstation-01"
 ```
 
 ## Classless static route
@@ -69,15 +69,15 @@ options[DhcpOptionCode.HOSTNAME] = "workstation-01"
 ```python
 from ipaddress import ip_network
 
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
 from pydhcp.options.type import ClasslessRoute
 
-options = DhcpOptions()
+options = DHCPOptions()
 # RFC 3442 carries one or more routes, and a server sending option 121 SHOULD
 # include the default route -- so this option is a list.
-options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = [
+options[DHCPOptionCode.CLASSLESS_STATIC_ROUTE] = [
     ClasslessRoute(IPv4("192.0.2.1"), ip_network("0.0.0.0/0")),
     ClasslessRoute(IPv4("192.0.2.1"), ip_network("10.0.0.0/8")),
 ]
@@ -86,28 +86,28 @@ options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = [
 ## Domain search list
 
 ```python
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 
-options = DhcpOptions()
-options[DhcpOptionCode.DOMAIN_SEARCH] = ["example.internal", "lab.example.internal"]
+options = DHCPOptions()
+options[DHCPOptionCode.DOMAIN_SEARCH] = ["example.internal", "lab.example.internal"]
 ```
 
 ## Decoded display
 
-`DhcpOptions.items(decoded=True)` returns typed values, so `repr()` now shows the improved type-specific output.
+`DHCPOptions.items(decoded=True)` returns typed values, so `repr()` now shows the improved type-specific output.
 
 ```python
 from ipaddress import ip_network
 
-from pydhcp import DhcpOptions
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPOptions
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
 from pydhcp.options.type import Boolean, ClasslessRoute
 
-options = DhcpOptions()
-options[DhcpOptionCode.RAPID_COMMIT] = True
-options[DhcpOptionCode.CLASSLESS_STATIC_ROUTE] = [
+options = DHCPOptions()
+options[DHCPOptionCode.RAPID_COMMIT] = True
+options[DHCPOptionCode.CLASSLESS_STATIC_ROUTE] = [
     ClasslessRoute(IPv4("192.0.2.1"), ip_network("10.0.0.0/8")),
 ]
 

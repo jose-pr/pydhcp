@@ -17,10 +17,10 @@ import time
 import typing as _ty
 from datetime import datetime, timedelta
 
-from pydhcp import DhcpLease, DhcpMessage, DhcpOptions, DhcpServer
+from pydhcp import DHCPLease, DHCPMessage, DHCPOptions, DHCPServer
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 
 #: The client hardware address most tests use; only tests that care about
 #: telling two clients apart pass their own.
@@ -88,11 +88,11 @@ DUPLICATE_UDP_BIND_ALLOWED = _duplicate_udp_bind_is_allowed()
 
 
 def build_request(
-    message_type: _ty.Optional[DhcpMessageType] = DhcpMessageType.DHCPDISCOVER,
+    message_type: _ty.Optional[DHCPMessageType] = DHCPMessageType.DHCPDISCOVER,
     *,
-    options: _ty.Optional[DhcpOptions] = None,
+    options: _ty.Optional[DHCPOptions] = None,
     **fields: _ty.Any,
-) -> DhcpMessage:
+) -> DHCPMessage:
     """A BOOTREQUEST with every field a test does not care about filled in.
 
     Any header field can be overridden by keyword (`xid=...`, `chaddr=...`,
@@ -106,17 +106,17 @@ def build_request(
     itself rather than having this function append to it.
     """
     if options is None:
-        options = DhcpOptions()
+        options = DHCPOptions()
         if message_type is not None:
-            options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = message_type
+            options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = message_type
     header: dict[str, _ty.Any] = dict(
-        op=OpCode.BOOTREQUEST,
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=0x12345678,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -126,7 +126,7 @@ def build_request(
         file="",
     )
     header.update(fields)
-    return DhcpMessage(options=options, **header)
+    return DHCPMessage(options=options, **header)
 
 
 def wait_bound(listener: _ty.Any, timeout: float = 2.0) -> None:
@@ -170,7 +170,7 @@ def running(listener: _ty.Any, timeout: float = 2.0) -> _ty.Iterator[_ty.Any]:
         listener.close()
 
 
-class FixedLeaseServer(DhcpServer):
+class FixedLeaseServer(DHCPServer):
     """A server that hands every client the same loopback lease.
 
     No host configuration and no address pool: the tests that use it are
@@ -188,13 +188,13 @@ class FixedLeaseServer(DhcpServer):
         self,
         client_id: _ty.Any,
         server_id: _ty.Any,
-        msg: DhcpMessage,
+        msg: DHCPMessage,
         *,
         commit: bool = True,
-    ) -> DhcpLease:
-        options = DhcpOptions()
-        options[DhcpOptionCode.ROUTER] = IPv4("127.0.0.1")
-        return DhcpLease(
+    ) -> DHCPLease:
+        options = DHCPOptions()
+        options[DHCPOptionCode.ROUTER] = IPv4("127.0.0.1")
+        return DHCPLease(
             IPv4("127.0.0.1"),
             datetime.now() + timedelta(seconds=self.LEASE_SECONDS),
             options,

@@ -5,36 +5,36 @@ from unittest.mock import Mock
 import pytest
 
 from pydhcp import (
-    AsyncDhcpRelay,
-    DhcpMessage,
-    DhcpOptions,
-    DhcpRelay,
+    AsyncDHCPRelay,
+    DHCPMessage,
+    DHCPOptions,
+    DHCPRelay,
     NetworkInterface,
-    RequestContext,
+    DHCPRequestContext,
 )
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.options.type import RelayAgentInformation, TlvOption
 from pydhcp.network import IPv4, SocketAddress
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 
 
-@pytest.fixture(params=[DhcpRelay, AsyncDhcpRelay], ids=["sync", "async"])
+@pytest.fixture(params=[DHCPRelay, AsyncDHCPRelay], ids=["sync", "async"])
 def relay_class(request):
     """Every forwarding test runs against both relays.
 
     Parametrized rather than duplicated on purpose: a second copy of these
     assertions is exactly how the async half of this project drifted from the
-    sync half last time. `AsyncDhcpRelay` takes the same arguments minus
+    sync half last time. `AsyncDHCPRelay` takes the same arguments minus
     `select_timeout`, which none of these tests passes, and `handle()` is
     ordinary synchronous code on both, so it needs no event loop here.
     """
     return request.param
 
 
-def _context(client_port: int = 68) -> RequestContext:
-    return RequestContext(
+def _context(client_port: int = 68) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
@@ -46,13 +46,13 @@ def _context(client_port: int = 68) -> RequestContext:
 
 def _server_context(
     client_port: int = 68, server_ip: str = "192.0.2.1"
-) -> RequestContext:
+) -> DHCPRequestContext:
     """A context whose source is a configured upstream server.
 
     Replies reach a relay *from* a server; the relay now drops a BOOTREPLY from
     anywhere else, so reply-path tests must look like the real thing.
     """
-    return RequestContext(
+    return DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
@@ -64,21 +64,21 @@ def _server_context(
 
 def _discover(
     giaddr: str = "0.0.0.0", hops: int = 0, with_relay_info: bool = False
-) -> DhcpMessage:
-    opts = DhcpOptions()
-    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+) -> DHCPMessage:
+    opts = DHCPOptions()
+    opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     if with_relay_info:
-        opts[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
+        opts[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
             [TlvOption(1, b"existing")]
         )
-    return DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    return DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=hops,
         xid=0x12345678,
         secs=timedelta(seconds=0),
-        flags=Flags.BROADCAST,
+        flags=DHCPFlags.BROADCAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -95,17 +95,17 @@ def _reply(
     ciaddr: str = "0.0.0.0",
     yiaddr: str = "0.0.0.0",
     broadcast: bool = False,
-) -> DhcpMessage:
-    opts = DhcpOptions()
-    opts[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPOFFER
-    return DhcpMessage(
-        op=OpCode.BOOTREPLY,
+) -> DHCPMessage:
+    opts = DHCPOptions()
+    opts[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPOFFER
+    return DHCPMessage(
+        op=DHCPOpcode.BOOTREPLY,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=1,
         xid=0x12345678,
         secs=timedelta(seconds=0),
-        flags=Flags.BROADCAST if broadcast else Flags.UNICAST,
+        flags=DHCPFlags.BROADCAST if broadcast else DHCPFlags.UNICAST,
         ciaddr=IPv4(ciaddr),
         yiaddr=IPv4(yiaddr),
         siaddr=IPv4("0.0.0.0"),
@@ -135,7 +135,7 @@ def test_forward_to_servers_stamps_giaddr_and_increments_hops(relay_class):
     assert port == 67
     assert mac == CHADDR
 
-    forwarded = DhcpMessage.decode(data)
+    forwarded = DHCPMessage.decode(data)
     assert forwarded.giaddr == IPv4("10.0.0.1")
     assert forwarded.hops == 1
     assert relay.metrics.packets_sent == 1
@@ -164,7 +164,7 @@ def test_forward_to_servers_is_idempotent_when_giaddr_already_set(relay_class):
     relay.handle(msg, context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(data)
+    forwarded = DHCPMessage.decode(data)
     assert forwarded.giaddr == IPv4("10.0.0.1")
 
 
@@ -199,7 +199,7 @@ def test_a_request_at_exactly_the_hop_limit_is_still_forwarded(relay_class):
 
     assert relay.metrics.packets_dropped_hop_limit == 0
     assert context.transport.send.call_count == 1
-    forwarded = DhcpMessage.decode(context.transport.send.call_args.args[0])
+    forwarded = DHCPMessage.decode(context.transport.send.call_args.args[0])
     assert forwarded.hops == 3, "the relay must still count itself"
 
 
@@ -231,9 +231,9 @@ def test_relay_agent_info_inserted_when_enabled(relay_class):
     relay.handle(msg, context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(data)
+    forwarded = DHCPMessage.decode(data)
     relay_info = forwarded.options.get(
-        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+        DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
     )
     assert relay_info == RelayAgentInformation(
         [TlvOption(1, b"circuit-1"), TlvOption(2, b"remote-1")]
@@ -248,8 +248,8 @@ def test_relay_agent_info_not_inserted_when_disabled(relay_class):
     relay.handle(msg, context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(data)
-    assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in forwarded.options
+    forwarded = DHCPMessage.decode(data)
+    assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in forwarded.options
 
 
 def test_request_with_relay_info_and_giaddr_zero_is_dropped(relay_class):
@@ -289,9 +289,9 @@ def test_relay_agent_info_passthrough_when_already_present(relay_class):
     relay.handle(msg, context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(data)
+    forwarded = DHCPMessage.decode(data)
     relay_info = forwarded.options.get(
-        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+        DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
     )
     assert relay_info == RelayAgentInformation([TlvOption(1, b"existing")])
 
@@ -307,9 +307,9 @@ def test_client_relay_info_passes_through_when_explicitly_trusted(relay_class):
     relay.handle(_discover(with_relay_info=True), context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(data)
+    forwarded = DHCPMessage.decode(data)
     assert forwarded.options.get(
-        DhcpOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
+        DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=RelayAgentInformation
     ) == RelayAgentInformation([TlvOption(1, b"existing")])
 
 
@@ -341,7 +341,7 @@ def test_forward_to_client_without_ciaddr_is_broadcast(relay_class):
     """A client with no address cannot answer ARP for yiaddr.
 
     The relay used to unicast there, which the kernel drops with no error -- the
-    same trap DhcpServer.UNICAST_TO_UNCONFIGURED_CLIENT documents. Confirmed with
+    same trap DHCPServer.UNICAST_TO_UNCONFIGURED_CLIENT documents. Confirmed with
     ISC dhclient through this relay, which never saw an OFFER.
     """
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
@@ -433,7 +433,7 @@ def test_relay_strips_relay_agent_information_from_replies(relay_class):
     before the reply reaches the client."""
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
-    reply.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
+    reply.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = RelayAgentInformation(
         [TlvOption(1, b"circuit-1")]
     )
     context = _server_context()
@@ -441,10 +441,10 @@ def test_relay_strips_relay_agent_information_from_replies(relay_class):
     relay.handle(reply, context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(data)
-    assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in forwarded.options
+    forwarded = DHCPMessage.decode(data)
+    assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in forwarded.options
     # The caller's message is untouched: the relay works on a copy.
-    assert DhcpOptionCode.RELAY_AGENT_INFORMATION in reply.options
+    assert DHCPOptionCode.RELAY_AGENT_INFORMATION in reply.options
 
 
 def test_relay_forwards_a_reply_larger_than_the_576_byte_default(relay_class):
@@ -460,7 +460,7 @@ def test_relay_forwards_a_reply_larger_than_the_576_byte_default(relay_class):
     relay.handle(reply, context)
 
     data, *_rest = context.transport.send.call_args.args
-    forwarded = DhcpMessage.decode(bytearray(data))
+    forwarded = DHCPMessage.decode(bytearray(data))
     assert len(data) > 576
     for index in range(4):
         assert len(forwarded.options.get(200 + index, decode=False)) == 200
@@ -479,7 +479,7 @@ def test_forwarding_a_request_does_not_mutate_the_callers_message(relay_class):
 
     assert msg.giaddr == IPv4("0.0.0.0")
     assert msg.hops == 0
-    assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in msg.options
+    assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in msg.options
 
 
 # --- Which interface a relayed datagram leaves by ---
@@ -494,23 +494,23 @@ def test_forwarding_a_request_does_not_mutate_the_callers_message(relay_class):
 
 
 def test_upstream_forward_drops_the_pktinfo_pin(relay_class):
-    from pydhcp.listener import PktInfoUdpTransport, UdpTransport
+    from pydhcp.listener import PktInfoUDPTransport, UDPTransport
 
-    pinned = PktInfoUdpTransport(Mock())
+    pinned = PktInfoUDPTransport(Mock())
     pinned.ifindex, pinned.local_ip = 7, IPv4("10.99.0.1")
 
     routed = relay_class._routed_transport(pinned)
 
-    assert type(routed) is UdpTransport
+    assert type(routed) is UDPTransport
     assert routed.socket is pinned.socket
 
 
 def test_reply_is_pinned_to_the_interface_the_request_arrived_on(relay_class):
-    from pydhcp.listener import PktInfoUdpTransport
+    from pydhcp.listener import PktInfoUDPTransport
     from pydhcp.relay import PendingClient
 
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    arrived_on_server_side = PktInfoUdpTransport(Mock())
+    arrived_on_server_side = PktInfoUDPTransport(Mock())
     arrived_on_server_side.ifindex, arrived_on_server_side.local_ip = 9, IPv4(
         "10.98.0.1"
     )
@@ -518,26 +518,26 @@ def test_reply_is_pinned_to_the_interface_the_request_arrived_on(relay_class):
 
     out = relay._client_transport(arrived_on_server_side, pending)
 
-    assert isinstance(out, PktInfoUdpTransport)
+    assert isinstance(out, PktInfoUDPTransport)
     assert out.ifindex == 3
     assert out.local_ip == IPv4("10.99.0.1")
 
 
 def test_reply_without_a_recorded_ingress_falls_back_to_plain_routing(relay_class):
-    from pydhcp.listener import PktInfoUdpTransport, UdpTransport
+    from pydhcp.listener import PktInfoUDPTransport, UDPTransport
 
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    transport = PktInfoUdpTransport(Mock())
+    transport = PktInfoUDPTransport(Mock())
     transport.ifindex, transport.local_ip = 9, IPv4("10.98.0.1")
 
     out = relay._client_transport(transport, None)
 
-    assert type(out) is UdpTransport
+    assert type(out) is UDPTransport
 
 
 def test_pending_map_records_the_ingress_interface(relay_class):
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
@@ -558,8 +558,8 @@ def test_pending_map_records_the_ingress_interface(relay_class):
 # --- reply routing must survive a client that reuses someone else's xid ---
 
 
-def _client_context(client_ip: str, client_port: int) -> RequestContext:
-    return RequestContext(
+def _client_context(client_ip: str, client_port: int) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
@@ -629,7 +629,7 @@ def test_a_client_on_the_standard_port_is_still_tracked(relay_class):
     client's reply goes out the default route instead.
     """
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None

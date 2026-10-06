@@ -4,21 +4,21 @@ import typing as _ty
 import enum as _enum
 import threading as _threading
 
-from .base import BaseDhcpOptionCode
-from .type import Bytes, DhcpOptionType
+from .base import BaseDHCPOptionCode
+from .type import Bytes, DHCPOptionType
 
-_CODEMAP: list[type[DhcpOptionType]] = [Bytes] * 256
+_CODEMAP: list[type[DHCPOptionType]] = [Bytes] * 256
 #: Reentrant: `registry` calls `register_type`, which re-enters
 #: `ensure_registered` on the importing thread while the import is in flight.
 _REGISTRY_LOCK = _threading.RLock()
 _REGISTRY_LOADED = False
 _REGISTRY_LOADING = False
-_PSEUDO_MEMBERS: dict[int, "DhcpOptionCode"] = {}
+_PSEUDO_MEMBERS: dict[int, "DHCPOptionCode"] = {}
 
 
-class DhcpOptionCode(BaseDhcpOptionCode, _enum.IntEnum):
+class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
     @classmethod
-    def _missing_(cls, value: object) -> "_ty.Optional[DhcpOptionCode]":
+    def _missing_(cls, value: object) -> "_ty.Optional[DHCPOptionCode]":
         """Return an opaque pseudo-member for any byte value without one.
 
         Only 163 of codes 0-255 are members here, and RFC 3942 reserves 224-254
@@ -75,7 +75,7 @@ class DhcpOptionCode(BaseDhcpOptionCode, _enum.IntEnum):
                 _REGISTRY_LOADING = False
             _REGISTRY_LOADED = True
 
-    def register_type(self, optiontype: type[DhcpOptionType]) -> None:
+    def register_type(self, optiontype: type[DHCPOptionType]) -> None:
         """Bind `optiontype` as this code's codec, permanently.
 
         The built-in registry is loaded first. Without that, a registration
@@ -88,20 +88,20 @@ class DhcpOptionCode(BaseDhcpOptionCode, _enum.IntEnum):
         what "register" is supposed to mean.
         """
         if not isinstance(optiontype, type) or not issubclass(
-            optiontype, DhcpOptionType
+            optiontype, DHCPOptionType
         ):
-            raise TypeError("optiontype must be a DhcpOptionType subclass")
+            raise TypeError("optiontype must be a DHCPOptionType subclass")
         self.ensure_registered()
         _CODEMAP[self] = optiontype
 
-    def get_type(self) -> type[DhcpOptionType]:
+    def get_type(self) -> type[DHCPOptionType]:
         self.ensure_registered()
         return _CODEMAP[self]
 
     def label(self) -> str:
         label = getattr(self, "name", None)
         if not isinstance(label, str):
-            return BaseDhcpOptionCode.label(self)
+            return BaseDHCPOptionCode.label(self)
         return label
 
     #

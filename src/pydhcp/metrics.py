@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing as _ty
 
 
-class DhcpMetrics:
+class DHCPMetrics:
     """Per-instance counters. Every listener/server/client/relay/capture owns one.
 
     The field list lives in `FIELDS` rather than being repeated by `__init__`,

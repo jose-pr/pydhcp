@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`pydhcp.exceptions`**, re-exported at the root: `DHCPError` (the base),
   `DHCPDecodeError` and `DHCPValueError` (each also a `ValueError`) and
   `NoClientIdentityError`. Every decoder raises `DHCPDecodeError` and nothing
-  else for malformed octets: `DhcpMessage.decode` and each option codec used
+  else for malformed octets: `DHCPMessage.decode` and each option codec used
   to raise a bare `ValueError` (or, for a short address, an
   `ipaddress.AddressValueError`, for a bad UTF-8 label a
   `UnicodeDecodeError`, for a destination with host bits set an `ipaddress`
@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking: `NoClientIdentity` is now `pydhcp.NoClientIdentityError`**
   (`pydhcp.exceptions`), no longer importable from `pydhcp.packet.message`.
   No alias is kept. It is a `ValueError` as before.
-- **`DhcpClient.discover_offer()` and `.dora()` name the keywords they
+- **`DHCPClient.discover_offer()` and `.dora()` name the keywords they
   forward** (`xid`, `client_identifier`, `parameter_request_list` and, for
   `discover_offer`, `broadcast`) instead of taking `**discover_kwargs`. The same
   calls work; an unknown keyword is now a `TypeError` at the call.
@@ -71,6 +71,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `import pydhcp` raises `ValueError` at import; use `NETIMPS_SOCKET_PATCH=0`
   to disable the `socket` patch.
 
+### Renamed
+
+**Breaking.** Every public class name spells its acronyms in capitals, and the
+generic names take the `DHCP` prefix. No alias is kept: an old name is not
+importable. Replace each name in the left column with the one beside it.
+
+| Was | Now |
+| --- | --- |
+| `DhcpListener` | `DHCPListener` |
+| `AsyncDhcpListener` | `AsyncDHCPListener` |
+| `DhcpServer` | `DHCPServer` |
+| `AsyncDhcpServer` | `AsyncDHCPServer` |
+| `DhcpClient` | `DHCPClient` |
+| `DhcpRelay` | `DHCPRelay` |
+| `AsyncDhcpRelay` | `AsyncDHCPRelay` |
+| `DhcpCapture` | `DHCPCapture` |
+| `AsyncDhcpCapture` | `AsyncDHCPCapture` |
+| `DhcpMessage` | `DHCPMessage` |
+| `DhcpOptions` | `DHCPOptions` |
+| `DhcpOption` | `DHCPOption` |
+| `DhcpOptionCode` | `DHCPOptionCode` |
+| `DhcpOptionCodes` | `DHCPOptionCodes` |
+| `DhcpOptionType` | `DHCPOptionType` |
+| `BaseDhcpOptionCode` | `BaseDHCPOptionCode` |
+| `DhcpMetrics` | `DHCPMetrics` |
+| `DhcpMessageType` | `DHCPMessageType` |
+| `DhcpPort` | `DHCPPort` |
+| `DhcpLease` | `DHCPLease` |
+| `OpCode` | `DHCPOpcode` |
+| `Flags` | `DHCPFlags` |
+| `RequestContext` | `DHCPRequestContext` |
+| `UdpTransport` | `UDPTransport` |
+| `PktInfoUdpTransport` | `PktInfoUDPTransport` |
+| `Transport` | `DHCPTransport` |
+
 ### Fixed
 
 - **Every public annotation resolves with `typing.get_type_hints` on Python
@@ -105,8 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **The async listener's queue behind its handler is bounded.** Every
   datagram was queued for the one worker thread with no limit, so a slow
   handler (a lease-file write) let a flood grow memory by tens of MiB a
-  second. `AsyncDhcpListener`, `AsyncDhcpServer`, `AsyncDhcpRelay` and
-  `AsyncDhcpCapture` take `max_queued` (default 1024 datagrams): the
+  second. `AsyncDHCPListener`, `AsyncDHCPServer`, `AsyncDHCPRelay` and
+  `AsyncDHCPCapture` take `max_queued` (default 1024 datagrams): the
   datagram that finds the backlog full is dropped, counted in the new
   `metrics.packets_dropped_backlog` and reported at WARNING at most once a
   minute. `stop()` discards what is still queued, counted in the same
@@ -114,7 +149,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for each queued datagram; the handler already running finishes. The
   per-datagram `getsockname()` for the DEBUG log is skipped when DEBUG is
   off.
-- **`DhcpListener.start()` raises when the bind fails.** It used to return the
+- **`DHCPListener.start()` raises when the bind fails.** It used to return the
   receive thread, whose bind error reached only `threading.excepthook`, leaving
   the listener "started": `wait()` blocked for ever and a second `start()`
   returned `None`. `start()` now binds on the caller's thread and raises what
@@ -122,7 +157,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   and the listener startable again; `listen()` clears its token when its own
   bind fails.
 - **A `bind()` that fails partway no longer keeps the sockets it had opened**
-  (`DhcpListener(listen=[good, bad]).bind()`, `with` on such a listener): they
+  (`DHCPListener(listen=[good, bad]).bind()`, `with` on such a listener): they
   are closed before the error is raised, so the ports are not held.
 - **The Client FQDN option (81) reads every form RFC 4702 defines.** A partial
   name (no terminating label) and an empty Domain Name field used to raise
@@ -142,7 +177,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ValueError` (the same datagram is now refused in 0.06 s). A last name left
   unfinished at the end of the option is discarded (RFC 3397 s3) rather than
   kept, and a final octet that starts a pointer no longer raises `IndexError`.
-- Re-binding a started `AsyncDhcpListener` whose listen list shrank retires the
+- Re-binding a started `AsyncDHCPListener` whose listen list shrank retires the
   dropped socket's receive task cleanly; it used to wait for ever.
 
 ## [0.7.0] - 2026-10-03

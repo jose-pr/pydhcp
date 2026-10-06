@@ -13,29 +13,29 @@ import typing as _ty
 
 import pytest
 
-from pydhcp import DhcpMessage, DhcpOptions
+from pydhcp import DHCPMessage, DHCPOptions
 from pydhcp.exceptions import DHCPDecodeError
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.options.type import IPv4Address
 from pydhcp.network import IPv4
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 
 
 def _seed_message() -> bytes:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
-    options[DhcpOptionCode.HOSTNAME] = bytearray(b"host")
-    options[DhcpOptionCode.PARAMETER_REQUEST_LIST] = bytearray([1, 3, 6, 15])
-    message = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    options[DHCPOptionCode.HOSTNAME] = bytearray(b"host")
+    options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray([1, 3, 6, 15])
+    message = DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET,
         hlen=6,
         hops=0,
         xid=1,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -71,7 +71,7 @@ def test_a_mutated_message_raises_the_decode_error_or_nothing() -> None:
     leaked: _ty.Dict[str, int] = {}
     for data in _mutations(20000):
         try:
-            DhcpMessage.decode(data)
+            DHCPMessage.decode(data)
         except DHCPDecodeError:
             pass
         except Exception as exc:  # noqa: BLE001 - the type is the report
@@ -86,13 +86,13 @@ def test_a_random_payload_for_every_option_raises_the_decode_error_or_nothing() 
     leaked: _ty.Dict[str, _ty.List[str]] = {}
     for code in range(1, 255):
         try:
-            code_obj = DhcpOptionCode(code)
+            code_obj = DHCPOptionCode(code)
         except ValueError:
             continue
         for _ in range(60):
             size = rng.choice((0, 1, 2, 3, 4, 5, 8, 13, 30))
             payload = bytes(rng.getrandbits(8) for _ in range(size))
-            options = DhcpOptions()
+            options = DHCPOptions()
             options[code_obj] = bytearray(payload)
             try:
                 options.get(code_obj)
@@ -108,7 +108,7 @@ def test_an_unknown_op_is_a_decode_error() -> None:
     data = bytearray(_seed_message())
     data[0] = 9
     with pytest.raises(DHCPDecodeError):
-        DhcpMessage.decode(data)
+        DHCPMessage.decode(data)
 
 
 def test_a_codec_decode_error_names_the_codec() -> None:

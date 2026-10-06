@@ -4,19 +4,19 @@ import logging as _logging
 import time as _time
 import typing as _ty
 
-from .packet.message import DhcpMessage
+from .packet.message import DHCPMessage
 from .listener import (
-    AsyncDhcpListener as _AsyncBase,
-    DhcpListener as _Base,
+    AsyncDHCPListener as _AsyncBase,
+    DHCPListener as _Base,
     ListenSpec,
-    PktInfoUdpTransport as _PktInfoUdpTransport,
-    RequestContext,
-    Transport as _Transport,
-    UdpTransport as _UdpTransport,
+    PktInfoUDPTransport as _PktInfoUDPTransport,
+    DHCPRequestContext,
+    DHCPTransport as _DHCPTransport,
+    UDPTransport as _UDPTransport,
 )
 from . import network as _net, constants as _const
 from .packet import enums as _enum
-from .options import DhcpOptionCode
+from .options import DHCPOptionCode
 from .options import type as _type
 from .server.reply import _is_loopback
 
@@ -65,7 +65,7 @@ def _normalize_server_address(address: ServerAddress) -> tuple[_net.IPv4, int]:
     argument.
     """
     ip, port = (
-        address if isinstance(address, tuple) else (address, _enum.DhcpPort.SERVER)
+        address if isinstance(address, tuple) else (address, _enum.DHCPPort.SERVER)
     )
     try:
         return _net.IPv4(ip), int(port)
@@ -77,7 +77,7 @@ def _normalize_server_address(address: ServerAddress) -> tuple[_net.IPv4, int]:
         ) from None
 
 
-class DhcpRelay(_Base):
+class DHCPRelay(_Base):
     """RFC 1542 / RFC 2131 4.1 / RFC 3046 DHCP relay agent.
 
     Forwards client broadcasts (received on port 67, same as a server) to one or
@@ -94,7 +94,7 @@ class DhcpRelay(_Base):
     well-known client port 68, which is where a real client listens.
     """
 
-    DEFAULT_PORTS = (_enum.DhcpPort.SERVER,)
+    DEFAULT_PORTS = (_enum.DHCPPort.SERVER,)
 
     #: Upper bound on in-flight `xid -> client address` entries.
     MAX_PENDING_CLIENTS = 1024
@@ -145,14 +145,14 @@ class DhcpRelay(_Base):
     ) -> None:
         """Set up the state and validation every relay variant needs.
 
-        `AsyncDhcpRelay` cannot call this class's `__init__` (its own base takes
+        `AsyncDHCPRelay` cannot call this class's `__init__` (its own base takes
         a different argument set), so without this it would have to re-implement
-        the body -- which is precisely how `AsyncDhcpServer` came to be missing
+        the body -- which is precisely how `AsyncDHCPServer` came to be missing
         `_declined`, and how a `max_hops` range check would end up enforced on
         one relay and not the other.
         """
         if not server_addresses:
-            raise ValueError("DhcpRelay requires at least one server address")
+            raise ValueError("DHCPRelay requires at least one server address")
         self.server_addresses = [_normalize_server_address(a) for a in server_addresses]
         if not 0 <= max_hops <= RFC1542_MAX_HOPS:
             raise ValueError(
@@ -169,10 +169,10 @@ class DhcpRelay(_Base):
             _ty.OrderedDict()
         )
 
-    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
-        if msg.op == _enum.OpCode.BOOTREQUEST:
+    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
+        if msg.op == _enum.DHCPOpcode.BOOTREQUEST:
             self._forward_to_servers(msg, context)
-        elif msg.op == _enum.OpCode.BOOTREPLY:
+        elif msg.op == _enum.DHCPOpcode.BOOTREPLY:
             self._forward_to_client(msg, context)
         else:
             LOGGER.warning(
@@ -180,7 +180,7 @@ class DhcpRelay(_Base):
             )
 
     @staticmethod
-    def _routed_transport(transport: _Transport) -> _Transport:
+    def _routed_transport(transport: _DHCPTransport) -> _DHCPTransport:
         """Drop the packet-info source pin for a send to a different network.
 
         A relay forwards *across* interfaces, which is the one case the pin gets
@@ -192,26 +192,26 @@ class DhcpRelay(_Base):
         this relay: 8 requests forwarded, 0 reaching the server. Falling back to
         a plain send over the same socket lets the kernel route normally.
         """
-        if isinstance(transport, _PktInfoUdpTransport):
-            return _UdpTransport(transport.socket)
+        if isinstance(transport, _PktInfoUDPTransport):
+            return _UDPTransport(transport.socket)
         return transport
 
     def _client_transport(
-        self, transport: _Transport, pending: _ty.Optional[PendingClient]
-    ) -> _Transport:
+        self, transport: _DHCPTransport, pending: _ty.Optional[PendingClient]
+    ) -> _DHCPTransport:
         """Send out the interface the client's request arrived on."""
         if (
-            isinstance(transport, _PktInfoUdpTransport)
+            isinstance(transport, _PktInfoUDPTransport)
             and pending is not None
             and pending.ifindex is not None
         ):
-            out = _PktInfoUdpTransport(transport.socket, transport.endpoint)
+            out = _PktInfoUDPTransport(transport.socket, transport.endpoint)
             out.ifindex = pending.ifindex
             out.local_ip = pending.local_ip
             return out
         return self._routed_transport(transport)
 
-    def _encode_for_forward(self, msg: DhcpMessage) -> bytearray:
+    def _encode_for_forward(self, msg: DHCPMessage) -> bytearray:
         """Encode a message being forwarded without shrinking it.
 
         `encode()` defaults to the 576-octet minimum, which is not a limit this
@@ -221,15 +221,17 @@ class DhcpRelay(_Base):
         receive loop logged it, so the client simply never got its reply.
         """
         advertised = msg.options.get(
-            DhcpOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE, default=None, decode=_type.U16
+            DHCPOptionCode.MAXIMUM_DHCP_MESSAGE_SIZE, default=None, decode=_type.U16
         )
         limit = int(advertised) if advertised else self._max_packet_size
         return msg.encode(max(limit, _const.DHCP_MIN_LEGAL_PACKET_SIZE))
 
-    def _forward_to_servers(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def _forward_to_servers(
+        self, msg: DHCPMessage, context: DHCPRequestContext
+    ) -> None:
         if (
             msg.giaddr == _net.WILDCARD_IPv4
-            and DhcpOptionCode.RELAY_AGENT_INFORMATION in msg.options
+            and DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options
             and not self.trust_client_relay_agent_info
         ):
             # RFC 3046 s2.1 and s5: giaddr 0 means this came straight from a
@@ -261,7 +263,7 @@ class DhcpRelay(_Base):
             self.metrics.packets_dropped_hop_limit += 1
             return
 
-        forwarded = DhcpMessage(**msg.__dict__.copy())
+        forwarded = DHCPMessage(**msg.__dict__.copy())
         # A shallow __dict__ copy shares the options container, so stamping this
         # copy would edit the caller's message.
         forwarded.options = msg.options.copy()
@@ -284,10 +286,10 @@ class DhcpRelay(_Base):
             transport.send(data, server_ip, server_port, msg.chaddr)
             self.metrics.packets_sent += 1
 
-    def _insert_relay_agent_info(self, msg: DhcpMessage) -> None:
+    def _insert_relay_agent_info(self, msg: DHCPMessage) -> None:
         if not self.insert_relay_agent_info:
             return
-        if DhcpOptionCode.RELAY_AGENT_INFORMATION in msg.options:
+        if DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options:
             LOGGER.warning(
                 f"[XID={msg.xid:08x}] Request already carries RELAY_AGENT_INFORMATION, passing through unmodified."
             )
@@ -298,11 +300,11 @@ class DhcpRelay(_Base):
         if self.remote_id is not None:
             suboptions.append((2, self.remote_id))
         if suboptions:
-            msg.options[DhcpOptionCode.RELAY_AGENT_INFORMATION] = (
+            msg.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = (
                 _type.RelayAgentInformation(suboptions)
             )
 
-    def _pending_key(self, msg: DhcpMessage) -> tuple[int, bytes]:
+    def _pending_key(self, msg: DHCPMessage) -> tuple[int, bytes]:
         """Identify an exchange by transaction *and* client.
 
         The xid alone is not an identity: it travels in cleartext in a broadcast
@@ -313,7 +315,7 @@ class DhcpRelay(_Base):
         """
         return msg.xid, bytes(msg.chaddr[: msg.hlen or len(msg.chaddr)])
 
-    def _record_pending(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def _record_pending(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Note where a reply for this exchange has to go.
 
         Recorded for every client, including one on the standard port 68. It is
@@ -344,7 +346,7 @@ class DhcpRelay(_Base):
         self._pending_clients.move_to_end(key)
         self._expire_pending(now)
 
-    def _lookup_pending(self, msg: DhcpMessage) -> _ty.Optional[PendingClient]:
+    def _lookup_pending(self, msg: DHCPMessage) -> _ty.Optional[PendingClient]:
         """Find where this reply goes, leaving the entry for any further ones.
 
         Popping on the first reply meant that with more than one server
@@ -364,7 +366,7 @@ class DhcpRelay(_Base):
         while len(self._pending_clients) > self.MAX_PENDING_CLIENTS:
             self._pending_clients.popitem(last=False)
 
-    def _forward_to_client(self, msg: DhcpMessage, context: RequestContext) -> None:
+    def _forward_to_client(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         if context.client.ip not in self._server_ips:
             # Anything that can reach this relay's port 67 could otherwise have a
             # forged ACK broadcast onto the client segment, sourced from the
@@ -380,11 +382,11 @@ class DhcpRelay(_Base):
 
         pending = self._lookup_pending(msg)
         client_port = (
-            pending.client.port if pending is not None else int(_enum.DhcpPort.CLIENT)
+            pending.client.port if pending is not None else int(_enum.DHCPPort.CLIENT)
         )
 
         dest: _net.IPv4
-        if msg.flags is _enum.Flags.BROADCAST:
+        if msg.flags is _enum.DHCPFlags.BROADCAST:
             dest = _net.IPv4("255.255.255.255")
         elif msg.ciaddr != _net.WILDCARD_IPv4:
             dest = msg.ciaddr
@@ -395,17 +397,17 @@ class DhcpRelay(_Base):
         else:
             # The client has no address yet, so it cannot answer ARP for yiaddr
             # and a unicast is dropped by the kernel with no error -- the same
-            # trap DhcpServer.UNICAST_TO_UNCONFIGURED_CLIENT documents.
+            # trap DHCPServer.UNICAST_TO_UNCONFIGURED_CLIENT documents.
             dest = _net.IPv4("255.255.255.255")
 
-        reply = DhcpMessage(**msg.__dict__.copy())
+        reply = DHCPMessage(**msg.__dict__.copy())
         reply.options = msg.options.copy()
-        if DhcpOptionCode.RELAY_AGENT_INFORMATION in reply.options:
+        if DHCPOptionCode.RELAY_AGENT_INFORMATION in reply.options:
             # RFC 3046 s2.2: the relay strips the option it echoed back before
             # handing the reply to the client. It is relay-to-server bookkeeping
             # -- circuit and remote ids describe the access port -- and has no
             # meaning to, and should not be disclosed to, the client.
-            del reply.options[int(DhcpOptionCode.RELAY_AGENT_INFORMATION)]
+            del reply.options[int(DHCPOptionCode.RELAY_AGENT_INFORMATION)]
 
         data = self._encode_for_forward(reply)
         reply.log(
@@ -421,25 +423,25 @@ class DhcpRelay(_Base):
         self.metrics.packets_sent += 1
 
 
-class AsyncDhcpRelay(_AsyncBase, DhcpRelay):  # type: ignore[misc]
-    """`DhcpRelay`'s forwarding policy on the asyncio listener.
+class AsyncDHCPRelay(_AsyncBase, DHCPRelay):  # type: ignore[misc]
+    """`DHCPRelay`'s forwarding policy on the asyncio listener.
 
-    Mixed the way `AsyncDhcpServer` is, and for the same reason: every line of
+    Mixed the way `AsyncDHCPServer` is, and for the same reason: every line of
     the receive path -- `_pktinfo_supported`, `_arrival`,
     `_context_for`, `_bind_sockets` -- stays in `listener.py` where both
     listeners reach it. The async half of this project has been written as a
     *copy* once already, and a hardcoded `_pktinfo = False` then left it
     receiving nothing at all on Linux while passing every unit test.
 
-    `_pending_clients` is unguarded, exactly as on `DhcpRelay`. What keeps it
-    safe here is that `AsyncDhcpListener` runs handlers on a single worker
+    `_pending_clients` is unguarded, exactly as on `DHCPRelay`. What keeps it
+    safe here is that `AsyncDHCPListener` runs handlers on a single worker
     thread, so `handle()` is still serialised and in arrival order.
     """
 
-    #: Read off the sync class rather than repeated: `AsyncDhcpListener`'s
+    #: Read off the sync class rather than repeated: `AsyncDHCPListener`'s
     #: all-ports default comes first in the MRO and would otherwise win, so a
     #: relay would also bind the client port 68.
-    DEFAULT_PORTS = DhcpRelay.DEFAULT_PORTS
+    DEFAULT_PORTS = DHCPRelay.DEFAULT_PORTS
 
     def __init__(
         self,
@@ -470,7 +472,7 @@ class AsyncDhcpRelay(_AsyncBase, DhcpRelay):  # type: ignore[misc]
             trust_client_relay_agent_info=trust_client_relay_agent_info,
         )
 
-    def handle(self, msg: DhcpMessage, context: RequestContext) -> None:
-        # Both bases define handle() and AsyncDhcpListener's no-op comes first
+    def handle(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
+        # Both bases define handle() and AsyncDHCPListener's no-op comes first
         # in the MRO; without this the relay would receive and forward nothing.
-        DhcpRelay.handle(self, msg, context)
+        DHCPRelay.handle(self, msg, context)

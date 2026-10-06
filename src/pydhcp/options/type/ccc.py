@@ -4,7 +4,7 @@ import typing as _ty
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import network as _net
-from .base import DhcpOptionType, List, RecordList, hashable_payload
+from .base import DHCPOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
 from .addresses import IPv4Address
 from .scalar import Boolean, Bytes, U8
@@ -23,7 +23,7 @@ def _decode_no_compression_domain(
 _CccDomainTextT = _ty.TypeVar("_CccDomainTextT", bound="_CccDomainText")
 
 
-class _CccDomainText(DhcpOptionType, str):
+class _CccDomainText(DHCPOptionType, str):
     """No-compression RFC 1035 domain text used by CCC sub-options."""
 
     def __new__(cls: type[_CccDomainTextT], value: _ty.Any) -> _CccDomainTextT:
@@ -65,7 +65,7 @@ class CccKerberosRealmName(_CccDomainText):
         return super().__new__(cls, str(value).upper())
 
 
-class CccProvisioningServerAddress(DhcpOptionType):
+class CccProvisioningServerAddress(DHCPOptionType):
     """CCC sub-option 3 tagged union for IPv4 address or FQDN."""
 
     def __init__(self, value: _ty.Any) -> None:
@@ -149,7 +149,7 @@ class CccProvisioningServerAddress(DhcpOptionType):
             self.kind,
             (
                 self.value.__json__()
-                if isinstance(self.value, DhcpOptionType)
+                if isinstance(self.value, DHCPOptionType)
                 else str(self.value)
             ),
         ]
@@ -176,7 +176,7 @@ _CccAsReqAsRepBackoffRetryT = _ty.TypeVar(
 )
 
 
-class CccAsReqAsRepBackoffRetry(DhcpOptionType):
+class CccAsReqAsRepBackoffRetry(DHCPOptionType):
     """CCC sub-option 4 AS-REQ/AS-REP backoff and retry tuple."""
 
     def __init__(
@@ -256,7 +256,7 @@ _CccSecurityTicketControlT = _ty.TypeVar(
 )
 
 
-class CccSecurityTicketControl(DhcpOptionType, int):
+class CccSecurityTicketControl(DHCPOptionType, int):
     """CCC sub-option 9 security ticket control mask."""
 
     def __new__(
@@ -296,10 +296,10 @@ class CccKdcServerAddressList(List[IPv4Address]):
 _CccSubOptionT = _ty.TypeVar("_CccSubOptionT", bound="CccSubOption")
 
 
-class CccSubOption(DhcpOptionType):
+class CccSubOption(DHCPOptionType):
     """Typed CCC sub-option record."""
 
-    _PAYLOAD_TYPE: type[DhcpOptionType] = Bytes
+    _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
 
     def __init__(self, code: int, value: _ty.Any) -> None:
         self.code = int(code)
@@ -307,7 +307,7 @@ class CccSubOption(DhcpOptionType):
 
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
-        if isinstance(value, DhcpOptionType):
+        if isinstance(value, DHCPOptionType):
             return value
         return Bytes(value)
 
@@ -317,7 +317,7 @@ class CccSubOption(DhcpOptionType):
 
     def _write_payload(self, data: bytearray) -> int:
         payload = self.value
-        if isinstance(payload, DhcpOptionType):
+        if isinstance(payload, DHCPOptionType):
             return payload._dhcp_write(data)
         payload_bytes = Bytes(payload)
         data.extend(payload_bytes)
@@ -352,7 +352,7 @@ class CccSubOption(DhcpOptionType):
 
     def __json__(self) -> list[_ty.Any]:
         value = self.value
-        if isinstance(value, DhcpOptionType):
+        if isinstance(value, DHCPOptionType):
             value = value.__json__()
         else:
             value = Bytes(value).__json__()
@@ -360,7 +360,7 @@ class CccSubOption(DhcpOptionType):
 
 
 class _CccFixedPayloadSubOption(CccSubOption):
-    _PAYLOAD_TYPE: type[DhcpOptionType] = Bytes
+    _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
 
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
@@ -375,7 +375,7 @@ class _CccFixedPayloadSubOption(CccSubOption):
         return cls._PAYLOAD_TYPE._dhcp_decode(payload)
 
     def _write_payload(self, data: bytearray) -> int:
-        return _ty.cast(DhcpOptionType, self.value)._dhcp_write(data)
+        return _ty.cast(DHCPOptionType, self.value)._dhcp_write(data)
 
 
 class CccPrimaryDhcpServerAddressSubOption(_CccFixedPayloadSubOption):

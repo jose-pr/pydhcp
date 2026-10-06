@@ -7,7 +7,7 @@ timing) and configures through its own script interface.
 
 from __future__ import annotations
 
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 
 from ._peers import udhcpc
 from ._topo import (
@@ -88,7 +88,7 @@ def test_udhcpc_completes_dora_through_the_relay(lab):
     assert [f.type_name() for f in delivered][:2] == ["DHCPOFFER", "DHCPACK"]
     assert {f.src_mac for f in delivered} == {RELAY_CLIENT_SIDE_MAC}
     for frame in delivered:
-        assert DhcpOptionCode.RELAY_AGENT_INFORMATION not in frame.message().options
+        assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in frame.message().options
 
     record_case(
         "udhcpc_relay_dora",

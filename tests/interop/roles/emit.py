@@ -19,7 +19,7 @@ import argparse
 import socket
 import time
 
-from pydhcp import DhcpClient
+from pydhcp import DHCPClient
 from pydhcp.network import IPv4
 
 parser = argparse.ArgumentParser()
@@ -36,7 +36,7 @@ parser.add_argument("--subnet-broadcast")
 parser.add_argument("--device", help="send out of this interface regardless of routes")
 args = parser.parse_args()
 
-builder = DhcpClient()
+builder = DHCPClient()
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 if args.device:

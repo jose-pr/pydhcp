@@ -1,5 +1,5 @@
 {
- "description": "pydhcp's DhcpClient completes DISCOVER, OFFER, REQUEST, ACK against dnsmasq",
+ "description": "pydhcp's DHCPClient completes DISCOVER, OFFER, REQUEST, ACK against dnsmasq",
  "peer": "Dnsmasq version 2.92rel2",
  "datagrams": [
   {

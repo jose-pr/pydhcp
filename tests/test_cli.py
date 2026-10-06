@@ -14,10 +14,10 @@ from datetime import datetime, timedelta, timezone
 
 from pydhcp import (
     CaptureEvent,
-    DhcpMessage,
-    DhcpOptions,
+    DHCPMessage,
+    DHCPOptions,
     NetworkInterface,
-    RequestContext,
+    DHCPRequestContext,
 )
 from pydhcp.cli import (
     App,
@@ -33,9 +33,9 @@ from pydhcp.cli import (
     main,
 )
 from pydhcp.config import load_config
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.packet.structured import dump_message
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4, MACAddress, SocketAddress
 from conftest import build_request
 
@@ -74,14 +74,14 @@ def test_cmd_interfaces(capsys, monkeypatch) -> None:
     ]
 
 
-def _sample_packet() -> DhcpMessage:
-    return build_request(DhcpMessageType.DHCPDISCOVER)
+def _sample_packet() -> DHCPMessage:
+    return build_request(DHCPMessageType.DHCPDISCOVER)
 
 
 def _capture_event() -> CaptureEvent:
     return CaptureEvent(
         message=_sample_packet(),
-        context=RequestContext(
+        context=DHCPRequestContext(
             transport=MagicMock(),
             interface=NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/24")),
             client=SocketAddress("127.0.0.1", 68),
@@ -420,7 +420,7 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
         def stop(self):
             self.stopped = True
 
-    monkeypatch.setattr("pydhcp.cli.capture.DhcpCapture", FakeCapture)
+    monkeypatch.setattr("pydhcp.cli.capture.DHCPCapture", FakeCapture)
     cmd = Capture(
         listen="127.0.0.1:6767",
         packet_filter="msg_type=DHCPDISCOVER",
@@ -488,7 +488,7 @@ def test_load_ini_config(tmp_path):
     assert loaded == {"server": {"listen": "127.0.0.1:6767"}}
 
 
-@patch("pydhcp.cli.server.DhcpServer")
+@patch("pydhcp.cli.server.DHCPServer")
 def test_cmd_server(mock_dhcp_server_cls):
     mock_server = MagicMock()
     mock_dhcp_server_cls.return_value = mock_server
@@ -504,7 +504,7 @@ def test_cmd_server(mock_dhcp_server_cls):
 
 
 def test_parse_server_address_host_only():
-    """A bare host now arrives at DhcpRelay already carrying the default port.
+    """A bare host now arrives at DHCPRelay already carrying the default port.
 
     It used to be handed through as the raw string and defaulted inside
     `_normalize_server_address`; the value reaching the relay is the same
@@ -558,13 +558,13 @@ def test_parse_server_address_refuses_a_malformed_port_or_bracket(value, message
 
 @pytest.mark.parametrize("listen", ["127.0.0.1:+6767", "[127.0.0.1]:6767"])
 def test_relay_listen_flag_refuses_what_the_listener_refuses(listen):
-    """`--listen` goes to the same parser as `DhcpListener(listen=)`: the
+    """`--listen` goes to the same parser as `DHCPListener(listen=)`: the
     command fails with a `ValueError` before it announces anything or binds."""
     with pytest.raises(ValueError):
         Relay(listen=listen, server=("192.0.2.1",))()
 
 
-@patch("pydhcp.cli.relay.DhcpRelay")
+@patch("pydhcp.cli.relay.DHCPRelay")
 def test_cmd_relay(mock_dhcp_relay_cls):
     mock_relay = MagicMock()
     mock_dhcp_relay_cls.return_value = mock_relay
@@ -650,7 +650,7 @@ def test_relay_server_flag_collects_zero_one_or_many(argv, expected) -> None:
 def test_per_interface_is_reachable_from_every_listening_subcommand(
     subcommand: str,
 ) -> None:
-    """Both DhcpServer and DhcpRelay take `per_interface`; only capture exposed it.
+    """Both DHCPServer and DHCPRelay take `per_interface`; only capture exposed it.
 
     A supported knob with no CLI route is unreachable -- and `--config` exists
     only on `server`, so relay had no second route either.
@@ -661,7 +661,7 @@ def test_per_interface_is_reachable_from_every_listening_subcommand(
     assert parser.parse_args([subcommand]).per_interface is False
 
 
-@patch("pydhcp.cli.server.DhcpServer")
+@patch("pydhcp.cli.server.DHCPServer")
 def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
     Server(config=None, listen="127.0.0.1:6767", per_interface=True)()
 
@@ -670,7 +670,7 @@ def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
     )
 
 
-@patch("pydhcp.cli.relay.DhcpRelay")
+@patch("pydhcp.cli.relay.DHCPRelay")
 def test_cmd_relay_forwards_per_interface(mock_dhcp_relay_cls) -> None:
     Relay(server=("192.0.2.1",), per_interface=True)()
 
@@ -681,7 +681,7 @@ def test_cmd_relay_forwards_per_interface(mock_dhcp_relay_cls) -> None:
     "flag, value",
     [("circuit_id", "0a01"), ("remote_id", "0b02")],
 )
-@patch("pydhcp.cli.relay.DhcpRelay")
+@patch("pydhcp.cli.relay.DHCPRelay")
 def test_relay_rejects_ids_without_insert_flag(
     mock_dhcp_relay_cls, flag: str, value: str
 ) -> None:
@@ -700,7 +700,7 @@ def test_relay_rejects_ids_without_insert_flag(
     assert not mock_dhcp_relay_cls.called
 
 
-@patch("pydhcp.cli.relay.DhcpRelay")
+@patch("pydhcp.cli.relay.DHCPRelay")
 def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
     Relay(
         server=("192.0.2.1",),
@@ -715,7 +715,7 @@ def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
     assert kwargs["remote_id"] == b"\x0b\x02"
 
 
-@patch("pydhcp.cli.relay.DhcpRelay")
+@patch("pydhcp.cli.relay.DHCPRelay")
 def test_relay_warns_when_insert_flag_has_no_ids(mock_dhcp_relay_cls, caplog) -> None:
     """The flag alone builds an empty sub-option list and inserts nothing."""
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
@@ -889,7 +889,7 @@ def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
         def stop(self):
             pass
 
-    monkeypatch.setattr("pydhcp.cli.server.DhcpServer", FakeServer)
+    monkeypatch.setattr("pydhcp.cli.server.DHCPServer", FakeServer)
 
     command = Server()
     command.config = str(config)
@@ -955,7 +955,7 @@ def test_capture_destination_port_is_the_port_received_on() -> None:
     so a filter using it silently matched nothing."""
     import socket as _socket
 
-    from pydhcp.listener import UdpTransport
+    from pydhcp.listener import UDPTransport
 
     sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))
@@ -963,8 +963,8 @@ def test_capture_destination_port_is_the_port_received_on() -> None:
     try:
         event = CaptureEvent(
             message=_sample_packet(),
-            context=RequestContext(
-                transport=UdpTransport(sock),
+            context=DHCPRequestContext(
+                transport=UDPTransport(sock),
                 interface=NetworkInterface(
                     "lo", ipaddress.IPv4Interface("127.0.0.1/24")
                 ),
@@ -1076,23 +1076,28 @@ def _capture_event_with_client_id(client_id: bytes):
     from unittest.mock import Mock
 
     from pydhcp.capture import CaptureEvent
-    from pydhcp.listener import RequestContext
+    from pydhcp.listener import DHCPRequestContext
     from pydhcp.network import IPv4, NetworkInterface, SocketAddress
-    from pydhcp.options import DhcpOptionCode, DhcpOptions
-    from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-    from pydhcp.packet.message import DhcpMessage
+    from pydhcp.options import DHCPOptionCode, DHCPOptions
+    from pydhcp.packet import (
+        DHCPMessageType,
+        DHCPFlags,
+        HardwareAddressType,
+        DHCPOpcode,
+    )
+    from pydhcp.packet.message import DHCPMessage
 
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    options[DhcpOptionCode.CLIENT_IDENTIFIER] = bytearray(client_id)
-    message = DhcpMessage(
-        OpCode.BOOTREQUEST,
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(client_id)
+    message = DHCPMessage(
+        DHCPOpcode.BOOTREQUEST,
         HardwareAddressType.ETHERNET,
         6,
         0,
         0x1234,
         timedelta(0),
-        Flags.UNICAST,
+        DHCPFlags.UNICAST,
         IPv4("0.0.0.0"),
         IPv4("0.0.0.0"),
         IPv4("0.0.0.0"),
@@ -1102,7 +1107,7 @@ def _capture_event_with_client_id(client_id: bytes):
         "",
         options,
     )
-    context = RequestContext(
+    context = DHCPRequestContext(
         transport=Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from pydhcp.options import DhcpOptionCode
+from pydhcp.options import DHCPOptionCode
 
 from ._peers import dhclient, dnsmasq
 from ._topo import RELAY_CLIENT_SIDE_MAC, ROLES_RELAYED, ROLES_SINGLE, relayed, single
@@ -57,7 +57,7 @@ def test_dhclient_completes_dora_through_the_relay_from_dnsmasq(lab):
 
 def test_pydhcp_client_completes_dora_against_dnsmasq(lab):
     need("dnsmasq")
-    # DhcpClient sends from an address the interface already holds.
+    # DHCPClient sends from an address the interface already holds.
     net = single(lab, client_addr="10.99.0.50/24")
     lab.route(net.cli, "default", "via", net.server_ip)
     tap = lab.tap(net.cli, "cv0", "client-segment")
@@ -70,12 +70,12 @@ def test_pydhcp_client_completes_dora_against_dnsmasq(lab):
     assert result["yiaddr"].startswith("10.99.0.1")
     types = [f.type_name() for f in tap.frames()]
     assert types[:4] == ["DHCPDISCOVER", "DHCPOFFER", "DHCPREQUEST", "DHCPACK"], types
-    assert DhcpOptionCode.SUBNET_MASK.name in result["options"]
+    assert DHCPOptionCode.SUBNET_MASK.name in result["options"]
     assert result["options"]["SUBNET_MASK"] == "255.255.255.0"
 
     record_case(
         "dnsmasq_pydhcp_client_dora",
-        "pydhcp's DhcpClient completes DISCOVER, OFFER, REQUEST, ACK against dnsmasq",
+        "pydhcp's DHCPClient completes DISCOVER, OFFER, REQUEST, ACK against dnsmasq",
         peer_version("dnsmasq", "--version"),
         {"client-segment": tap},
         ROLES_SINGLE

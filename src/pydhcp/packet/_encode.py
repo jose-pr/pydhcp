@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as _ty
 
 from .. import constants as _const, nvt as _nvt
-from ..options import DhcpOptionCode, type as _type
+from ..options import DHCPOptionCode, type as _type
 from ._decode import _MessageDecode
 from ._fields import (
     _FIXED_HEADER_SIZE,
@@ -60,8 +60,8 @@ class _MessageEncode(_MessageDecode):
         # and re-encoding it (a relay forwarding a PXE reply, say) would otherwise
         # tell the receiver to parse sname/file as options while they hold the
         # literal server name and boot file that decode moved out of them.
-        if int(DhcpOptionCode.OPTION_OVERLOAD) in base:
-            del base[int(DhcpOptionCode.OPTION_OVERLOAD)]
+        if int(DHCPOptionCode.OPTION_OVERLOAD) in base:
+            del base[int(DHCPOptionCode.OPTION_OVERLOAD)]
         sname_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.sname)
         file_bytes: _ty.Union[bytes, bytearray] = _nvt.encode(self.file)
         if len(base.encode()) > max_options_field_size + 128 + 64:
@@ -81,20 +81,20 @@ class _MessageEncode(_MessageDecode):
         for choice in candidates:
             options = base.copy()
             if choice & overload_type.FILE and self.file:
-                if DhcpOptionCode.BOOTFILE_NAME not in options:
-                    options[DhcpOptionCode.BOOTFILE_NAME] = self.file
+                if DHCPOptionCode.BOOTFILE_NAME not in options:
+                    options[DHCPOptionCode.BOOTFILE_NAME] = self.file
                     options._options.move_to_end(
-                        int(DhcpOptionCode.BOOTFILE_NAME), False
+                        int(DHCPOptionCode.BOOTFILE_NAME), False
                     )
             if choice & overload_type.SNAME and self.sname:
-                if DhcpOptionCode.TFTP_SERVER not in options:
-                    options[DhcpOptionCode.TFTP_SERVER] = self.sname
-                    options._options.move_to_end(int(DhcpOptionCode.TFTP_SERVER), False)
+                if DHCPOptionCode.TFTP_SERVER not in options:
+                    options[DHCPOptionCode.TFTP_SERVER] = self.sname
+                    options._options.move_to_end(int(DHCPOptionCode.TFTP_SERVER), False)
             if choice is not overload_type.NONE:
-                options._options[int(DhcpOptionCode.OPTION_OVERLOAD)] = bytearray(
+                options._options[int(DHCPOptionCode.OPTION_OVERLOAD)] = bytearray(
                     [choice.value]
                 )
-                options._options.move_to_end(int(DhcpOptionCode.OPTION_OVERLOAD), False)
+                options._options.move_to_end(int(DHCPOptionCode.OPTION_OVERLOAD), False)
             # DHCP_MESSAGE_TYPE leads the options field whether or not we
             # overload, ahead of OPTION_OVERLOAD. RFC 2131 s3 walks the protocol
             # by message type, and receivers read option 53 before parsing the
@@ -103,7 +103,7 @@ class _MessageEncode(_MessageDecode):
             # TLV after the cookie on the overload path.
             try:
                 options._options.move_to_end(
-                    int(DhcpOptionCode.DHCP_MESSAGE_TYPE), False
+                    int(DHCPOptionCode.DHCP_MESSAGE_TYPE), False
                 )
             except KeyError:
                 pass

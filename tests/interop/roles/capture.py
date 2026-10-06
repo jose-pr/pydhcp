@@ -13,7 +13,7 @@ import json
 import signal
 import sys
 
-from pydhcp import AsyncDhcpCapture
+from pydhcp import AsyncDHCPCapture
 
 out = open(sys.argv[1], "w", encoding="utf-8", buffering=1, newline="\n")
 
@@ -34,7 +34,7 @@ def sink(event) -> None:
 
 
 async def main() -> None:
-    capture = AsyncDhcpCapture(listen=("*", 67), sink=sink)
+    capture = AsyncDHCPCapture(listen=("*", 67), sink=sink)
     done = asyncio.Event()
     asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, done.set)
     await capture.start()

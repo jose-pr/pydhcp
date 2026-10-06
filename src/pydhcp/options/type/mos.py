@@ -4,7 +4,7 @@ import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from .base import DhcpOptionType, List, RecordList, hashable_payload
+from .base import DHCPOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
 from .addresses import IPv4Address
 from .scalar import Bytes
@@ -12,7 +12,7 @@ from .scalar import Bytes
 _MoSLabelListT = _ty.TypeVar("_MoSLabelListT", bound="_MoSLabelList")
 
 
-class _MoSLabelList(DhcpOptionType, list[str]):
+class _MoSLabelList(DHCPOptionType, list[str]):
     def __init__(self, *items: _ty.Any):
         if len(items) == 1 and isinstance(items[0], list):
             self.extend(items[0])
@@ -72,7 +72,7 @@ class _MoSLabelList(DhcpOptionType, list[str]):
 _MoSSubOptionT = _ty.TypeVar("_MoSSubOptionT", bound="_MoSSubOption")
 
 
-class _MoSSubOption(DhcpOptionType):
+class _MoSSubOption(DHCPOptionType):
     def __init__(self, code: int, value: _ty.Any) -> None:
         self.code = int(code)
         self.value = self._normalize_value(self.code, value)
@@ -98,7 +98,7 @@ class _MoSSubOption(DhcpOptionType):
 
     def _write_payload(self, data: bytearray) -> int:
         payload = self.value
-        if isinstance(payload, DhcpOptionType):
+        if isinstance(payload, DHCPOptionType):
             return payload._dhcp_write(data)
         payload_bytes = Bytes(payload)
         data.extend(payload_bytes)
@@ -134,7 +134,7 @@ class _MoSSubOption(DhcpOptionType):
 
     def __json__(self) -> list[_ty.Any]:
         value = self.value
-        if isinstance(value, DhcpOptionType):
+        if isinstance(value, DHCPOptionType):
             value = value.__json__()
         return [self.code, value]
 
@@ -174,7 +174,7 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
     def _write_payload(self, data: bytearray) -> int:
         if self.code not in self._KNOWN_CODES:
             return Bytes(self.value)._dhcp_write(data)
-        payload = _ty.cast(DhcpOptionType, self.value)
+        payload = _ty.cast(DHCPOptionType, self.value)
         return payload._dhcp_write(data)
 
 
@@ -207,7 +207,7 @@ class _MoSFqdnSubOption(_MoSSubOption):
     def _write_payload(self, data: bytearray) -> int:
         if self.code not in self._KNOWN_CODES:
             return Bytes(self.value)._dhcp_write(data)
-        payload = _ty.cast(DhcpOptionType, self.value)
+        payload = _ty.cast(DHCPOptionType, self.value)
         return payload._dhcp_write(data)
 
 

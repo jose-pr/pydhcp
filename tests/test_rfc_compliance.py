@@ -1,29 +1,29 @@
 import pytest
 from datetime import datetime, timedelta
-from pydhcp.packet.message import DhcpMessage
-from pydhcp.packet import DhcpMessageType, Flags, HardwareAddressType, OpCode
-from pydhcp.options import DhcpOptionCode
+from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.options import DHCPOptionCode
 from pydhcp.network import IPv4
-from pydhcp.options import DhcpOptions
-from pydhcp.server import DhcpServer, DhcpLease
+from pydhcp.options import DHCPOptions
+from pydhcp.server import DHCPServer, DHCPLease
 from pydhcp.options.type import U16, U32, String
 from math import inf as _inf
 
 
 def build_dhcp_packet(htype=1, cookie=b"\x63\x82\x53\x63") -> bytearray:
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
-        [DhcpMessageType.DHCPDISCOVER.value]
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPDISCOVER.value]
     )
 
-    msg = DhcpMessage(
-        op=OpCode.BOOTREQUEST,
+    msg = DHCPMessage(
+        op=DHCPOpcode.BOOTREQUEST,
         htype=HardwareAddressType.ETHERNET if htype == 1 else htype,
         hlen=6,
         hops=0,
         xid=0x3903F326,
         secs=timedelta(seconds=0),
-        flags=Flags.UNICAST,
+        flags=DHCPFlags.UNICAST,
         ciaddr=IPv4("0.0.0.0"),
         yiaddr=IPv4("0.0.0.0"),
         siaddr=IPv4("0.0.0.0"),
@@ -46,22 +46,22 @@ def build_dhcp_packet(htype=1, cookie=b"\x63\x82\x53\x63") -> bytearray:
 
 def test_lease_expiration_total_seconds():
     """Bug 3: Verify lease TTL calculation uses total_seconds() instead of seconds."""
-    server = DhcpServer()
+    server = DHCPServer()
     # Create lease expiring in 1 hour 1 minute
-    lease = DhcpLease(
+    lease = DHCPLease(
         IPv4("192.168.1.100"),
         datetime.now() + timedelta(hours=1, minutes=1, seconds=1),
-        DhcpOptions(),
+        DHCPOptions(),
     )
     resp = server._create_response(
-        DhcpMessage(
-            op=OpCode.BOOTREQUEST,
+        DHCPMessage(
+            op=DHCPOpcode.BOOTREQUEST,
             htype=HardwareAddressType.ETHERNET,
             hlen=6,
             hops=0,
             xid=1,
             secs=timedelta(seconds=0),
-            flags=Flags.UNICAST,
+            flags=DHCPFlags.UNICAST,
             ciaddr=IPv4("0.0.0.0"),
             yiaddr=IPv4("0.0.0.0"),
             siaddr=IPv4("0.0.0.0"),
@@ -69,14 +69,14 @@ def test_lease_expiration_total_seconds():
             chaddr=b"\x00\x11\x22\x33\x44\x55",
             sname="",
             file="",
-            options=DhcpOptions(),
+            options=DHCPOptions(),
         ),
         lease,
         IPv4("192.168.1.1"),
-        DhcpMessageType.DHCPOFFER,
+        DHCPMessageType.DHCPOFFER,
     )
     # Expiration should be ~3661 seconds, definitely greater than 600
-    expires = resp.options.get(DhcpOptionCode.IP_ADDRESS_LEASE_TIME)
+    expires = resp.options.get(DHCPOptionCode.IP_ADDRESS_LEASE_TIME)
     assert expires is not None
     assert 3650 < expires <= 3662
 
@@ -90,14 +90,14 @@ def test_unnamed_htype_is_preserved_not_rewritten():
     identifier is built from this value too, so that changed as well.
     """
     data = build_dhcp_packet(htype=255)
-    msg = DhcpMessage.decode(data)
+    msg = DHCPMessage.decode(data)
 
     assert msg.htype == 255
     assert msg.htype.label() == "HTYPE_255"
     assert bytes(msg.encode())[1] == 255, "htype was rewritten on re-encode"
 
     # A type that now has a name resolves to it rather than a pseudo-member.
-    assert DhcpMessage.decode(build_dhcp_packet(htype=32)).htype is (
+    assert DHCPMessage.decode(build_dhcp_packet(htype=32)).htype is (
         HardwareAddressType.INFINIBAND
     )
 
@@ -106,7 +106,7 @@ def test_bad_magic_cookie_raises_value_error():
     """Bug 2: Invalid magic cookie raises ValueError with context."""
     data = build_dhcp_packet(cookie=b"\x00\x00\x00\x00")
     with pytest.raises(ValueError, match="Invalid magic cookie"):
-        DhcpMessage.decode(data)
+        DHCPMessage.decode(data)
 
 
 def test_u16_overflow_validation():

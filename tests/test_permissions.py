@@ -1,12 +1,12 @@
 import pytest
 import errno
 from unittest.mock import MagicMock
-from pydhcp import DhcpServer
+from pydhcp import DHCPServer
 from pydhcp.network import SocketAddress, IPv4
 
 
 def test_bind_permission_error():
-    server = DhcpServer(listen=[("127.0.0.1", 67)])
+    server = DHCPServer(listen=[("127.0.0.1", 67)])
     mock_address = MagicMock()
     mock_address.port = 67
     mock_address.ip = IPv4("127.0.0.1")
@@ -28,7 +28,7 @@ def test_bind_address_in_use():
     that is what the mocked `listen` raises; the DHCP suggestion is appended."""
     import netimps
 
-    server = DhcpServer(listen=[("127.0.0.1", 6767)])
+    server = DHCPServer(listen=[("127.0.0.1", 6767)])
     mock_address = MagicMock()
     mock_address.port = 6767
     mock_address.ip = IPv4("127.0.0.1")

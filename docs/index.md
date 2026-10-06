@@ -5,9 +5,9 @@ A Python DHCP library and server implementation.
 ## Features
 
 - **DHCP Packet Parsing & Construction**: Full control and type safety over DHCP message structures.
-- **Synchronous & Asynchronous Sockets**: Standard threaded listening loops (`DhcpListener`/`DhcpServer`/`DhcpRelay`/`DhcpCapture`) and an asyncio counterpart for each (`AsyncDhcpListener`/`AsyncDhcpServer`/`AsyncDhcpRelay`/`AsyncDhcpCapture`). The async halves are mixins over the same receive path, not parallel implementations, so a fix reaches both.
+- **Synchronous & Asynchronous Sockets**: Standard threaded listening loops (`DHCPListener`/`DHCPServer`/`DHCPRelay`/`DHCPCapture`) and an asyncio counterpart for each (`AsyncDHCPListener`/`AsyncDHCPServer`/`AsyncDHCPRelay`/`AsyncDHCPCapture`). The async halves are mixins over the same receive path, not parallel implementations, so a fix reaches both.
 - **Client & Capture Helpers**: Packet-level client builders and structured DHCP capture output for troubleshooting.
-- **Relay Agent**: `DhcpRelay` forwards client traffic to upstream DHCP servers per RFC 1542 / RFC 2131 §4.1, with hop-limit loop protection and optional RFC 3046 option-82 tagging.
+- **Relay Agent**: `DHCPRelay` forwards client traffic to upstream DHCP servers per RFC 1542 / RFC 2131 §4.1, with hop-limit loop protection and optional RFC 3046 option-82 tagging.
 - **Flexible Options System**: Easy options manipulation using type-safe custom dictionaries.
 
 ## Installation
@@ -22,20 +22,20 @@ pip install pydhcp
 
 ### Synchronous DHCP Server
 ```python
-from pydhcp.server import DhcpServer
+from pydhcp.server import DHCPServer
 
 # Automatically binds to default DHCP server ports
-server = DhcpServer()
+server = DHCPServer()
 server.listen()
 ```
 
 ### Asynchronous DHCP Server
 ```python
 import asyncio
-from pydhcp.server import AsyncDhcpServer
+from pydhcp.server import AsyncDHCPServer
 
 async def main():
-    server = AsyncDhcpServer()
+    server = AsyncDHCPServer()
     await server.start()      # binds and starts receiving; returns immediately
     try:
         await asyncio.Event().wait()   # serve until cancelled (Ctrl-C)
@@ -56,12 +56,12 @@ when the backlog is full is dropped and counted in `metrics.packets_dropped_back
 ### Basic Packet Client
 
 ```python
-from pydhcp.client import DhcpClient
+from pydhcp.client import DHCPClient
 
-client = DhcpClient(listen=("127.0.0.1", 6768))
+client = DHCPClient(listen=("127.0.0.1", 6768))
 discover = client.build_discover(b"\x00\x11\x22\x33\x44\x55")
 client.send(discover, destination="127.0.0.1", port=6767)
 ```
 
-`DhcpClient` is intentionally packet-level tooling; it does not configure the operating
+`DHCPClient` is intentionally packet-level tooling; it does not configure the operating
 system network stack.

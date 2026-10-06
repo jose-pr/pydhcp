@@ -25,7 +25,7 @@ This page covers the most common things that go sideways when bringing up a DHCP
 
 - Capture the raw packet and compare it against the DHCP header layout.
 - Turn on debug logging to inspect the transaction ID and message type.
-- Validate that any custom options implement the `DhcpOptionType` contract correctly.
+- Validate that any custom options implement the `DHCPOptionType` contract correctly.
 
 Decode packet hex to structured JSON when you want tooling-friendly output.
 

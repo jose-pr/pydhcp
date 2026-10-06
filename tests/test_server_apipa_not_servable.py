@@ -16,13 +16,13 @@ from unittest.mock import Mock
 
 import pytest
 
-from pydhcp import DhcpOptions, NetworkInterface, RequestContext
+from pydhcp import DHCPOptions, NetworkInterface, DHCPRequestContext
 from pydhcp import network as net
 from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.network import IPv4, SocketAddress
-from pydhcp.options import DhcpOptionCode
-from pydhcp.packet import DhcpMessageType
-from pydhcp.server import DhcpServer
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType
+from pydhcp.server import DHCPServer
 
 from conftest import build_request
 
@@ -60,8 +60,8 @@ def host(monkeypatch):
     return interfaces
 
 
-def _context(interface) -> RequestContext:
-    return RequestContext(
+def _context(interface) -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=Mock(send=Mock(return_value=1)),
         interface=NetworkInterface("eth0", interface),
         client=SocketAddress("169.254.11.200", 68),
@@ -70,9 +70,9 @@ def _context(interface) -> RequestContext:
 
 
 def _request(requested: str):
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
-    options[DhcpOptionCode.REQUESTED_IP] = IPv4(requested)
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    options[DHCPOptionCode.REQUESTED_IP] = IPv4(requested)
     return build_request(options=options)
 
 
@@ -92,7 +92,7 @@ def test_a_routable_interface_still_is(host) -> None:
 
 
 def test_no_lease_is_allocated_from_a_link_local_network(host) -> None:
-    server = DhcpServer(lease_backend=InMemoryLeaseBackend())
+    server = DHCPServer(lease_backend=InMemoryLeaseBackend())
     msg = _request("169.254.11.200")
 
     lease = server.acquire_lease(msg.client_id(), IPv4("169.254.11.89"), msg)
@@ -108,6 +108,6 @@ def test_the_identity_check_still_sees_a_link_local_address(host) -> None:
     and treating it as foreign is what made a multi-address host delete its own
     bindings.
     """
-    server = DhcpServer(lease_backend=InMemoryLeaseBackend())
+    server = DHCPServer(lease_backend=InMemoryLeaseBackend())
 
     assert server._is_our_server_id(IPv4("169.254.11.89"), IPv4("10.0.0.1")) is True

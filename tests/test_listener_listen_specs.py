@@ -2,9 +2,9 @@ import ipaddress
 
 import pytest
 
-from pydhcp.listener import DhcpListener, _parselisteners
+from pydhcp.listener import DHCPListener, _parselisteners
 from pydhcp.network import IPv4, NetworkInterface, SocketAddress
-from pydhcp.server import AsyncDhcpServer, DhcpServer
+from pydhcp.server import AsyncDHCPServer, DHCPServer
 
 
 def test_parse_single_tuple() -> None:
@@ -77,7 +77,7 @@ def test_a_malformed_port_or_bracket_is_named_as_such(
     are refused, and the message blames the port or the brackets, not the
     address -- on the wildcard-detecting path and on the per-interface one."""
     with pytest.raises(ValueError, match=message):
-        DhcpListener(listen=listen, per_interface=per_interface)
+        DHCPListener(listen=listen, per_interface=per_interface)
 
 
 @pytest.mark.parametrize("listen", ["localhost:6767", "eth0", ("localhost", 6767)])
@@ -86,21 +86,21 @@ def test_a_host_name_is_refused_as_not_an_ipv4_address(listen, per_interface) ->
     """`listen` takes addresses; a name is not one, and both paths say so in the
     same words (`ipaddress`'s), not a wildcard-detection error."""
     with pytest.raises(ipaddress.AddressValueError, match="Expected 4 octets"):
-        DhcpListener(listen=listen, per_interface=per_interface)
+        DHCPListener(listen=listen, per_interface=per_interface)
 
 
 @pytest.mark.parametrize(
     "listen", ["*", "*:6767", ":6767", "0.0.0.0:6767", "127.0.0.1:6767"]
 )
 def test_the_listen_forms_that_stay_valid(listen) -> None:
-    DhcpListener(listen=listen)
+    DHCPListener(listen=listen)
 
 
 def test_server_constructors_accept_per_interface_and_multiple_endpoints() -> None:
     listen = [("127.0.0.1", [6767, 6768])]
 
-    server = DhcpServer(listen=listen, per_interface=True)
-    async_server = AsyncDhcpServer(listen=listen, per_interface=True)
+    server = DHCPServer(listen=listen, per_interface=True)
+    async_server = AsyncDHCPServer(listen=listen, per_interface=True)
 
     expected = [
         SocketAddress("127.0.0.1", 6767),
@@ -225,9 +225,9 @@ def test_resolve_interface_falls_back_to_address_when_index_is_unknown() -> None
 def test_close_releases_every_bound_socket() -> None:
     """stop() only ends the receive loop. Without close(), a process creating a
     listener per operation leaks a bound UDP socket and its port each time."""
-    from pydhcp.listener import DhcpListener
+    from pydhcp.listener import DHCPListener
 
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     # The private list on purpose: the claim is that the OS sockets were
     # *closed*, which `bound_addresses` cannot express -- it reports addresses,
@@ -243,9 +243,9 @@ def test_close_releases_every_bound_socket() -> None:
 
 
 def test_listener_is_a_context_manager() -> None:
-    from pydhcp.listener import DhcpListener
+    from pydhcp.listener import DHCPListener
 
-    with DhcpListener(listen=("127.0.0.1", 0)) as listener:
+    with DHCPListener(listen=("127.0.0.1", 0)) as listener:
         assert listener.bound_addresses
         sockets = list(listener._sockets)  # see above: closed-ness, not addresses
 
@@ -259,9 +259,9 @@ def test_start_off_the_main_thread_does_not_wedge_the_listener() -> None:
     cancellation token was set, leaving the listener permanently 'started'."""
     import threading
 
-    from pydhcp.listener import DhcpListener
+    from pydhcp.listener import DHCPListener
 
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener._select_timeout = 0.05
     result = {}
 
@@ -287,10 +287,10 @@ def test_start_restores_the_previous_sigint_handler_on_close() -> None:
     """Library code must not keep a process-wide handler after it is done."""
     import signal
 
-    from pydhcp.listener import DhcpListener
+    from pydhcp.listener import DHCPListener
 
     original = signal.getsignal(signal.SIGINT)
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     listener._select_timeout = 0.05
     thread = listener.start()
     assert thread is not None
@@ -309,7 +309,7 @@ def test_interface_resolution_is_cached_and_cleared_by_bind(enumerations) -> Non
     resolution now costs one enumeration, and a bind forces the next."""
     import socket
 
-    from pydhcp.listener import DhcpListener, _resolve_interface
+    from pydhcp.listener import DHCPListener, _resolve_interface
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))
@@ -318,7 +318,7 @@ def test_interface_resolution_is_cached_and_cleared_by_bind(enumerations) -> Non
             _resolve_interface(sock)
         assert len(enumerations) == 1, "resolution was not cached"
 
-        DhcpListener(listen=("127.0.0.1", 0)).__enter__().close()
+        DHCPListener(listen=("127.0.0.1", 0)).__enter__().close()
         _resolve_interface(sock)
         assert len(enumerations) == 2, "a bind did not force a re-enumeration"
     finally:
@@ -332,9 +332,9 @@ def test_bound_addresses_reports_the_ephemeral_port() -> None:
     private `_sockets` list, which the suite did in twenty-one places -- and
     which anyone writing a test or a tool against pydhcp had to do too.
     """
-    from pydhcp.listener import DhcpListener
+    from pydhcp.listener import DHCPListener
 
-    listener = DhcpListener(listen=("127.0.0.1", 0))
+    listener = DHCPListener(listen=("127.0.0.1", 0))
     assert listener.bound_addresses == ()
 
     listener.bind()

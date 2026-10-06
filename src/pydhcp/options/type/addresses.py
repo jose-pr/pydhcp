@@ -5,13 +5,13 @@ from __future__ import annotations
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ...network import IPv4 as _IP, IPv4Network as _Network
-from .base import DhcpOptionType
+from .base import DHCPOptionType
 from collections.abc import Iterable
 
 _IPv4AddressT = _ty.TypeVar("_IPv4AddressT", bound="IPv4Address")
 
 
-class IPv4Address(DhcpOptionType, _IP):
+class IPv4Address(DHCPOptionType, _IP):
     """A single IPv4 address carried in network byte order."""
 
     @classmethod
@@ -42,7 +42,7 @@ class IPv4Address(DhcpOptionType, _IP):
 _ClasslessRouteT = _ty.TypeVar("_ClasslessRouteT", bound="ClasslessRoute")
 
 
-class ClasslessRoute(DhcpOptionType):
+class ClasslessRoute(DHCPOptionType):
     """RFC 3442 classless static route entry.
 
     Accepts either ``ClasslessRoute(gateway, network)`` or a single
@@ -124,7 +124,7 @@ class ClasslessRoute(DhcpOptionType):
 _IPv4PairListT = _ty.TypeVar("_IPv4PairListT", bound="_IPv4PairList")
 
 
-class _IPv4PairList(DhcpOptionType, list[tuple[_IP, _IP]]):
+class _IPv4PairList(DHCPOptionType, list[tuple[_IP, _IP]]):
     _SECOND_LABEL: str = "second"
 
     def __init__(self, *items: _ty.Any):

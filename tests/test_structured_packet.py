@@ -2,16 +2,16 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp import DhcpMessage, DhcpOptions
-from pydhcp.packet import DhcpMessageType
-from pydhcp.options import DhcpOptionCode
+from pydhcp import DHCPMessage, DHCPOptions
+from pydhcp.packet import DHCPMessageType
+from pydhcp.options import DHCPOptionCode
 from pydhcp.packet.structured import dump_message, load_mapping, load_message
 from pydhcp.packet import structured
 from conftest import build_request
 
 
-def _sample_packet() -> DhcpMessage:
-    return build_request(DhcpMessageType.DHCPDISCOVER)
+def _sample_packet() -> DHCPMessage:
+    return build_request(DHCPMessageType.DHCPDISCOVER)
 
 
 @pytest.mark.parametrize("format_name", ["json", "yaml", "toml", "ini"])
@@ -54,12 +54,12 @@ def test_toml_encode_without_writer_reports_not_implemented(monkeypatch) -> None
 
 def _message_with_option(code, payload):
 
-    from pydhcp.options import DhcpOptionCode, DhcpOptions
-    from pydhcp.packet import DhcpMessageType
-    from pydhcp.packet.message import DhcpMessage
+    from pydhcp.options import DHCPOptionCode, DHCPOptions
+    from pydhcp.packet import DHCPMessageType
+    from pydhcp.packet.message import DHCPMessage
 
-    options = DhcpOptions()
-    options[DhcpOptionCode.DHCP_MESSAGE_TYPE] = DhcpMessageType.DHCPDISCOVER
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
     options[code] = bytearray(payload)
     return build_request(options=options, xid=0x1234)
 
@@ -90,14 +90,14 @@ def test_structured_round_trip_preserves_option_octets(code, payload, why, fmt):
     octets), and an unnamed code was written under the key "UNKNOWN" -- which
     every other unnamed code shared, and which then failed on int("UNKNOWN").
     """
-    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options import DHCPOptionCode
     from pydhcp.packet.structured import dump_message, load_message
 
     _require_format(fmt)
     original = _message_with_option(code, payload)
     reloaded = load_message(dump_message(original, fmt), fmt)
 
-    got = bytes(reloaded.options.get(DhcpOptionCode(code), decode=False) or b"")
+    got = bytes(reloaded.options.get(DHCPOptionCode(code), decode=False) or b"")
     assert got == payload, f"{why}: {got.hex()} != {payload.hex()}"
 
 
@@ -109,7 +109,7 @@ def test_integer_options_serialize_as_plain_integers(fmt):
     something it could not read back -- so any packet carrying option 57 or 51,
     which is most real packets, could not round-trip through either.
     """
-    from pydhcp.options import DhcpOptionCode
+    from pydhcp.options import DHCPOptionCode
     from pydhcp.packet.structured import dump_message, load_message
 
     _require_format(fmt)
@@ -119,13 +119,13 @@ def test_integer_options_serialize_as_plain_integers(fmt):
 
     reloaded = load_message(dump_message(original, fmt), fmt)
     assert bytes(
-        reloaded.options.get(DhcpOptionCode(57), decode=False)
+        reloaded.options.get(DHCPOptionCode(57), decode=False)
     ) == bytes.fromhex("05dc")
 
 
 def test_unnamed_option_codes_do_not_collide_on_one_key():
     """Every code without a name used to serialize as "UNKNOWN"."""
-    from pydhcp.options import DhcpOptionCode, DhcpOptions
+    from pydhcp.options import DHCPOptionCode, DHCPOptions
 
     message = _message_with_option(224, bytes.fromhex("0102"))
     message.options[225] = bytearray(bytes.fromhex("0304"))
