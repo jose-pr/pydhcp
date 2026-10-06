@@ -84,7 +84,7 @@ class DHCPClient(_ClientCore, DHCPListener):
             port=int(port),
             client_mac=message.chaddr,
         )
-        self._note_sent(message)
+        self._note_sent()
         return sent
 
     def _monotonic(self) -> float:
@@ -107,11 +107,16 @@ class DHCPClient(_ClientCore, DHCPListener):
         timeout: float,
         retries: int,
         started_at: float,
-    ) -> _ty.Optional[DHCPMessage]:
+        server: _ty.Optional[_ipaddress.IPv4Address] = None,
+        ends: _ty.Optional[float] = None,
+    ) -> DHCPMessage:
         """Send `message`, retransmitting on RFC 2131 s4.1 backoff, until `msg_type`.
 
         `started_at` is when *acquisition* began, not when this message was
-        built: see `_stamp_secs`.
+        built: see `_stamp_secs`. `server` is the server the exchange selected,
+        `ends` the monotonic reading the call must be over by (`_deadline_end`).
+        Raises `DHCPTimeoutError` when nothing usable arrives, and
+        `DHCPRefusedError` for a DHCPNAK.
         """
         key = self._pending_key(message)
         try:
@@ -120,13 +125,21 @@ class DHCPClient(_ClientCore, DHCPListener):
             # with no queue to route it to it would land in the shared one and
             # be invisible to the exchange that asked for it.
             with self._waiting_for(key) as waiter:
+                self._pending_keys.add(key)
+                attempts = 0
                 for interval in self._retransmit_intervals(timeout, retries):
-                    self._stamp_secs(message, self._monotonic() - started_at)
+                    now = self._monotonic()
+                    if ends is not None:
+                        if ends - now <= 0:
+                            break
+                        interval = min(interval, ends - now)
+                    self._stamp_secs(message, now - started_at)
+                    attempts += 1
                     self.send(message, dst=destination, port=port)
-                    reply = self._wait_for(waiter, msg_type, interval)
+                    reply = self._wait_for(waiter, msg_type, interval, server)
                     if reply is not None:
                         return reply
-                return None
+                raise self._timed_out(msg_type, attempts, ends)
         finally:
             # The exchange is over either way. Left in place, this set only ever
             # grew, and every later replay of a spent xid -- visible to anyone on
@@ -165,8 +178,12 @@ class DHCPClient(_ClientCore, DHCPListener):
         waiter: _queue.Queue[Reply],
         msg_type: _enum.DHCPMessageType,
         timeout: float,
+        server: _ty.Optional[_ipaddress.IPv4Address] = None,
     ) -> _ty.Optional[DHCPMessage]:
-        """Take the first reply of `msg_type` from one exchange's own queue."""
+        """Take the first usable reply of `msg_type` from one exchange's own queue.
+
+        `None` when `timeout` runs out; see `_take` for what is skipped.
+        """
         deadline = self._monotonic() + timeout
         while True:
             remaining = deadline - self._monotonic()
@@ -176,9 +193,9 @@ class DHCPClient(_ClientCore, DHCPListener):
                 msg, _context = waiter.get(timeout=remaining)
             except _queue.Empty:
                 return None
-            if not self._is_awaited(msg, msg_type):
-                continue
-            return msg
+            taken = self._take(msg, msg_type, server, self._monotonic())
+            if taken is not None:
+                return taken
 
     def discover_offer(
         self,
@@ -186,20 +203,55 @@ class DHCPClient(_ClientCore, DHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
+        deadline: _ty.Optional[float] = None,
         destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
-    ) -> _ty.Optional[DHCPMessage]:
-        """Broadcast DHCPDISCOVER and return the first DHCPOFFER, or None.
+    ) -> DHCPMessage:
+        """Broadcast DHCPDISCOVER and return the first usable DHCPOFFER.
 
         `timeout` is the *initial* retransmission interval, not a fixed one:
         each retransmission waits about twice as long as the last, jittered, up
         to `RETRANSMIT_MAX_INTERVAL` (RFC 2131 s4.1). With the defaults the
-        whole call is bounded at roughly 2+4+8 seconds rather than 3x2.
+        whole call is bounded at roughly 2+4+8 seconds rather than 3x2;
+        `deadline` bounds it outright, in seconds.
+
+        An OFFER is usable when it offers an address and names its server;
+        others are ignored. Raises `DHCPTimeoutError` when none arrives.
         """
+        started_at = self._monotonic()
+        return self._discover(
+            chaddr,
+            timeout=timeout,
+            retries=retries,
+            destination=destination,
+            port=port,
+            xid=xid,
+            client_identifier=client_identifier,
+            parameter_request_list=parameter_request_list,
+            broadcast=broadcast,
+            started_at=started_at,
+            ends=self._deadline_end(started_at, deadline),
+        )
+
+    def _discover(
+        self,
+        chaddr: bytes,
+        *,
+        timeout: float,
+        retries: int,
+        destination: IPv4AddressLike,
+        port: int,
+        xid: _ty.Optional[int],
+        client_identifier: _ty.Optional[ClientIdentifierLike],
+        parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]],
+        broadcast: bool,
+        started_at: float,
+        ends: _ty.Optional[float],
+    ) -> DHCPMessage:
         discover = self.build_discover(
             chaddr,
             xid=xid,
@@ -214,7 +266,8 @@ class DHCPClient(_ClientCore, DHCPListener):
             port=port,
             timeout=timeout,
             retries=retries,
-            started_at=self._monotonic(),
+            started_at=started_at,
+            ends=ends,
         )
 
     def dora(
@@ -223,22 +276,27 @@ class DHCPClient(_ClientCore, DHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
+        deadline: _ty.Optional[float] = None,
         destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
-    ) -> _ty.Optional[DHCPMessage]:
-        """Run a full DISCOVER/OFFER/REQUEST/ACK exchange and return the DHCPACK, or None.
+    ) -> DHCPMessage:
+        """Run a full DISCOVER/OFFER/REQUEST/ACK exchange and return the DHCPACK.
 
         `timeout` is the initial retransmission interval for each half of the
-        exchange -- see `discover_offer`.
+        exchange -- see `discover_offer`; `deadline` bounds the two halves
+        together. Raises `DHCPTimeoutError` when no usable OFFER or ACK arrives
+        (an ACK is usable when it comes from the server the REQUEST selected) and
+        `DHCPRefusedError` when the server answers the REQUEST with a DHCPNAK.
         """
         # RFC 2131 s2: `secs` counts from the start of *acquisition*, so the
         # REQUEST half keeps counting from the DISCOVER rather than resetting.
         started_at = self._monotonic()
-        offer = self.discover_offer(
+        ends = self._deadline_end(started_at, deadline)
+        offer = self._discover(
             chaddr,
             timeout=timeout,
             retries=retries,
@@ -248,19 +306,18 @@ class DHCPClient(_ClientCore, DHCPListener):
             client_identifier=client_identifier,
             parameter_request_list=parameter_request_list,
             broadcast=broadcast,
+            started_at=started_at,
+            ends=ends,
         )
-        if offer is None:
-            return None
+        server = self._selected_server(offer)
         request = self._request_after(
             offer,
+            server,
             chaddr,
             client_identifier=client_identifier,
             parameter_request_list=parameter_request_list,
             broadcast=broadcast,
-            now=self._monotonic(),
         )
-        if request is None:
-            return None
         return self._exchange(
             request,
             _enum.DHCPMessageType.DHCPACK,
@@ -269,6 +326,8 @@ class DHCPClient(_ClientCore, DHCPListener):
             timeout=timeout,
             retries=retries,
             started_at=started_at,
+            server=server,
+            ends=ends,
         )
 
     def _deliver(

@@ -15,6 +15,8 @@ from pydhcp import exceptions
 from pydhcp.exceptions import (
     DHCPDecodeError,
     DHCPError,
+    DHCPRefusedError,
+    DHCPTimeoutError,
     DHCPValueError,
     NoClientIdentityError,
 )
@@ -25,8 +27,21 @@ _BASES = [
     (DHCPDecodeError, (DHCPError, ValueError)),
     (DHCPValueError, (DHCPError, ValueError)),
     (NoClientIdentityError, (DHCPError, ValueError)),
+    (DHCPTimeoutError, (DHCPError, TimeoutError)),
+    (DHCPRefusedError, (DHCPError,)),
 ]
 _IDS = [cls.__name__ for cls, _ in _BASES]
+
+
+def _make(cls):
+    if cls is DHCPRefusedError:
+        nak = pydhcp.DHCPMessage.decode(
+            pydhcp.DHCPClient(listen=("127.0.0.1", 0))
+            .build_discover(bytes.fromhex("001122334455"), xid=7)
+            .encode()
+        )
+        return cls("the message", nak)
+    return cls("the message")
 
 
 @pytest.mark.parametrize("cls, bases", _BASES, ids=_IDS)
@@ -44,16 +59,18 @@ def test_every_exception_is_exported_from_the_root(cls, bases) -> None:
 
 @pytest.mark.parametrize("cls, bases", _BASES, ids=_IDS)
 def test_every_exception_copies_and_pickles(cls, bases) -> None:
-    """One constructor shape: a message. It round-trips by value."""
-    error = cls("the message")
+    """A message, and for a refusal the DHCPNAK it carries. It round-trips by value."""
+    error = _make(cls)
     for clone in (
         copy.copy(error),
         copy.deepcopy(error),
         pickle.loads(pickle.dumps(error)),
     ):
         assert type(clone) is cls
-        assert clone.args == ("the message",)
+        assert clone.args[0] == "the message"
         assert str(clone) == "the message"
+        if cls is DHCPRefusedError:
+            assert clone.nak == error.nak
 
 
 def test_every_exception_class_is_defined_in_one_module() -> None:

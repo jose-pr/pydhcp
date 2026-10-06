@@ -23,7 +23,13 @@ import pytest
 
 from conftest import CHADDR, FixedLeaseServer, running
 from driving import LOOPS, WAIT_SECONDS, threads_settle
-from pydhcp import AsyncDHCPClient, DHCPMessage, DHCPOptions
+from pydhcp import (
+    AsyncDHCPClient,
+    DHCPMessage,
+    DHCPOptions,
+    DHCPRefusedError,
+    DHCPTimeoutError,
+)
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import (
     DHCPFlags,
@@ -214,11 +220,14 @@ def test_an_exchange_gives_up_after_the_schedule_and_not_before(
                     lambda timeout, retries: iter(schedule)
                 )
                 began = time.monotonic()
-                offer = await client.discover_offer(
-                    CHADDR, destination="127.0.0.1", port=peer.port, broadcast=False
-                )
+                with pytest.raises(DHCPTimeoutError):
+                    await client.discover_offer(
+                        CHADDR,
+                        destination="127.0.0.1",
+                        port=peer.port,
+                        broadcast=False,
+                    )
                 elapsed = time.monotonic() - began
-                assert offer is None
                 assert client._pending_keys == set()
                 assert client._waiters == {}
                 await asyncio.sleep(0.1)  # the last datagram has reached the peer
@@ -356,15 +365,15 @@ def test_an_offer_without_a_server_identifier_is_refused(loop_type: type) -> Non
         try:
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
-                ack = await client.dora(
-                    CHADDR,
-                    timeout=1.0,
-                    retries=0,
-                    destination="127.0.0.1",
-                    port=peer.port,
-                    broadcast=False,
-                )
-                assert ack is None
+                with pytest.raises(DHCPTimeoutError):
+                    await client.dora(
+                        CHADDR,
+                        timeout=1.0,
+                        retries=0,
+                        destination="127.0.0.1",
+                        port=peer.port,
+                        broadcast=False,
+                    )
                 assert [_message_type(m) for m in peer.received] == [
                     DHCPMessageType.DHCPDISCOVER
                 ]
@@ -388,7 +397,11 @@ class _StubbedClockClient(AsyncDHCPClient):
         return self.now
 
     async def _wait_for(
-        self, waiter: _ty.Any, msg_type: _ty.Any, timeout: float
+        self,
+        waiter: _ty.Any,
+        msg_type: _ty.Any,
+        timeout: float,
+        server: _ty.Any = None,
     ) -> None:
         self.intervals.append(timeout)
         self.now += self.WAIT_COST
@@ -404,7 +417,7 @@ def test_secs_counts_up_from_the_first_send(loop_type: type) -> None:
         try:
             async with _StubbedClockClient(listen=LOCAL) as client:
                 await client.start()
-                assert (
+                with pytest.raises(DHCPTimeoutError):
                     await client.discover_offer(
                         CHADDR,
                         timeout=8.0,
@@ -413,8 +426,6 @@ def test_secs_counts_up_from_the_first_send(loop_type: type) -> None:
                         port=peer.port,
                         broadcast=False,
                     )
-                    is None
-                )
                 await _until(lambda: len(peer.received) == 3, "three datagrams")
                 return list(peer.received), client.intervals
         finally:
@@ -551,5 +562,136 @@ def test_a_failed_send_leaves_no_transaction_accepted(loop_type: type) -> None:
                 assert client.metrics.packets_sent == 0
             finally:
                 client._endpoints[sock] = real
+
+    _run(loop_type, main)
+
+
+# --- what an exchange reports: the same rules as the thread-based client ---
+
+
+def _ack(message: DHCPMessage, server: str = "127.0.0.1") -> DHCPMessage:
+    reply = _reply(message.xid, DHCPMessageType.DHCPACK)
+    reply.options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4(server)
+    return reply
+
+
+@loop_types
+def test_a_dhcpnak_ends_the_exchange_and_is_raised(loop_type: type) -> None:
+    """RFC 2131 s3.1 step 5: one REQUEST, then the refusal with its NAK."""
+
+    def answer(message: DHCPMessage) -> "list[DHCPMessage]":
+        if _message_type(message) == DHCPMessageType.DHCPDISCOVER:
+            return [_reply(message.xid)]
+        return [_reply(message.xid, DHCPMessageType.DHCPNAK)]
+
+    async def main() -> "tuple[DHCPRefusedError, list[DHCPMessage]]":
+        peer = _Peer(answer)
+        try:
+            async with AsyncDHCPClient(listen=LOCAL) as client:
+                await client.start()
+                with pytest.raises(DHCPRefusedError) as refused:
+                    await client.dora(
+                        CHADDR,
+                        timeout=2.0,
+                        retries=2,
+                        destination="127.0.0.1",
+                        port=peer.port,
+                        broadcast=False,
+                    )
+                assert client._pending_keys == set() and client._waiters == {}
+                return refused.value, list(peer.received)
+        finally:
+            peer.close()
+
+    refusal, received = _run(loop_type, main)
+    assert [_message_type(m) for m in received] == [
+        DHCPMessageType.DHCPDISCOVER,
+        DHCPMessageType.DHCPREQUEST,
+    ]
+    assert _message_type(refusal.nak) == DHCPMessageType.DHCPNAK
+
+
+@loop_types
+def test_an_ack_from_another_server_is_ignored_until_the_selected_one_answers(
+    loop_type: type,
+) -> None:
+    def answer(message: DHCPMessage) -> "list[DHCPMessage]":
+        if _message_type(message) == DHCPMessageType.DHCPDISCOVER:
+            return [_reply(message.xid)]
+        foreign = _ack(message, server="10.0.0.66")
+        foreign.yiaddr = IPv4("172.16.9.9")
+        return [foreign, _ack(message)]
+
+    async def main() -> DHCPMessage:
+        peer = _Peer(answer)
+        try:
+            async with AsyncDHCPClient(listen=LOCAL) as client:
+                await client.start()
+                return await client.dora(
+                    CHADDR,
+                    timeout=2.0,
+                    retries=0,
+                    destination="127.0.0.1",
+                    port=peer.port,
+                    broadcast=False,
+                )
+        finally:
+            peer.close()
+
+    ack = _run(loop_type, main)
+    assert ack.yiaddr == IPv4("127.0.0.7")
+    assert ack.options.get(DHCPOptionCode.SERVER_IDENTIFIER) == IPv4("127.0.0.1")
+
+
+@loop_types
+def test_a_deadline_bounds_the_whole_call(loop_type: type) -> None:
+    """`timeout` is still the first retransmission interval; `deadline` caps the
+    call: sent at 0 and 0.5, the second wait cut to what the deadline leaves."""
+    schedule = [0.5, 1.0, 2.0]
+
+    async def main() -> "tuple[float, int]":
+        peer = _Peer()
+        try:
+            async with AsyncDHCPClient(listen=LOCAL) as client:
+                await client.start()
+                client._retransmit_intervals = (  # type: ignore[method-assign]
+                    lambda timeout, retries: iter(schedule)
+                )
+                began = time.monotonic()
+                with pytest.raises(DHCPTimeoutError) as raised:
+                    await client.discover_offer(
+                        CHADDR,
+                        deadline=0.7,
+                        destination="127.0.0.1",
+                        port=peer.port,
+                        broadcast=False,
+                    )
+                assert isinstance(raised.value, TimeoutError)
+                elapsed = time.monotonic() - began
+                await asyncio.sleep(0.1)
+                return elapsed, len(peer.received)
+        finally:
+            peer.close()
+
+    elapsed, sent = _run(loop_type, main)
+    assert 0.7 - 0.05 <= elapsed <= 0.7 + 1.0, elapsed
+    assert sent == 2
+
+
+@loop_types
+def test_send_used_on_its_own_leaves_no_transaction_behind(loop_type: type) -> None:
+    async def main() -> None:
+        peer = _Peer()
+        try:
+            async with AsyncDHCPClient(listen=LOCAL) as client:
+                for xid in range(50):
+                    await client.send(
+                        client.build_release(CHADDR, ciaddr="10.0.0.50", xid=xid),
+                        dst="127.0.0.1",
+                        port=peer.port,
+                    )
+                assert client._pending_keys == set()
+        finally:
+            peer.close()
 
     _run(loop_type, main)

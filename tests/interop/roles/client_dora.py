@@ -2,9 +2,11 @@
 
 Run: python client_dora.py [--chaddr HEX]
 
-Prints one JSON object: the address the ACK gave and the options it carried,
-or null when nothing came back. The interface needs an address for the client
-to send from, since `DHCPClient` configures nothing itself.
+Prints one JSON object: the address the ACK gave and the options it carried.
+When no ACK comes back the exchange raises (`DHCPTimeoutError`, or
+`DHCPRefusedError` for a DHCPNAK) and the script ends with its traceback. The
+interface needs an address for the client to send from, since `DHCPClient`
+configures nothing itself.
 """
 
 from __future__ import annotations
@@ -26,11 +28,8 @@ try:
 finally:
     client.close()
 
-if ack is None:
-    print(json.dumps(None))
-else:
-    options = {}
-    for code in (DHCPOptionCode.ROUTER, DHCPOptionCode.DNS, DHCPOptionCode.SUBNET_MASK):
-        value = ack.options.get(code)
-        options[code.name] = None if value is None else str(value)
-    print(json.dumps({"yiaddr": str(ack.yiaddr), "options": options}))
+options = {}
+for code in (DHCPOptionCode.ROUTER, DHCPOptionCode.DNS, DHCPOptionCode.SUBNET_MASK):
+    value = ack.options.get(code)
+    options[code.name] = None if value is None else str(value)
+print(json.dumps({"yiaddr": str(ack.yiaddr), "options": options}))

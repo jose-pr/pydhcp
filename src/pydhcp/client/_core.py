@@ -19,7 +19,8 @@ import netimps as _netimps
 from .. import _constants as _const
 from .._network import IPv4AddressLike
 from .._metrics import DHCPMetrics
-from ..listener._limit import _LogLimit
+from ..exceptions import DHCPDecodeError, DHCPRefusedError, DHCPTimeoutError
+from ..listener._limit import _brief, _LogLimit
 from ..listener._receive import DHCPRequestContext
 from ..options import DHCPOptions
 from ..options import _codecs as _type
@@ -212,13 +213,125 @@ class _ClientCore:
         return key
 
     @staticmethod
-    def _is_awaited(msg: DHCPMessage, msg_type: _enum.DHCPMessageType) -> bool:
-        """Whether `msg` is the kind of reply an exchange is waiting for.
+    def _server_identifier(msg: DHCPMessage) -> _ty.Optional[_ipaddress.IPv4Address]:
+        """Option 54 of a reply, or `None` when it is absent or unreadable."""
+        try:
+            return msg.options.get(
+                DHCPOptionCode.SERVER_IDENTIFIER,
+                default=None,
+                decode=_type.IPv4AddressOption,
+            )
+        except DHCPDecodeError:
+            return None
 
-        The only thing standing between a DHCPNAK and a caller that believes it
-        holds `yiaddr`.
+    def _take(
+        self,
+        msg: DHCPMessage,
+        msg_type: _enum.DHCPMessageType,
+        server: _ty.Optional[_ipaddress.IPv4Address],
+        now: float,
+    ) -> _ty.Optional[DHCPMessage]:
+        """What an exchange waiting for `msg_type` does with a reply that matched it.
+
+        Returns the reply when it is the answer, `None` when it is to be ignored
+        and the wait goes on, and raises `DHCPRefusedError` for a DHCPNAK. `server`
+        is the server a DHCPREQUEST selected (RFC 2131 s4.4.1), `None` for a
+        DHCPDISCOVER, and `now` the driver's monotonic reading, for the limited
+        warnings. This is the only thing standing between a DHCPNAK and a caller
+        that believes it holds `yiaddr`.
+
+        - A DHCPNAK refuses a DHCPREQUEST (s3.1 step 5): it ends the exchange,
+          unless it names a server other than the selected one.
+        - A DHCPOFFER is usable when it offers an address (`yiaddr`) and names its
+          server: s4.3.2 has the REQUEST that selects it carry option 54.
+        - A DHCPACK from a server other than the selected one is not the answer
+          to this REQUEST.
         """
-        return msg.message_type is msg_type
+        kind = msg.message_type
+        named = self._server_identifier(msg)
+        if kind is _enum.DHCPMessageType.DHCPNAK:
+            if msg_type is not _enum.DHCPMessageType.DHCPACK:
+                return None
+            if server is not None and named is not None and named != server:
+                return None
+            text = msg.options.get(
+                DHCPOptionCode.DHCP_MESSAGE, default=None, decode=_type.String
+            )
+            raise DHCPRefusedError(
+                "the server refused the request with a DHCPNAK"
+                + (f": {_brief(text)}" if text else ""),
+                msg,
+            )
+        if kind is not msg_type:
+            return None
+        if msg_type is _enum.DHCPMessageType.DHCPOFFER:
+            if msg.yiaddr == _const.WILDCARD_V4:
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "DHCPOFFER without an address",
+                    "[XID=%08x] Ignoring a DHCPOFFER that offers no address",
+                    msg.xid,
+                    now=now,
+                )
+                return None
+            if named is None:
+                # RFC 2131 s4.3.2: a REQUEST in SELECTING state MUST carry the
+                # server identifier, and the server uses it to tell "this offer
+                # is mine" from "another server's offer was chosen". Selecting
+                # an offer that does not name its server would send one without.
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "DHCPOFFER without a server identifier",
+                    "[XID=%08x] Ignoring a DHCPOFFER with no SERVER_IDENTIFIER; "
+                    "a conforming DHCPREQUEST cannot be built from it",
+                    msg.xid,
+                    now=now,
+                )
+                return None
+        elif (
+            msg_type is _enum.DHCPMessageType.DHCPACK
+            and server is not None
+            and named is not None
+            and named != server
+        ):
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "DHCPACK from another server",
+                "[XID=%08x] Ignoring a DHCPACK from %s: the request selected %s",
+                msg.xid,
+                named,
+                server,
+                now=now,
+            )
+            return None
+        return msg
+
+    @staticmethod
+    def _deadline_end(
+        started_at: float, deadline: _ty.Optional[float]
+    ) -> _ty.Optional[float]:
+        """The monotonic reading a call with this `deadline` must be over by."""
+        if deadline is None:
+            return None
+        if not deadline > 0:
+            raise ValueError(
+                f"deadline must be a positive number of seconds, got {deadline!r}"
+            )
+        return started_at + deadline
+
+    @staticmethod
+    def _timed_out(
+        msg_type: _enum.DHCPMessageType, attempts: int, ends: _ty.Optional[float]
+    ) -> DHCPTimeoutError:
+        """The error for an exchange whose retransmissions or deadline ran out."""
+        return DHCPTimeoutError(
+            f"no usable {msg_type.label()} arrived after {attempts} "
+            f"{'attempt' if attempts == 1 else 'attempts'}"
+            + (" within the deadline" if ends is not None else "")
+        )
 
     def _retransmit_intervals(
         self, timeout: float, retries: int
@@ -257,42 +370,27 @@ class _ClientCore:
     def _encode(message: DHCPMessage) -> bytes:
         return message.encode(_const.DHCP_MIN_LEGAL_PACKET_SIZE)
 
-    def _note_sent(self, message: DHCPMessage) -> None:
-        self._pending_keys.add(self._pending_key(message))
+    def _note_sent(self) -> None:
         self.metrics.packets_sent += 1
+
+    def _selected_server(self, offer: DHCPMessage) -> _ipaddress.IPv4Address:
+        """The server a DHCPOFFER names, which `_take` required it to."""
+        server = self._server_identifier(offer)
+        if server is None:
+            raise ValueError("the DHCPOFFER names no server (option 54)")
+        return server
 
     def _request_after(
         self,
         offer: DHCPMessage,
+        server_identifier: _ipaddress.IPv4Address,
         chaddr: bytes,
         *,
         client_identifier: _ty.Optional[ClientIdentifierLike],
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]],
         broadcast: bool,
-        now: float,
-    ) -> _ty.Optional[DHCPMessage]:
-        """The DHCPREQUEST that selects `offer`, or `None` when it cannot be built.
-
-        `now` is the driver's monotonic reading, for the limited warning.
-        """
-        server_identifier = offer.options.get(
-            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
-        )
-        if server_identifier is None:
-            # RFC 2131 s4.3.2: a REQUEST in SELECTING state MUST carry the
-            # server identifier, and the server uses it to tell "this offer is
-            # mine" from "another server's offer was chosen". Sending one
-            # without it asks every server on the segment to answer.
-            self._log_limit.log(
-                LOGGER,
-                _logging.WARNING,
-                "DHCPOFFER without a server identifier",
-                "[XID=%08x] DHCPOFFER has no SERVER_IDENTIFIER; cannot send a "
-                "conforming DHCPREQUEST",
-                offer.xid,
-                now=now,
-            )
-            return None
+    ) -> DHCPMessage:
+        """The DHCPREQUEST that selects `offer`, made by `server_identifier`."""
         return self.build_request(
             chaddr,
             xid=offer.xid,

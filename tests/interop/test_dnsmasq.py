@@ -66,7 +66,6 @@ def test_pydhcp_client_completes_dora_against_dnsmasq(lab):
     out = lab.python_wait(net.cli, "client_dora.py", timeout=60)
     result = json.loads(out.strip().splitlines()[-1])
 
-    assert result is not None, out
     assert result["yiaddr"].startswith("10.99.0.1")
     types = [f.type_name() for f in tap.frames()]
     assert types[:4] == ["DHCPDISCOVER", "DHCPOFFER", "DHCPREQUEST", "DHCPACK"], types

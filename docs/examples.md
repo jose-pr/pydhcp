@@ -180,21 +180,28 @@ Real DHCP traffic on ports 67/68 may require elevated privileges depending on yo
 
 ### Full DORA exchange in one call
 
-`DHCPClient.dora()` runs DISCOVER → OFFER → REQUEST → ACK and returns the final DHCPACK (or
-`None` if any step times out). The listener loop must be running (`start()`) so replies reach
-the client's internal queue.
+`DHCPClient.dora()` runs DISCOVER → OFFER → REQUEST → ACK and returns the final DHCPACK. It
+raises `DHCPTimeoutError` (also a `TimeoutError`) when no usable OFFER or ACK arrives, and
+`DHCPRefusedError` when the server answers the REQUEST with a DHCPNAK (the NAK is its `nak`
+attribute); a NAK ends the exchange at once. `timeout` is the first retransmission interval and
+`deadline` bounds the whole call in seconds. The listener loop must be running (`start()`) so
+replies reach the client's internal queue.
 
 ```python
+from pydhcp import DHCPRefusedError, DHCPTimeoutError
 from pydhcp.client import DHCPClient
 
 client = DHCPClient(listen=("0.0.0.0", 68))
 client.start()
 try:
-    ack = client.dora(b"\x00\x11\x22\x33\x44\x55", timeout=2.0, retries=2)
+    ack = client.dora(b"\x00\x11\x22\x33\x44\x55", timeout=2.0, retries=2, deadline=30)
+    print(f"Leased {ack.yiaddr}")
+except DHCPTimeoutError:
+    print("no server answered")
+except DHCPRefusedError as refused:
+    print(f"the server refused: {refused}")
 finally:
     client.close()
-if ack is not None:
-    print(f"Leased {ack.yiaddr}")
 ```
 
 Use `discover_offer()` instead if you only need the DHCPOFFER without following through with a

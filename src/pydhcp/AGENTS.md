@@ -47,6 +47,12 @@ constants are in private modules and are not importable from a public one.
   range).
 - **`NoClientIdentityError(DHCPError, ValueError)`** — `DHCPMessage.get_client_id()`
   on a message with neither option 61 nor a hardware address.
+- **`DHCPTimeoutError(DHCPError, TimeoutError)`** — a client exchange (`dora()`,
+  `discover_offer()`) ended with no usable reply: the retransmissions or the call's
+  `deadline` ran out.
+- **`DHCPRefusedError(message, nak)`** (a `DHCPError`) — the server answered the DHCPREQUEST with a
+  DHCPNAK. `.nak` is the DHCPNAK `DHCPMessage` (its `DHCP_MESSAGE` option, when
+  present, says why); it copies and pickles with its NAK.
 
 A caller's own mistake (a wrong argument type, a bad option code, a bad
 `max_packetsize`) stays a plain `TypeError` or `ValueError`.
@@ -612,34 +618,47 @@ A test that patches a module global patches it in the private module that reads 
     `parameter_request_list` is accepted only where a reply carries options.
   - `.send(message, *, dst=IPv4("255.255.255.255"),
     port=DHCPPort.SERVER) -> int` — binds lazily on first call, sends via a
-    fresh `UDPTransport`, and tracks the message's `(xid, chaddr)` in
-    `self._pending_keys` so `.handle()` only queues matching replies. A reply
-    carrying a seen `xid` but another client's `chaddr` is ignored — the xid
-    is in cleartext in a broadcast DISCOVER, so anyone on the segment can
-    read one (same key as `DHCPRelay._pending_key`).
-  - `.discover_offer(chaddr, *, timeout=2.0, retries=2, destination=...,
-    port=..., xid=None, client_identifier=None, parameter_request_list=None,
-    broadcast=True) -> DHCPMessage | None` — broadcasts
-    DHCPDISCOVER (with retries) and returns the first DHCPOFFER, or `None`.
+    fresh `UDPTransport`. It sends and registers nothing: an exchange
+    (`.discover_offer()`, `.dora()`) registers its own `(xid, chaddr)` in
+    `self._pending_keys` for as long as it runs, so `.handle()` queues only the
+    matching replies while one is pending. A reply carrying a seen `xid` but
+    another client's `chaddr` is ignored — the xid is in cleartext in a
+    broadcast DISCOVER, so anyone on the segment can read one (same key as
+    `DHCPRelay._pending_key`). A message sent with `.send()` alone is therefore
+    not awaited: its reply is queued only while no exchange is pending.
+  - `.discover_offer(chaddr, *, timeout=2.0, retries=2, deadline=None,
+    destination=..., port=..., xid=None, client_identifier=None,
+    parameter_request_list=None, broadcast=True) -> DHCPMessage` — broadcasts
+    DHCPDISCOVER (with retries) and returns the first usable DHCPOFFER: one that
+    offers an address (`yiaddr`) and carries `SERVER_IDENTIFIER`, since a
+    SELECTING REQUEST must echo it (§4.3.2); others are ignored, with a limited
+    warning. **Raises `DHCPTimeoutError`** (also a `TimeoutError`) when none
+    arrives.
     **`timeout` is the *initial* retransmission interval, not a fixed one**:
     each retransmission waits twice as long as the last, randomized by ±1 s,
     the doubling capped at `RETRANSMIT_MAX_INTERVAL` (RFC 2131 §4.1); a
     `timeout` above the cap starts at the cap. With the
-    defaults the call is bounded at about 2+4+8 s (±1 s each) rather than 3×2 s. Each transmission
-    carries a real `secs` — seconds since the exchange began (§2) — which was
-    previously hardcoded to 0.
-  - `.dora(chaddr, *, timeout=2.0, retries=2, destination=..., port=...,
-    xid=None, client_identifier=None, parameter_request_list=None,
-    broadcast=True) -> DHCPMessage | None` — full
-    DISCOVER→OFFER→REQUEST→ACK exchange; returns the DHCPACK or `None`.
+    defaults the call is bounded at about 2+4+8 s (±1 s each) rather than 3×2 s.
+    **`deadline`** (seconds, `None` for none) bounds the whole call, whatever the
+    schedule: no transmission starts after it and the last wait is cut to what
+    it leaves; a value that is not positive is a `ValueError`. Each transmission
+    carries a real `secs` — seconds since the exchange began (§2).
+  - `.dora(chaddr, *, timeout=2.0, retries=2, deadline=None, destination=...,
+    port=..., xid=None, client_identifier=None, parameter_request_list=None,
+    broadcast=True) -> DHCPMessage` — full
+    DISCOVER→OFFER→REQUEST→ACK exchange; returns the DHCPACK. Raises
+    `DHCPTimeoutError` when no usable OFFER or ACK arrives and
+    **`DHCPRefusedError`** (carrying the NAK) when the server answers the
+    REQUEST with a DHCPNAK, which ends the exchange at once instead of being
+    retransmitted against (§3.1 step 5). An ACK is usable when its option 54
+    is the server the REQUEST selected (§4.4.1); a NAK naming another server is
+    ignored. `deadline` counts across both halves.
     **`broadcast` forwards to both the DISCOVER and the follow-up REQUEST**,
     as do `client_identifier` and `parameter_request_list` — RFC 2131 §4.2
     and §4.4.1 require the same values in every subsequent message, and the
-    identifier is what the server keys the lease on. Returns `None` (with a
-    limited warning) if the OFFER carries no `SERVER_IDENTIFIER`, since a SELECTING
-    REQUEST must echo it (§4.3.2). `secs` counts from the DISCOVER across both
-    halves — §2 defines it as time since *acquisition* began, so the REQUEST
-    does not restart the clock.
+    identifier is what the server keys the lease on. `secs` counts from the
+    DISCOVER across both halves — §2 defines it as time since *acquisition*
+    began, so the REQUEST does not restart the clock.
   - `.next_reply(timeout=None) -> tuple[DHCPMessage, DHCPRequestContext] | None`
     / `.drain_replies() -> list[...]` — pull queued BOOTREPLY messages.
     A reply belonging to an exchange currently running in
@@ -670,9 +689,10 @@ A test that patches a module global patches it in the private module that reads 
     `await .serve_forever()`, `.shutdown()`, `await .wait_closed(timeout=None)`,
     `await .aclose()`, `async with` (which binds, and does not serve).
   - `await .send(message, *, dst=..., port=...) -> int`,
-    `await .discover_offer(chaddr, *, ...) -> DHCPMessage | None` and
-    `await .dora(chaddr, *, ...) -> DHCPMessage | None` take the keywords of
-    the synchronous methods and return what they return. `send` works before
+    `await .discover_offer(chaddr, *, ...) -> DHCPMessage` and
+    `await .dora(chaddr, *, ...) -> DHCPMessage` take the keywords of
+    the synchronous methods (`deadline` included) and return and raise what
+    they do. `send` works before
     serving starts (it binds); an exchange needs the receive tasks running or it
     times out. `await .next_reply(timeout=None)` waits for a queued reply and
     returns `None` on timeout; `.drain_replies()` is not a coroutine, it never

@@ -8,6 +8,8 @@ from .exceptions import (
     DHCPDecodeError as DHCPDecodeError,
     DHCPValueError as DHCPValueError,
     NoClientIdentityError as NoClientIdentityError,
+    DHCPTimeoutError as DHCPTimeoutError,
+    DHCPRefusedError as DHCPRefusedError,
 )
 from .listener import (
     DHCPListener as DHCPListener,
@@ -78,6 +80,8 @@ __all__ = [
     "DHCPDecodeError",
     "DHCPValueError",
     "NoClientIdentityError",
+    "DHCPTimeoutError",
+    "DHCPRefusedError",
     "DHCPListener",
     "AsyncDHCPListener",
     "DHCPTransport",

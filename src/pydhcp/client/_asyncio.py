@@ -78,22 +78,12 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
             self.bind()
         endpoint = self._endpoints[self._sockets[0]]
         data = self._encode(message)
-        # Expected before the send, not after: the reply can be handled on the
-        # loop turn between the datagram leaving and this coroutine resuming.
-        key = self._pending_key(message)
-        was_pending = key in self._pending_keys
-        self._pending_keys.add(key)
-        try:
-            sent = await endpoint.asend(
-                bytes(data),
-                _dest_string(_ipaddress.IPv4Address(dst)),
-                int(port),
-            )
-        except BaseException:
-            if not was_pending:
-                self._pending_keys.discard(key)
-            raise
-        self.metrics.packets_sent += 1
+        sent = await endpoint.asend(
+            bytes(data),
+            _dest_string(_ipaddress.IPv4Address(dst)),
+            int(port),
+        )
+        self._note_sent()
         return int(sent)
 
     def _monotonic(self) -> float:
@@ -110,18 +100,33 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         timeout: float,
         retries: int,
         started_at: float,
-    ) -> _ty.Optional[DHCPMessage]:
-        """Send `message`, retransmitting on RFC 2131 s4.1 backoff, until `msg_type`."""
+        server: _ty.Optional[_ipaddress.IPv4Address] = None,
+        ends: _ty.Optional[float] = None,
+    ) -> DHCPMessage:
+        """Send `message`, retransmitting on RFC 2131 s4.1 backoff, until `msg_type`.
+
+        See `DHCPClient._exchange`. The key is accepted before the first send,
+        because a reply can be handled on the loop turn between the datagram
+        leaving and this coroutine resuming.
+        """
         key = self._pending_key(message)
         try:
             with self._waiting_for(key) as waiter:
+                self._pending_keys.add(key)
+                attempts = 0
                 for interval in self._retransmit_intervals(timeout, retries):
-                    self._stamp_secs(message, self._monotonic() - started_at)
+                    now = self._monotonic()
+                    if ends is not None:
+                        if ends - now <= 0:
+                            break
+                        interval = min(interval, ends - now)
+                    self._stamp_secs(message, now - started_at)
+                    attempts += 1
                     await self.send(message, dst=destination, port=port)
-                    reply = await self._wait_for(waiter, msg_type, interval)
+                    reply = await self._wait_for(waiter, msg_type, interval, server)
                     if reply is not None:
                         return reply
-                return None
+                raise self._timed_out(msg_type, attempts, ends)
         finally:
             # Also on cancellation: a spent transaction does not stay acceptable.
             self._pending_keys.discard(key)
@@ -153,8 +158,9 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         waiter: _asyncio.Queue[Reply],
         msg_type: _enum.DHCPMessageType,
         timeout: float,
+        server: _ty.Optional[_ipaddress.IPv4Address] = None,
     ) -> _ty.Optional[DHCPMessage]:
-        """Take the first reply of `msg_type` from one exchange's own queue."""
+        """Take the first usable reply of `msg_type` from one exchange's own queue."""
         deadline = self._monotonic() + timeout
         while True:
             remaining = deadline - self._monotonic()
@@ -164,9 +170,9 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
                 msg, _context = await _asyncio.wait_for(waiter.get(), remaining)
             except _asyncio.TimeoutError:
                 return None
-            if not self._is_awaited(msg, msg_type):
-                continue
-            return msg
+            taken = self._take(msg, msg_type, server, self._monotonic())
+            if taken is not None:
+                return taken
 
     async def discover_offer(
         self,
@@ -174,18 +180,49 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
+        deadline: _ty.Optional[float] = None,
         destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
-    ) -> _ty.Optional[DHCPMessage]:
-        """Broadcast DHCPDISCOVER and return the first DHCPOFFER, or None.
+    ) -> DHCPMessage:
+        """Broadcast DHCPDISCOVER and return the first usable DHCPOFFER.
 
-        `timeout` is the initial retransmission interval, as in
+        `timeout`, `deadline` and what raises are as in
         `DHCPClient.discover_offer`. Cancelling the call abandons the exchange.
         """
+        started_at = self._monotonic()
+        return await self._discover(
+            chaddr,
+            timeout=timeout,
+            retries=retries,
+            destination=destination,
+            port=port,
+            xid=xid,
+            client_identifier=client_identifier,
+            parameter_request_list=parameter_request_list,
+            broadcast=broadcast,
+            started_at=started_at,
+            ends=self._deadline_end(started_at, deadline),
+        )
+
+    async def _discover(
+        self,
+        chaddr: bytes,
+        *,
+        timeout: float,
+        retries: int,
+        destination: IPv4AddressLike,
+        port: int,
+        xid: _ty.Optional[int],
+        client_identifier: _ty.Optional[ClientIdentifierLike],
+        parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]],
+        broadcast: bool,
+        started_at: float,
+        ends: _ty.Optional[float],
+    ) -> DHCPMessage:
         discover = self.build_discover(
             chaddr,
             xid=xid,
@@ -200,7 +237,8 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
             port=port,
             timeout=timeout,
             retries=retries,
-            started_at=self._monotonic(),
+            started_at=started_at,
+            ends=ends,
         )
 
     async def dora(
@@ -209,17 +247,22 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
+        deadline: _ty.Optional[float] = None,
         destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
-    ) -> _ty.Optional[DHCPMessage]:
-        """Run a full DISCOVER/OFFER/REQUEST/ACK exchange and return the DHCPACK, or None."""
+    ) -> DHCPMessage:
+        """Run a full DISCOVER/OFFER/REQUEST/ACK exchange and return the DHCPACK.
+
+        Raises what `DHCPClient.dora` raises.
+        """
         # RFC 2131 s2: `secs` counts from the start of *acquisition*.
         started_at = self._monotonic()
-        offer = await self.discover_offer(
+        ends = self._deadline_end(started_at, deadline)
+        offer = await self._discover(
             chaddr,
             timeout=timeout,
             retries=retries,
@@ -229,19 +272,18 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
             client_identifier=client_identifier,
             parameter_request_list=parameter_request_list,
             broadcast=broadcast,
+            started_at=started_at,
+            ends=ends,
         )
-        if offer is None:
-            return None
+        server = self._selected_server(offer)
         request = self._request_after(
             offer,
+            server,
             chaddr,
             client_identifier=client_identifier,
             parameter_request_list=parameter_request_list,
             broadcast=broadcast,
-            now=self._monotonic(),
         )
-        if request is None:
-            return None
         return await self._exchange(
             request,
             _enum.DHCPMessageType.DHCPACK,
@@ -250,6 +292,8 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
             timeout=timeout,
             retries=retries,
             started_at=started_at,
+            server=server,
+            ends=ends,
         )
 
     def _shared_replies(self) -> _asyncio.Queue[Reply]:

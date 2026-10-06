@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ipaddress.AddressValueError`, for a bad UTF-8 label a
   `UnicodeDecodeError`, for a destination with host bits set an `ipaddress`
   `ValueError`). `except ValueError` keeps working.
+- **`DHCPTimeoutError` and `DHCPRefusedError`** (`pydhcp.exceptions`, re-exported at the
+  root): what a client exchange raises instead of returning `None`.
+  `DHCPTimeoutError(DHCPError, TimeoutError)` says no usable reply arrived;
+  `DHCPRefusedError(DHCPError)` carries the server's DHCPNAK as `.nak`. Both copy and pickle.
+- **`deadline=` on `DHCPClient` and `AsyncDHCPClient` `dora()` and `discover_offer()`**:
+  seconds for the whole call (both halves of a `dora()` together), where `timeout` stays
+  the first retransmission interval. No transmission starts after it and the last wait is
+  cut to what it leaves; a value that is not positive is a `ValueError`.
 - **Four counters in `DHCPMetrics`**: `packets_decoded_leniently`,
   `packets_dropped_no_client_id`, `packets_dropped_other_server` and
   `addresses_refused`, for what a decoder forgave and for three server drops that
@@ -96,6 +104,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   forwarded without it and counted in `relay_info_omitted`. A reply loses option 82 only
   when it is the option this relay added; an option a trusted downstream element added
   (`trust_client_relay_agent_info=True`, insertion off) now reaches that element.
+- **Breaking: `dora()` and `discover_offer()` raise where they returned `None`.** The `None`
+  stood for four outcomes at once, and `dora()` returned it after retransmitting its REQUEST
+  against a DHCPNAK for about 14 seconds. They now return the message or raise
+  `DHCPTimeoutError` (nothing usable arrived; also a `TimeoutError`) or
+  `DHCPRefusedError` (a DHCPNAK, which ends the exchange at once, RFC 2131 section 3.1).
+  Callers that tested for `None` catch the exceptions instead. A DHCPOFFER that offers no
+  address or names no server (it used to be selected, or logged and abandoned), and a
+  DHCPACK from a server other than the one the REQUEST selected (it used to be returned),
+  are ignored and the wait goes on.
+- **`DHCPClient.send()` and `AsyncDHCPClient.send()` no longer register the message's
+  transaction** (they used to, and nothing removed it, so 5000 RELEASEs left 5000 keys and
+  stopped the client from queuing unrelated replies). An exchange registers its own for as
+  long as it runs, before its first send.
 - **Breaking: `DHCPRelay` and `AsyncDHCPRelay` refuse contradictory options.**
   `insert_relay_agent_info=True` with neither `circuit_id` nor `remote_id` (it inserted
   nothing and said nothing) and either id without the flag (it was ignored) are a

@@ -14,7 +14,7 @@ The project has a few different operational concerns now: API reference, example
 
 ## How do I run a DORA handshake from Python?
 
-Use `DHCPClient.dora()` — it broadcasts a DHCPDISCOVER, waits for a DHCPOFFER, sends a matching DHCPREQUEST, and waits for the DHCPACK, returning `None` if any step times out after the configured retries. The client's listener loop must be started first (`client.start()`) so replies reach its internal queue. See [Examples](examples.md#full-dora-exchange-in-one-call) for a full snippet, or `DHCPClient.discover_offer()` if you only need the offer.
+Use `DHCPClient.dora()` — it broadcasts a DHCPDISCOVER, waits for a DHCPOFFER, sends a matching DHCPREQUEST, and waits for the DHCPACK, raising `DHCPTimeoutError` if no usable reply arrives after the configured retries (or the call's `deadline`) and `DHCPRefusedError` if the server answers with a DHCPNAK. The client's listener loop must be started first (`client.start()`) so replies reach its internal queue. See [Examples](examples.md#full-dora-exchange-in-one-call) for a full snippet, or `DHCPClient.discover_offer()` if you only need the offer.
 
 ## Which config formats does the CLI accept?
 

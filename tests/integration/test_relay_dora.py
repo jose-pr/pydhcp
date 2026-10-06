@@ -30,7 +30,6 @@ def test_full_dora_through_relay() -> None:
                     port=relay_port,
                     broadcast=False,
                 )
-                assert ack is not None
                 assert (
                     ack.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
                     == DHCPMessageType.DHCPACK

@@ -43,7 +43,6 @@ def _dora(port: int) -> None:
             port=port,
             broadcast=False,
         )
-    assert ack is not None, "no ACK"
     assert ack.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
 
 

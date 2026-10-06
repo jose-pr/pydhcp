@@ -115,7 +115,7 @@ async def main() -> None:
         ack = await client.dora(
             b"\x00\x11\x22\x33\x44\x55", destination="127.0.0.1", port=6767
         )
-        print(ack)
+        print(ack)  # raises DHCPTimeoutError, or DHCPRefusedError for a DHCPNAK
 
 
 asyncio.run(main())

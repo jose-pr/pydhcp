@@ -877,24 +877,45 @@ def test_a_request_that_cannot_carry_option_82_is_limited_and_counted(
 # -- the client and the capture -------------------------------------------------
 
 
-def test_an_offer_without_a_server_identifier_is_limited(
+def test_an_offer_without_a_server_identifier_is_limited_and_ignored(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
     client = DHCPClient(listen=("127.0.0.1", 0))
     offer = build_request(DHCPMessageType.DHCPOFFER, op=DHCPOpcode.BOOTREPLY)
+    offer.yiaddr = ipaddress.IPv4Address("10.0.0.50")
+    taken: "list[ty.Any]" = []
     _assert_bounded(
         caplog,
         clock,
         "pydhcp.client._core",
-        lambda: client._request_after(
-            offer,
-            CHADDR,
-            client_identifier=None,
-            parameter_request_list=None,
-            broadcast=True,
-            now=clock.t,
+        lambda: taken.append(
+            client._take(offer, DHCPMessageType.DHCPOFFER, None, clock.t)
         ),
     )
+    assert taken == [None] * (INSIDE + 1)
+
+
+def test_a_foreign_ack_is_limited_and_ignored(
+    caplog: pytest.LogCaptureFixture, clock: Clock
+) -> None:
+    client = DHCPClient(listen=("127.0.0.1", 0))
+    ack = build_request(DHCPMessageType.DHCPACK, op=DHCPOpcode.BOOTREPLY)
+    ack.options[DHCPOptionCode.SERVER_IDENTIFIER] = ipaddress.IPv4Address("10.0.0.66")
+    taken: "list[ty.Any]" = []
+    _assert_bounded(
+        caplog,
+        clock,
+        "pydhcp.client._core",
+        lambda: taken.append(
+            client._take(
+                ack,
+                DHCPMessageType.DHCPACK,
+                ipaddress.IPv4Address("10.0.0.1"),
+                clock.t,
+            )
+        ),
+    )
+    assert taken == [None] * (INSIDE + 1)
 
 
 def test_a_hook_that_fails_every_time_is_limited(

@@ -2,11 +2,17 @@ import ipaddress
 import queue
 import socket
 import threading
+import time
 from datetime import timedelta
 from unittest.mock import Mock
 
+import pytest
+
 from pydhcp import (
     DHCPClient,
+    DHCPError,
+    DHCPRefusedError,
+    DHCPTimeoutError,
     DHCPMessage,
     DHCPOptions,
     NetworkInterface,
@@ -152,7 +158,8 @@ def test_client_send_uses_bound_udp_transport(monkeypatch) -> None:
     assert dest == IPv4("192.0.2.1")
     assert port == 6767
     assert mac == CHADDR
-    assert (0xCAFEBABE, CHADDR) in client._pending_keys
+    # `send` does not register the transaction: an exchange does.
+    assert (0xCAFEBABE, CHADDR) not in client._pending_keys
 
 
 def test_client_dora_against_real_server() -> None:
@@ -230,17 +237,18 @@ def test_client_discover_offer_times_out_when_nothing_answers() -> None:
         silent_port = silent.getsockname()[1]
 
         with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
-            offer = client.discover_offer(
-                CHADDR,
-                timeout=0.2,
-                retries=0,
-                destination="127.0.0.1",
-                port=silent_port,
-                broadcast=False,
-            )
+            with pytest.raises(DHCPTimeoutError):
+                client.discover_offer(
+                    CHADDR,
+                    timeout=0.2,
+                    retries=0,
+                    destination="127.0.0.1",
+                    port=silent_port,
+                    broadcast=False,
+                )
 
         # The datagram really was sent and really did arrive -- otherwise the
-        # None above would be the old tautology in a new costume.
+        # timeout above would be the old tautology in a new costume.
         silent.settimeout(1.0)
         received = DHCPMessage.decode(bytearray(silent.recv(2048)))
         assert (
@@ -250,7 +258,6 @@ def test_client_discover_offer_times_out_when_nothing_answers() -> None:
     finally:
         silent.close()
 
-    assert offer is None
     assert client._pending_keys == set()
 
 
@@ -313,13 +320,14 @@ def test_dora_repeats_the_client_id_and_parameter_list_in_the_request():
     prl = [DHCPOptionCode.SUBNET_MASK, DHCPOptionCode.ROUTER]
 
     client = _RecordingClient(listen=("127.0.0.1", 0))
-    client.dora(
-        CHADDR,
-        timeout=0.2,
-        retries=0,
-        client_identifier=cid,
-        parameter_request_list=prl,
-    )
+    with pytest.raises(DHCPTimeoutError):  # nobody answers the REQUEST
+        client.dora(
+            CHADDR,
+            timeout=0.2,
+            retries=0,
+            client_identifier=cid,
+            parameter_request_list=prl,
+        )
 
     assert len(client.sent) == 2, [
         str(m.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)) for m in client.sent
@@ -342,7 +350,8 @@ def test_dora_refuses_an_offer_without_a_server_identifier():
     """
     client = _RecordingClient(listen=("127.0.0.1", 0), offer_has_server_id=False)
 
-    assert client.dora(CHADDR, timeout=0.2, retries=0) is None
+    with pytest.raises(DHCPTimeoutError):
+        client.dora(CHADDR, timeout=0.2, retries=0)
     types = [m.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) for m in client.sent]
     assert DHCPMessageType.DHCPREQUEST not in types
 
@@ -374,7 +383,8 @@ def test_pending_keys_do_not_accumulate_across_exchanges():
     client = _RecordingClient(listen=("127.0.0.1", 0))
 
     for _ in range(5):
-        client.dora(CHADDR, timeout=0.05, retries=0)
+        with pytest.raises(DHCPTimeoutError):
+            client.dora(CHADDR, timeout=0.05, retries=0)
 
     assert client._pending_keys == set(), client._pending_keys
 
@@ -420,7 +430,7 @@ class _StubbedClockClient(DHCPClient):
             self.handle(_canned_ack(message.xid), None)
         return 0
 
-    def _wait_for(self, waiter, msg_type, timeout):
+    def _wait_for(self, waiter, msg_type, timeout, server=None):
         """Record the interval the exchange chose, then spend it instantly.
 
         Only the *waiting* is stubbed. Delegating to the real `_wait_for` with
@@ -434,8 +444,9 @@ class _StubbedClockClient(DHCPClient):
                 msg, _context = waiter.get_nowait()
             except queue.Empty:
                 return None
-            if msg.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is msg_type:
-                return msg
+            taken = self._take(msg, msg_type, server, self.now)
+            if taken is not None:
+                return taken
 
 
 def test_retransmissions_back_off_instead_of_repeating_one_interval():
@@ -447,12 +458,10 @@ def test_retransmissions_back_off_instead_of_repeating_one_interval():
     """
     client = _StubbedClockClient(listen=("127.0.0.1", 0), answer=False)
 
-    assert (
+    with pytest.raises(DHCPTimeoutError):
         client.discover_offer(
             CHADDR, timeout=2.0, retries=3, destination="127.0.0.1", port=6767
         )
-        is None
-    )
 
     assert len(client.intervals) == 4
     assert client.intervals == sorted(client.intervals)
@@ -526,9 +535,10 @@ def test_secs_counts_up_across_retransmissions():
     """
     client = _StubbedClockClient(listen=("127.0.0.1", 0), answer=False)
 
-    client.discover_offer(
-        CHADDR, timeout=8.0, retries=2, destination="127.0.0.1", port=6767
-    )
+    with pytest.raises(DHCPTimeoutError):
+        client.discover_offer(
+            CHADDR, timeout=8.0, retries=2, destination="127.0.0.1", port=6767
+        )
 
     assert client.secs_sent[0] == 0
     assert client.secs_sent == [0, 3, 6], client.secs_sent
@@ -546,48 +556,239 @@ def test_dora_secs_continues_from_the_discover():
     assert request_secs == _StubbedClockClient.WAIT_COST
 
 
-class _NakOnRequestClient(_StubbedClockClient):
-    """Offers on the DISCOVER and refuses the REQUEST with a DHCPNAK."""
+# --- what an exchange reports: RFC 2131 s3.1 step 5 and s4.4.1 ---
 
-    def __init__(self, *args, **kwargs):
+
+class _ScriptedClient(_StubbedClockClient):
+    """Answers each message type with the datagrams a test chooses.
+
+    `answers` maps a message type to a function of the request that returns
+    the replies to hand to `handle()`, as the receive thread would.
+    """
+
+    def __init__(self, *args, answers, **kwargs):
         super().__init__(*args, **kwargs)
-        self.naks_delivered = 0
+        self.answers = answers
+        self.requests = []
 
     def send(self, message, dst=IPv4("255.255.255.255"), port=67):
+        kind = message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
+        self.requests.append(kind)
         self.secs_sent.append(int(message.secs.total_seconds()))
-        self._pending_keys.add(self._pending_key(message))
-        message_type = message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
-        if message_type is DHCPMessageType.DHCPDISCOVER:
-            self.handle(_canned_offer(message.xid), None)
-        elif message_type is DHCPMessageType.DHCPREQUEST:
-            nak = _canned_offer(message.xid)
-            nak.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPNAK
-            self.naks_delivered += 1
-            self.handle(nak, None)
+        for reply in self.answers.get(kind, lambda m: [])(message):
+            self.handle(reply, None)
         return 0
 
+    def kinds(self):
+        return [kind.name for kind in self.requests]
 
-def test_dora_does_not_mistake_a_dhcpnak_for_an_ack():
-    """RFC 2131 s3.1.5: a DHCPNAK refuses the REQUEST; it is not an address.
 
-    `dora()` returns whatever `_wait_for` hands back, and the only thing
-    standing between a NAK and a caller that believes it holds `yiaddr` is
-    `_wait_for`'s message-type filter. Nothing exercised the NAK path at all,
-    so a filter that stopped discriminating would have gone unnoticed -- and
-    the canned NAK here carries 10.0.0.50 in `yiaddr`, exactly the shape that
-    would be mistaken for a lease.
-    """
-    client = _NakOnRequestClient(listen=("127.0.0.1", 0))
+def _from_server(reply, server):
+    reply.options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4(server)
+    return reply
 
-    ack = client.dora(CHADDR, timeout=2.0, retries=1)
 
-    assert ack is None
-    # Two REQUEST attempts, each answered: the NAKs really reached `handle()`
-    # and really matched the exchange, so the None above is a rejection rather
-    # than nothing ever having arrived.
-    assert client.naks_delivered == 2
-    # Routed to the exchange's own queue, not left in the shared one.
-    assert client._replies.qsize() == 0
+def _offer_then(other):
+    return {
+        DHCPMessageType.DHCPDISCOVER: lambda m: [_canned_offer(m.xid)],
+        DHCPMessageType.DHCPREQUEST: other,
+    }
+
+
+def test_a_dhcpnak_ends_the_exchange_at_once_and_is_raised():
+    """RFC 2131 s3.1 step 5: on a DHCPNAK "the client restarts the configuration
+    process"; retransmission is for when it "receives neither a DHCPACK or a
+    DHCPNAK". The refusal carries the NAK, and one REQUEST was sent."""
+
+    def nak(message):
+        reply = _canned_offer(message.xid)
+        reply.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPNAK
+        reply.yiaddr = IPv4("0.0.0.0")
+        return [reply]
+
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers=_offer_then(nak))
+
+    with pytest.raises(DHCPRefusedError) as refused:
+        client.dora(CHADDR, timeout=2.0, retries=2)
+
+    assert client.kinds() == ["DHCPDISCOVER", "DHCPREQUEST"]
+    assert refused.value.nak.message_type is DHCPMessageType.DHCPNAK
+    assert refused.value.nak.chaddr == CHADDR
+    assert client._pending_keys == set()
+
+
+def test_a_dhcpnak_from_a_server_other_than_the_selected_one_is_ignored():
+    """The REQUEST names the selected server (RFC 2131 s4.3.2); a NAK naming
+    another one is not an answer to it."""
+
+    def foreign_nak(message):
+        reply = _from_server(_canned_offer(message.xid), "10.0.0.66")
+        reply.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPNAK
+        return [reply]
+
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers=_offer_then(foreign_nak))
+
+    with pytest.raises(DHCPTimeoutError):
+        client.dora(CHADDR, timeout=2.0, retries=0)
+
+
+def test_an_offer_without_yiaddr_is_ignored():
+    """An OFFER of 0.0.0.0 offers nothing: no REQUEST is built from it."""
+
+    def empty(message):
+        offer = _canned_offer(message.xid)
+        offer.yiaddr = IPv4("0.0.0.0")
+        return [offer]
+
+    client = _ScriptedClient(
+        listen=("127.0.0.1", 0), answers={DHCPMessageType.DHCPDISCOVER: empty}
+    )
+
+    with pytest.raises(DHCPTimeoutError):
+        client.dora(CHADDR, timeout=2.0, retries=0)
+
+    assert client.kinds() == ["DHCPDISCOVER"]
+
+
+def test_an_ack_from_a_server_other_than_the_selected_one_is_ignored():
+    """RFC 2131 s4.4.1: the client "records the address of the server that
+    supplied the parameters from the 'server identifier' field". An ACK from
+    another server, ahead of the real one, does not end the exchange."""
+
+    def acks(message):
+        foreign = _from_server(_canned_ack(message.xid), "10.0.0.66")
+        foreign.yiaddr = IPv4("172.16.9.9")
+        return [foreign, _canned_ack(message.xid)]
+
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers=_offer_then(acks))
+
+    ack = client.dora(CHADDR, timeout=2.0, retries=0)
+
+    assert ack.yiaddr == IPv4("10.0.0.50")
+    assert ack.options.get(DHCPOptionCode.SERVER_IDENTIFIER) == IPv4("10.0.0.1")
+
+
+def test_a_foreign_ack_alone_is_a_timeout_not_an_answer():
+    def foreign(message):
+        return [_from_server(_canned_ack(message.xid), "10.0.0.66")]
+
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers=_offer_then(foreign))
+
+    with pytest.raises(DHCPTimeoutError):
+        client.dora(CHADDR, timeout=2.0, retries=0)
+
+
+def test_a_timeout_is_a_timeout_error_and_a_package_error():
+    """API "Exceptions": a timeout is `(Base, TimeoutError)`."""
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers={})
+
+    with pytest.raises(TimeoutError) as raised:
+        client.discover_offer(CHADDR, timeout=2.0, retries=1)
+
+    assert isinstance(raised.value, DHCPTimeoutError)
+    assert isinstance(raised.value, DHCPError)
+    assert client._pending_keys == set()
+
+
+# --- time: bounded from above by a second of margin, from below by the schedule ---
+
+
+def _real_clock_client(schedule):
+    """A client on the real clock with a fixed retransmission schedule."""
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers={})
+    client._monotonic = time.monotonic
+    client._wait_for = lambda waiter, msg_type, timeout, server=None: (
+        DHCPClient._wait_for(client, waiter, msg_type, timeout, server)
+    )
+    client._retransmit_intervals = lambda timeout, retries: iter(schedule)
+    return client
+
+
+def test_an_exchange_gives_up_after_its_schedule_and_not_before():
+    schedule = [0.2, 0.3]
+    client = _real_clock_client(schedule)
+
+    began = time.monotonic()
+    with pytest.raises(DHCPTimeoutError):
+        client.discover_offer(CHADDR)
+    elapsed = time.monotonic() - began
+
+    assert sum(schedule) - 0.05 <= elapsed <= sum(schedule) + 1.0, elapsed
+    assert client.kinds() == ["DHCPDISCOVER"] * 2
+
+
+def test_a_deadline_bounds_the_whole_call_and_timeout_keeps_its_meaning():
+    client = _real_clock_client([0.5, 1.0, 2.0])
+
+    began = time.monotonic()
+    with pytest.raises(DHCPTimeoutError):
+        client.discover_offer(CHADDR, deadline=0.7)
+    elapsed = time.monotonic() - began
+
+    assert 0.7 - 0.05 <= elapsed <= 0.7 + 1.0, elapsed
+    # Sent at 0 and at 0.5; the second wait was cut to what the deadline left.
+    assert client.kinds() == ["DHCPDISCOVER"] * 2
+
+
+def test_a_deadline_counts_across_both_halves_of_a_dora():
+    client = _real_clock_client([0.4, 0.4, 0.4])
+    client.answers = {
+        DHCPMessageType.DHCPDISCOVER: lambda m: [_canned_offer(m.xid)],
+    }
+
+    began = time.monotonic()
+    with pytest.raises(DHCPTimeoutError):
+        client.dora(CHADDR, deadline=0.6)
+    elapsed = time.monotonic() - began
+
+    assert 0.6 - 0.05 <= elapsed <= 0.6 + 1.0, elapsed
+    assert client.kinds()[0] == "DHCPDISCOVER" and "DHCPREQUEST" in client.kinds()
+
+
+@pytest.mark.parametrize("deadline", [0, -1.0])
+def test_a_deadline_that_is_not_positive_is_refused(deadline):
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers={})
+
+    with pytest.raises(ValueError, match="deadline"):
+        client.dora(CHADDR, deadline=deadline)
+
+    assert client.requests == []
+
+
+# --- send() alone remembers nothing; an exchange registers its own key ---
+
+
+def test_send_used_on_its_own_leaves_no_transaction_behind(monkeypatch):
+    client = DHCPClient(listen=("127.0.0.1", 0))
+    client._sockets.append(object())
+    transport = Mock()
+    transport.send.return_value = 300
+    monkeypatch.setattr("pydhcp.client._sync.UDPTransport", lambda sock: transport)
+
+    for xid in range(5000):
+        client.send(client.build_release(CHADDR, ciaddr="10.0.0.50", xid=xid))
+
+    assert client._pending_keys == set()
+    # Still an observer: an unrelated reply is queued, not dropped.
+    client.handle(_canned_offer(0x99), _context())
+    assert client.next_reply(timeout=0) is not None
+
+
+def test_an_exchange_registers_its_key_before_the_first_send():
+    """A reply handled while the datagram is still being sent is accepted."""
+    seen = []
+
+    class Watching(_ScriptedClient):
+        def send(self, message, dst=IPv4("255.255.255.255"), port=67):
+            seen.append(self._pending_key(message) in self._pending_keys)
+            return super().send(message, dst, port)
+
+    client = Watching(listen=("127.0.0.1", 0), answers={})
+
+    with pytest.raises(DHCPTimeoutError):
+        client.discover_offer(CHADDR, timeout=2.0, retries=0)
+
+    assert seen == [True]
     assert client._pending_keys == set()
 
 

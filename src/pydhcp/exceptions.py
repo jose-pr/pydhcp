@@ -10,11 +10,15 @@ order, is not here: it raises plain `ValueError` or `TypeError`.
 
 from __future__ import annotations
 
+import typing as _ty
+
 __all__ = [
     "DHCPError",
     "DHCPDecodeError",
     "DHCPValueError",
     "NoClientIdentityError",
+    "DHCPTimeoutError",
+    "DHCPRefusedError",
 ]
 
 
@@ -45,3 +49,32 @@ class NoClientIdentityError(DHCPError, ValueError):
     Neither a client identifier option nor a hardware address. Also a
     `ValueError`; a server drops the message rather than failing.
     """
+
+
+class DHCPTimeoutError(DHCPError, TimeoutError):
+    """A client exchange ended with no usable reply from the server.
+
+    Raised by `DHCPClient` and `AsyncDHCPClient` when the retransmissions, or the
+    `deadline` of the call, ran out before an acceptable DHCPOFFER or DHCPACK
+    arrived. Also a `TimeoutError`.
+    """
+
+
+class DHCPRefusedError(DHCPError):
+    """The server answered a DHCPREQUEST with a DHCPNAK.
+
+    The client's configuration process starts over (RFC 2131 section 3.1), so the
+    exchange ends at once instead of retransmitting. `nak` is the DHCPNAK
+    message; its `DHCP_MESSAGE` option, when present, says why.
+    """
+
+    #: The DHCPNAK `DHCPMessage`. Typed `Any` because this module is a leaf
+    #: that the message decoder itself imports.
+    nak: _ty.Any
+
+    def __init__(self, message: str, nak: _ty.Any) -> None:
+        super().__init__(message, nak)
+        self.nak = nak
+
+    def __str__(self) -> str:
+        return str(self.args[0])

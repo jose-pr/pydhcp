@@ -36,9 +36,11 @@ EXPECTED_ROOT = [
     "DHCPOptionType",
     "DHCPOptions",
     "DHCPPort",
+    "DHCPRefusedError",
     "DHCPRelay",
     "DHCPRequestContext",
     "DHCPServer",
+    "DHCPTimeoutError",
     "DHCPTransport",
     "DHCPValueError",
     "DomainList",
@@ -85,6 +87,8 @@ EXPECTED_CLI = [
 EXPECTED_EXCEPTIONS = [
     "DHCPDecodeError",
     "DHCPError",
+    "DHCPRefusedError",
+    "DHCPTimeoutError",
     "DHCPValueError",
     "NoClientIdentityError",
 ]
