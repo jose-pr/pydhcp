@@ -7,31 +7,28 @@ project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 private `_network` package and the `options` and `packet` subpackages have
 their own headers (they ship as `pydhcp/{_network,options,packet}/AGENTS.md`).
 
-**`pydhcp/__init__.py` re-exports much of those subpackages, but not all of
-them** — the previous wording said "everything", and 17 documented or
-subpackage names are not importable from `pydhcp`, among them `DHCPMetrics`,
-`ListenSpec`, `load_config`, `main`, `DHCPMessageType`, `DHCPPort`, `DHCPFlags`,
-`HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_V4`
-(the last is `pydhcp._constants.WILDCARD_V4`, in a private module).
-`from pydhcp import DHCPMessage` works; `from pydhcp import DHCPMessageType`
-does not. Import from the owning module when a name is not in `__all__`
-(83 names today, `__version__` among them: the installed distribution's
-version, read from its metadata).
+**What the root holds** (`pydhcp.__all__`, 52 names, `__version__` among them:
+the installed distribution's version, read from its metadata): the main
+classes of each role (`DHCPServer`, `DHCPClient`, `DHCPRelay`, `DHCPCapture`
+and their async twins, the listeners and transports), `DHCPMessage` and the
+enums a caller passes (`DHCPMessageType`, `DHCPOpcode`, `DHCPFlags`,
+`DHCPPort`), the option container and its generic codecs, the lease backends,
+`SocketAddress` and `NetworkInterface`, and the exceptions. Everything else
+is imported from the module that owns it:
 
-**Removed from the top level** (breaking, see the changelog):
-**`IPv4AddressOption`**, **`List`**, **`Bytes`**, **`String`** and **`Boolean`** are
-not re-exported here. They are option **codecs** and a bare name would not say
-so; the address codec is `IPv4AddressOption` so that the bare name
-`IPv4Address` is only ever the address type, and `isinstance(interface.ip,
-pydhcp.options.IPv4AddressOption)` is **False**. Import them from
-**`pydhcp.options`**. The stdlib
-address type is **`pydhcp.IPv4`**.
+| Name | Home |
+| --- | --- |
+| `CCC*`, `MoS*`, `VI*` codecs, `IPv4AddressOption`, `List`, `Bytes`, `String`, `Boolean`, `BaseDHCPOptionCode` | `pydhcp.options` |
+| `HardwareAddressType`, `load_message`, `dump_message`, `load_mapping`, `dump_mapping` | `pydhcp.packet` |
+| `DHCPMetrics`, `ListenSpec`, `BROADCAST_ADDRESS` | `pydhcp.listener` |
+| `ServerAddress`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
+| `validate_filename_pattern`, `FILENAME_FIELDS` | `pydhcp.capture` |
+| `main`, `App` | `pydhcp.cli` |
 
-The other codecs stay re-exported, including `U8`/`U16`/`U32` and the
-`CCC*`/`MoS*`/`VI*` families: nothing in the stdlib or `typing` is called any
-of those, so the bare name already says it is a pydhcp type. The test applied
-was whether a reader meeting the name at top level could mistake it for
-something else.
+A name outside a module's `__all__` is not API. The address and MAC types are
+not re-exported: `IPv4Address`, `IPv4Network` and `IPv4Interface` come from
+`ipaddress`, `MACAddress` from `netimps`. `load_config` and the size
+constants are in private modules and are not importable from a public one.
 
 ## Exceptions (`pydhcp.exceptions`, also at the root)
 
@@ -621,7 +618,7 @@ IPv6-only interface can break at runtime.
     crash — which an operator cannot see going wrong — for throughput they
     can already measure and that `MAX_LEASES` already bounds.
 
-## Metrics (`_metrics.py`)
+## Metrics (`pydhcp.listener.DHCPMetrics`)
 
 - **`DHCPMetrics()`** — plain counters, one instance per listener/server/
   client/relay/capture (`self.metrics`), never a module-level singleton.
@@ -644,7 +641,7 @@ IPv6-only interface can break at runtime.
     shutdowns. `releases_ignored` counts releases refused for naming an address
     the client does not hold.
 
-## Constants (`_constants.py`)
+## Constants (private)
 
 Not importable from a public module: they live in the private
 `pydhcp._constants`.
@@ -668,7 +665,7 @@ Not importable from a public module: they live in the private
   `max_packet_size`.
 - **`INFINITE_LEASE_TIME`** (`0xFFFFFFFF`) — RFC 2131's "infinite" lease.
 
-## NVT text (`_nvt.py`)
+## NVT text (private)
 
 The fields RFC 2131/2132 call NVT ASCII — `sname`, `file`, and the `String`
 options — carry other encodings in practice. Three helpers keep such a value
@@ -689,7 +686,7 @@ lossless on the wire and safe on a screen; use them rather than calling
 fails at write time. Anything rendering one must call `display()` first —
 `DHCPMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
 
-## Logging (`_log.py`)
+## Logging
 
 - **`LOGGER`** — the package logger, `logging.getLogger("pydhcp")`. Every
   module logs through its own `getLogger(__name__)` child, so an embedder can
@@ -701,7 +698,7 @@ fails at write time. Anything rendering one must call `display()` first —
   and a `NullHandler` counts as a handler, so those lines go silent instead.
   Configure a handler to see them. The CLI is unaffected — it installs its own.
 
-## Config loading (`_config.py`)
+## Config loading (private)
 
 - **`load_config(filepath: str) -> dict[str, Any]`** — dispatches on the
   file extension: `.ini` (via `configparser`, one dict per section), `.yaml`/
@@ -714,9 +711,9 @@ fails at write time. Anything rendering one must call `display()` first —
 A package: `App` and `main()` are in `pydhcp.cli` itself, and each subcommand
 has its own private module (`cli._interfaces`, `cli._server`, `cli._relay`,
 `cli._packet`, `cli._capture`, with `cli._capture_hook` for `--hook` loading and
-`cli._common` for the shared base). `from pydhcp.cli import ...` works for every name as
-before; patch a name where the command module looks it up
-(`pydhcp.cli._server.DHCPServer`, not `pydhcp.cli.DHCPServer`).
+`cli._common` for the shared base). `pydhcp.cli` exports `App`, `main`, the five
+command classes and the format and limit constants named in its `__all__`; patch a
+name where the command module looks it up (`pydhcp.cli._server.DHCPServer`).
 
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both
@@ -733,7 +730,7 @@ for logging (`-v`/`-q`/`--loglevel`, `self._logger_`); there is no
 per-subcommand `--log-level` flag anymore (superseded by duho's verbosity
 scheme). Every subcommand derives from an internal `_Command` base that sets
 `_logger_name_ = "pydhcp"`, so `self._logger_` resolves the package logger
-every module logger is a child of (`pydhcp._log.LOGGER`), and `-v`/`-q`
+every module logger is a child of (`logging.getLogger("pydhcp")`), and `-v`/`-q`
 change that logger's level. The attribute has to live on the subcommand: duho
 resolves the logger on the *parsed* instance, so setting it only on `App` left
 `-v` raising the level of a logger named after the subcommand while `pydhcp`

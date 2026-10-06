@@ -46,7 +46,12 @@ serve a private or vendor option space instead of the IANA registry above.
 
 ## Option Types
 
-::: pydhcp.options._codecs
+::: pydhcp.options
+    options:
+      # The classes above have sections of their own; the rest of `__all__` is
+      # the option codecs.
+      filters:
+        - "!^(DHCPOptions|DHCPOptionCode|BaseDHCPOptionCode|DHCPOption)$"
 
 ## DHCPServer
 
@@ -102,7 +107,7 @@ Every `DHCPListener` (and therefore `DHCPServer`, `DHCPClient`) owns its own `me
 instance — counters are per-instance, not global, so running multiple listeners in one process
 (e.g. in tests) never cross-contaminates counts. Call `.snapshot()` for a plain `dict[str, int]`.
 
-::: pydhcp._metrics.DHCPMetrics
+::: pydhcp.listener.DHCPMetrics
 
 ## pydhcp.client
 

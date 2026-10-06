@@ -3,10 +3,9 @@
 Header-file-style reference for `pydhcp.options`: the DHCP options
 container, the option-code registry, and the option payload codecs
 (private modules under `pydhcp.options._codecs`, exported from `pydhcp.options`).
-Most exports are also re-exported from the top-level
-`pydhcp` package -- **except `IPv4AddressOption`, `List`, `Bytes`, `String` and
-`Boolean`**, whose bare names did not say they were codecs; import those from
-`pydhcp.options`. The top-level package header ships beside this
+Every name below is importable from `pydhcp.options`; the top-level `pydhcp`
+package re-exports the generic codecs, **not** the `CCC*`, `MoS*` and `VI*`
+families, `IPv4AddressOption`, `List`, `Bytes`, `String` or `Boolean`. The top-level package header ships beside this
 one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
 of the installed package).

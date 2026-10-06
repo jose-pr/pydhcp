@@ -1,8 +1,9 @@
 # `pydhcp.packet` — public API header
 
 Header-file-style reference for `pydhcp.packet`: the DHCP wire message
-format plus JSON/YAML/TOML/INI structured (de)serialization. All exports are
-also re-exported from the top-level `pydhcp` package. The top-level package
+format plus JSON/YAML/TOML/INI structured (de)serialization. `DHCPMessage` and
+the enums `DHCPMessageType`, `DHCPOpcode`, `DHCPFlags` and `DHCPPort` are also
+re-exported from the top-level `pydhcp` package. The top-level package
 header ships beside this one as `pydhcp/AGENTS.md`; for the project overview
 see <https://github.com/jose-pr/pydhcp>. That file is the
 top-level package header.
