@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ipaddress.AddressValueError`, for a bad UTF-8 label a
   `UnicodeDecodeError`, for a destination with host bits set an `ipaddress`
   `ValueError`). `except ValueError` keeps working.
+- **Four counters in `DHCPMetrics`**: `packets_decoded_leniently`,
+  `packets_dropped_no_client_id`, `packets_dropped_other_server` and
+  `addresses_refused`, for what a decoder forgave and for three server drops that
+  had no counter.
 - **`pydhcp.__version__`**, read from the installed distribution's metadata.
 - **`AsyncDHCPClient`** (`pydhcp` and `pydhcp.client`): `DHCPClient` on an event
   loop. `send`, `discover_offer` and `dora` are coroutines taking the same
@@ -32,6 +36,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **A line a sender can provoke is rate-limited at every site.** A flood of junk
+  datagrams, forged requests, a failing handler or a failing pin used to write
+  one WARNING or ERROR per datagram (300 forged packets gave 300 records at each
+  server and relay site, 500 one-octet datagrams 500 records). Each reason now
+  writes its first occurrence, then at most one line per 60 s carrying the
+  running count; a traceback goes with the first occurrence only. The reasons
+  are the undecodable, oversized and control-truncated datagram, a receive or
+  handler error (by exception class), a pinned send that fails, the server's
+  BOOTREPLY, unidentifiable client, unusable or unhandled message type, message
+  for another server, INIT-REBOOT from an unknown client, DHCPDECLINE, DHCPRELEASE for
+  an address not held, refused address and a reply that does not decode, the
+  relay's five, an OFFER with no server identifier, and a failing capture hook
+  (callable or command). Text a sender wrote that a line names is escaped and cut
+  at 80 characters. The decoders log at DEBUG instead of WARNING (a text field that is
+  not UTF-8, an option cut short); the listener counts such datagrams.
+  The existing counters stay exact.
 - **Breaking: `NoClientIdentity` is now `pydhcp.NoClientIdentityError`**
   (`pydhcp.exceptions`), no longer importable from `pydhcp.packet.message`.
   No alias is kept. It is a `ValueError` as before.

@@ -446,7 +446,7 @@ A test that patches a module global patches it in the private module that reads 
     as do `client_identifier` and `parameter_request_list` — RFC 2131 §4.2
     and §4.4.1 require the same values in every subsequent message, and the
     identifier is what the server keys the lease on. Returns `None` (with a
-    warning) if the OFFER carries no `SERVER_IDENTIFIER`, since a SELECTING
+    limited warning) if the OFFER carries no `SERVER_IDENTIFIER`, since a SELECTING
     REQUEST must echo it (§4.3.2). `secs` counts from the DISCOVER across both
     halves — §2 defines it as time since *acquisition* began, so the REQUEST
     does not restart the clock.
@@ -753,7 +753,14 @@ IPv6-only interface can break at runtime.
     `packets_dropped_hop_limit`, `packets_dropped_untrusted`,
     `packets_dropped_truncated`, `packets_dropped_error`,
     `replies_dropped_overflow`, `packets_dropped_backlog` (async hand-off
-    drops and stop-time discards).
+    drops and stop-time discards), `packets_decoded_leniently` (datagrams the
+    decoder accepted although an option was cut short or a text field was not
+    UTF-8: one per datagram; option text is read when a handler asks for it, so
+    a bad option string is not counted), `packets_dropped_no_client_id` (a
+    server dropped a message with neither option 61 nor a hardware address),
+    `packets_dropped_other_server` (a message other than a REQUEST naming
+    another server) and `addresses_refused` (a requested address the server
+    refused to lease).
   - `leases_declined` counts `DHCPDECLINE`, which used to land in
     `leases_released` though it means the opposite — the client found the
     address already in use. An address-conflict storm read as orderly
@@ -792,7 +799,8 @@ lossless on the wire and safe on a screen; use them rather than calling
 `bytes.decode`/`str.encode` on these fields directly.
 
 - **`decode(raw: bytes, what="text") -> str`** — UTF-8, with undecodable octets
-  preserved via `surrogateescape` (logged once, naming `what`). Replacing them
+  preserved via `surrogateescape` (logged at DEBUG, naming `what`, and counted by
+  the listener that is decoding). Replacing them
   meant a relay forwarded a *different* boot filename than it received.
 - **`encode(text: str) -> bytes`** — restores those octets exactly. Valid UTF-8
   is unaffected in both directions.
@@ -811,6 +819,17 @@ fails at write time. Anything rendering one must call `display()` first —
   module logs through its own `getLogger(__name__)` child, so an embedder can
   raise or silence one component (`pydhcp.listener`, `pydhcp.server`) without
   touching the others; they all propagate to `pydhcp`.
+- **A line a sender can provoke is rate-limited.** For every such reason (an
+  undecodable or oversized datagram, a receive or handler error, a message a
+  role drops or ignores, a failing pin, a failing hook) the first occurrence is
+  written, then at most one line per 60 s for that reason, carrying the running
+  count (`[N occurrences so far; ...]`). The listener owns the limiter; the
+  table of reasons is capped (128, then one entry shared by the rest) and the
+  counts of `metrics` stay exact. A traceback is written for the first occurrence of
+  a reason only, and a handler error's reason is its exception class. Text a
+  sender wrote (a client identifier, an error's message) is escaped and cut at 80
+  characters. A decoder writes at DEBUG only: option and text leniency is counted
+  as `packets_decoded_leniently`.
 - The package installs a `NullHandler` on `pydhcp`, per the stdlib guidance for
   libraries. One consequence worth knowing: with logging otherwise
   unconfigured, `logging.lastResort` would print WARNING and above to stderr,

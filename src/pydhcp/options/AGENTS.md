@@ -65,7 +65,8 @@ of the installed package).
     -> DHCPOptions`** (classmethod) — parses a raw TLV options buffer into a
     new bag: PAD is skipped, END stops the parse, octets after END are
     ignored, a repeated code is joined (RFC 3396 long-option splitting).
-    Malformed lengths log a warning rather than raising. (`DHCPMessage.decode`
+    Malformed lengths log at DEBUG rather than raising (a listener counts the
+    datagram in `metrics.packets_decoded_leniently`). (`DHCPMessage.decode`
     reads the options field and, on **RFC 2132 §9.3** option overload, the
     `file`/`sname` fields into one bag — option 52, a different mechanism.)
   - **`.encode(word_size=1) -> bytearray`** / **`.partial_encode(maxsize,
@@ -245,7 +246,7 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
   Measured, `String("abc")` encodes to `b"abc"`. (Some senders do append
   one; `decode` keeps whatever arrived rather than stripping it, because
   stripping would change a value that round-trips.)
-  Octets that are not valid UTF-8 are **preserved**, not replaced (logged), so
+  Octets that are not valid UTF-8 are **preserved**, not replaced (logged at DEBUG), so
   the value re-encodes to exactly what arrived — a hostname or boot filename in
   another encoding survives being forwarded. They are held as surrogates, so
   such a value cannot go to a strict encoder: `to_json()` returns the display
