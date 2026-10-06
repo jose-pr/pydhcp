@@ -229,7 +229,8 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
 ### Scalars (`_scalar.py`)
 
 - **`Bytes(value=None)`** — opaque byte payload; `value` is bytes-like or
-  `None`, and text is a `TypeError`. **`Bytes.parse(text)`** reads hex text
+  `None`, and text or a number (not a count of zero octets) is a `TypeError`.
+  **`Bytes.parse(text)`** reads hex text
   (spaces and colons between octets are ignored; `DHCPValueError` for anything
   that is not whole hex octets, `TypeError` for a non-text) and
   **`Bytes.try_parse(text, default=None)`** answers `default` for text that

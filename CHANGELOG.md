@@ -496,6 +496,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   raise `DHCPValueError` when built, where `bytearray` said `byte must be in
   range(0, 256)`. A `ClientIdentifier` of one octet and an empty `SIPServers`
   raise `DHCPValueError` when written; both still decode.
+- **`from_mapping` reads a value once.** The second reading of a value its codec
+  refused, as bare hex, is gone: `"SUBNET_MASK": "dead"` loaded as a two-octet
+  mask and `"IP_ADDRESS_LEASE_TIME": "abcd"` as a two-octet lease time, and
+  `"255.255.255.0/24"` reported the hex parser's complaint. A value the codec
+  refuses raises `TypeError` or `ValueError` naming the option and the kind of
+  value (`option 1 (SUBNET_MASK) cannot hold a str: ...`). Octets are read from
+  `{"hex": "..."}` for any option, and as hex text only for an option whose codec
+  is opaque bytes (`VENDOR_SPECIFIC_INFORMATION`, an unnamed code); a number for
+  such an option is a `TypeError`, where `Bytes(5)` was five zero octets. A missing
+  header field is a `ValueError` naming it, where it was a bare `KeyError`; an
+  option name nobody knows is a `ValueError` naming it.
+  **Breaking** for a document that relied on bare hex for a typed option: write
+  `{"hex": "..."}`.
+- **`from_mapping` and `from_text` take `codemap=`**, the code map `to_mapping`
+  named the options with (default `DHCPOptionCode`).
+- **`sname` and `file` are byte-exact through the mapping and every format.**
+  A name that is not UTF-8 is written as `{"hex": "..."}` (it was text with U+FFFD
+  for each such octet, so `from_mapping(to_mapping())` changed it, and a name
+  taken from JSON or YAML changed too); a name that is UTF-8 is still text.
+  `from_mapping` also takes `bytes` and the hex form for either field. A document
+  written before still loads, with the U+FFFD text it holds.
+- **`decode` accepts a missing END marker**, as it always did: the documentation
+  said it raised `DHCPDecodeError`, and the check could not fire. A message that
+  stops after a complete option, inside one, or after the cookie decodes and
+  keeps what arrived.
 
 ### Renamed
 

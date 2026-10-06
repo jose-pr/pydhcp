@@ -24,6 +24,10 @@ class Bytes(DHCPOptionType, _TextForm, bytes):
                 f"{cls.__name__} is built from bytes, not text: "
                 f"use {cls.__name__}.parse for hex text"
             )
+        if isinstance(value, int):
+            raise TypeError(
+                f"{cls.__name__} is built from bytes, not a {type(value).__name__}"
+            )
         if value is None:
             return super().__new__(cls)
         return super().__new__(cls, value)

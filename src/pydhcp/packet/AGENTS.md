@@ -43,9 +43,12 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   - **`DHCPMessage.decode(data: bytes | bytearray | memoryview) ->
     DHCPMessage`** — parses a wire packet. Raises `DHCPDecodeError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
-    a missing `0xFF` (END) options terminator, or an `op` that is neither
-    request nor reply (`op` 1 and 2 are the only values RFC 2131 defines, and
-    nothing else is forwarded). An `htype` with no IANA name
+    an `op` that is neither request nor reply (`op` 1 and 2 are the only
+    values RFC 2131 defines, and nothing else is forwarded). A **missing END
+    marker (`0xFF`) is accepted**, in the options field and in an overloaded
+    `sname`/`file` alike: what arrived is kept, and a message with no options
+    at all (240 octets) decodes to an empty bag. `encode` always ends the options
+    field, and each field it overloads, with END. An `htype` with no IANA name
     is **preserved** as an unnamed `HardwareAddressType` member rather than
     raising or being rewritten, so a relay forwards the type it received. The
     `flags` field is preserved the same way: the reserved bits stay set, and
@@ -116,16 +119,28 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     a relay agent require — never past `max_packetsize` less the 28 octets of
     IPv4 and UDP header.
   - **`.to_mapping() -> dict[str, Any]`** / **`DHCPMessage.from_mapping(data:
-    Mapping[str, Any]) -> DHCPMessage`** — structured round-trip to/from a
-    plain dict. Option keys are the option's label when it has one, else its
-    **numeric code** as a string (every unnamed code shares the label
-    `"UNKNOWN"`, so using it collided them onto one key).
+    Mapping[str, Any], *, codemap=None) -> DHCPMessage`** — structured
+    round-trip to/from a plain dict. Option keys are the option's label when it
+    has one, else its **numeric code** as a string (every unnamed code shares
+    the label `"UNKNOWN"`, so it is not used as a key). `to_mapping` names the
+    options with the message's own code map; pass the same `codemap` to
+    `from_mapping` (default `DHCPOptionCode`) to read them back.
     - The round trip is **byte-exact**: each option is loaded back at dump
       time, and one whose readable form does not reproduce the original
       octets is written as **`{"hex": "..."}`** instead
       (`DHCPMessage.HEX_VALUE_KEY`). That covers text holding a non-UTF-8
       octet, a payload the codec normalises, and a length the codec does not
-      preserve. The form survives JSON, YAML, TOML and INI alike.
+      preserve. `sname` and `file` follow the same rule: text when it is
+      UTF-8, `{"hex": "..."}` for any other octets. The form survives JSON,
+      YAML, TOML and INI alike.
+    - **A value is read once, as its codec reads it.** `from_mapping` builds
+      each option from what its codec accepts (a name for an enum, dotted text
+      for an address, a number for an integer). A codec that refuses the value
+      raises `TypeError` or `ValueError` naming the option and the kind of value
+      (`option 1 (SUBNET_MASK) cannot hold a str: ...`); octets are read only
+      from `{"hex": "..."}`, which any option takes, and from hex text for an
+      option whose codec is opaque bytes (`VENDOR_SPECIFIC_INFORMATION`, an
+      unnamed code). A missing header field is a `ValueError` naming it.
     - Integer options serialize as plain `int`, not as the `U16`/`U32`
       subclass — YAML cannot represent the subclass and TOML writes something
       it cannot read back.
@@ -149,7 +164,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     (used by `.log_str()`/`.log()` and the CLI's `--format summary`); nothing
     reads it back.
   - **`.to_text(format: str) -> str`** / **`DHCPMessage.from_text(text: str,
-    format: str) -> DHCPMessage`** — the message as a document and back;
+    format: str, *, codemap=None) -> DHCPMessage`** — the message as a document and back;
     `format` is `"json"`, `"yaml"`, `"toml"` or `"ini"` (case-insensitive),
     anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
     out by `pydhcp.packet.structured` (below). `"toml"` needs Python 3.11+ or
@@ -157,16 +172,14 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   - **`.log(src, dst, level: int) -> None`** — logs `.summary()` framed with a
     header, at `pydhcp`'s `LOGGER`, at the given `logging` level.
 
-**Hand-authoring a message for `from_text`** — two traps, both of which used
-to corrupt silently rather than fail:
+**Hand-authoring a message for `from_text`** — two traps, both refused with
+an error:
 
 - **Quote the MAC.** `chaddr: 10:20:30:40:50:55` unquoted is read by PyYAML as
-  the sexagesimal integer `8041827055`. It now raises and names the cause;
-  write `chaddr: "10:20:30:40:50:55"`.
-- **Omit or quote `sname`/`file`.** A bare `sname:` loads as `None`, and that
-  used to be stringified into the BOOTP field as the four characters `None`.
-  `None` now means empty, and a non-text value raises instead of being
-  stringified.
+  the sexagesimal integer `8041827055`, and raises with a message naming the
+  cause; write `chaddr: "10:20:30:40:50:55"`.
+- **Omit or quote `sname`/`file`.** A bare `sname:` loads as `None`, which means
+  empty; a value that is not text, null, octets or `{"hex": ...}` raises.
 
 **`DHCPMessage.decode()` honours `cls`**, so a subclass decodes to itself — it
 used to hard-code `DHCPMessage(...)` while `from_mapping` already used `cls`.

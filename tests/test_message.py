@@ -262,9 +262,12 @@ def test_non_utf8_sname_and_file_survive_a_re_encode():
     assert out[108:236] == file.ljust(128, b"\x00"), "file octets were not preserved"
 
     # Rendering stays safe: no preserved octet reaches a terminal or serializer.
+    # The summary shows U+FFFD; the mapping carries the octets as hex.
+    assert "�" in decoded.summary()
     decoded.summary().encode("utf-8")
     mapping = decoded.to_mapping()
-    assert "�" in mapping["sname"] and "�" in mapping["file"]
+    assert mapping["sname"] == {"hex": sname.hex()}
+    assert mapping["file"] == {"hex": file.hex()}
     json.dumps(mapping, ensure_ascii=False).encode("utf-8")
 
 

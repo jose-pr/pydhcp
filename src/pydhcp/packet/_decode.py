@@ -42,12 +42,15 @@ class _MessageDecode(_MessageFields):
         not valid UTF-8 is preserved octet for octet. A relay must forward what it
         received. RFC 2132 s9.3 overload is honoured: options packed into `file`
         and `sname` are read back and the fields take their literal values from
-        options 67/66. Constructs `cls`, so a subclass decodes to itself.
+        options 67/66. A missing END marker is accepted, in the options field and
+        in an overloaded field alike (RFC 2131 s4.1 requires one; a message
+        without it keeps what arrived). Constructs `cls`, so
+        a subclass decodes to itself.
 
         Raises:
             DHCPDecodeError: shorter than the fixed header or magic cookie, a
-                wrong magic cookie, `op` that is neither request nor reply,
-                `hlen > 16`, or no END marker. A `ValueError` too.
+                wrong magic cookie, `op` that is neither request nor reply, or
+                `hlen > 16`. A `ValueError` too.
         """
         if not isinstance(data, memoryview):
             data = memoryview(data)
@@ -101,11 +104,7 @@ class _MessageDecode(_MessageFields):
             )
 
         options = DHCPOptions()
-        remaining_opts = options._decode_into(data[240:], base_offset=240)
-        if remaining_opts and remaining_opts[0] != 255:
-            raise DHCPDecodeError(
-                f"Bad options terminator: expected 255 (END), got {remaining_opts[0]}"
-            )
+        options._decode_into(data[240:], base_offset=240)
 
         overload = options.get(
             DHCPOptionCode.OPTION_OVERLOAD,

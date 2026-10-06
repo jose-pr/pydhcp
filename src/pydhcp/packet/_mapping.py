@@ -13,6 +13,7 @@ from ..options._codes import OptionCode
 from ..options import DHCPOptions
 from ..options import _codecs as _type
 from ._encode import _MessageEncode
+from ._fields import _MessageFields
 from . import structured as _structured
 
 
@@ -68,22 +69,44 @@ def _coerce_chaddr(value: _ty.Any) -> bytes:
     return bytes.fromhex(_strip_hex_text(value))
 
 
+def _text_value(text: str) -> _ty.Any:
+    """`sname` or `file` for a document: the text, or its octets when the text
+    would not give them back (a name that is not UTF-8)."""
+    shown = _nvt.display(text)
+    if _nvt.encode(shown) == _nvt.encode(text):
+        return shown
+    return {_MessageFields.HEX_VALUE_KEY: _nvt.encode(text).hex()}
+
+
 def _coerce_bootp_text(value: _ty.Any, field: str) -> str:
     """Coerce a mapping's `sname`/`file` to text without inventing content.
 
     A bare `sname:` / `file:` key in YAML (and a JSON `null`) loads as `None`,
-    and the previous `str(data[field])` turned that into the literal four
-    characters `None` -- a silently corrupt packet rather than an error or an
-    empty field. An absent field means "empty", which is what the wire encodes
-    as an all-NUL BOOTP field.
+    which is an empty field, what the wire encodes as an all-NUL BOOTP field;
+    octets (`bytes`, or the explicit hex form) are read as they are.
     """
     if value is None:
         return ""
+    if isinstance(value, _ty.Mapping) and set(value) == {_MessageFields.HEX_VALUE_KEY}:
+        try:
+            value = bytes.fromhex(
+                _strip_hex_text(str(value[_MessageFields.HEX_VALUE_KEY]))
+            )
+        except ValueError as exc:
+            raise ValueError(f"{field} is not hex octets: {exc}") from exc
     if isinstance(value, (bytes, bytearray, memoryview)):
         return _nvt.decode(bytes(value))
     if not isinstance(value, str):
         raise TypeError(f"{field} must be text or null, not {type(value).__name__}")
     return value
+
+
+def _header(data: _ty.Mapping[str, _ty.Any], key: str) -> _ty.Any:
+    """The header field `key`, or a `ValueError` that names it."""
+    try:
+        return data[key]
+    except KeyError:
+        raise ValueError(f"the message has no {key!r} field") from None
 
 
 def _coerce_option_value(
@@ -98,6 +121,14 @@ def _coerce_option_value(
     return value
 
 
+def _option_type(codemap: type[OptionCode], code: int) -> type[_type.OptionCodec]:
+    """The codec `codemap` binds `code` to; opaque bytes for a code it cannot name."""
+    try:
+        return codemap.from_code(code).get_type()
+    except (ValueError, KeyError):
+        return _type.Bytes
+
+
 def _coerce_option_code(raw_code: _ty.Any, codemap: type[OptionCode]) -> int:
     if isinstance(raw_code, int):
         return raw_code
@@ -106,8 +137,11 @@ def _coerce_option_code(raw_code: _ty.Any, codemap: type[OptionCode]) -> int:
             return int(raw_code)
         try:
             return int(codemap[raw_code])  # type: ignore[index]
-        except Exception:
-            pass
+        except (KeyError, TypeError):
+            raise ValueError(
+                f"unknown option {raw_code!r}: it is neither a name in "
+                f"{codemap.__name__} nor a number"
+            ) from None
     return int(raw_code)
 
 
@@ -182,10 +216,10 @@ class _MessageMapping(_MessageEncode):
             "siaddr": str(self.siaddr),
             "giaddr": str(self.giaddr),
             "chaddr": self.chaddr.hex(":").upper(),
-            # Display form: a mapping is written out as JSON/YAML/TOML/INI, and
-            # a preserved octet cannot be encoded by a strict serializer.
-            "sname": _nvt.display(self.sname),
-            "file": _nvt.display(self.file),
+            # Text a strict serializer can write, or the octets as hex when the
+            # name is not UTF-8.
+            "sname": _text_value(self.sname),
+            "file": _text_value(self.file),
             "options": options,
         }
 
@@ -198,12 +232,19 @@ class _MessageMapping(_MessageEncode):
         return _structured.dumps(self.to_mapping(), format)
 
     @classmethod
-    def from_text(cls: "type[_Mapped]", text: str, format: str) -> _Mapped:
+    def from_text(
+        cls: "type[_Mapped]",
+        text: str,
+        format: str,
+        *,
+        codemap: _ty.Optional[type[OptionCode]] = None,
+    ) -> _Mapped:
         """Build a message from a document `to_text` (or the capture command) wrote.
 
-        `pydhcp.packet.structured.loads` then `from_mapping`; the same errors.
+        `pydhcp.packet.structured.loads` then `from_mapping`, with the same
+        `codemap` and the same errors.
         """
-        return cls.from_mapping(_structured.loads(text, format))
+        return cls.from_mapping(_structured.loads(text, format), codemap=codemap)
 
     def _survives_round_trip(
         self, code: int, option_value: _ty.Any, original: _ty.Any
@@ -225,63 +266,64 @@ class _MessageMapping(_MessageEncode):
             return False
 
     @classmethod
-    def from_mapping(cls: "type[_Mapped]", data: _ty.Mapping[str, _ty.Any]) -> _Mapped:
+    def from_mapping(
+        cls: "type[_Mapped]",
+        data: _ty.Mapping[str, _ty.Any],
+        *,
+        codemap: _ty.Optional[type[OptionCode]] = None,
+    ) -> _Mapped:
         """Build a message from a mapping in the shape `to_mapping` produces.
 
-        Accepts option keys by name or number and the ``{HEX_VALUE_KEY: ...}`` raw
-        form, so `to_mapping` -> `from_mapping` round-trips exactly. A MAC written
-        unquoted in YAML (read as a sexagesimal integer) is refused with a message
-        naming the cause, and a missing `sname`/`file` is empty, never the text
-        "None". Constructs `cls`.
+        Accepts option keys by name or number, so `to_mapping` -> `from_mapping`
+        round-trips exactly when `codemap` is the one the options were named with
+        (the default is `DHCPOptionCode`). An option's value is what its codec
+        accepts, and a codec that refuses it is an error naming the option and the
+        kind of value. Octets are read only in the explicit ``{HEX_VALUE_KEY: ...}``
+        form, which any option takes, and as hex text for an option whose codec is
+        opaque bytes. `sname` and `file` take text, null (empty), `bytes` or the
+        hex form. A MAC written unquoted in YAML (read as a sexagesimal integer) is
+        refused with a message naming the cause. Constructs `cls`.
 
         Raises:
-            TypeError: `options` is not a mapping, or a field has the wrong type.
-            ValueError: a field or option value cannot be coerced.
+            TypeError: `options` is not a mapping, or a field or option value has
+                the wrong type.
+            ValueError: a header field is missing, or a field or option value
+                cannot be coerced.
         """
-        options = DHCPOptions()
+        options = DHCPOptions(codemap)
         raw_options = data.get("options", {})
         if not isinstance(raw_options, _ty.Mapping):
             raise TypeError("options must be a mapping")
 
         for raw_code, raw_value in raw_options.items():
             code = _coerce_option_code(raw_code, options._codemap)
-            if isinstance(raw_value, _ty.Mapping) and set(raw_value) == {
-                cls.HEX_VALUE_KEY
-            }:
-                options[code] = bytearray.fromhex(
-                    _strip_hex_text(str(raw_value[cls.HEX_VALUE_KEY]))
-                )
-                continue
-            try:
-                code_obj = options._codemap.from_code(code)
-                option_type = code_obj.get_type()
-                value = _coerce_option_value(option_type, raw_value)
-                options[code] = value
-            except Exception:
-                if isinstance(raw_value, str):
-                    raw_bytes = bytearray.fromhex(_strip_hex_text(raw_value))
-                elif isinstance(raw_value, (bytes, bytearray, memoryview)):
-                    raw_bytes = bytearray(raw_value)
+            with options._naming(code, raw_value):
+                if isinstance(raw_value, _ty.Mapping) and set(raw_value) == {
+                    cls.HEX_VALUE_KEY
+                }:
+                    value: _ty.Any = bytearray.fromhex(
+                        _strip_hex_text(str(raw_value[cls.HEX_VALUE_KEY]))
+                    )
                 else:
-                    raise TypeError(
-                        f"Unsupported value for unknown option {raw_code!r}"
-                    ) from None
-                options[code] = raw_bytes
+                    value = _coerce_option_value(
+                        _option_type(options._codemap, code), raw_value
+                    )
+            options[code] = value
 
         return cls(
-            op=_coerce_enum_value(_enum.DHCPOpcode, data["op"]),
-            htype=_coerce_enum_value(_enum.HardwareAddressType, data["htype"]),
-            hlen=_coerce_int(data["hlen"]),
-            hops=_coerce_int(data["hops"]),
-            xid=_coerce_int(data["xid"]),
-            secs=_dt.timedelta(seconds=_coerce_int(data["secs"])),
-            flags=_coerce_enum_value(_enum.DHCPFlags, data["flags"]),
-            ciaddr=_ipaddress.IPv4Address(data["ciaddr"]),
-            yiaddr=_ipaddress.IPv4Address(data["yiaddr"]),
-            siaddr=_ipaddress.IPv4Address(data["siaddr"]),
-            giaddr=_ipaddress.IPv4Address(data["giaddr"]),
-            chaddr=_coerce_chaddr(data["chaddr"]),
-            sname=_coerce_bootp_text(data["sname"], "sname"),
-            file=_coerce_bootp_text(data["file"], "file"),
+            op=_coerce_enum_value(_enum.DHCPOpcode, _header(data, "op")),
+            htype=_coerce_enum_value(_enum.HardwareAddressType, _header(data, "htype")),
+            hlen=_coerce_int(_header(data, "hlen")),
+            hops=_coerce_int(_header(data, "hops")),
+            xid=_coerce_int(_header(data, "xid")),
+            secs=_dt.timedelta(seconds=_coerce_int(_header(data, "secs"))),
+            flags=_coerce_enum_value(_enum.DHCPFlags, _header(data, "flags")),
+            ciaddr=_ipaddress.IPv4Address(_header(data, "ciaddr")),
+            yiaddr=_ipaddress.IPv4Address(_header(data, "yiaddr")),
+            siaddr=_ipaddress.IPv4Address(_header(data, "siaddr")),
+            giaddr=_ipaddress.IPv4Address(_header(data, "giaddr")),
+            chaddr=_coerce_chaddr(_header(data, "chaddr")),
+            sname=_coerce_bootp_text(_header(data, "sname"), "sname"),
+            file=_coerce_bootp_text(_header(data, "file"), "file"),
             options=options,
         )

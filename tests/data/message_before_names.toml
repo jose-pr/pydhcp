@@ -1,0 +1,21 @@
+op = "BOOTREPLY"
+htype = "ETHERNET"
+hlen = 6
+hops = 0
+xid = 16909060
+secs = 0
+flags = "UNICAST"
+ciaddr = "0.0.0.0"
+yiaddr = "0.0.0.0"
+siaddr = "0.0.0.0"
+giaddr = "0.0.0.0"
+chaddr = "00:11:22:33:44:55"
+sname = "srv-�"
+file = "boot�.img"
+
+[options]
+DHCP_MESSAGE_TYPE = "DHCPOFFER"
+SUBNET_MASK = "255.255.255.0"
+
+[options.HOSTNAME]
+hex = "686f73742de9"
