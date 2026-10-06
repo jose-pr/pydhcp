@@ -20,6 +20,8 @@ class DHCPMetrics:
         "leases_renewed",
         "leases_released",
         "leases_declined",
+        "declines_ignored",
+        "quarantines_refused",
         "offers_withdrawn",
         "releases_ignored",
         "informs_ignored",
@@ -33,6 +35,8 @@ class DHCPMetrics:
         "packets_decoded_leniently",
         "packets_dropped_no_client_id",
         "packets_dropped_other_server",
+        "packets_dropped_malformed_option",
+        "options_ignored_malformed",
         "addresses_refused",
         "replies_dropped_pin",
         "packets_dropped_other_interface",
@@ -53,6 +57,12 @@ class DHCPMetrics:
     #: address-conflict signal an operator needs to see, and folding it into
     #: `leases_released` made a conflict storm look like orderly shutdowns.
     leases_declined: int
+    #: DHCPDECLINEs that quarantined nothing: the sender holds no lease for
+    #: the address named, it is outside the served network, or the message
+    #: names another server.
+    declines_ignored: int
+    #: Addresses the quarantine refused to take because it was full.
+    quarantines_refused: int
     #: Offers dropped because the client's REQUEST chose another server.
     offers_withdrawn: int
     #: DHCPRELEASEs refused because the address named did not match the stored
@@ -92,6 +102,10 @@ class DHCPMetrics:
     packets_dropped_no_client_id: int
     #: Messages other than a REQUEST that name another server's identifier.
     packets_dropped_other_server: int
+    #: Messages dropped because option 50 or 54 could not be read (wrong length).
+    packets_dropped_malformed_option: int
+    #: Options 51 or 57 of the wrong length, treated as absent.
+    options_ignored_malformed: int
     #: Requested addresses the server refused to lease (off the served
     #: network, its own, in use, quarantined).
     addresses_refused: int

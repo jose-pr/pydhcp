@@ -1,3 +1,4 @@
+import time
 import pytest
 import ipaddress
 from datetime import datetime, timedelta, timezone
@@ -549,17 +550,33 @@ def test_allocator_grants_a_free_in_subnet_address() -> None:
     assert lease is not None and lease.ip == IPv4("10.0.0.50")
 
 
-def test_declined_address_is_quarantined_and_not_reoffered() -> None:
-    """RFC 2131 4.3.3: the client found the address in use, so the server must
-    not hand it out again -- releasing the binding alone left it first in line."""
-    server = _LoopbackServer()
-    server.lease_backend.allocate("client-a", IPv4("10.0.0.50"), 3600)
+@pytest.fixture
+def served(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`_servable_interface` answers with the network `_LoopbackServer` allocates from."""
+    monkeypatch.setattr(
+        "pydhcp.server._policy._servable_interface",
+        lambda _ip: NetworkInterface("test0", _LoopbackServer.NETWORK),
+    )
 
-    decline = _message(DHCPMessageType.DHCPDECLINE)
-    decline.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.50")
+
+def _decline(address: str, client: bytes = b"\x01\x02\x03") -> DHCPMessage:
+    msg = _message(DHCPMessageType.DHCPDECLINE)
+    msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4(address)
+    msg.options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(client)
+    return msg
+
+
+def test_declined_address_is_quarantined_and_not_reoffered(served) -> None:
+    """RFC 2131 4.3.3: the client found the address in use, so the server must
+    not hand it out again -- releasing the binding alone left it first in line.
+    The address is the sender's own: it holds it."""
+    server = _LoopbackServer()
+    decline = _decline("10.0.0.50")
+    server.lease_backend.allocate(decline.get_client_id(), IPv4("10.0.0.50"), 3600)
+
     server.handle(decline, _context(Mock()))
 
-    assert IPv4("10.0.0.50") in server._declined
+    assert server.is_quarantined(IPv4("10.0.0.50"))
     assert (
         server.acquire_lease("client-b", IPv4("10.0.0.1"), _request_for("10.0.0.50"))
         is None
@@ -569,13 +586,29 @@ def test_declined_address_is_quarantined_and_not_reoffered() -> None:
 def test_quarantine_is_bounded_and_expires() -> None:
     server = _LoopbackServer()
     server.MAX_DECLINED_ADDRESSES = 3
+    now = time.monotonic()
     for last in range(5):
-        server.quarantine_address(IPv4(f"10.0.0.{10 + last}"))
+        server.quarantine_address(IPv4(f"10.0.0.{10 + last}"), now=now)
+    # At the bound a new address is refused and counted; nothing already held
+    # is pushed out.
     assert len(server._declined) == 3
-    assert IPv4("10.0.0.10") not in server._declined
+    assert server.is_quarantined(IPv4("10.0.0.10"), now=now)
+    assert not server.is_quarantined(IPv4("10.0.0.13"), now=now)
+    assert server.metrics.quarantines_refused == 2
 
-    server.DECLINE_QUARANTINE_SECONDS = -1.0  # already elapsed
-    server.quarantine_address(IPv4("10.0.0.60"))
+    # Entries that have run out make room, and no longer refuse the address.
+    later = now + server.DECLINE_QUARANTINE_SECONDS + 1
+    assert not server.is_quarantined(IPv4("10.0.0.10"), now=later)
+    server.quarantine_address(IPv4("10.0.0.60"), now=later)
+    assert server.is_quarantined(IPv4("10.0.0.60"), now=later)
+    assert server.metrics.quarantines_refused == 2
+
+
+def test_an_expired_quarantine_offers_the_address_again() -> None:
+    server = _LoopbackServer()
+    server.quarantine_address(
+        IPv4("10.0.0.60"), now=time.monotonic() - server.DECLINE_QUARANTINE_SECONDS - 1
+    )
     assert (
         server.acquire_lease("client-a", IPv4("10.0.0.1"), _request_for("10.0.0.60"))
         is not None

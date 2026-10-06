@@ -122,6 +122,11 @@ class _Recording:
             DHCPOptions(),
         )
 
+    def lookup_lease(self, client_id: str) -> DHCPLease:
+        # Keeps its leases nowhere: every client holds the one address.
+        self._note("lookup_lease")
+        return DHCPLease(LOOPBACK)
+
     def release_lease(self, client_id: str, server_id: IPv4, msg: DHCPMessage) -> bool:
         self._note("release_lease")
         return super().release_lease(client_id, server_id, msg)  # type: ignore[misc,no-any-return]
@@ -243,6 +248,7 @@ def test_each_override_point_is_the_subclass_method_on_the_handler_thread(
                 "handle_release",
                 "acquire_lease",
                 "release_lease",
+                "lookup_lease",
                 "get_inform_options",
                 "quarantine_address",
             },

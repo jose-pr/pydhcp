@@ -430,7 +430,37 @@ A test that patches a module global patches it in the private module that reads 
   - `.quarantine_address(ip, *, now=None)` — stops offering `ip` for
     `DECLINE_QUARANTINE_SECONDS`; `now` is `time.monotonic()` seconds, and when
     omitted (as `handle_decline` calls it, so an override taking only `ip` keeps
-    working) the driver's reading is used.
+    working) the driver's reading is used. The map holds at most
+    **`MAX_DECLINED_ADDRESSES`** (1024): at the bound the entries that have run
+    out are dropped and, if none has, a **new** address is refused and counted in
+    `quarantines_refused` — never the oldest evicted, which would let a flood of
+    reports push a genuine one out.
+  - `.is_quarantined(ip, *, now=None) -> bool` — whether `ip` is out of the pool.
+    The server asks it of **every lease a hook returns**: an `acquire_lease`
+    override is not offered a declined address again, and does not have to check.
+    A DISCOVER whose lease is quarantined gets no OFFER, a REQUEST gets a NAK
+    (`addresses_refused` counts both).
+  - `.lookup_lease(client_id) -> DHCPLease | None` — override point: the lease
+    this server holds for the client, in either state (`lease.offered`), `None`
+    for none. The default reads `lease_backend`. A DHCPDECLINE, a DHCPRELEASE and a
+    REQUEST naming another server ask it to learn what the sender holds; a server
+    that keeps its leases elsewhere overrides this one method.
+  - **`.handle_decline()` quarantines only an address the sender holds**: the
+    address option 50 names (else `ciaddr`, else the one the sender holds) must be
+    the sender's own binding or outstanding offer according to `lookup_lease`,
+    lie in the served network, and option 54, when present, must name this server.
+    The sender's lease is then released and the address quarantined
+    (`leases_declined`). Any other DECLINE changes nothing and is counted in
+    `declines_ignored`: client identifiers are unauthenticated, so a DECLINE from
+    another client for a held address, for an address nobody was offered, for one
+    outside the network or for the server's own would otherwise take addresses
+    out of the pool at one packet each.
+  - **Options 50, 51, 54 and 57 are decoded once, at the top of `.handle()`**,
+    inside one guard: a wrong-length option 50 or 54 (the message cannot say which
+    address or which server) drops the message, counted in
+    `packets_dropped_malformed_option`; a wrong-length 51 or 57 is removed from the
+    message, so every reader sees it absent (`options_ignored_malformed`). Each is
+    logged once per interval with the XID and the client, never raised.
   - `.release_lease(client_id, server_id, msg) -> bool` — override point,
     releases via the lease backend; returns whether a binding actually went
     away. It does **not** touch metrics: an orderly `DHCPRELEASE`, a
@@ -928,8 +958,14 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     `packets_dropped_other_interface` (a datagram dropped before decoding because it
     arrived on an interface the listener was not told to serve),
     `informs_ignored` (a DHCPINFORM whose `ciaddr` is neither the sender's address nor
-    in the served network, or absent) and `relay_info_omitted` (a reply sent without
-    option 82 because it would not fit in the options field).
+    in the served network, or absent), `relay_info_omitted` (a reply sent without
+    option 82 because it would not fit in the options field),
+    `packets_dropped_malformed_option` (a message dropped for an option 50 or 54 of
+    the wrong length), `options_ignored_malformed` (an option 51 or 57 of the wrong
+    length, treated as absent), `declines_ignored` (a DHCPDECLINE that quarantined
+    nothing: the sender holds no lease for the address, it is outside the served
+    network, or option 54 names another server) and `quarantines_refused` (an
+    address the full quarantine refused).
   - **`leases_offered` counts offers, `leases_allocated` counts commits.** A
     DHCPOFFER holds an address (`offer`) and adds one to `leases_offered`; the
     REQUEST that accepts it (`commit`), or an address allocated and committed

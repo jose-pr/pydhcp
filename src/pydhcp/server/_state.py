@@ -53,7 +53,9 @@ class _ServerState(_Timed):
     DECLINE_QUARANTINE_SECONDS: float = 600.0
 
     #: Upper bound on quarantined addresses, so a DECLINE flood cannot grow
-    #: memory without limit; the oldest entry is evicted first.
+    #: memory without limit. At the bound an entry that has run out is dropped
+    #: and, failing that, a new address is refused (counted in
+    #: `quarantines_refused`): a flood does not push a genuine report out.
     MAX_DECLINED_ADDRESSES = 1024
 
     #: Whether to unicast a reply to a client that has no address yet.
@@ -105,6 +107,5 @@ class _ServerState(_Timed):
         if lease_backend is not None:
             _check_backend(lease_backend)
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
-        self._declined: _ty.OrderedDict[_ipaddress.IPv4Address, float] = (
-            _ty.OrderedDict()
-        )
+        #: Address -> the `time.monotonic()` second its quarantine ends.
+        self._declined: _ty.Dict[_ipaddress.IPv4Address, float] = {}

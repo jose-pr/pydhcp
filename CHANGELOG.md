@@ -67,6 +67,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `ciaddr` the server will not answer) and `relay_info_omitted` (a reply sent without
   option 82 because it would not fit the options field).
 
+- **`DHCPServer.is_quarantined(ip, *, now=None)` and `.lookup_lease(client_id)`**
+  (and the same on `AsyncDHCPServer`). `is_quarantined` says whether an address is
+  out of the pool after a DHCPDECLINE; the server asks it of every lease a hook
+  returns. `lookup_lease` is the override point for what the server holds for a
+  client (default: `lease_backend.lookup`), asked by DHCPDECLINE, DHCPRELEASE and a
+  REQUEST naming another server.
+- **Four counters in `DHCPMetrics`**: `packets_dropped_malformed_option`,
+  `options_ignored_malformed`, `declines_ignored` and `quarantines_refused`.
+
 ### Changed
 
 - **Breaking: text in `listen` that is not an IPv4 address is an interface name.**
@@ -737,6 +746,21 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **A wrong-length option 50, 51, 54 or 57 no longer raises out of `handle()`.**
+  The options the server acts on are decoded once, at the top of `handle()`. A
+  message whose option 50 or 54 is unusable is dropped (counted in
+  `packets_dropped_malformed_option`); an unusable 51 or 57 is treated as absent
+  (`options_ignored_malformed`). Each is logged once per interval with the XID and
+  the client, where the listener used to log a traceback per datagram.
+- **A DHCPDECLINE quarantines only an address the sender holds.** Any client could
+  quarantine any address for ten minutes, an address outside the network or the
+  server's own included, and 1024 such reports evicted a genuine one. Only the
+  sender's own binding or outstanding offer, in the served network and (when
+  option 54 is present) with option 54 naming this server, is now quarantined and
+  released; anything else changes nothing and is counted in `declines_ignored`. At
+  `MAX_DECLINED_ADDRESSES` a new address is refused (`quarantines_refused`) rather
+  than the oldest evicted. The quarantine is applied to whatever lease
+  `acquire_lease` returns, so an override is not offered a declined address again.
 - **A unicast reply whose route leaves by another interface arrives.** Every
   reply on a wildcard socket was pinned to the arrival interface's index, so a
   unicast (a reply to a relay's `giaddr`, a RENEWING client) whose route is through

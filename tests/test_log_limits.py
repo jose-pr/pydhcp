@@ -21,6 +21,7 @@ from pydhcp import (
     AsyncDHCPListener,
     DHCPCapture,
     DHCPClient,
+    DHCPLease,
     DHCPListener,
     DHCPMessage,
     DHCPOptions,
@@ -577,9 +578,9 @@ SERVER_SITES: "list[tuple[str, ty.Callable[[], DHCPMessage], ty.Optional[str]]]"
         "addresses_refused",
     ),
     (
-        "a DHCPDECLINE",
+        "a DHCPDECLINE that names no address",
         lambda: build_request(DHCPMessageType.DHCPDECLINE),
-        "leases_declined",
+        "declines_ignored",
     ),
     ("a refused address", _off_subnet_discover, "addresses_refused"),
 ]
@@ -610,6 +611,60 @@ def test_a_server_site_is_limited_and_counted(
     )
     if counter is not None:
         assert getattr(server.metrics, counter) == INSIDE + 1
+
+
+@pytest.mark.parametrize(
+    "code, counter",
+    [
+        (DHCPOptionCode.SERVER_IDENTIFIER, "packets_dropped_malformed_option"),
+        (DHCPOptionCode.IP_ADDRESS_LEASE_TIME, "options_ignored_malformed"),
+    ],
+)
+def test_an_unusable_option_is_limited_and_counted(
+    code: DHCPOptionCode,
+    counter: str,
+    caplog: pytest.LogCaptureFixture,
+    clock: Clock,
+) -> None:
+    server = _server(clock)
+
+    def arrive() -> None:
+        message = build_request(DHCPMessageType.DHCPDISCOVER)
+        message.options._options[int(code)] = bytearray(1)
+        server.handle(message, _context(clock))
+
+    _assert_bounded(caplog, clock, "pydhcp.server._input", arrive)
+    assert getattr(server.metrics, counter) == INSIDE + 1
+
+
+def test_a_refused_quarantine_and_a_quarantined_offer_are_limited_and_counted(
+    caplog: pytest.LogCaptureFixture, clock: Clock
+) -> None:
+    server = _server(clock)
+    server.MAX_DECLINED_ADDRESSES = 1
+    server.quarantine_address(ipaddress.IPv4Address("10.0.0.60"), now=clock.t)
+    _assert_bounded(
+        caplog,
+        clock,
+        "pydhcp.server._policy",
+        lambda: server.quarantine_address(
+            ipaddress.IPv4Address("10.0.0.61"), now=clock.t
+        ),
+    )
+    assert server.metrics.quarantines_refused == INSIDE + 1
+
+    class Fixed(DHCPServer):
+        def acquire_lease(self, client_id, server_id, msg, *, commit=True):  # type: ignore[no-untyped-def]
+            return DHCPLease(ipaddress.IPv4Address("10.0.0.60"))
+
+    fixed = Fixed(lease_backend=InMemoryLeaseBackend())
+    fixed._read_clock = clock.instant  # type: ignore[method-assign]
+    fixed.quarantine_address(ipaddress.IPv4Address("10.0.0.60"), now=clock.t)
+    discover = build_request(DHCPMessageType.DHCPDISCOVER)
+    _assert_bounded(
+        caplog, clock, HANDLERS, lambda: fixed.handle(discover, _context(clock))
+    )
+    assert fixed.metrics.addresses_refused == INSIDE + 1
 
 
 def test_a_release_naming_an_address_the_client_does_not_hold_is_limited_and_counted(

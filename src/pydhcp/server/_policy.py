@@ -17,7 +17,7 @@ from ..options import _codecs as _type
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from math import inf as _inf
-from ._state import _ServerState
+from ._input import _InputGuard
 
 __all__: list[str] = []
 
@@ -61,7 +61,7 @@ def _servable_interface(
     )
 
 
-class _LeasePolicy(_ServerState):
+class _LeasePolicy(_InputGuard):
     """Allocation, lease time, address ownership, quarantine and release."""
 
     def get_lease_seconds(self, msg: DHCPMessage) -> float:
@@ -300,11 +300,8 @@ class _LeasePolicy(_ServerState):
             if ip == network.broadcast_address:
                 return "this is the broadcast address"
 
-        declined_until = self._declined.get(ip)
-        if declined_until is not None:
-            if declined_until > (self._read_clock().monotonic if now is None else now):
-                return "address is quarantined after a DHCPDECLINE"
-            del self._declined[ip]
+        if self.is_quarantined(ip, now=now):
+            return "address is quarantined after a DHCPDECLINE"
 
         lookup_by_ip = getattr(self.lease_backend, "lookup_by_ip", None)
         if lookup_by_ip is not None:
@@ -338,6 +335,49 @@ class _LeasePolicy(_ServerState):
             "nor in the served network"
         )
 
+    def _decline_refusal(
+        self,
+        msg: DHCPMessage,
+        declined: _ty.Optional[_ipaddress.IPv4Address],
+        held: _ty.Optional[DHCPLease],
+        actual_server_id: _ipaddress.IPv4Address,
+    ) -> _ty.Optional[str]:
+        """Say why a DHCPDECLINE must not quarantine `declined`, or None if it may."""
+        if declined is None:
+            return "it names no address"
+        server_id = msg.options.get(
+            DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
+        )
+        if server_id is not None and not self._is_our_server_id(
+            server_id, actual_server_id
+        ):
+            return f"it names another server, {server_id}"
+        if held is None:
+            return "the sender holds no lease"
+        if held.ip != declined:
+            return f"the sender holds {held.ip}, not {declined}"
+        served = _servable_interface(actual_server_id)
+        if served is None or declined not in served.network:
+            return f"{declined} is outside the served network"
+        return None
+
+    def is_quarantined(
+        self, ip: _ipaddress.IPv4Address, *, now: _ty.Optional[float] = None
+    ) -> bool:
+        """Whether `ip` is out of the pool after a DHCPDECLINE.
+
+        The server asks this of every lease a hook returns, so an
+        `acquire_lease` override does not have to. `now` is `time.monotonic()`
+        seconds; omitted, the driver's reading is used.
+        """
+        until = self._declined.get(ip)
+        if until is None:
+            return False
+        if until > (self._read_clock().monotonic if now is None else now):
+            return True
+        del self._declined[ip]
+        return False
+
     def quarantine_address(
         self, ip: _ipaddress.IPv4Address, *, now: _ty.Optional[float] = None
     ) -> None:
@@ -346,19 +386,48 @@ class _LeasePolicy(_ServerState):
         RFC 2131 4.3.3: a DHCPDECLINE says the client found the address already
         in use, so the server MUST NOT hand it out again. Releasing the binding
         alone left it first in line to be offered to the next client, which
-        would collide with whatever is really using it. The map is bounded, and
-        entries expire, so a DECLINE flood cannot exhaust memory or permanently
-        consume a pool.
+        would collide with whatever is really using it.
+
+        The map holds at most `MAX_DECLINED_ADDRESSES`. At the bound the entries
+        that have run out are dropped first; if none has, a new address is
+        refused and counted in `quarantines_refused`, because evicting the
+        oldest would let a flood of reports push a genuine one out. An address
+        already held is renewed for a full quarantine.
 
         `now` is `time.monotonic()` seconds; omitted, the driver's reading is
         used, so an override that takes only `ip` keeps working.
         """
         if now is None:
             now = self._read_clock().monotonic
+        if (
+            ip not in self._declined
+            and len(self._declined) >= self.MAX_DECLINED_ADDRESSES
+        ):
+            for held, until in list(self._declined.items()):
+                if until <= now:
+                    del self._declined[held]
+            if len(self._declined) >= self.MAX_DECLINED_ADDRESSES:
+                self.metrics.quarantines_refused += 1
+                self._log_limit.log(
+                    LOGGER,
+                    _logging.WARNING,
+                    "quarantine full",
+                    "The quarantine holds %d addresses; not adding %s",
+                    len(self._declined),
+                    ip,
+                    now=now,
+                )
+                return
         self._declined[ip] = now + self.DECLINE_QUARANTINE_SECONDS
-        self._declined.move_to_end(ip)
-        while len(self._declined) > self.MAX_DECLINED_ADDRESSES:
-            self._declined.popitem(last=False)
+
+    def lookup_lease(self, client_id: str) -> _ty.Optional[DHCPLease]:
+        """The lease this server holds for `client_id`, in either state, or None.
+
+        What a DHCPDECLINE, a DHCPRELEASE and a REQUEST naming another server
+        ask to learn what the sender holds. The default reads `lease_backend`;
+        a server that keeps its leases elsewhere overrides this one method.
+        """
+        return self.lease_backend.lookup(client_id)
 
     def release_lease(
         self, client_id: str, server_id: _ipaddress.IPv4Address, msg: DHCPMessage

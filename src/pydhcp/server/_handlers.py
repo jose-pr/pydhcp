@@ -8,6 +8,7 @@ import typing as _ty
 
 from .. import _constants as _const
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
+from ..lease import DHCPLease
 from ..listener._limit import _brief
 from ..listener._receive import DHCPRequestContext
 from ..options._codes import DHCPOptionCode
@@ -77,6 +78,8 @@ class _Handlers(_Replies):
                 now=self._instant(context).monotonic,
             )
             return
+        if not self._acted_on_options_usable(msg, client_id, context):
+            return
         msg_ty_name = msg_ty.label() if msg_ty is not None else str(msg_ty)
         # Lazy %-style rather than an f-string because this one runs for every
         # request, and an f-string is built whether or not DEBUG is enabled.
@@ -99,7 +102,7 @@ class _Handlers(_Replies):
                 # The client selected a different server, so the address held
                 # for it by an offer is given back (RFC 2131 4.3.2). A binding
                 # the client accepted stays: anyone can name another server.
-                held = self.lease_backend.lookup(client_id)
+                held = self.lookup_lease(client_id)
                 if (
                     held is not None
                     and held.offered
@@ -158,6 +161,8 @@ class _Handlers(_Replies):
         # not extend an existing binding or commit one.
         lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
         now = self._instant(context).utc
+        if lease and self._refused_as_quarantined(msg, lease, client_id, context):
+            return
         if not lease or not self._has_time_left(lease, now):
             LOGGER.info(
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
@@ -237,6 +242,9 @@ class _Handlers(_Replies):
             )
             return
         now = self._instant(context).utc
+        if self._refused_as_quarantined(msg, lease, client_id, context):
+            self._nak(msg, context, "the address is not available")
+            return
         if ip_req != lease.ip:
             self._nak(msg, context, "the requested address is not the client's")
             return
@@ -267,35 +275,84 @@ class _Handlers(_Replies):
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPNAK)
 
     def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
+        """Handle DHCPDECLINE: quarantine the address the sender holds, and release it.
+
+        RFC 2131 s4.3.3 makes the server mark a declined address unavailable.
+        Nothing authenticates the sender, so only the address the sender itself
+        holds, as a binding or an outstanding offer, is marked: a DECLINE
+        naming any other address, one outside the served network, or one that
+        names another server in option 54 changes nothing and is counted in
+        `declines_ignored`.
+        """
         client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
-        self._log_limit.log(
-            LOGGER,
-            _logging.WARNING,
-            "DHCPDECLINE",
-            "[XID=%08x] DHCPDECLINE from %s|%s",
-            msg.xid,
-            context.client,
-            _brief(client_id),
-            now=self._instant(context).monotonic,
-        )
+        held = self.lookup_lease(client_id)
         declined: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
         if declined is None and msg.ciaddr != _const.WILDCARD_V4:
             declined = msg.ciaddr
-        if declined is None:
-            existing = self.lease_backend.lookup(client_id)
-            declined = existing.ip if existing is not None else None
-        if declined is not None:
-            self.quarantine_address(declined)
+        if declined is None and held is not None:
+            declined = held.ip
+        refusal = self._decline_refusal(msg, declined, held, actual_server_id)
+        if refusal is not None or declined is None:
+            self.metrics.declines_ignored += 1
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "DHCPDECLINE ignored",
+                "[XID=%08x] Ignoring DHCPDECLINE from %s|%s: %s",
+                msg.xid,
+                context.client,
+                _brief(client_id),
+                _brief(refusal),
+                now=self._instant(context).monotonic,
+            )
+            return
+        self._log_limit.log(
+            LOGGER,
+            _logging.WARNING,
+            "DHCPDECLINE",
+            "[XID=%08x] DHCPDECLINE of %s from %s|%s",
+            msg.xid,
+            declined,
+            context.client,
+            _brief(client_id),
+            now=self._instant(context).monotonic,
+        )
+        self.quarantine_address(declined)
         # Counted as a decline, not a release: the client found the address
-        # already in use, which is the opposite of an orderly hand-back. Both
-        # landing in `leases_released` made an address-conflict storm read as
-        # normal client shutdowns.
+        # already in use, which is the opposite of an orderly hand-back.
         self.metrics.leases_declined += 1
         self.release_lease(client_id, actual_server_id, msg)
+
+    def _refused_as_quarantined(
+        self,
+        msg: DHCPMessage,
+        lease: DHCPLease,
+        client_id: str,
+        context: DHCPRequestContext,
+    ) -> bool:
+        """Whether `lease`, whatever hook returned it, is for a quarantined address.
+
+        Counted in `addresses_refused` and logged through the rate limit.
+        """
+        now = self._instant(context).monotonic
+        if not self.is_quarantined(lease.ip, now=now):
+            return False
+        self.metrics.addresses_refused += 1
+        self._log_limit.log(
+            LOGGER,
+            _logging.WARNING,
+            "quarantined address",
+            "[XID=%08x] Refusing %s for %s|%s: it is quarantined after a DHCPDECLINE",
+            msg.xid,
+            lease.ip,
+            context.client,
+            _brief(client_id),
+            now=now,
+        )
+        return True
 
     def handle_release(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPRELEASE, but only for the address the client actually holds."""
@@ -309,7 +366,7 @@ class _Handlers(_Replies):
         # RELEASE naming an *old* address deleted whatever binding that client
         # holds now -- and the address then went to someone else while the
         # client was still using it.
-        existing = self.lease_backend.lookup(client_id)
+        existing = self.lookup_lease(client_id)
         if existing is not None and msg.ciaddr != _const.WILDCARD_V4:
             if existing.ip != msg.ciaddr:
                 self._log_limit.log(
