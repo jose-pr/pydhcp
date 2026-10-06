@@ -24,10 +24,10 @@ from pydhcp.options.type import (
     RDNSSSelection,
     URIList,
     I32,
-    MoSIpv4AddressRecord,
-    MoSFqdnRecord,
-    MoSIpv4AddressList,
-    MoSFqdnList,
+    MoSIPv4AddressRecord,
+    MoSFQDNRecord,
+    MoSIPv4AddressList,
+    MoSFQDNList,
     CccOption,
     CccPrimaryDhcpServerAddress,
     CccSecondaryDhcpServerAddress,
@@ -346,16 +346,16 @@ def test_rdnss_selection_round_trip():
 
 
 def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
-    value = MoSIpv4AddressList(
+    value = MoSIPv4AddressList(
         [
-            MoSIpv4AddressRecord(1, ["192.0.2.1", "192.0.2.2"]),
+            MoSIPv4AddressRecord(1, ["192.0.2.1", "192.0.2.2"]),
             (99, b"\x01\x02"),
         ]
     )
     buf = bytearray()
     wrote = value._dhcp_write(buf)
     assert wrote == len(buf)
-    decoded, length = MoSIpv4AddressList._dhcp_read(memoryview(buf))
+    decoded, length = MoSIPv4AddressList._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == len(buf)
     assert decoded[0].value == [
@@ -370,27 +370,27 @@ def test_mos_ipv4_address_option_round_trip_and_preserves_unknown_codes():
         + IPv4AddressOption("198.51.100.1").packed
         + IPv4AddressOption("198.51.100.2").packed
     )
-    decoded_raw, length = MoSIpv4AddressList._dhcp_read(memoryview(raw))
-    assert decoded_raw == MoSIpv4AddressList(
-        [MoSIpv4AddressRecord(1, ["198.51.100.1", "198.51.100.2"])]
+    decoded_raw, length = MoSIPv4AddressList._dhcp_read(memoryview(raw))
+    assert decoded_raw == MoSIPv4AddressList(
+        [MoSIPv4AddressRecord(1, ["198.51.100.1", "198.51.100.2"])]
     )
     assert length == len(raw)
 
     with pytest.raises(ValueError, match="truncated"):
-        MoSIpv4AddressList._dhcp_read(memoryview(b"\x01\x05\x01\x02\x03"))
+        MoSIPv4AddressList._dhcp_read(memoryview(b"\x01\x05\x01\x02\x03"))
 
 
 def test_mos_fqdn_option_round_trip_and_rejects_truncated_labels():
-    value = MoSFqdnList(
+    value = MoSFQDNList(
         [
-            MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+            MoSFQDNRecord(1, ["alpha.example", "beta.example"]),
             (99, b"\x03raw"),
         ]
     )
     buf = bytearray()
     wrote = value._dhcp_write(buf)
     assert wrote == len(buf)
-    decoded, length = MoSFqdnList._dhcp_read(memoryview(buf))
+    decoded, length = MoSFQDNList._dhcp_read(memoryview(buf))
     assert decoded == value
     assert length == len(buf)
     assert decoded[0].value == ["alpha.example", "beta.example"]
@@ -398,12 +398,12 @@ def test_mos_fqdn_option_round_trip_and_rejects_truncated_labels():
     assert decoded[1].value == b"\x03raw"
 
     raw = b"\x01\x0f\x05alpha\x07example\x00"
-    decoded_raw, length = MoSFqdnList._dhcp_read(memoryview(raw))
-    assert decoded_raw == MoSFqdnList([MoSFqdnRecord(1, ["alpha.example"])])
+    decoded_raw, length = MoSFQDNList._dhcp_read(memoryview(raw))
+    assert decoded_raw == MoSFQDNList([MoSFQDNRecord(1, ["alpha.example"])])
     assert length == len(raw)
 
     with pytest.raises(ValueError, match="truncated"):
-        MoSFqdnList._dhcp_read(memoryview(b"\x01\x04\x03ab"))
+        MoSFQDNList._dhcp_read(memoryview(b"\x01\x04\x03ab"))
 
 
 def test_signed_i32_round_trip():
@@ -829,7 +829,7 @@ def test_ccc_and_mos_inherit_the_shared_checks():
         _decode_no_compression_domain,
         _encode_no_compression_domain,
     )
-    from pydhcp.options.type import MoSFqdnList, MoSFqdnRecord
+    from pydhcp.options.type import MoSFQDNList, MoSFQDNRecord
 
     pointer = memoryview(bytearray(bytes([0x03]) + b"lab" + bytes([0xC0, 0x00])))
     with _pytest.raises(ValueError, match="compression pointer"):
@@ -838,10 +838,10 @@ def test_ccc_and_mos_inherit_the_shared_checks():
         _encode_no_compression_domain(".".join(["abcdefgh"] * 40))
     # MoS validates by encoding, so the same limits apply on construction.
     with _pytest.raises(ValueError, match="255 octets"):
-        MoSFqdnRecord(1, [".".join(["abcdefgh"] * 40)])
+        MoSFQDNRecord(1, [".".join(["abcdefgh"] * 40)])
     # and the ordinary case still works
-    record = MoSFqdnRecord(1, ["alpha.example"])
-    assert list(MoSFqdnList([record])) == [record]
+    record = MoSFQDNRecord(1, ["alpha.example"])
+    assert list(MoSFQDNList([record])) == [record]
 
 
 # --- the search list obeys the same name rules as every other option ---
@@ -1076,8 +1076,8 @@ def test_hash_agrees_with_eq_for_records_holding_a_list_payload():
     assert a == b and hash(a) == hash(b)
     assert len({a, b}) == 1
 
-    c = MoSFqdnRecord(1, ["alpha.example"])
-    d = MoSFqdnRecord(1, ["alpha.example"])
+    c = MoSFQDNRecord(1, ["alpha.example"])
+    d = MoSFQDNRecord(1, ["alpha.example"])
     assert c == d and hash(c) == hash(d)
     assert len({c, d}) == 1
 

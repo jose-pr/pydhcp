@@ -38,10 +38,10 @@ from .ccc import (
     CccKdcServerAddressSubOption as CccKdcServerAddressSubOption,
 )
 from .mos import (
-    MoSIpv4AddressRecord as MoSIpv4AddressRecord,
-    MoSFqdnRecord as MoSFqdnRecord,
-    MoSIpv4AddressList as MoSIpv4AddressList,
-    MoSFqdnList as MoSFqdnList,
+    MoSIPv4AddressRecord as MoSIPv4AddressRecord,
+    MoSFQDNRecord as MoSFQDNRecord,
+    MoSIPv4AddressList as MoSIPv4AddressList,
+    MoSFQDNList as MoSFQDNList,
 )
 from .addresses import (
     IPv4AddressOption as IPv4AddressOption,
@@ -129,10 +129,10 @@ __all__ = [
     "VIVendorSpecificInformation",
     "VIVendorClassRecord",
     "VIVendorClass",
-    "MoSIpv4AddressRecord",
-    "MoSFqdnRecord",
-    "MoSIpv4AddressList",
-    "MoSFqdnList",
+    "MoSIPv4AddressRecord",
+    "MoSFQDNRecord",
+    "MoSIPv4AddressList",
+    "MoSFQDNList",
     "CccOption",
     "CccSubOption",
     "CccPrimaryDhcpServerAddress",

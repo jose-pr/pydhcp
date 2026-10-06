@@ -155,8 +155,8 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   from `List` only in normalization: a `tuple` argument is one record, not a
   sequence of items, so `EncapsulatedOptions((1, b"ab"))` is a single TLV;
   a `list` argument is several records. `EncapsulatedOptions`,
-  `VIVendorSpecificInformation`, `VIVendorClass`, `MoSIpv4AddressList`,
-  `MoSFqdnList` and `CccOption` are all `RecordList` subclasses. Subclass a
+  `VIVendorSpecificInformation`, `VIVendorClass`, `MoSIPv4AddressList`,
+  `MoSFQDNList` and `CccOption` are all `RecordList` subclasses. Subclass a
   subscripted form — `class MyOption(RecordList[MyRecord])`.
 - **`DHCPOptionCodes[C]`** (`List[C]` subclass) — a list of raw option-code
   ints, used for `PARAMETER_REQUEST_LIST`-style options; falls back to a
@@ -332,10 +332,10 @@ carrying a name can reach it with no import-order constraint.
 
 ### MoS records (`mos.py`, RFC 5678)
 
-- **`MoSIpv4AddressRecord`** / **`MoSIpv4AddressList`** — Mobility Services
+- **`MoSIPv4AddressRecord`** / **`MoSIPv4AddressList`** — Mobility Services
   IPv4-address record and its list container, shared by
   `IPV4_ADDRESS_MOS`.
-- **`MoSFqdnRecord`** / **`MoSFqdnList`** — Mobility Services FQDN record
+- **`MoSFQDNRecord`** / **`MoSFQDNList`** — Mobility Services FQDN record
   (non-compressed domain labels) and its list container, shared by
   `IPV4_FQDN_MOS`.
 

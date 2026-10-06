@@ -23,10 +23,10 @@ from pydhcp.options.type import (
     VIVendorClassRecord,
     VIVendorClass,
     RDNSSSelection,
-    MoSIpv4AddressList,
-    MoSFqdnList,
-    MoSIpv4AddressRecord,
-    MoSFqdnRecord,
+    MoSIPv4AddressList,
+    MoSFQDNList,
+    MoSIPv4AddressRecord,
+    MoSFQDNRecord,
     URIList,
     CccOption,
     CccPrimaryDhcpServerAddressSubOption,
@@ -236,8 +236,8 @@ def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.NAME_SERVICE_SEARCH.get_type()._args_[0].__name__ == "U16"
     assert DHCPOptionCode.SUBNET_SELECTION_OPTION.get_type() is IPv4AddressOption
     assert DHCPOptionCode.RDNSS_SELECTION.get_type() is RDNSSSelection
-    assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
-    assert DHCPOptionCode.IPV4_FQDN_MOS.get_type() is MoSFqdnList
+    assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIPv4AddressList
+    assert DHCPOptionCode.IPV4_FQDN_MOS.get_type() is MoSFQDNList
 
     opts = DHCPOptions()
     opts[DHCPOptionCode.LOG_SERVER] = ["10.0.0.1", "10.0.0.2"]
@@ -397,11 +397,11 @@ def test_typed_registrations_and_aliases():
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     opts[DHCPOptionCode.IPV4_ADDRESS_MOS] = [
-        MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+        MoSIPv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
         (99, b"\x01\x02"),
     ]
     opts[DHCPOptionCode.IPV4_FQDN_MOS] = [
-        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        MoSFQDNRecord(1, ["alpha.example", "beta.example"]),
         (99, b"\x03raw"),
     ]
     assert opts.get(DHCPOptionCode.POLICY_FILTER)[0][0] == IPv4AddressOption(
@@ -429,15 +429,15 @@ def test_typed_registrations_and_aliases():
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     assert opts.get(DHCPOptionCode.V4_PCP_SERVER) == [["192.0.2.70", "192.0.2.71"]]
-    assert opts.get(DHCPOptionCode.IPV4_ADDRESS_MOS) == MoSIpv4AddressList(
+    assert opts.get(DHCPOptionCode.IPV4_ADDRESS_MOS) == MoSIPv4AddressList(
         [
-            MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+            MoSIPv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
             (99, b"\x01\x02"),
         ]
     )
-    assert opts.get(DHCPOptionCode.IPV4_FQDN_MOS) == MoSFqdnList(
+    assert opts.get(DHCPOptionCode.IPV4_FQDN_MOS) == MoSFQDNList(
         [
-            MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+            MoSFQDNRecord(1, ["alpha.example", "beta.example"]),
             (99, b"\x03raw"),
         ]
     )
@@ -511,11 +511,11 @@ def test_registered_option_code_round_trips():
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     opts[DHCPOptionCode.IPV4_ADDRESS_MOS] = [
-        MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+        MoSIPv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
         (99, b"\x01\x02"),
     ]
     opts[DHCPOptionCode.IPV4_FQDN_MOS] = [
-        MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+        MoSFQDNRecord(1, ["alpha.example", "beta.example"]),
         (99, b"\x03raw"),
     ]
 
@@ -630,15 +630,15 @@ def test_registered_option_code_round_trips():
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
     assert decoded.get(DHCPOptionCode.V4_PCP_SERVER) == [["192.0.2.70", "192.0.2.71"]]
-    assert decoded.get(DHCPOptionCode.IPV4_ADDRESS_MOS) == MoSIpv4AddressList(
+    assert decoded.get(DHCPOptionCode.IPV4_ADDRESS_MOS) == MoSIPv4AddressList(
         [
-            MoSIpv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
+            MoSIPv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
             (99, b"\x01\x02"),
         ]
     )
-    assert decoded.get(DHCPOptionCode.IPV4_FQDN_MOS) == MoSFqdnList(
+    assert decoded.get(DHCPOptionCode.IPV4_FQDN_MOS) == MoSFQDNList(
         [
-            MoSFqdnRecord(1, ["alpha.example", "beta.example"]),
+            MoSFQDNRecord(1, ["alpha.example", "beta.example"]),
             (99, b"\x03raw"),
         ]
     )
@@ -674,8 +674,8 @@ def test_raw_wire_decoding_for_opaque_and_enterprise_specific_options():
             VIVendorSpecificInformationRecord(65537, b"\x00\xff"),
         ]
     )
-    assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIpv4AddressList
-    assert DHCPOptionCode.IPV4_FQDN_MOS.get_type() is MoSFqdnList
+    assert DHCPOptionCode.IPV4_ADDRESS_MOS.get_type() is MoSIPv4AddressList
+    assert DHCPOptionCode.IPV4_FQDN_MOS.get_type() is MoSFQDNList
 
 
 def test_raw_wire_decoding_for_new_primitive_registrations():

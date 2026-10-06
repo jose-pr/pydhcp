@@ -116,6 +116,10 @@ importable. Replace each name in the left column with the one beside it.
 | `ViVendorClassRecord` | `VIVendorClassRecord` |
 | `ViVendorSpecificInformation` | `VIVendorSpecificInformation` |
 | `ViVendorSpecificInformationRecord` | `VIVendorSpecificInformationRecord` |
+| `MoSIpv4AddressRecord` | `MoSIPv4AddressRecord` |
+| `MoSIpv4AddressList` | `MoSIPv4AddressList` |
+| `MoSFqdnRecord` | `MoSFQDNRecord` |
+| `MoSFqdnList` | `MoSFQDNList` |
 
 ### Fixed
 

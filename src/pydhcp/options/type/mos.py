@@ -139,12 +139,12 @@ class _MoSSubOption(DHCPOptionType):
         return [self.code, value]
 
 
-_MoSIpv4AddressSubOptionT = _ty.TypeVar(
-    "_MoSIpv4AddressSubOptionT", bound="_MoSIpv4AddressSubOption"
+_MoSIPv4AddressSubOptionT = _ty.TypeVar(
+    "_MoSIPv4AddressSubOptionT", bound="_MoSIPv4AddressSubOption"
 )
 
 
-class _MoSIpv4AddressSubOption(_MoSSubOption):
+class _MoSIPv4AddressSubOption(_MoSSubOption):
     _KNOWN_CODES = {1, 2, 3}
 
     @classmethod
@@ -165,8 +165,8 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
 
     @classmethod
     def _from_payload(
-        cls: type[_MoSIpv4AddressSubOptionT], code: int, payload: memoryview
-    ) -> _MoSIpv4AddressSubOptionT:
+        cls: type[_MoSIPv4AddressSubOptionT], code: int, payload: memoryview
+    ) -> _MoSIPv4AddressSubOptionT:
         if code not in cls._KNOWN_CODES:
             return cls(code, Bytes(payload))
         return cls(code, cls._read_payload(payload))
@@ -178,10 +178,10 @@ class _MoSIpv4AddressSubOption(_MoSSubOption):
         return payload._dhcp_write(data)
 
 
-_MoSFqdnSubOptionT = _ty.TypeVar("_MoSFqdnSubOptionT", bound="_MoSFqdnSubOption")
+_MoSFQDNSubOptionT = _ty.TypeVar("_MoSFQDNSubOptionT", bound="_MoSFQDNSubOption")
 
 
-class _MoSFqdnSubOption(_MoSSubOption):
+class _MoSFQDNSubOption(_MoSSubOption):
     _KNOWN_CODES = {1, 2, 3}
 
     @classmethod
@@ -198,8 +198,8 @@ class _MoSFqdnSubOption(_MoSSubOption):
 
     @classmethod
     def _from_payload(
-        cls: type[_MoSFqdnSubOptionT], code: int, payload: memoryview
-    ) -> _MoSFqdnSubOptionT:
+        cls: type[_MoSFQDNSubOptionT], code: int, payload: memoryview
+    ) -> _MoSFQDNSubOptionT:
         if code not in cls._KNOWN_CODES:
             return cls(code, Bytes(payload))
         return cls(code, cls._read_payload(payload))
@@ -211,17 +211,17 @@ class _MoSFqdnSubOption(_MoSSubOption):
         return payload._dhcp_write(data)
 
 
-class MoSIpv4AddressRecord(_MoSIpv4AddressSubOption):
+class MoSIPv4AddressRecord(_MoSIPv4AddressSubOption):
     """RFC 5678 MoS sub-option record carrying IPv4 addresses."""
 
 
-class MoSFqdnRecord(_MoSFqdnSubOption):
+class MoSFQDNRecord(_MoSFQDNSubOption):
     """RFC 5678 MoS sub-option record carrying FQDN label sequences."""
 
 
-class MoSIpv4AddressList(RecordList[MoSIpv4AddressRecord]):
+class MoSIPv4AddressList(RecordList[MoSIPv4AddressRecord]):
     """RFC 5678 MoS option carrying IPv4 address sub-options."""
 
 
-class MoSFqdnList(RecordList[MoSFqdnRecord]):
+class MoSFQDNList(RecordList[MoSFQDNRecord]):
     """RFC 5678 MoS option carrying FQDN sub-options."""

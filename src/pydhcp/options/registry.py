@@ -133,8 +133,8 @@ DHCPOptionCode.STDA_SERVER.register_type(List[IPv4AddressOption])
 # RFC 3361 s3.1: a leading encoding octet selects names (0) or addresses (1).
 DHCPOptionCode.SIP_SERVERS.register_type(SIPServers)
 DHCPOptionCode.ARP_TIMEOUT.register_type(U32)
-DHCPOptionCode.IPV4_ADDRESS_MOS.register_type(MoSIpv4AddressList)
-DHCPOptionCode.IPV4_FQDN_MOS.register_type(MoSFqdnList)
+DHCPOptionCode.IPV4_ADDRESS_MOS.register_type(MoSIPv4AddressList)
+DHCPOptionCode.IPV4_FQDN_MOS.register_type(MoSFQDNList)
 DHCPOptionCode.CCC.register_type(CccOption)
 # Opaque by default, like VENDOR_SPECIFIC_INFORMATION (43): iPXE and several
 # PXE ROMs send option 77 unframed rather than in RFC 3004's length-prefixed
