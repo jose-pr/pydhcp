@@ -89,12 +89,16 @@ def free_port() -> int:
         return int(probe.getsockname()[1])
 
 
+#: How long after the listener's announcement a command is given to have bound.
+BIND_SECONDS = 1.0
+
+
 class Running:
     """`pydhcp argv...` started and left running.
 
     Start it with `-v` and `--listen 127.0.0.1:<free_port()>`: the listener
-    announces that it is binding, and `listening()` waits for that line (and a
-    moment for the bind that follows it). `finish()` waits for the command to
+    announces that it is binding, and `listening()` waits for that line and for
+    the bind that follows it. `finish()` waits for the command to
     end by itself and returns its status, killing it, and failing the caller's
     check, when it does not.
     """
@@ -138,11 +142,16 @@ class Running:
                 self._listening.set()
 
     def listening(self, timeout: float = 30.0) -> None:
-        """Wait until the command has announced and made its bind."""
+        """Wait until the command has announced that it binds, and for the bind.
+
+        The line is logged just before the bind. A test cannot probe the port
+        instead: a bind of its own would hold the port for the moment the command
+        wants it.
+        """
         if not self._listening.wait(timeout):
             self.kill()
             raise AssertionError("the command did not bind:\n" + "\n".join(self.stderr))
-        time.sleep(0.3)
+        time.sleep(BIND_SECONDS)
 
     def finish(self, timeout: float = 30.0) -> int:
         try:

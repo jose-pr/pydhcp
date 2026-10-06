@@ -14,6 +14,7 @@ from ._events import (
     compile_capture_filter,
     validate_filename_pattern,
 )
+from ._command import HOOK_TIMEOUT_SECONDS, command_hook
 from ._sync import DHCPCapture
 
 __all__ = [
@@ -25,7 +26,9 @@ __all__ = [
     "DHCPCapture",
     "PacketFilterLike",
     "FILENAME_FIELDS",
+    "HOOK_TIMEOUT_SECONDS",
     "UNIQUE_FILENAME_FIELDS",
+    "command_hook",
     "compile_capture_filter",
     "validate_filename_pattern",
 ]

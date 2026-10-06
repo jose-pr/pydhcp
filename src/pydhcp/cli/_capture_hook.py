@@ -4,38 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import importlib
-import json as _json
-import logging as _logging
-import pathlib
 import os
-import shutil
-import subprocess
 import sys
-import time
 import typing as _ty
 
+from ..capture._command import command_hook
 from ..capture._events import CaptureEvent
-from ..listener._limit import _brief, _LogLimit
-
-LOGGER = _logging.getLogger(__name__)
-
-#: A command hook runs once per captured packet, so a failing one is limited.
-_FAILURES = _LogLimit()
-
-
-def _serialize_capture_event(event: CaptureEvent, packet_format: str) -> str:
-    """One captured message in `packet_format` -- what a record file holds and
-    what a command hook reads on stdin. Lives here, not in `capture`, so the
-    two modules import in one direction only."""
-    if packet_format == "json":
-        return _json.dumps(event.message.to_mapping()) + "\n"
-    return event.message.to_text(packet_format)
-
-
-#: How long a command hook may run before it is treated as a failure. The hook
-#: runs on the receive thread, so without a bound a hanging one (a network
-#: export, say) stops packets being read at all, with nothing logged.
-HOOK_TIMEOUT_SECONDS = 10.0
 
 
 @contextlib.contextmanager
@@ -60,34 +34,6 @@ def _cwd_on_sys_path() -> "_ty.Iterator[None]":
                 pass
 
 
-def _resolve_command(hook: str, has_separator: bool) -> pathlib.Path:
-    """The absolute path of a command hook, found once, when it is loaded.
-
-    A name with a directory part (`./hook`, `/usr/bin/hook`, `sub/hook`) is that
-    file, taken relative to the working directory *now*; a name with none (`hook`)
-    is looked up on PATH, as a shell would. Running the absolute path means
-    `./hook` is never handed to the process as the bare `hook`, which POSIX
-    searches on PATH alone, and survives a later change of working directory.
-    """
-    if has_separator:
-        path = pathlib.Path(os.path.abspath(hook))
-        if not path.exists():
-            raise ValueError(f"Capture hook command does not exist: {hook}")
-    else:
-        found = shutil.which(hook)
-        if found is None:
-            raise ValueError(
-                f"Capture hook command {hook!r} is not on PATH; a file in the "
-                f"working directory is named with a path, e.g. ./{hook}"
-            )
-        path = pathlib.Path(os.path.abspath(found))
-    if not path.is_file():
-        raise ValueError(f"Capture hook command is not a file: {hook}")
-    if os.name == "posix" and not os.access(path, os.X_OK):
-        raise ValueError(f"Capture hook command is not executable: {hook}")
-    return path
-
-
 def _load_capture_hook(
     hook: "_ty.Optional[str]", packet_format: str, fail_fast: bool
 ) -> "_ty.Optional[_ty.Callable[[CaptureEvent], None]]":
@@ -107,50 +53,4 @@ def _load_capture_hook(
         if not callable(function):
             raise ValueError(f"Capture hook {hook!r} does not resolve to a callable")
         return _ty.cast(_ty.Callable[[CaptureEvent], None], function)
-    hook_path = _resolve_command(hook, has_separator)
-
-    def command_hook(event: CaptureEvent) -> None:
-        payload = _serialize_capture_event(event, packet_format)
-        env = os.environ.copy()
-        env.update(
-            {
-                "PYDHCP_CAPTURE_CLIENT_ID": event.client_id,
-                "PYDHCP_CAPTURE_MSG_TYPE": event.message_type,
-                "PYDHCP_CAPTURE_XID": event.xid,
-                "PYDHCP_CAPTURE_FORMAT": packet_format,
-            }
-        )
-        try:
-            result = subprocess.run(
-                [str(hook_path)],
-                input=payload,
-                text=True,
-                capture_output=True,
-                env=env,
-                timeout=HOOK_TIMEOUT_SECONDS,
-            )
-        except subprocess.TimeoutExpired as expired:
-            # The hook runs on the receive thread, so without this a hanging one
-            # stops packets being read at all and nothing says why.
-            raise RuntimeError(
-                f"Capture hook command timed out after {HOOK_TIMEOUT_SECONDS}s: "
-                f"{hook_path}"
-            ) from expired
-        if result.stdout:
-            LOGGER.debug("Capture hook command output: %s", result.stdout.strip())
-        if result.returncode != 0:
-            _FAILURES.log(
-                LOGGER,
-                _logging.ERROR,
-                "command hook failed",
-                "Capture hook command failed (%s): %s",
-                result.returncode,
-                _brief(result.stderr.strip(), 400),
-                now=time.monotonic(),
-            )
-            if fail_fast:
-                raise RuntimeError(
-                    f"Capture hook command failed with exit code {result.returncode}"
-                )
-
-    return command_hook
+    return command_hook(hook, packet_format=packet_format, fail_fast=fail_fast)

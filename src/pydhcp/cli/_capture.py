@@ -11,12 +11,13 @@ from duho import Meta
 from ..capture._events import (
     UNIQUE_FILENAME_FIELDS,
     CaptureEvent,
+    serialize_event,
     validate_filename_pattern,
 )
 from ..capture._sync import DHCPCapture
 from ._common import CAPTURE_FORMATS, _arguments, _Configured, _Failed, write_line
 from ._settings import listen_value
-from ._capture_hook import _load_capture_hook, _serialize_capture_event
+from ._capture_hook import _load_capture_hook
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ def _write_capture_record(
 
     An `OSError` is a record that could not be written.
     """
-    payload = _serialize_capture_event(event, packet_format)
+    payload = serialize_event(event, packet_format)
     target = "-" if output is None else str(output)
     if output_mode == "per-capture":
         if target == "-":

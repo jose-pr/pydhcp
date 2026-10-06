@@ -21,7 +21,6 @@ from ._interfaces import Interfaces
 from ._server import Server
 from ._relay import Relay
 from ._packet import Packet
-from ._capture_hook import HOOK_TIMEOUT_SECONDS
 from ._capture import MAX_PER_CAPTURE_FILES, Capture
 
 #: The command line's logger, a child of the package logger `pydhcp`: the
@@ -113,7 +112,6 @@ __all__ = [
     "Server",
     "Relay",
     "Packet",
-    "HOOK_TIMEOUT_SECONDS",
     "MAX_PER_CAPTURE_FILES",
     "Capture",
 ]

@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`pydhcp.capture.command_hook(command, *, packet_format, timeout, fail_fast)` and
+  `HOOK_TIMEOUT_SECONDS`** (10 seconds): the command hook is a library function, no longer
+  reachable only from `pydhcp capture --hook`. **`DHCPHookError`** (`pydhcp.exceptions`,
+  re-exported at the root) is what a failing hook raises under `fail_fast`.
 - **`DHCPConfigError`** (`pydhcp.exceptions`, re-exported at the root): a configuration
   file that cannot be used. It carries `path`, `lineno`, `colno` and `msg`, is also a
   `ValueError`, and `str()` is one line, `path:line:col: msg`, with no text from the
@@ -143,6 +147,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **A value interpolated into a capture filename is at most 64 characters**: a longer one (a client
   identifier is up to 255 octets, 765 characters as text) is cut and ends in a hash of the whole,
   so two long values still name two files. It used to make every write fail.
+- **The command hook follows the subprocess rules**: its output is decoded as UTF-8 with
+  replacement (a program printing other bytes was a decode error, or a mis-decode on
+  Windows), the program **and the processes it started** are killed on the time limit (only the
+  program was), the limit is an argument with `HOOK_TIMEOUT_SECONDS` as its default and a timeout
+  raises `DHCPTimeoutError` (a `TimeoutError`; it was a `RuntimeError`), and only the sizes of its
+  output are logged, never its contents. **Breaking**: `pydhcp.cli.HOOK_TIMEOUT_SECONDS` is now
+  `pydhcp.capture.HOOK_TIMEOUT_SECONDS`, and `pydhcp.cli` no longer exports it.
 - **Every option has a help line**: `packet --decode`, `--encode` and `capture --format`
   had none, and `capture --filter` showed the field name `PACKET_FILTER`.
 - **The relay follows RFC 3046 section 2.1 on the request side.** It adds option 82 only to

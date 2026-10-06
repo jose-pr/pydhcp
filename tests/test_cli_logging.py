@@ -21,9 +21,7 @@ from unittest.mock import MagicMock
 # The module that logs for the capture; a logger is named for its module.
 import pydhcp.capture._core as capture_module
 import pydhcp.cli as cli_module
-from pydhcp.cli import (
-    _capture_hook as capture_hook_module,
-)  # patches the hook's subprocess call
+from pydhcp.capture import command_hook
 from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
 
 # the logging setup is not public
@@ -33,6 +31,7 @@ from pydhcp import SocketAddress
 from pydhcp.packet import DHCPMessageType
 
 from conftest import build_request
+from hook_programs import python_hook
 
 
 def _event() -> CaptureEvent:
@@ -131,25 +130,15 @@ def test_a_configured_application_still_sees_the_records() -> None:
     assert "pydhcp.capture" in result.stderr
 
 
-def test_the_capture_hook_logs_through_the_module_logger(
-    tmp_path, monkeypatch, caplog
-) -> None:
-    """`cli.py` re-fetched `logging.getLogger("pydhcp")` by name on the command
-    hook path, twice, with the module's own LOGGER already imported. The record
-    naming `pydhcp.cli` is what says the re-fetch is gone."""
-    command = tmp_path / "hook"
-    command.write_text("", encoding="utf-8")
-    command.chmod(0o755)  # a command hook must be executable on POSIX
-
-    class Result:
-        stdout = "chatter"
-        stderr = "boom"
-        returncode = 3
-
-    monkeypatch.setattr(capture_hook_module.subprocess, "run", lambda *a, **k: Result())
-
-    hook = capture_hook_module._load_capture_hook(str(command), "json", fail_fast=False)
-    assert hook is not None
+def test_the_capture_hook_logs_through_the_module_logger(tmp_path, caplog) -> None:
+    """The command hook logs through its own module's logger, not one re-fetched by
+    name; the record naming `pydhcp.capture._command` is what says so."""
+    program = python_hook(
+        tmp_path,
+        "chatty",
+        'import sys\nsys.stdout.write("chatter")\nsys.stderr.write("boom")\nsys.exit(3)\n',
+    )
+    hook = command_hook(str(program))
 
     previous = LOGGER.level
     try:
@@ -161,8 +150,9 @@ def test_the_capture_hook_logs_through_the_module_logger(
 
     by_message = {r.getMessage().split(":")[0]: r for r in caplog.records}
     failure = by_message["Capture hook command failed (3)"]
-    assert failure.name == "pydhcp.cli._capture_hook"
-    assert by_message["Capture hook command output"].name == "pydhcp.cli._capture_hook"
+    assert failure.name == "pydhcp.capture._command"
+    output = [r for r in caplog.records if "wrote" in r.getMessage()]
+    assert output and output[0].name == "pydhcp.capture._command"
 
 
 def _pydhcp_modules() -> "list[str]":
@@ -233,28 +223,15 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     assert "pydhcp.listener._interfaces" in names
 
 
-@pytest.fixture(autouse=True)
-def _fresh_command_hook_limit(monkeypatch) -> None:
-    from pydhcp.listener._limit import _LogLimit
-
-    monkeypatch.setattr(capture_hook_module, "_FAILURES", _LogLimit())
-
-
 def test_a_command_hook_that_fails_every_time_is_logged_once_per_interval(
-    tmp_path, monkeypatch, caplog
+    tmp_path, caplog
 ) -> None:
-    command = tmp_path / "hook"
-    command.write_text("", encoding="utf-8")
-    command.chmod(0o755)
-
-    class Result:
-        stdout = ""
-        stderr = "boom\n" * 200
-        returncode = 3
-
-    monkeypatch.setattr(capture_hook_module.subprocess, "run", lambda *a, **k: Result())
-    hook = capture_hook_module._load_capture_hook(str(command), "json", fail_fast=False)
-    assert hook is not None
+    program = python_hook(
+        tmp_path,
+        "boom",
+        'import sys\nsys.stderr.write("boom\\n" * 200)\nsys.exit(3)\n',
+    )
+    hook = command_hook(str(program))
     with caplog.at_level(logging.ERROR, logger="pydhcp"):
         for _ in range(5):
             hook(_event())

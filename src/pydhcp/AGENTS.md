@@ -54,7 +54,10 @@ constants are in private modules and are not importable from a public one.
   on a message with neither option 61 nor a hardware address.
 - **`DHCPTimeoutError(DHCPError, TimeoutError)`** — a client exchange (`dora()`,
   `discover_offer()`) ended with no usable reply: the retransmissions or the call's
-  `deadline` ran out.
+  `deadline` ran out; or a `command_hook` program ran past its `timeout` and was killed.
+- **`DHCPHookError(DHCPError)`** — a `command_hook` created with `fail_fast=True` whose
+  program exited non-zero; the message names the program, the status and the tail of its
+  standard error.
 - **`DHCPRefusedError(message, nak)`** (a `DHCPError`) — the server answered the DHCPREQUEST with a
   DHCPNAK. `.nak` is the DHCPNAK `DHCPMessage` (its `DHCP_MESSAGE` option, when
   present, says why); it copies and pickles with its NAK.
@@ -854,6 +857,29 @@ exchange has an entry in the pending table.
   the result with `UNIQUE_FILENAME_FIELDS` to tell whether records will
   overwrite. Not re-exported from the top-level package — import it from
   `pydhcp.capture`.
+- **`command_hook(command, *, packet_format="json", timeout=HOOK_TIMEOUT_SECONDS,
+  fail_fast=False) -> CaptureHook`** — a hook that runs a program once per
+  captured packet. `command` is found when the hook is made: a name with a
+  directory part (`./hook`, `/opt/hook`) is that file, taken relative to the
+  working directory then, and a bare name is looked up on `PATH`; `ValueError`
+  when it does not exist, is not a file or (POSIX) is not executable. It is run by
+  its absolute path with **no arguments and no shell**. It reads the packet on
+  standard input (`packet_format` `json` is one compact line, `yaml`/`toml`/`ini`
+  are `DHCPMessage.to_text`) and its environment is a copy of this process's
+  plus `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`
+  and `PYDHCP_CAPTURE_FORMAT`. Its output is decoded as UTF-8 with
+  `errors="replace"`. Each run is bounded by `timeout` seconds (`ValueError`
+  unless above 0): past it the program **and the processes it started** are
+  killed (`taskkill /T` on Windows, the process group elsewhere) and the hook
+  raises **`DHCPTimeoutError`**. A non-zero exit is logged at ERROR, at most once
+  a minute whatever its frequency, with the status and the last 400 characters of
+  standard error; with `fail_fast` it also raises **`DHCPHookError`**. The sizes
+  of the two streams are logged at DEBUG, never their contents. Pass it as
+  `DHCPCapture(hook=...)`; `hook_fail_fast=True` there stops the capture on the
+  first error.
+- **`HOOK_TIMEOUT_SECONDS`** (`10.0`) — the default `timeout` of `command_hook`.
+  The hook runs on the receive thread, so without a bound a hanging program would
+  stop packets being read at all.
 - **`compile_capture_filter(text) -> Callable[[CaptureEvent], bool]`** —
   `None`/blank → always-true. Otherwise parses `and`-joined `key=value`
   clauses (`or` unsupported, raises `ValueError`). Both keywords are matched
@@ -1170,7 +1196,8 @@ fails at write time. Anything rendering one must call `display()` first —
 
 A package: `App` and `main()` are in `pydhcp.cli` itself, and each subcommand
 has its own private module (`cli._interfaces`, `cli._server`, `cli._relay`,
-`cli._packet`, `cli._capture`, with `cli._capture_hook` for `--hook` loading and
+`cli._packet`, `cli._capture`, with `cli._capture_hook` for `--hook` loading (a command
+is `capture.command_hook`) and
 `cli._common` for the shared base). `pydhcp.cli` exports `App`, `main`, the five
 command classes and the format and limit constants named in its `__all__`; patch a
 name where the command module looks it up (`pydhcp.cli._server.DHCPServer`).

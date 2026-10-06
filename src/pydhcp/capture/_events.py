@@ -7,6 +7,7 @@ import dataclasses as _data
 import datetime as _dt
 import enum as _enum_base
 import hashlib as _hashlib
+import json as _json
 import re as _re
 import string as _string
 import typing as _ty
@@ -105,6 +106,18 @@ CapturePredicate = _ty.Callable[[CaptureEvent], bool]
 PacketFilterLike = _ty.Union[str, CapturePredicate]
 CaptureHook = _ty.Callable[[CaptureEvent], None]
 CaptureSink = _ty.Callable[[CaptureEvent], None]
+
+
+def serialize_event(event: CaptureEvent, packet_format: str) -> str:
+    """One captured message in `packet_format`: what a record file holds and what
+    a command hook reads on standard input.
+
+    `json` is one compact line ending in a newline; `yaml`, `toml` and `ini` are
+    `DHCPMessage.to_text`.
+    """
+    if packet_format == "json":
+        return _json.dumps(event.message.to_mapping()) + "\n"
+    return event.message.to_text(packet_format)
 
 
 def validate_filename_pattern(pattern: str) -> frozenset[str]:

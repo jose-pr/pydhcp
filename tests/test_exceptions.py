@@ -13,8 +13,10 @@ import pytest
 import pydhcp
 from pydhcp import exceptions
 from pydhcp.exceptions import (
+    DHCPConfigError,
     DHCPDecodeError,
     DHCPError,
+    DHCPHookError,
     DHCPRefusedError,
     DHCPTimeoutError,
     DHCPValueError,
@@ -26,6 +28,8 @@ _BASES = [
     (DHCPError, (Exception,)),
     (DHCPDecodeError, (DHCPError, ValueError)),
     (DHCPValueError, (DHCPError, ValueError)),
+    (DHCPHookError, (DHCPError,)),
+    (DHCPConfigError, (DHCPError, ValueError)),
     (NoClientIdentityError, (DHCPError, ValueError)),
     (DHCPTimeoutError, (DHCPError, TimeoutError)),
     (DHCPRefusedError, (DHCPError,)),

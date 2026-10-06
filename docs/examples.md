@@ -273,7 +273,11 @@ disk is full) ends the capture the same way, with one line naming the path, and 
 file that cannot be appended to is refused before the capture binds.
 
 Hooks can be trusted Python callables or commands. Command hooks receive the serialized
-packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables. A command with a
+packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables
+(`PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and
+`PYDHCP_CAPTURE_FORMAT`); they are started with no arguments and no shell, and killed, with any
+process they started, after `HOOK_TIMEOUT_SECONDS` (10 seconds). The same hook is available
+to a program as `pydhcp.capture.command_hook(...)`. A command with a
 directory in its name (`./on-dhcp-capture`, `/opt/hooks/export`) is that file, found relative
 to the working directory when the capture starts; a bare name (`export`) is looked up on
 `PATH`. A file in the working directory is therefore written `./name`.
