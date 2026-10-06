@@ -224,6 +224,8 @@ def test_one_overridden_lookup_answers_init_reboot_release_and_decline(
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.bind(("127.0.0.1", 0))
         client.settimeout(WAIT_SECONDS)
+        # The client is on an ephemeral port, not 68.
+        server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
         kinds: "list[DHCPMessageType]" = []
 
         def ask(data: bytes) -> DHCPMessageType:

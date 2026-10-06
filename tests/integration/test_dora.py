@@ -34,6 +34,8 @@ def test_dora_sequence(run_dora_server):
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
     client.settimeout(2.0)
+    # The client is on an ephemeral port, not 68.
+    run_dora_server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
 
     try:
         # 1. Send DISCOVER
@@ -200,6 +202,7 @@ def test_dora_with_lease_persistence(tmp_path):
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
     client.settimeout(2.0)
+    server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
 
     with running(server), contextlib.closing(client):
         server_port = server.bound_addresses[0].port

@@ -178,11 +178,15 @@ def _datagram(kind: DHCPMessageType, **options: _ty.Any) -> bytes:
     return bytes(build_request(options=bag, **fields).encode())
 
 
-def _exchange(port: int, datagrams: "list[bytes]", replies: int) -> "list[DHCPMessage]":
+def _exchange(
+    server: _ty.Any, port: int, datagrams: "list[bytes]", replies: int
+) -> "list[DHCPMessage]":
     """Send each datagram in turn, then read `replies` replies, all with timeouts."""
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
     client.settimeout(WAIT_SECONDS)
+    # The client is on an ephemeral port, not 68.
+    server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
     try:
         for data in datagrams:
             client.sendto(data, ("127.0.0.1", port))
@@ -217,6 +221,7 @@ def test_each_override_point_is_the_subclass_method_on_the_handler_thread(
 
     def exercise(port: int) -> "list[DHCPMessage]":
         replies = _exchange(
+            server,
             port,
             [
                 _datagram(DHCPMessageType.DHCPDISCOVER),
@@ -230,6 +235,7 @@ def test_each_override_point_is_the_subclass_method_on_the_handler_thread(
             replies=3,
         )
         _exchange(
+            server,
             port,
             [
                 _datagram(DHCPMessageType.DHCPDECLINE, REQUESTED_IP=LOOPBACK),
@@ -281,6 +287,7 @@ def test_the_lease_policy_hook_is_called_by_the_base_allocator(
 
     def exercise(port: int) -> None:
         _exchange(
+            server,
             port,
             [_datagram(DHCPMessageType.DHCPDISCOVER, REQUESTED_IP=IPv4("127.0.0.77"))],
             replies=0,

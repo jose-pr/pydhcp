@@ -161,6 +161,8 @@ def test_client_dora_against_real_server() -> None:
         server_port = server.bound_addresses[0].port
 
         with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
+            # The client is on an ephemeral port, not 68.
+            server.REPLY_TO_CLIENT_PORT = client.bound_addresses[0].port
             ack = client.dora(
                 CHADDR,
                 timeout=2.0,
@@ -192,6 +194,7 @@ def test_client_discover_offer_receives_a_real_offer() -> None:
         server_port = server.bound_addresses[0].port
 
         with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
+            server.REPLY_TO_CLIENT_PORT = client.bound_addresses[0].port
             offer = client.discover_offer(
                 CHADDR,
                 timeout=2.0,

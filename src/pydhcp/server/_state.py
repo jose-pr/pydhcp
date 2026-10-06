@@ -58,6 +58,13 @@ class _ServerState(_Timed):
     #: `quarantines_refused`): a flood does not push a genuine report out.
     MAX_DECLINED_ADDRESSES = 1024
 
+    #: The UDP destination port of a reply sent to a relay (`giaddr` set), and of
+    #: one sent to a client. RFC 1542 s5.4 fixes them at BOOTPS (67) and BOOTPC
+    #: (68) whatever port the request came from; a harness that runs a relay or
+    #: a client on another port sets them.
+    REPLY_TO_RELAY_PORT: int = int(_enum.DHCPPort.SERVER)
+    REPLY_TO_CLIENT_PORT: int = int(_enum.DHCPPort.CLIENT)
+
     #: Whether to unicast a reply to a client that has no address yet.
     #:
     #: RFC 2131 4.1 says the server unicasts OFFER/ACK "to the client's hardware

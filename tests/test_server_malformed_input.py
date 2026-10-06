@@ -224,6 +224,8 @@ def test_the_next_well_formed_client_is_answered_after_every_wrong_length(
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.bind(("127.0.0.1", 0))
         client.settimeout(WAIT_SECONDS)
+        # The client is on an ephemeral port, not 68.
+        server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
         try:
             for index, (code, octets) in enumerate(WRONG_LENGTHS):
                 message = _wire(

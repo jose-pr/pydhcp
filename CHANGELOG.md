@@ -79,6 +79,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking, in behaviour: a reply goes to port 67 when it goes to a relay and port 68
+  otherwise, whatever port the request came from** (RFC 1542 section 5.4: "The UDP
+  destination port MUST be set to BOOTPS (67)" for `giaddr`, "to BOOTPC (68)" for
+  `ciaddr` and "in any case"). The server used to reply to the request's source port
+  (except that a relay's port 68 became 67), so one unauthenticated datagram made it
+  send a DHCP reply to any port on any host; with `giaddr = 127.0.0.2` a bystander
+  bound there received the OFFER. The two ports are the class attributes
+  `REPLY_TO_RELAY_PORT` (67) and `REPLY_TO_CLIENT_PORT` (68) of `DHCPServer` and
+  `AsyncDHCPServer`; a test harness whose relay or client listens on another port sets
+  them. A real client (port 68) and a real relay (port 67) are unaffected.
+
 - **Breaking: text in `listen` that is not an IPv4 address is an interface name.**
   `"eth0"`, `"localhost:6767"` and `("localhost", 6767)` raised
   `ipaddress.AddressValueError` and are now read as adapter names (a host name is

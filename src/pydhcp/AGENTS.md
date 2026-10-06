@@ -553,11 +553,19 @@ A test that patches a module global patches it in the private module that reads 
     `SERVER_IDENTIFIER` than this interface's IP (a DHCPREQUEST first gives
     back an address held for the client by an *offer*, counted in
     `offers_withdrawn`; a binding is kept).
-  - Reply destination (`_filter_and_send`): unicasts to `giaddr:67` when a
-    relay is in play (RFC 2131 §4.1); otherwise uses `ciaddr`, then
-    broadcasts if the client's `BROADCAST` flag is set, else `yiaddr`,
-    falling back to `255.255.255.255`. `RELAY_AGENT_INFORMATION` (option 82)
-    on the request is echoed back unmodified on the reply, per RFC 3046 §2.2.
+  - Reply destination: unicasts to `giaddr` when a relay is in play (RFC 2131
+    §4.1); otherwise uses `ciaddr`, then broadcasts if the client's `BROADCAST`
+    flag is set, else `yiaddr`, falling back to `255.255.255.255`. **The UDP
+    destination port comes from where the reply goes, never from the request's
+    source port** (RFC 1542 §5.4, three MUSTs): **`REPLY_TO_RELAY_PORT`** (class
+    attribute, `67`) for a reply sent to `giaddr`, a DHCPNAK through a relay
+    included, and **`REPLY_TO_CLIENT_PORT`** (`68`) for every other reply. The
+    source port is the sender's to choose, so honouring it let one unauthenticated
+    datagram send a reply to any port on any host. A harness that runs a relay or
+    a client on another port sets the attribute (on the class, the instance, or
+    per request from `handle`); a real deployment never does.
+    `RELAY_AGENT_INFORMATION` (option 82) on the request is echoed back
+    unmodified on the reply, per RFC 3046 §2.2.
   - The reply is built from `lease.options.copy()`, never the lease's own
     container: the response pipeline injects bookkeeping options and the
     `PARAMETER_REQUEST_LIST` filter deletes everything the client did not

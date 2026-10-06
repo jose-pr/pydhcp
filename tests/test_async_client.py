@@ -148,6 +148,8 @@ def test_a_dora_against_the_thread_based_server(loop_type: type) -> None:
             port = server.bound_addresses[0].port
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
+                # The client is on an ephemeral port, not 68.
+                server.REPLY_TO_CLIENT_PORT = client.bound_addresses[0].port
                 ack = await client.dora(
                     CHADDR,
                     timeout=2.0,
@@ -173,6 +175,7 @@ def test_a_dora_against_the_asyncio_server_on_the_same_loop(loop_type: type) -> 
             port = server.bound_addresses[0].port
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
+                server.REPLY_TO_CLIENT_PORT = client.bound_addresses[0].port
                 offer = await client.discover_offer(
                     CHADDR,
                     timeout=2.0,
@@ -316,6 +319,8 @@ def test_two_exchanges_at_once_each_receive_their_own_reply(loop_type: type) -> 
             port = server.bound_addresses[0].port
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
+                # The client is on an ephemeral port, not 68.
+                server.REPLY_TO_CLIENT_PORT = client.bound_addresses[0].port
                 first, second = await asyncio.gather(
                     *[
                         client.dora(
@@ -507,6 +512,7 @@ def test_a_real_exchange_logs_nothing_loud(
             await server.start()
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
+                server.REPLY_TO_CLIENT_PORT = client.bound_addresses[0].port
                 ack = await client.dora(
                     CHADDR,
                     timeout=2.0,

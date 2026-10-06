@@ -33,6 +33,8 @@ def test_async_server_lifecycle():
         # We want to send a UDP packet and get a response
         client_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client_sock.bind(("127.0.0.1", 0))
+        # The client is on an ephemeral port, not 68.
+        server.REPLY_TO_CLIENT_PORT = client_sock.getsockname()[1]
 
         # Construct a DHCP DISCOVER message
         from datetime import timedelta

@@ -106,7 +106,9 @@ def test_every_wildcard_spelling_takes_the_packet_info_path(spec) -> None:
     assert DHCPListener(listen=spec)._pktinfo, spec
 
 
-def _exchange_discover(server_port: int) -> "DHCPMessage | None":
+def _exchange_discover(
+    server_port: int, server: _ty.Any = None
+) -> "DHCPMessage | None":
     """Send one DISCOVER over loopback and return the reply, if any.
 
     The client is bound to the wildcard: over loopback the server unicasts the
@@ -116,6 +118,9 @@ def _exchange_discover(server_port: int) -> "DHCPMessage | None":
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("0.0.0.0", 0))
     client.settimeout(2.0)
+    if server is not None:
+        # The client is on an ephemeral port, not 68.
+        server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
     try:
         discover = build_request(DHCPMessageType.DHCPDISCOVER)
         discover.options[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.50")
@@ -145,7 +150,7 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     port = server.bound_addresses[0].port
     server.start()
     try:
-        reply = _exchange_discover(port)
+        reply = _exchange_discover(port, server)
     finally:
         server.close()
 

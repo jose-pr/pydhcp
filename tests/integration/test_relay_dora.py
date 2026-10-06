@@ -17,6 +17,9 @@ def test_full_dora_through_relay() -> None:
         )
         with running(relay):
             relay_port = relay.bound_addresses[0].port
+            # The relay is on an ephemeral port, not 67; the relay itself
+            # answers the client on the port the client sent from.
+            server.REPLY_TO_RELAY_PORT = relay_port
 
             with running(DHCPClient(listen=("127.0.0.1", 0))) as client:
                 ack = client.dora(

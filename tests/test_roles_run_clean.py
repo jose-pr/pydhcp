@@ -63,6 +63,8 @@ def test_sync_server_and_relay(caplog: pytest.LogCaptureFixture) -> None:
                 server_addresses=[("127.0.0.1", server.bound_addresses[0].port)],
             )
             with running(relay):
+                # The relay is on an ephemeral port, not 67.
+                server.REPLY_TO_RELAY_PORT = relay.bound_addresses[0].port
                 _dora(relay.bound_addresses[0].port)
     assert _loud(caplog) == []
 
@@ -99,6 +101,7 @@ def test_async_server_relay_and_capture(
                 server_addresses=[("127.0.0.1", server.bound_addresses[0].port)],
             ) as relay:
                 await relay.start()
+                server.REPLY_TO_RELAY_PORT = relay.bound_addresses[0].port
                 await loop.run_in_executor(None, _dora, relay.bound_addresses[0].port)
         async with AsyncDHCPCapture(listen=[LOCAL], sink=seen.append) as capture:
             await capture.start()

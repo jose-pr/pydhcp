@@ -13,6 +13,13 @@ from conftest import build_request
 
 
 class MockAsyncServerForConcurrency(AsyncDHCPServer):
+    def handle(self, msg, context):
+        # Five clients on five ephemeral ports. The handler is serialised
+        # and replies from inside `handle`, so one attribute per request
+        # is safe.
+        self.REPLY_TO_CLIENT_PORT = context.client.port
+        super().handle(msg, context)
+
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         requested_ip = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=IPv4AddressOption

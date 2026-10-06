@@ -334,7 +334,9 @@ class _Replies(_LeasePolicy):
             )
 
         dest: _ipaddress.IPv4Address
-        dest_port: int = context.client.port
+        # RFC 1542 s5.4: the destination port is set by the kind of destination,
+        # never taken from the request's source port, which the sender chooses.
+        dest_port: int = self.REPLY_TO_CLIENT_PORT
 
         if resp_ty is _enum.DHCPMessageType.DHCPNAK:
             # RFC 2131 4.3.2: with giaddr 0 the server MUST broadcast the NAK to
@@ -345,12 +347,12 @@ class _Replies(_LeasePolicy):
             # the client never saw it and retried until its timers expired.
             if msg.giaddr != _const.WILDCARD_V4:
                 dest = msg.giaddr
-                dest_port = 67 if context.client.port == 68 else context.client.port
+                dest_port = self.REPLY_TO_RELAY_PORT
             else:
                 dest = _ipaddress.IPv4Address("255.255.255.255")
         elif msg.giaddr != _const.WILDCARD_V4:
             dest = msg.giaddr
-            dest_port = 67 if context.client.port == 68 else context.client.port
+            dest_port = self.REPLY_TO_RELAY_PORT
         elif msg.ciaddr != _const.WILDCARD_V4:
             dest = msg.ciaddr
         elif msg.broadcast:
