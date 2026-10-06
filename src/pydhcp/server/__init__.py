@@ -7,18 +7,18 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import _network as _net
-from ..lease import DHCPLease, LeaseBackend
-from ..listener import AsyncDHCPListener as _AsyncBase, ListenSpec, DHCPRequestContext
+from ..lease import LeaseBackend
+from ..listener._asyncio import AsyncDHCPListener as _AsyncBase
+from ..listener._receive import DHCPRequestContext
+from ..listener._spec import ListenSpec
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from .handlers import _Handlers
 from .policy import _NonExtendingBackend, _servable_interface
 from .reply import _is_loopback
 
-# `DHCPLease`, `_net` and `_netimps` are imported only to stay importable from
-# `pydhcp.server`, as they were from the single module: callers import
-# `DHCPLease` from here, and tests patch attributes through the `_net`/`_netimps`
-# aliases -- the shared module objects, so such a patch reaches every layer.
+# `_net` and `_netimps` are the shared module objects: a test patches an attribute
+# through them and the patch reaches every layer of the server.
 
 
 class DHCPServer(_Handlers):

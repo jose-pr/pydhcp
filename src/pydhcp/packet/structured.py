@@ -8,7 +8,7 @@ import typing as _ty
 from ..exceptions import DHCPDecodeError
 from ._message import DHCPMessage
 
-# `..config` imports nothing from `pydhcp`, so the dependency is one-way and
+# `.._config` imports nothing from `pydhcp`, so the dependency is one-way and
 # adds no cycle; the optional-TOML ladder and its three near-identical error
 # messages used to be duplicated verbatim between the two modules.
 from .._config import (
@@ -19,6 +19,13 @@ from .._config import (
 )
 
 import yaml as _yaml  # type: ignore[import-untyped]
+
+__all__ = [
+    "dump_mapping",
+    "dump_message",
+    "load_mapping",
+    "load_message",
+]
 
 _tomllib = _import_toml_reader()
 _tomli_w = _import_toml_writer()

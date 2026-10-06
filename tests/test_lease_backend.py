@@ -1,6 +1,7 @@
 import datetime as _dt
 import time
 import os
+from ipaddress import IPv4Address
 import pytest
 from math import inf as _inf
 
@@ -9,7 +10,6 @@ from pydhcp import (
     InMemoryLeaseBackend,
     FileLeaseBackend,
     DHCPOptions,
-    IPv4,
 )
 from pydhcp.options import IPv4AddressOption
 from pydhcp.options import DHCPOptionCode
@@ -18,10 +18,10 @@ from pydhcp.options import DHCPOptionCode
 def test_in_memory_lease_backend():
     backend = InMemoryLeaseBackend()
     client_id = "test-client-1"
-    ip = IPv4("192.168.1.100")
+    ip = IPv4Address("192.168.1.100")
     ttl = 5
     options = DHCPOptions()
-    options[DHCPOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
+    options[DHCPOptionCode.SUBNET_MASK] = IPv4Address("255.255.255.0")
 
     # Test allocate
     lease = backend.allocate(client_id, ip, ttl, options)
@@ -29,7 +29,7 @@ def test_in_memory_lease_backend():
     assert lease.ip == ip
     assert lease.options.get(
         DHCPOptionCode.SUBNET_MASK, decode=IPv4AddressOption
-    ) == IPv4("255.255.255.0")
+    ) == IPv4Address("255.255.255.0")
     assert isinstance(lease.expires, _dt.datetime)
 
     # Test lookup
@@ -56,7 +56,7 @@ def test_lease_expiration():
     comparison lands on -- was the single value never tried. Both are asserted
     now, along with a live lease, so "lookup always returns None" cannot pass.
     """
-    ip = IPv4("192.168.1.200")
+    ip = IPv4Address("192.168.1.200")
 
     for ttl in (0, -1):
         backend = InMemoryLeaseBackend()
@@ -77,10 +77,10 @@ def test_file_lease_backend(tmp_path):
     filepath = str(tmp_path / "leases.json")
     backend = FileLeaseBackend(filepath=filepath)
     client_id = "test-client-file"
-    ip = IPv4("192.168.1.150")
+    ip = IPv4Address("192.168.1.150")
     ttl = 60
     options = DHCPOptions()
-    options[DHCPOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
+    options[DHCPOptionCode.SUBNET_MASK] = IPv4Address("255.255.255.0")
 
     # Allocate
     lease = backend.allocate(client_id, ip, ttl, options)
@@ -94,7 +94,7 @@ def test_file_lease_backend(tmp_path):
     assert loaded.ip == ip
     assert loaded.options.get(
         DHCPOptionCode.SUBNET_MASK, decode=IPv4AddressOption
-    ) == IPv4("255.255.255.0")
+    ) == IPv4Address("255.255.255.0")
 
     # Renew
     new_backend.renew(client_id, 120)
@@ -128,7 +128,7 @@ def test_lease_file_write_is_atomic(tmp_path):
     path = tmp_path / "leases.json"
     backend = FileLeaseBackend(str(path))
     for index in range(20):
-        backend.allocate(f"client-{index}", IPv4(f"10.0.0.{index + 1}"), 60)
+        backend.allocate(f"client-{index}", IPv4Address(f"10.0.0.{index + 1}"), 60)
 
     # The file is complete and parseable at rest, and the temporary the atomic
     # write goes through is cleaned up rather than accumulating beside it --
@@ -143,7 +143,7 @@ def test_unreadable_lease_file_is_reported_and_kept(tmp_path, caplog):
 
     path = tmp_path / "leases.json"
     backend = FileLeaseBackend(str(path))
-    backend.allocate("client-a", IPv4("10.0.0.5"), 60)
+    backend.allocate("client-a", IPv4Address("10.0.0.5"), 60)
 
     text = path.read_text(encoding="utf-8")
     path.write_text(text[: len(text) // 2], encoding="utf-8")  # crash mid-write
@@ -165,7 +165,7 @@ def test_failed_save_is_reported(tmp_path, caplog):
     backend = FileLeaseBackend(str(path))
 
     with caplog.at_level(logging.ERROR, logger="pydhcp"):
-        lease = backend.allocate("client-a", IPv4("10.0.0.5"), 60)
+        lease = backend.allocate("client-a", IPv4Address("10.0.0.5"), 60)
 
     assert lease is not None  # still served; the server must not fall over
     assert "Could not persist leases" in caplog.text
@@ -185,7 +185,7 @@ def test_concurrent_saves_never_expose_a_partial_file(tmp_path):
 
     def saver(n: int) -> None:
         for index in range(40):
-            backend.allocate(f"c{n}-{index}", IPv4(f"10.1.{n}.{index + 1}"), 60)
+            backend.allocate(f"c{n}-{index}", IPv4Address(f"10.1.{n}.{index + 1}"), 60)
             try:
                 json.loads(path.read_text(encoding="utf-8"))
             except FileNotFoundError:
@@ -222,10 +222,10 @@ def test_in_memory_backend_survives_concurrent_use():
         for index in range(200):
             try:
                 backend.allocate(
-                    f"c{n}-{index}", IPv4(f"10.0.{n}.{index % 250 + 1}"), 60
+                    f"c{n}-{index}", IPv4Address(f"10.0.{n}.{index % 250 + 1}"), 60
                 )
                 backend.lookup(f"c{n}-{index}")
-                backend.lookup_by_ip(IPv4(f"10.0.{n}.{index % 250 + 1}"))
+                backend.lookup_by_ip(IPv4Address(f"10.0.{n}.{index % 250 + 1}"))
             except Exception as e:  # pragma: no cover - the failure being tested
                 errors.append(f"{e.__class__.__name__}: {e}")
 
@@ -257,7 +257,7 @@ def test_lease_store_is_bounded():
     backend = _SmallStore()
 
     accepted = sum(
-        backend.allocate(f"forged-{n}", IPv4("10.0.0.1"), 3600) is not None
+        backend.allocate(f"forged-{n}", IPv4Address("10.0.0.1"), 3600) is not None
         for n in range(500)
     )
 
@@ -277,10 +277,10 @@ def test_an_established_lease_is_never_evicted_to_make_room():
     guard on the eviction policy, not a reproduction of a past failure.
     """
     backend = _SmallStore()
-    backend.allocate("real-client", IPv4("10.0.0.9"), 3600)
+    backend.allocate("real-client", IPv4Address("10.0.0.9"), 3600)
 
     for n in range(500):
-        backend.allocate(f"forged-{n}", IPv4("10.0.0.1"), 3600)
+        backend.allocate(f"forged-{n}", IPv4Address("10.0.0.1"), 3600)
 
     assert backend.lookup("real-client") is not None
     # and it can still renew, which is what keeps a working client working
@@ -296,10 +296,12 @@ def test_expired_leases_are_reclaimed_before_refusing():
     """
     backend = _SmallStore()
     for n in range(backend.MAX_LEASES):
-        backend.allocate(f"transient-{n}", IPv4("10.0.0.1"), 0)  # already expiring
+        backend.allocate(
+            f"transient-{n}", IPv4Address("10.0.0.1"), 0
+        )  # already expiring
 
     time.sleep(0.01)
-    assert backend.allocate("newcomer", IPv4("10.0.0.2"), 3600) is not None
+    assert backend.allocate("newcomer", IPv4Address("10.0.0.2"), 3600) is not None
     assert backend.lookup("newcomer") is not None
 
 
@@ -312,7 +314,7 @@ def test_a_full_store_does_not_flood_the_log(caplog):
     backend = _SmallStore()
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         for n in range(500):
-            backend.allocate(f"forged-{n}", IPv4("10.0.0.1"), 3600)
+            backend.allocate(f"forged-{n}", IPv4Address("10.0.0.1"), 3600)
 
     full_reports = [
         r for r in caplog.records if "Lease store is full" in r.getMessage()
@@ -338,7 +340,7 @@ def test_default_still_writes_on_every_mutation(tmp_path):
     backend = FileLeaseBackend(str(path))
     assert backend.SAVE_INTERVAL_SECONDS == 0
 
-    backend.allocate("client-a", IPv4("10.0.0.5"), 60)
+    backend.allocate("client-a", IPv4Address("10.0.0.5"), 60)
     # on disk immediately, with no flush() call
     assert list(json.loads(path.read_text(encoding="utf-8"))) == ["client-a"]
 
@@ -353,8 +355,8 @@ def test_coalescing_defers_writes_and_flush_forces_one(tmp_path):
     path = tmp_path / "leases.json"
     backend = Coalesced(str(path))
 
-    backend.allocate("client-a", IPv4("10.0.0.5"), 60)  # first write is due
-    backend.allocate("client-b", IPv4("10.0.0.6"), 60)  # this one is not
+    backend.allocate("client-a", IPv4Address("10.0.0.5"), 60)  # first write is due
+    backend.allocate("client-b", IPv4Address("10.0.0.6"), 60)  # this one is not
     assert list(json.loads(path.read_text(encoding="utf-8"))) == ["client-a"]
 
     backend.flush()
@@ -375,8 +377,8 @@ def test_close_flushes_so_a_clean_shutdown_loses_nothing(tmp_path):
 
     path = tmp_path / "leases.json"
     with Coalesced(str(path)) as backend:
-        backend.allocate("client-a", IPv4("10.0.0.5"), 60)
-        backend.allocate("client-b", IPv4("10.0.0.6"), 60)
+        backend.allocate("client-a", IPv4Address("10.0.0.5"), 60)
+        backend.allocate("client-b", IPv4Address("10.0.0.6"), 60)
 
     assert sorted(json.loads(path.read_text(encoding="utf-8"))) == [
         "client-a",

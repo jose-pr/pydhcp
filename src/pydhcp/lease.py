@@ -12,6 +12,13 @@ from math import inf as _inf
 
 from .options import DHCPOptions
 
+__all__ = [
+    "DHCPLease",
+    "FileLeaseBackend",
+    "InMemoryLeaseBackend",
+    "LeaseBackend",
+]
+
 LOGGER = _logging.getLogger(__name__)
 
 

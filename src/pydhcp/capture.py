@@ -19,6 +19,19 @@ from .exceptions import NoClientIdentityError
 from .packet._message import DHCPMessage
 from .options._codecs._base import DHCPOptionType
 
+__all__ = [
+    "AsyncDHCPCapture",
+    "CaptureEvent",
+    "CaptureHook",
+    "CapturePredicate",
+    "CaptureSink",
+    "DHCPCapture",
+    "FILENAME_FIELDS",
+    "UNIQUE_FILENAME_FIELDS",
+    "compile_capture_filter",
+    "validate_filename_pattern",
+]
+
 #: This module's logger, a child of the package logger `pydhcp` (which
 #: `.listener` above has already imported, installing its `NullHandler`).
 LOGGER = _logging.getLogger(__name__)

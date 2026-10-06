@@ -23,6 +23,10 @@ from .options._codes import DHCPOptionCode
 from .options import DHCPOptions
 from .options import _codecs as _type
 
+__all__ = [
+    "DHCPClient",
+]
+
 LOGGER = _logging.getLogger(__name__)
 
 

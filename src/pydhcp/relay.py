@@ -21,6 +21,14 @@ from .options._codes import DHCPOptionCode
 from .options import _codecs as _type
 from .server.reply import _is_loopback
 
+__all__ = [
+    "AsyncDHCPRelay",
+    "DEFAULT_MAX_HOPS",
+    "DHCPRelay",
+    "RFC1542_MAX_HOPS",
+    "ServerAddress",
+]
+
 LOGGER = _logging.getLogger(__name__)
 
 ServerAddress = _ty.Union[

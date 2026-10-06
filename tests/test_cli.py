@@ -1138,7 +1138,7 @@ def test_per_capture_file_count_is_bounded(tmp_path, caplog):
 
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         for index in range(cli.MAX_PER_CAPTURE_FILES + 50):
-            cli._write_capture_record(
+            _write_capture_record(
                 _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
                 output=pattern,
                 output_mode="per-capture",
@@ -1166,7 +1166,7 @@ def test_a_pattern_the_client_cannot_influence_is_not_limited(tmp_path):
     state: dict = {"first": True}
 
     for index in range(cli.MAX_PER_CAPTURE_FILES + 200):
-        cli._write_capture_record(
+        _write_capture_record(
             _capture_event_with_client_id(b"\xff" + index.to_bytes(4, "big")),
             output=pattern,
             output_mode="per-capture",

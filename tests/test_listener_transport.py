@@ -16,7 +16,6 @@ import time
 import pytest
 
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
-from pydhcp import listener as listener_module
 import ipaddress
 
 import netimps
@@ -24,7 +23,7 @@ import netimps
 from pydhcp.listener import DHCPListener, PktInfoUDPTransport, UDPTransport
 
 # the receive path is not public
-from pydhcp.listener._receive import _arrival
+from pydhcp.listener._receive import _arrival, _TruncatedDatagram
 from ipaddress import IPv4Address as IPv4
 
 
@@ -121,7 +120,7 @@ def _interface(*addresses: str) -> netimps.Interface:
 def test_arrival_reports_the_msg_trunc_flag() -> None:
     """The flags `recvmsg` returns were discarded outright, so a datagram cut
     to the buffer was decoded from its leading half."""
-    with pytest.raises(listener_module._TruncatedDatagram) as exc_info:
+    with pytest.raises(_TruncatedDatagram) as exc_info:
         _arrival(_datagram(data=b"z" * 576, truncated=True), 576)
 
     assert "576" in str(exc_info.value)
@@ -131,7 +130,7 @@ def test_arrival_reports_the_msg_trunc_flag() -> None:
 def test_arrival_treats_a_full_extra_octet_as_truncated() -> None:
     """The path with no MSG_TRUNC to report: a datagram that fills the
     one-octet-larger buffer was longer than the limit."""
-    with pytest.raises(listener_module._TruncatedDatagram):
+    with pytest.raises(_TruncatedDatagram):
         _arrival(_datagram(data=b"z" * 577), 576)
 
 

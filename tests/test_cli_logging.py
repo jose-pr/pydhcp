@@ -145,7 +145,7 @@ def test_the_capture_hook_logs_through_the_module_logger(
 
     monkeypatch.setattr(capture_hook_module.subprocess, "run", lambda *a, **k: Result())
 
-    hook = cli_module._load_capture_hook(str(command), "json", fail_fast=False)
+    hook = capture_hook_module._load_capture_hook(str(command), "json", fail_fast=False)
     assert hook is not None
 
     previous = LOGGER.level

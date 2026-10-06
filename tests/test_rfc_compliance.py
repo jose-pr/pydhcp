@@ -5,7 +5,8 @@ from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPO
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
-from pydhcp.server import DHCPServer, DHCPLease
+from pydhcp.server import DHCPServer
+from pydhcp.lease import DHCPLease
 from pydhcp.options import U16, U32, String
 from math import inf as _inf
 

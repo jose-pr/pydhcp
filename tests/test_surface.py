@@ -16,29 +16,6 @@ EXPECTED_ROOT = [
     "AsyncDHCPListener",
     "AsyncDHCPRelay",
     "AsyncDHCPServer",
-    "CCCAPBackoffRetry",
-    "CCCAPBackoffRetrySubOption",
-    "CCCASBackoffRetry",
-    "CCCASBackoffRetrySubOption",
-    "CCCKDCServerAddressList",
-    "CCCKDCServerAddressSubOption",
-    "CCCKerberosRealmName",
-    "CCCKerberosRealmNameSubOption",
-    "CCCOption",
-    "CCCPrimaryDHCPServerAddress",
-    "CCCPrimaryDHCPServerAddressSubOption",
-    "CCCProvisioningServerAddress",
-    "CCCProvisioningServerAddressSubOption",
-    "CCCProvisioningServerFQDN",
-    "CCCProvisioningTimer",
-    "CCCProvisioningTimerSubOption",
-    "CCCSecondaryDHCPServerAddress",
-    "CCCSecondaryDHCPServerAddressSubOption",
-    "CCCSecurityTicketControl",
-    "CCCSecurityTicketControlSubOption",
-    "CCCSubOption",
-    "CCCTicketGrantingServerUtilization",
-    "CCCTicketGrantingServerUtilizationSubOption",
     "CaptureEvent",
     "ClasslessRoute",
     "ClientIdentifier",
@@ -46,14 +23,18 @@ EXPECTED_ROOT = [
     "DHCPClient",
     "DHCPDecodeError",
     "DHCPError",
+    "DHCPFlags",
     "DHCPLease",
     "DHCPListener",
     "DHCPMessage",
+    "DHCPMessageType",
+    "DHCPOpcode",
     "DHCPOption",
     "DHCPOptionCode",
     "DHCPOptionCodes",
     "DHCPOptionType",
     "DHCPOptions",
+    "DHCPPort",
     "DHCPRelay",
     "DHCPRequestContext",
     "DHCPServer",
@@ -61,16 +42,8 @@ EXPECTED_ROOT = [
     "DHCPValueError",
     "DomainList",
     "FileLeaseBackend",
-    "IPv4",
-    "IPv4Interface",
-    "IPv4Network",
     "InMemoryLeaseBackend",
     "LeaseBackend",
-    "MACAddress",
-    "MoSFQDNList",
-    "MoSFQDNRecord",
-    "MoSIPv4AddressList",
-    "MoSIPv4AddressRecord",
     "NetworkInterface",
     "NoClientIdentityError",
     "OptionOverload",
@@ -88,10 +61,6 @@ EXPECTED_ROOT = [
     "URIList",
     "UncompressedDomainList",
     "UserClass",
-    "VIVendorClass",
-    "VIVendorClassRecord",
-    "VIVendorSpecificInformation",
-    "VIVendorSpecificInformationRecord",
     "VendorSpecificInformation",
     "__version__",
     "compile_capture_filter",
@@ -103,7 +72,6 @@ EXPECTED_CLI = [
     "Capture",
     "HOOK_TIMEOUT_SECONDS",
     "Interfaces",
-    "LOGGER",
     "MAX_PER_CAPTURE_FILES",
     "PACKET_FORMATS",
     "Packet",
@@ -123,6 +91,7 @@ EXPECTED_LISTENER = [
     "AsyncDHCPListener",
     "BROADCAST_ADDRESS",
     "DHCPListener",
+    "DHCPMetrics",
     "DHCPRequestContext",
     "DHCPTransport",
     "ListenAddress",
@@ -232,16 +201,74 @@ EXPECTED_SERVER = [
     "DHCPServer",
 ]
 
+EXPECTED_OPTIONS = sorted(
+    EXPECTED_OPTIONS_TYPE
+    + [
+        "BaseDHCPOptionCode",
+        "DHCPOption",
+        "DHCPOptionCode",
+        "DHCPOptions",
+        "MAX_OPTION_CODE",
+        "MIN_OPTION_CODE",
+    ]
+)
+
+EXPECTED_CLIENT = ["DHCPClient"]
+
+EXPECTED_RELAY = [
+    "AsyncDHCPRelay",
+    "DEFAULT_MAX_HOPS",
+    "DHCPRelay",
+    "RFC1542_MAX_HOPS",
+    "ServerAddress",
+]
+
+EXPECTED_CAPTURE = [
+    "AsyncDHCPCapture",
+    "CaptureEvent",
+    "CaptureHook",
+    "CapturePredicate",
+    "CaptureSink",
+    "DHCPCapture",
+    "FILENAME_FIELDS",
+    "UNIQUE_FILENAME_FIELDS",
+    "compile_capture_filter",
+    "validate_filename_pattern",
+]
+
+EXPECTED_LEASE = [
+    "DHCPLease",
+    "FileLeaseBackend",
+    "InMemoryLeaseBackend",
+    "LeaseBackend",
+]
+
+EXPECTED_STRUCTURED = [
+    "dump_mapping",
+    "dump_message",
+    "load_mapping",
+    "load_message",
+]
+
 SURFACE = {
     "pydhcp": EXPECTED_ROOT,
+    "pydhcp.capture": EXPECTED_CAPTURE,
     "pydhcp.cli": EXPECTED_CLI,
+    "pydhcp.client": EXPECTED_CLIENT,
     "pydhcp.exceptions": EXPECTED_EXCEPTIONS,
+    "pydhcp.lease": EXPECTED_LEASE,
     "pydhcp.listener": EXPECTED_LISTENER,
+    "pydhcp.options": EXPECTED_OPTIONS,
     "pydhcp.options._codecs": EXPECTED_OPTIONS_TYPE,
     "pydhcp.packet": EXPECTED_PACKET,
     "pydhcp.packet._enums": EXPECTED_PACKET_ENUMS,
     "pydhcp.packet._message": EXPECTED_PACKET_MESSAGE,
+    "pydhcp.packet.structured": EXPECTED_STRUCTURED,
+    "pydhcp.relay": EXPECTED_RELAY,
     "pydhcp.server": EXPECTED_SERVER,
+    "pydhcp.server.handlers": [],
+    "pydhcp.server.policy": [],
+    "pydhcp.server.reply": [],
 }
 
 
@@ -284,3 +311,27 @@ def test_every_export_is_the_defining_object(module_name: str) -> None:
         if home is not obj:
             wrong.append(name)
     assert wrong == []
+
+
+@pytest.mark.parametrize("module_name", sorted(SURFACE))
+def test_no_export_is_a_typevar_a_logger_or_underscored(module_name: str) -> None:
+    import logging
+
+    module = importlib.import_module(module_name)
+    wrong = [
+        name
+        for name in module.__all__
+        if isinstance(getattr(module, name), (typing.TypeVar, logging.Logger))
+        or (name.startswith("_") and name != "__version__")
+    ]
+    assert wrong == []
+
+
+def test_a_name_exported_twice_is_one_object() -> None:
+    """The root and a package re-export the same object, never a wrapper."""
+    homes: typing.Dict[str, typing.Dict[int, str]] = {}
+    for module_name in SURFACE:
+        module = importlib.import_module(module_name)
+        for name in module.__all__:
+            homes.setdefault(name, {})[id(getattr(module, name))] = module_name
+    assert {n: sorted(h.values()) for n, h in homes.items() if len(h) > 1} == {}

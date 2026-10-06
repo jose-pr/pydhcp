@@ -13,14 +13,89 @@ from math import inf as _inf
 
 LOGGER = _logging.getLogger(__name__)
 
-T = _ty.TypeVar("T", bound=DHCPOptionType)
-C = _ty.TypeVar("C", bound=BaseDHCPOptionCode)
+_T = _ty.TypeVar("_T", bound=DHCPOptionType)
+_C = _ty.TypeVar("_C", bound=BaseDHCPOptionCode)
 _R = _ty.TypeVar("_R")
 
 #: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
 #: markers rather than options -- see `_check_code`.
 MIN_OPTION_CODE = 1
 MAX_OPTION_CODE = 254
+
+__all__ = [
+    "BaseDHCPOptionCode",
+    "BaseFixedLengthInteger",
+    "Boolean",
+    "Bytes",
+    "CCCAPBackoffRetry",
+    "CCCAPBackoffRetrySubOption",
+    "CCCASBackoffRetry",
+    "CCCASBackoffRetrySubOption",
+    "CCCKDCServerAddressList",
+    "CCCKDCServerAddressSubOption",
+    "CCCKerberosRealmName",
+    "CCCKerberosRealmNameSubOption",
+    "CCCOption",
+    "CCCPrimaryDHCPServerAddress",
+    "CCCPrimaryDHCPServerAddressSubOption",
+    "CCCProvisioningServerAddress",
+    "CCCProvisioningServerAddressSubOption",
+    "CCCProvisioningServerFQDN",
+    "CCCProvisioningTimer",
+    "CCCProvisioningTimerSubOption",
+    "CCCSecondaryDHCPServerAddress",
+    "CCCSecondaryDHCPServerAddressSubOption",
+    "CCCSecurityTicketControl",
+    "CCCSecurityTicketControlSubOption",
+    "CCCSubOption",
+    "CCCTicketGrantingServerUtilization",
+    "CCCTicketGrantingServerUtilizationSubOption",
+    "ClasslessRoute",
+    "ClientFQDN",
+    "ClientIdentifier",
+    "DHCPOption",
+    "DHCPOptionCode",
+    "DHCPOptionCodes",
+    "DHCPOptionType",
+    "DHCPOptions",
+    "DomainList",
+    "DomainName",
+    "EncapsulatedOptions",
+    "FixedLengthInteger",
+    "Flag",
+    "I32",
+    "IPv4AddressOption",
+    "List",
+    "MAX_OPTION_CODE",
+    "MIN_OPTION_CODE",
+    "MoSFQDNList",
+    "MoSFQDNRecord",
+    "MoSIPv4AddressList",
+    "MoSIPv4AddressRecord",
+    "OctetString",
+    "OptionOverload",
+    "PCPServerList",
+    "PolicyFilter",
+    "RDNSSSelection",
+    "RecordList",
+    "RelayAgentInformation",
+    "SIPServers",
+    "StaticRoute",
+    "StatusCode",
+    "String",
+    "TLVOption",
+    "U16",
+    "U32",
+    "U8",
+    "URIList",
+    "UncompressedDomainList",
+    "UserClass",
+    "VIVendorClass",
+    "VIVendorClassRecord",
+    "VIVendorSpecificInformation",
+    "VIVendorSpecificInformationRecord",
+    "VendorSpecificInformation",
+]
 
 
 def _check_code(key: _ty.Any) -> int:
@@ -237,8 +312,8 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     # decodes by default and returns a `DHCPOptionType`.
     @_ty.overload  # type: ignore[override]
     def get(
-        self, __key: int, default: _ty.Any = None, *, decode: _builtins.type[T]
-    ) -> _ty.Optional[T]: ...
+        self, __key: int, default: _ty.Any = None, *, decode: _builtins.type[_T]
+    ) -> _ty.Optional[_T]: ...
 
     @_ty.overload
     def get(
@@ -372,7 +447,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     def items(self, decoded: _ty.Literal[True]) -> list[DHCPOption]: ...
 
     @_ty.overload
-    def items(self, decoded: _builtins.type[C]) -> list[DHCPOption]: ...
+    def items(self, decoded: _builtins.type[_C]) -> list[DHCPOption]: ...
 
     def items(
         self, decoded: _ty.Union[bool, _builtins.type[BaseDHCPOptionCode]] = True

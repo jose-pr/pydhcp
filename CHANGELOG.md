@@ -76,9 +76,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `LINK_LOCAL_V4` and
   `SocketOption` are gone from it: import `ipaddress.IPv4Address` and the others from
   `ipaddress`, and `LINK_LOCAL_V4` and `SocketOption` from `netimps`. `WILDCARD_V4` is
-  `pydhcp.constants.WILDCARD_V4`. No alias is kept.
-- **Breaking: `pydhcp.MACAddress` and `NetworkInterface.mac` are `netimps.MACAddress`.**
-  `str(mac)` is now `aa:bb:cc:dd:ee:ff` where it was `AA-BB-CC-DD-EE-FF`; `pydhcp
+  not public: write `ipaddress.IPv4Address("0.0.0.0")`. No alias is kept.
+- **Breaking: `NetworkInterface.mac` is a `netimps.MACAddress`, and `pydhcp.MACAddress` is
+  gone** (import it from `netimps`). `str(mac)` is now `aa:bb:cc:dd:ee:ff` where it was `AA-BB-CC-DD-EE-FF`; `pydhcp
   interfaces` still prints the hyphenated upper-case form, through `mac.format("-",
   upper=True)`.
 - **Breaking: `SocketAddress.listen()` is gone.** The listener calls `netimps.bind()`
@@ -119,6 +119,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `pydhcp.cli.capture_hook` and the other command modules `pydhcp.cli._capture_hook`
   and so on. A `--loglevel` or a filter naming one of them follows; one naming
   `pydhcp` or `pydhcp.listener` is unaffected.
+
+- **Breaking: the root exports the packet enums and no longer exports the address
+  aliases or the specialised codec families.** `pydhcp.DHCPMessageType`,
+  `pydhcp.DHCPOpcode`, `pydhcp.DHCPFlags` and `pydhcp.DHCPPort` are new (the same
+  objects as `pydhcp.packet`'s). Each name below is gone from `pydhcp`, no alias is
+  kept; import it from where it is listed:
+
+| Was | Now |
+| --- | --- |
+| `pydhcp.IPv4` | `ipaddress.IPv4Address` |
+| `pydhcp.IPv4Interface` | `ipaddress.IPv4Interface` |
+| `pydhcp.IPv4Network` | `ipaddress.IPv4Network` |
+| `pydhcp.MACAddress` | `netimps.MACAddress` |
+| `pydhcp.CCCOption` | `pydhcp.options.CCCOption` |
+| `pydhcp.CCCSubOption` | `pydhcp.options.CCCSubOption` |
+| `pydhcp.CCCPrimaryDHCPServerAddress` | `pydhcp.options.CCCPrimaryDHCPServerAddress` |
+| `pydhcp.CCCSecondaryDHCPServerAddress` | `pydhcp.options.CCCSecondaryDHCPServerAddress` |
+| `pydhcp.CCCProvisioningServerAddress` | `pydhcp.options.CCCProvisioningServerAddress` |
+| `pydhcp.CCCProvisioningServerFQDN` | `pydhcp.options.CCCProvisioningServerFQDN` |
+| `pydhcp.CCCKerberosRealmName` | `pydhcp.options.CCCKerberosRealmName` |
+| `pydhcp.CCCASBackoffRetry` | `pydhcp.options.CCCASBackoffRetry` |
+| `pydhcp.CCCAPBackoffRetry` | `pydhcp.options.CCCAPBackoffRetry` |
+| `pydhcp.CCCTicketGrantingServerUtilization` | `pydhcp.options.CCCTicketGrantingServerUtilization` |
+| `pydhcp.CCCProvisioningTimer` | `pydhcp.options.CCCProvisioningTimer` |
+| `pydhcp.CCCSecurityTicketControl` | `pydhcp.options.CCCSecurityTicketControl` |
+| `pydhcp.CCCKDCServerAddressList` | `pydhcp.options.CCCKDCServerAddressList` |
+| `pydhcp.CCCPrimaryDHCPServerAddressSubOption` | `pydhcp.options.CCCPrimaryDHCPServerAddressSubOption` |
+| `pydhcp.CCCSecondaryDHCPServerAddressSubOption` | `pydhcp.options.CCCSecondaryDHCPServerAddressSubOption` |
+| `pydhcp.CCCProvisioningServerAddressSubOption` | `pydhcp.options.CCCProvisioningServerAddressSubOption` |
+| `pydhcp.CCCASBackoffRetrySubOption` | `pydhcp.options.CCCASBackoffRetrySubOption` |
+| `pydhcp.CCCAPBackoffRetrySubOption` | `pydhcp.options.CCCAPBackoffRetrySubOption` |
+| `pydhcp.CCCKerberosRealmNameSubOption` | `pydhcp.options.CCCKerberosRealmNameSubOption` |
+| `pydhcp.CCCTicketGrantingServerUtilizationSubOption` | `pydhcp.options.CCCTicketGrantingServerUtilizationSubOption` |
+| `pydhcp.CCCProvisioningTimerSubOption` | `pydhcp.options.CCCProvisioningTimerSubOption` |
+| `pydhcp.CCCSecurityTicketControlSubOption` | `pydhcp.options.CCCSecurityTicketControlSubOption` |
+| `pydhcp.CCCKDCServerAddressSubOption` | `pydhcp.options.CCCKDCServerAddressSubOption` |
+| `pydhcp.VIVendorSpecificInformationRecord` | `pydhcp.options.VIVendorSpecificInformationRecord` |
+| `pydhcp.VIVendorSpecificInformation` | `pydhcp.options.VIVendorSpecificInformation` |
+| `pydhcp.VIVendorClassRecord` | `pydhcp.options.VIVendorClassRecord` |
+| `pydhcp.VIVendorClass` | `pydhcp.options.VIVendorClass` |
+| `pydhcp.MoSIPv4AddressRecord` | `pydhcp.options.MoSIPv4AddressRecord` |
+| `pydhcp.MoSFQDNRecord` | `pydhcp.options.MoSFQDNRecord` |
+| `pydhcp.MoSIPv4AddressList` | `pydhcp.options.MoSIPv4AddressList` |
+| `pydhcp.MoSFQDNList` | `pydhcp.options.MoSFQDNList` |
+
+- **Every public module declares `__all__`.** `pydhcp.options`, `.client`, `.relay`,
+  `.capture`, `.lease`, `.packet.structured` and `.server.handlers`, `.policy` and
+  `.reply` (the last three export nothing) gained one; a name outside it is not API.
+  No `__all__` lists a type variable, a logger or an underscore name: `pydhcp.cli.LOGGER`
+  leaves `pydhcp.cli.__all__`, and `pydhcp.options.T` and `.C` (type variables that
+  `from pydhcp.options import *` used to bring in) are gone.
+- **Breaking: `pydhcp.listener` and `pydhcp.cli` no longer re-export underscore names**
+  (`_bind_sockets`, `_arrival`, `_TruncatedDatagram`, `_split_host_port`,
+  `_load_capture_hook`, `_write_capture_record` and the rest). They are in the private
+  modules that define them.
+- **`DHCPMetrics` is `pydhcp.listener.DHCPMetrics`**, where it was
+  `pydhcp.metrics.DHCPMetrics` and then a private module's. `pydhcp.options` exports
+  `MIN_OPTION_CODE`, `MAX_OPTION_CODE` and every option codec in one list, and
+  `from pydhcp.server import DHCPLease` is not API (it is `pydhcp.lease.DHCPLease`).
 
 ### Renamed
 

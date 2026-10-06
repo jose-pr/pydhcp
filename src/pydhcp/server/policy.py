@@ -18,6 +18,8 @@ from ..packet._message import DHCPMessage
 from math import inf as _inf
 from ._state import _ServerState
 
+__all__: list[str] = []
+
 LOGGER = _logging.getLogger(__name__)
 
 

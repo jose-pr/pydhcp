@@ -2,7 +2,6 @@
 
 `App` and `main` live here; each subcommand has its own module (`_interfaces`,
 `_server`, `_relay`, `_packet`, `_capture`), with what they share in `_common`.
-Every name the single-module CLI had is re-exported, so imports are unchanged.
 """
 
 from __future__ import annotations
@@ -14,26 +13,13 @@ import sys
 import duho
 from duho import AUTO, Cli, DefaultsFormatter
 
-from ._common import PACKET_FORMATS, CAPTURE_FORMATS, _Command
+from ._common import PACKET_FORMATS, CAPTURE_FORMATS
 from ._interfaces import Interfaces
 from ._server import Server
-from ._relay import _parse_server_address, Relay
+from ._relay import Relay
 from ._packet import Packet
-from ._capture_hook import (
-    HOOK_TIMEOUT_SECONDS,
-    _cwd_on_sys_path,
-    _load_capture_hook,
-    _serialize_capture_event,
-)
-from ._capture import (
-    _infer_capture_format,
-    _infer_output_mode,
-    _stream_separator,
-    MAX_PER_CAPTURE_FILES,
-    _per_capture_budget,
-    _write_capture_record,
-    Capture,
-)
+from ._capture_hook import HOOK_TIMEOUT_SECONDS
+from ._capture import MAX_PER_CAPTURE_FILES, Capture
 
 #: The command line's logger, a child of the package logger `pydhcp`: the
 #: `-v` and `--loglevel pydhcp:DEBUG` options configure the parent.
@@ -71,7 +57,6 @@ def main() -> None:
 __all__ = [
     "App",
     "main",
-    "LOGGER",
     "PACKET_FORMATS",
     "CAPTURE_FORMATS",
     "Interfaces",

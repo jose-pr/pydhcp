@@ -14,42 +14,23 @@ Split by responsibility, one private module each:
 
 from __future__ import annotations
 
+from .._metrics import DHCPMetrics
 from ._asyncio import AsyncDHCPListener
-from ._binding import _REQUESTED_ADDRESS, _bind_sockets, _close_socket
-from ._interfaces import _network_interface, _resolve_interface
-from ._receive import (
-    Arrival,
-    DHCPRequestContext,
-    _TruncatedDatagram,
-    _arrival,
-    _context_for,
-    _pktinfo_supported,
-)
-from ._spec import (
-    ListenAddress,
-    ListenBinding,
-    ListenPort,
-    ListenSpec,
-    _binding_host,
-    _iter_listen_bindings,
-    _listen_uses_wildcard,
-    _parselisteners,
-    _split_host_port,
-    _split_listen_string,
-)
+from ._receive import DHCPRequestContext
+from ._spec import ListenAddress, ListenBinding, ListenPort, ListenSpec
 from ._sync import DHCPListener
 from ._transport import (
     BROADCAST_ADDRESS,
     PktInfoUDPTransport,
     DHCPTransport,
     UDPTransport,
-    _dest_string,
 )
 
 __all__ = [
     "AsyncDHCPListener",
     "BROADCAST_ADDRESS",
     "DHCPListener",
+    "DHCPMetrics",
     "ListenAddress",
     "ListenBinding",
     "ListenPort",

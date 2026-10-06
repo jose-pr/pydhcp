@@ -23,33 +23,32 @@ from pydhcp.options import DHCPOptions
 #: Modules that declare `__all__`: the walk covers what it lists.
 _WITH_ALL = [
     "pydhcp",
+    "pydhcp.capture",
     "pydhcp.cli",
+    "pydhcp.client",
     "pydhcp.exceptions",
+    "pydhcp.lease",
     "pydhcp.listener",
+    "pydhcp.options",
     "pydhcp.options._codecs",
     "pydhcp.packet",
     "pydhcp.packet._enums",
     "pydhcp.packet._message",
+    "pydhcp.packet.structured",
+    "pydhcp.relay",
     "pydhcp.server",
 ]
 
-#: Public modules without `__all__`: the walk covers every public name they define.
+#: Modules without `__all__`: the walk covers every public name they define.
 _WITHOUT_ALL = [
-    "pydhcp.capture",
-    "pydhcp.client",
     "pydhcp._config",
     "pydhcp._constants",
-    "pydhcp.lease",
     "pydhcp._log",
     "pydhcp._metrics",
     "pydhcp._network",
     "pydhcp._nvt",
-    "pydhcp.options",
-    "pydhcp.options._codes",
     "pydhcp.options._codes",
     "pydhcp.options._registry",
-    "pydhcp.packet.structured",
-    "pydhcp.relay",
 ]
 
 

@@ -17,6 +17,8 @@ from ..packet._message import DHCPMessage
 from math import inf as _inf
 from .reply import _Replies
 
+__all__: list[str] = []
+
 LOGGER = _logging.getLogger(__name__)
 
 
