@@ -16,6 +16,8 @@ logging.getLogger("pydhcp").setLevel(logging.DEBUG)
 if __name__ == "__main__":
     # The wildcard hears the broadcasts of every segment; per_interface=True
     # would bind addresses, which hear none on Linux.
-    listener = DHCPListener(listen="*")
-    listener.start()
-    listener.wait()
+    with DHCPListener(listen="*") as listener:
+        try:
+            listener.serve_forever()
+        except KeyboardInterrupt:
+            pass

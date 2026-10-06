@@ -34,9 +34,17 @@ base package.
 ```python
 from pydhcp.server import DHCPServer
 
-server = DHCPServer(listen="*")
-server.listen()
+with DHCPServer(listen="*") as server:    # binds; does not serve yet
+    server.serve_forever()                # until shutdown(); Ctrl-C raises KeyboardInterrupt
 ```
+
+`serve_forever()` receives on the calling thread. `start()` receives on a daemon
+thread instead and returns; `shutdown()` ends either and never blocks, so a
+handler may call it; `wait_closed()` blocks until receiving has stopped; `close()`
+(which leaving the `with` block calls) does both and then releases the sockets.
+Closed is final. The library installs no signal handler: the `pydhcp` commands
+turn Ctrl-C into `shutdown()`, and an application that wants the same catches
+`KeyboardInterrupt` around `serve_forever()`.
 
 The built-in server intentionally keeps allocation policy small. It renews existing leases
 and responds to client-requested addresses, while applications can subclass `DHCPServer`
@@ -48,7 +56,7 @@ tests, not clients that have no address yet:
 
 ```python
 server = DHCPServer(listen=[("127.0.0.1", [6767, 6768])], per_interface=True)
-server.listen()
+server.serve_forever()
 ```
 
 ### Asynchronous Server
@@ -64,20 +72,19 @@ import asyncio
 from pydhcp.server import AsyncDHCPServer
 
 async def main():
-    server = AsyncDHCPServer()
-    await server.start()      # binds and starts receiving; returns immediately
-    try:
-        await asyncio.Event().wait()   # serve until cancelled (Ctrl-C)
-    finally:
-        server.stop()
+    async with AsyncDHCPServer() as server:   # binds; does not serve yet
+        await server.serve_forever()          # until shutdown() or cancelled
 
 asyncio.run(main())
 ```
 
-`start()` returns as soon as the sockets are bound, so something has to keep the
-loop alive — await your application's own work there instead of the `Event` if you
-have any. Handlers run on a worker thread, so a blocking `handle()` will not stall
-the rest of your application.
+`serve_forever()` receives in the calling task. `await server.start()` receives
+in background tasks and returns once the sockets are bound, for an application that
+has its own work to await; `shutdown()` (never blocks, safe from a handler) ends
+either one, `await wait_closed()` returns once receiving has stopped, and
+`await aclose()` (which leaving `async with` awaits) releases the sockets. Handlers
+run on a worker thread, so a blocking `handle()` will not stall the rest of your
+application.
 
 ### Basic Packet Client
 

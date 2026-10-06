@@ -13,7 +13,11 @@ def main() -> None:
         packet_filter="msg_type=DHCPDISCOVER",
         hook=on_capture,
     )
-    capture.listen()
+    with capture:
+        try:
+            capture.serve_forever()
+        except KeyboardInterrupt:
+            pass
 
 
 if __name__ == "__main__":

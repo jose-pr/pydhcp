@@ -26,7 +26,7 @@ from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp.server import DHCPServer
 
 server = DHCPServer(lease_backend=InMemoryLeaseBackend())
-server.listen()
+server.serve_forever()
 ```
 
 ## Custom server policy
@@ -79,7 +79,7 @@ datagram arrived on.
 from pydhcp.server import DHCPServer
 
 server = DHCPServer(listen="*")
-server.listen()
+server.serve_forever()
 ```
 
 `per_interface=True`, like naming an address in `listen`, binds one socket per address
@@ -95,7 +95,7 @@ endpoints or a tuple with multiple ports.
 from pydhcp.server import DHCPServer
 
 server = DHCPServer(listen=[("127.0.0.1", [6767, 6768])], per_interface=True)
-server.listen()
+server.serve_forever()
 ```
 
 The CLI accepts comma-separated endpoint strings for the same workflow.
@@ -137,7 +137,10 @@ from pydhcp.client import DHCPClient
 
 client = DHCPClient(listen=("0.0.0.0", 68))
 client.start()
-ack = client.dora(b"\x00\x11\x22\x33\x44\x55", timeout=2.0, retries=2)
+try:
+    ack = client.dora(b"\x00\x11\x22\x33\x44\x55", timeout=2.0, retries=2)
+finally:
+    client.close()
 if ack is not None:
     print(f"Leased {ack.yiaddr}")
 ```
@@ -159,8 +162,7 @@ relay = DHCPRelay(
     server_addresses=["10.0.0.53", ("10.0.1.53", 6767)],
     max_hops=16,
 )
-relay.bind()
-relay.listen()
+relay.serve_forever()
 ```
 
 Pass `insert_relay_agent_info=True` (with `circuit_id`/`remote_id`) to tag forwarded requests with

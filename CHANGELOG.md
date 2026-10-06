@@ -62,6 +62,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   capture, and `CaptureEvent.captured_at` is the time stamped on the context when the
   datagram arrived. `pydhcp.capture` is now a package (same import path and
   names); its hook-failure record is logged by `pydhcp.capture._core`.
+- **Breaking: one lifecycle vocabulary on every listener and role**
+  (`DHCPListener`, `DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient` and their
+  asyncio counterparts). `listen()` is `serve_forever()`, `stop()` is `shutdown()`,
+  `wait()` is `wait_closed(timeout=None)` (it returns `False` when the timeout passed
+  first), and `start()` returns `None` and takes no cancellation token; no alias is
+  kept for the old names. `shutdown()` never blocks and is safe from any thread and
+  from a handler. The synchronous classes close with `close()` and a `with` block,
+  the asynchronous ones with `await aclose()` and `async with`, neither starting to
+  serve (the block binds). **Closed is final**: `start()`, `serve_forever()`,
+  `bind()` and `with` after `close()` raise `RuntimeError`, where `start()` used to
+  serve again. A second `start()` while serving raises `RuntimeError` too: on the
+  asynchronous classes it added a second receive task per socket and stranded a
+  pending `wait()`. `serve_forever()` no longer closes the sockets on its way out
+  (`close()` does), and `start()` no longer returns the receive thread.
+- **`close()` on a running thread-based listener ends it cleanly.** It shuts the
+  loop down through a wake-up socket, waits for the receive thread (up to five
+  seconds) and then releases the sockets; called on the receive thread itself, from
+  a handler, it shuts down and returns, and the loop releases the sockets as it
+  ends. On Windows the receive thread used to die with an uncaught `ValueError` or
+  `OSError`; on Linux it never ended, `wait()` blocked and `start()` returned
+  nothing. `shutdown()` ends the wait at once instead of after the poll interval.
+- **The library installs no signal handler.** `DHCPListener.start()` no longer
+  claims `SIGINT` for the process, and `close()` no longer gives it back. Ctrl-C
+  reaches `serve_forever()` as `KeyboardInterrupt`; the `pydhcp server`, `relay`
+  and `capture` commands catch it, log the same line and exit with status 0, as
+  before.
 - **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
   are gone** (they exported nothing); the layers are private modules of
   `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.

@@ -68,5 +68,8 @@ class ExampleDHCPServer(DHCPServer):
 
 
 if __name__ == "__main__":
-    dhcpd = ExampleDHCPServer()
-    dhcpd.listen()
+    with ExampleDHCPServer() as dhcpd:
+        try:
+            dhcpd.serve_forever()
+        except KeyboardInterrupt:
+            pass

@@ -116,38 +116,53 @@ everything below from `pydhcp.listener` itself.
     ephemeral port it already has rather than closing that socket and taking a
     new port. Sockets are bound with `connreset=False`, so on Windows an ICMP
     error from an earlier reply does not surface on a later receive.
-  - `.listen() -> None` — blocking receive loop; decodes each datagram,
-    resolves the receiving `NetworkInterface`, builds a `DHCPRequestContext`, and
-    calls `self.handle(msg, context)`. Receive, decode and `handle()` failures
-    are caught and reported separately (never `KeyboardInterrupt`) so one bad
-    packet never kills the loop; only the `handle()` one carries a traceback.
-    A datagram larger than `max_packet_size` is **dropped, not decoded from its
-    truncated half**. The loop rechecks the cancellation token between sockets,
-    so a handler that calls `.stop()` is not called again for the rest of the
-    ready set. **`.listen()` closes the sockets on its way out**, so `.stop()`
-    plus joining the thread actually releases the ports.
-  - `.start(cancellation_token=None) -> Thread | None` — **binds on the
-    caller's thread**, then runs `.listen()` on a
-    **daemon** thread named `pydhcp-listener` (nothing in the loop ends by
-    itself, so a non-daemon one meant a process that forgot to stop never
-    exited) and installs a `SIGINT` handler that calls `.stop()`; returns
-    `None` if already started. An address that cannot be bound raises what
-    `.bind()` raised (`AddressInUseError`, `PermissionError`, ...) out of
-    `.start()`, with nothing bound and the listener unstarted, so it can be
-    started again. `.bind()` itself, when it fails partway, closes the
-    sockets that call opened and keeps the ones an earlier call bound. That handler is given back by `.close()` **on
-    the main thread only** — `signal.signal` raises anywhere else, so the
-    receive thread's own teardown deliberately leaves it installed for a later
-    `.close()` to restore.
-  - `.stop() -> None` / `.wait() -> None` — signal and block on the
-    cancellation `threading.Event`. `.stop()` only asks the loop to exit; the
-    close happens on the receive thread, up to `select_timeout` later.
+  - **Lifecycle** — one state machine on the thread-based listener and on every
+    role built on it (`DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient`):
+    - `.serve_forever() -> None` — binds, then receives on the **calling**
+      thread until `.shutdown()`. Decodes each datagram, resolves the receiving
+      `NetworkInterface`, builds a `DHCPRequestContext` and calls
+      `self.handle(msg, context)`. Receive, decode and `handle()` failures are
+      caught and reported separately (never `KeyboardInterrupt`) so one bad
+      packet never kills the loop; only the `handle()` one carries a traceback.
+      A datagram larger than `max_packet_size` is **dropped, not decoded from
+      its truncated half**. The loop rechecks for shutdown between sockets, so a
+      handler that calls `.shutdown()` is not called again for the rest of the
+      ready set. The sockets stay open on return: `.close()` releases them.
+      Raises what `.bind()` raised, and `RuntimeError` when already serving or
+      closed.
+    - `.start() -> None` — **binds on the caller's thread**, then runs the same
+      loop on a **daemon** thread named `pydhcp-listener` (nothing in the loop
+      ends by itself, so a non-daemon one meant a process that forgot to close
+      never exited). An address that cannot be bound raises what `.bind()`
+      raised (`AddressInUseError`, `PermissionError`, ...) out of `.start()`,
+      with nothing bound and the listener unstarted. `RuntimeError` when
+      already serving or closed: a second `.start()` is an error, never a second
+      thread. `.bind()` itself, when it fails partway, closes the sockets that
+      call opened and keeps the ones an earlier call bound.
+    - `.shutdown() -> None` — asks the loop to end. **Never blocks and is safe
+      from any thread and from a handler**; a wake-up socket ends the wait at
+      once, so it does not wait for a poll. A no-op when nothing is serving.
+      Shut down is not closed: `.serve_forever()` or `.start()` may run again.
+    - `.wait_closed(timeout=None) -> bool` — blocks until the loop has ended and
+      its thread is joined; `False` if `timeout` seconds passed first. Returns
+      at once when nothing is serving. `RuntimeError` on the receive thread
+      itself, which would wait for itself.
+    - `.close() -> None` — `.shutdown()`, `.wait_closed()` (up to five seconds),
+      then release every socket. **Final and repeatable**: `.bind()`,
+      `.start()`, `.serve_forever()` and `with` afterwards raise `RuntimeError`.
+      On the receive thread (a handler calling it) it shuts down and returns
+      without joining; the loop releases the sockets as it ends.
+    - `with listener:` binds on entry (it does not serve) and calls `.close()` on
+      exit.
+    - The library installs **no signal handler**: Ctrl-C reaches
+      `.serve_forever()` as `KeyboardInterrupt`, which the `pydhcp` commands turn
+      into `.shutdown()`. `select_timeout` bounds one wait for a datagram because
+      Windows delivers the interrupt to the main thread between waits.
   - **`.bound_addresses -> tuple[SocketAddress, ...]`** — what this listener is
     actually bound to, read from the sockets rather than from the requested
-    spec. Empty before `.bind()` and after `.close()` — and after `.stop()`
-    *once the receive loop has actually exited*, which is why a caller that
-    cares should join the thread `.start()` returned. This is how a caller that
-    passed port 0 learns the ephemeral port it was given.
+    spec. Empty before `.bind()` and after `.close()`; a listener that was only
+    shut down keeps its sockets. This is how a caller that passed port 0 learns
+    the ephemeral port it was given.
   - **`metrics.packets_dropped_truncated`** / **`metrics.packets_dropped_error`**
     — datagrams that did not fit `max_packet_size`, and datagrams lost to an
     error anywhere in receive/decode/handle. They are `DHCPMetrics` fields, so
@@ -159,21 +174,33 @@ everything below from `pydhcp.listener` itself.
 - **`AsyncDHCPListener(listen=None, max_packet_size=None,
   per_interface=None, max_queued=None)`** — `asyncio` counterpart, with the same receive path,
   the same packet-info wildcard routing and the same `listen` forms as
-  `DHCPListener`. `await .start()` binds and registers each socket with the
-  event loop; `.stop()` unregisters and closes them. `.stop()` is **not** a
-  coroutine — it is reached through the inherited `DHCPListener` contract,
-  where nobody awaits it — but `await .stop()` still works. Same `.handle()`
-  override point and per-instance `self.metrics`.
-  - **`.stop()` is safe to call from a handler**, which runs on the worker
-    thread rather than on the loop: it hands the close back to the loop with
-    `call_soon_threadsafe` instead of running it inline. Nothing it touches is
-    thread-safe — `remove_reader`, `transport.close()` and `Event.set()` all
-    finish through `loop.call_soon`, which queues a callback *without* waking
-    the loop. Measured with a handler calling `stop()` on its worker: Linux's
-    selector loop never woke and `await wait()` blocked forever, while
-    Windows' proactor loop returned in 7 ms. The close is therefore not
-    synchronous when called this way — `bound_addresses` empties on the loop's
-    next turn, not before `stop()` returns.
+  `DHCPListener`. Same `.handle()` override point and per-instance
+  `self.metrics`. The lifecycle mirrors the thread-based one with coroutines
+  where it blocks, on `AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`
+  too:
+  - `await .serve_forever() -> None` — binds, then receives in the **calling**
+    task until `.shutdown()`; the sockets stay open on return. `await .start()
+    -> None` binds and receives in background tasks, one per socket, and returns
+    once receiving. Both raise what `.bind()` raised (with nothing bound, no task
+    and no worker left behind) and `RuntimeError` when already serving or closed:
+    a second `await .start()` is an error and adds no task.
+  - **`.shutdown() -> None`** — not a coroutine; never blocks; safe from any
+    thread and from a handler, which runs on the worker thread: it queues
+    `Event.set` with `call_soon_threadsafe`, because a plain `Event.set()`
+    queues a callback *without* waking a selector loop. Measured with a handler
+    calling it on its worker: Linux's selector loop never woke and
+    `await .wait_closed()` blocked forever, while Windows' proactor loop returned
+    in 7 ms. It closes nothing: the receive tasks end on the loop's next turn and
+    `await .aclose()` releases the sockets.
+  - `await .wait_closed(timeout=None) -> bool` — returns once the receive tasks
+    have ended and the worker is aborted; `False` if `timeout` seconds passed
+    first. Returns at once when nothing is serving.
+  - `await .aclose() -> None` — `.shutdown()`, `.wait_closed()`, then release the
+    sockets. **Final and repeatable**; a task ending `serve_forever()` this way
+    sees it return quietly. `async with listener:` binds on entry (it does not
+    serve) and awaits `.aclose()` on exit. There is no `.close()`, `with`,
+    `.listen()`, `.stop()` or `.wait()`.
+  - The library installs no signal handler (see `DHCPListener`).
   - Handlers run on a single worker thread, not on the event loop: `.handle()`
     is ordinary blocking code, so running it inline stalled every other
     coroutine in the host application. One worker, so handlers still run one
@@ -186,7 +213,7 @@ everything below from `pydhcp.listener` itself.
     that finds the backlog full is **dropped**, counted in
     `metrics.packets_dropped_backlog` and reported at WARNING at most once
     per `BACKLOG_LOG_INTERVAL_SECONDS` (60), the report carrying the count.
-    **Stopping aborts, it does not drain**: queued datagrams are discarded,
+    **Shutting down aborts, it does not drain**: queued datagrams are discarded,
     counted in the same counter and reported once at INFO; only the handler
     already running finishes. `AsyncDHCPServer`, `AsyncDHCPRelay` and
     `AsyncDHCPCapture` take the same `max_queued`.
@@ -194,15 +221,12 @@ everything below from `pydhcp.listener` itself.
     datagram — as on `DHCPListener`, including the oversized-datagram drop; both
     listeners share one private base for them, and neither is a subclass of the
     other. The counters are on `.metrics` only.
-  - `await .wait() -> None` — returns when `.stop()` is called; returns
-    immediately if never started. `.listen()` raises `NotImplementedError`
-    (there is no blocking loop to enter — use `start()` then `wait()`).
   - Receives with one `netimps.UDPEndpoint.arecv()` task per socket, so packet
     info works on **every** loop type, Windows' default proactor loop included.
     A socket retired by a re-`bind()` whose listen list shrank ends its task
     without an error.
-    `.stop()` cancels those tasks and then closes the sockets; `await .stop()`
-    and `await .wait()` both return only once the sockets are closed.
+    Serving ends by cancelling those tasks *before* the sockets are closed, the
+    order netimps documents for a clean shutdown.
 - **`DHCPTransport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
   bytes) -> int`; base raises `NotImplementedError`.
 - **`UDPTransport(socket)`** — plain UDP send. A destination of `0.0.0.0`
@@ -340,8 +364,8 @@ A test that patches a module global patches it in the private module that reads 
     a reference to is therefore safe.
 - **`AsyncDHCPServer(listen=None, max_packet_size=None, lease_backend=None,
   per_interface=None, max_queued=None)`** — the same rules and hooks as
-  `DHCPServer`, running on `AsyncDHCPListener`. It has no `__enter__`,
-  `__exit__` or `close()`.
+  `DHCPServer`, running on `AsyncDHCPListener`: `async with`, `await .aclose()`,
+  `await .serve_forever()` and `.shutdown()` as there, and no `with` or `.close()`.
 
 ## Client (`client.py`)
 
@@ -425,9 +449,10 @@ A test that patches a module global patches it in the private module that reads 
     jittered negative.
 
 **Gotcha**: `.dora()`/`.discover_offer()` require the listener's receive loop
-to actually be running (`client.start()`) — replies only reach the internal
-queue via `.handle()`, which the background thread calls. A `DHCPClient`
-that's never started will always time out waiting for a reply.
+to actually be running (`client.start()`, and `client.close()` when done) —
+replies only reach the internal queue via `.handle()`, which the background
+thread calls. A `DHCPClient` that's never started will always time out waiting
+for a reply.
 
 ## Relay (`relay/`)
 
@@ -460,7 +485,8 @@ that's never started will always time out waiting for a reply.
   `select_timeout` (the sync receive loop's poll interval, which asyncio has no
   use for), and both constructors share the core's state setup, so the
   `server_addresses` and `max_hops` validation cannot be enforced on one and not
-  the other. Drive it with `await .start()` / `await .wait()` / `.stop()`.
+  the other. Drive it with `await .serve_forever()` or `await .start()`, `.shutdown()`,
+  `await .wait_closed()` and `await .aclose()`.
   - `_pending_clients` is unguarded on both. What keeps it safe here is that
     `AsyncDHCPListener` runs handlers on **one** worker thread, so `handle()`
     is still serialised and in arrival order — the same guarantee the lease
@@ -504,8 +530,8 @@ observed by this relay instance.
   or a `Callable[[CaptureEvent], bool]`; `sink` gets every accepted event;
   `hook` also gets every accepted event but exceptions are only logged
   unless `hook_fail_fast=True`, in which case the failure is re-raised, stored
-  on `self.hook_error` and the receive loop is stopped. Check `hook_error`
-  after `listen()` returns to tell a hook failure from an ordinary shutdown --
+  on `self.hook_error` and the receive loop is shut down. Check `hook_error`
+  after `serve_forever()` returns to tell a hook failure from an ordinary shutdown --
   re-raising alone does not reach the caller, because `handle()` runs inside
   the listener's per-packet exception handler. `self.accepted_count` tracks
   how many events passed the filter.
@@ -559,16 +585,17 @@ IPv6-only interface can break at runtime.
   filter/sink/hook rules running on `AsyncDHCPListener`: a sibling of
   `DHCPCapture` over one private core, not a subclass. Identical arguments minus
   `select_timeout`, and both constructors share the core's state setup. Drive
-  it with `await .start()` / `await .wait()` / `.stop()` rather than
-  `.listen()`, and check `.hook_error` after `.wait()` returns.
+  it with `await .serve_forever()` or `await .start()`, `.shutdown()`,
+  `await .wait_closed()` and `await .aclose()`, and check `.hook_error` after
+  `.wait_closed()` returns.
   - `accepted_count`, `hook_error` and whatever a `sink` keeps are unguarded on
     both, and the single handler worker is again the whole guarantee — the sink
     runs on it too, so a per-run budget such as the CLI's `--count` needs no
     lock and no library-side state of its own.
-  - `hook_fail_fast` stops the capture through `AsyncDHCPListener.stop()`,
-    called from that worker thread; see the `.stop()` note under
-    `AsyncDHCPListener` for why the close is deferred to the loop and is not
-    complete by the time `handle()` re-raises.
+  - `hook_fail_fast` shuts the capture down through
+    `AsyncDHCPListener.shutdown()`, called from that worker thread; see the
+    `.shutdown()` note under `AsyncDHCPListener` for why the sockets are still
+    open when `handle()` re-raises: `await .aclose()` releases them.
 
 - **Type aliases** (`pydhcp.capture`, not re-exported from the top level, so
   import them from the module): **`CaptureSink = Callable[[CaptureEvent],
