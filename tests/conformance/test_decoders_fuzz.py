@@ -13,7 +13,7 @@ import typing as _ty
 import pytest
 
 from pydhcp.options import DHCPOptionCode
-from pydhcp.options import type as t
+from pydhcp.options import _codecs as t
 
 SEEDS = [
     b"",

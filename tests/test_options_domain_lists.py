@@ -13,8 +13,8 @@ from __future__ import annotations
 import pytest
 
 from pydhcp.options import DHCPOptions
-from pydhcp.options.code import DHCPOptionCode
-from pydhcp.options.type import DomainList, RDNSSSelection, UncompressedDomainList
+from pydhcp.options._codes import DHCPOptionCode
+from pydhcp.options._codecs import DomainList, RDNSSSelection, UncompressedDomainList
 
 #: A list whose second name is a suffix-match for the first, so a compressing
 #: encoder has something to point at and the difference is visible in bytes.

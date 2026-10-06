@@ -28,9 +28,9 @@ import pytest
 
 import pydhcp
 import pydhcp.options as _options
-import pydhcp.options.registry as _registry
-from pydhcp.options import code as _code
-from pydhcp.options.code import DHCPOptionCode
+import pydhcp.options._registry as _registry
+from pydhcp.options import _codes as _code
+from pydhcp.options._codes import DHCPOptionCode
 
 #: The tree under test, so a subprocess imports the same one pytest did rather
 #: than whatever an editable install happens to point at.
@@ -65,16 +65,16 @@ def test_a_failed_registry_import_is_retried(monkeypatch: pytest.MonkeyPatch) ->
     """
     monkeypatch.setattr(_code, "_REGISTRY_LOADED", False)
     monkeypatch.setattr(_code, "_REGISTRY_LOADING", False)
-    monkeypatch.setitem(sys.modules, "pydhcp.options.registry", None)
-    monkeypatch.delattr(_options, "registry")
+    monkeypatch.setitem(sys.modules, "pydhcp.options._registry", None)
+    monkeypatch.delattr(_options, "_registry")
 
     with pytest.raises(ImportError):
         DHCPOptionCode.ensure_registered()
     assert _code._REGISTRY_LOADED is False, "a failed import was recorded as loaded"
     assert _code._REGISTRY_LOADING is False, "the in-progress guard was not cleared"
 
-    monkeypatch.setitem(sys.modules, "pydhcp.options.registry", _registry)
-    monkeypatch.setattr(_options, "registry", _registry, raising=False)
+    monkeypatch.setitem(sys.modules, "pydhcp.options._registry", _registry)
+    monkeypatch.setattr(_options, "_registry", _registry, raising=False)
     DHCPOptionCode.ensure_registered()
     assert _code._REGISTRY_LOADED is True, "the retry did not take"
 
@@ -91,8 +91,8 @@ def test_the_loaded_flag_is_not_published_while_the_registry_runs() -> None:
     out = _run("""
         import sys
         import pydhcp.options as opts
-        from pydhcp.options import code as c
-        from pydhcp.options.code import DHCPOptionCode
+        from pydhcp.options import _codes as c
+        from pydhcp.options._codes import DHCPOptionCode
 
         seen = []
         original = DHCPOptionCode.register_type
@@ -122,9 +122,9 @@ def test_a_registration_made_before_the_lazy_load_survives_it() -> None:
     later one.
     """
     out = _run("""
-        from pydhcp.options import code as c
-        from pydhcp.options.code import DHCPOptionCode
-        from pydhcp.options.type import Bytes
+        from pydhcp.options import _codes as c
+        from pydhcp.options._codes import DHCPOptionCode
+        from pydhcp.options._codecs import Bytes
 
         class MyDnsCodec(Bytes):
             pass

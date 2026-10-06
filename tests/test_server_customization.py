@@ -614,7 +614,7 @@ def test_configured_client_still_gets_a_unicast_reply() -> None:
 
 
 def _discover_requesting(seconds=None):
-    from pydhcp.options import type as _optype
+    from pydhcp.options import _codecs as _optype
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
@@ -743,7 +743,7 @@ def test_relayed_client_on_another_subnet_is_refused_not_misconfigured():
 
 
 def _discover_requesting_ip(ip):
-    from pydhcp.options import type as _optype
+    from pydhcp.options import _codecs as _optype
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER

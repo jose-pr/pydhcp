@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from .base import (
+from ._base import (
     DHCPOptionType as DHCPOptionType,
     List as List,
     RecordList as RecordList,
@@ -12,7 +12,7 @@ from .base import (
 # worked only while it was imported last, and hoisting this block produced an
 # ImportError from a partially initialised module. It is now a sibling that
 # imports `.base`/`.addresses`/`.scalar` directly, so any order works.
-from .ccc import (
+from ._ccc import (
     CCCOption as CCCOption,
     CCCSubOption as CCCSubOption,
     CCCPrimaryDHCPServerAddress as CCCPrimaryDHCPServerAddress,
@@ -37,31 +37,31 @@ from .ccc import (
     CCCSecurityTicketControlSubOption as CCCSecurityTicketControlSubOption,
     CCCKDCServerAddressSubOption as CCCKDCServerAddressSubOption,
 )
-from .mos import (
+from ._mos import (
     MoSIPv4AddressRecord as MoSIPv4AddressRecord,
     MoSFQDNRecord as MoSFQDNRecord,
     MoSIPv4AddressList as MoSIPv4AddressList,
     MoSFQDNList as MoSFQDNList,
 )
-from .addresses import (
+from ._addresses import (
     IPv4AddressOption as IPv4AddressOption,
     ClasslessRoute as ClasslessRoute,
     PolicyFilter as PolicyFilter,
     StaticRoute as StaticRoute,
 )
-from .domains import (
+from ._domains import (
     DomainList as DomainList,
     UncompressedDomainList as UncompressedDomainList,
     DomainName as DomainName,
 )
-from .fqdn import ClientFQDN as ClientFQDN
-from .servers import (
+from ._fqdn import ClientFQDN as ClientFQDN
+from ._servers import (
     RDNSSSelection as RDNSSSelection,
     SIPServers as SIPServers,
     StatusCode as StatusCode,
     PCPServerList as PCPServerList,
 )
-from .scalar import (
+from ._scalar import (
     Bytes as Bytes,
     URIList as URIList,
     String as String,
@@ -77,7 +77,7 @@ from .scalar import (
     ClientIdentifier as ClientIdentifier,
     OptionOverload as OptionOverload,
 )
-from .vendor import (
+from ._vendor import (
     UserClass as UserClass,
     TLVOption as TLVOption,
     EncapsulatedOptions as EncapsulatedOptions,

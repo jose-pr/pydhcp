@@ -14,11 +14,11 @@ import pytest
 from pydhcp import _config as config
 from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode, DHCPOptions
-from pydhcp.options.type import DomainList, OptionOverload
-from pydhcp.options.type.base import DHCPOptionCodes
-from pydhcp.options.type.ccc import CCCProvisioningServerAddress
-from pydhcp.options.type.addresses import IPv4AddressOption
-from pydhcp.options.type.scalar import U32
+from pydhcp.options._codecs import DomainList, OptionOverload
+from pydhcp.options._codecs._base import DHCPOptionCodes
+from pydhcp.options._codecs._ccc import CCCProvisioningServerAddress
+from pydhcp.options._codecs._addresses import IPv4AddressOption
+from pydhcp.options._codecs._scalar import U32
 from pydhcp.packet import DHCPMessageType
 from pydhcp.packet import _message as _message
 from pydhcp.packet import structured
@@ -121,7 +121,7 @@ def test_ccc_address_narrows_its_except_to_valueerror() -> None:
     def _explode(_value: object) -> object:
         raise RuntimeError("codec defect")
 
-    import pydhcp.options.type.ccc as ccc
+    import pydhcp.options._codecs._ccc as ccc
 
     original = ccc.IPv4AddressOption
     ccc.IPv4AddressOption = _explode  # type: ignore[assignment]

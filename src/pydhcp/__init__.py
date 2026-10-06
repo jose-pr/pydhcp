@@ -23,7 +23,7 @@ from .options import (
     DHCPOption as DHCPOption,
     DHCPOptionCode as DHCPOptionCode,
 )
-from .options.type import (
+from .options._codecs import (
     DHCPOptionType as DHCPOptionType,
     DHCPOptionCodes as DHCPOptionCodes,
     ClasslessRoute as ClasslessRoute,

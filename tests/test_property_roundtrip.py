@@ -13,7 +13,7 @@ from ipaddress import IPv4Network
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.packet._message import DHCPMessage
-from pydhcp.options.type import (
+from pydhcp.options._codecs import (
     U8,
     U16,
     U32,

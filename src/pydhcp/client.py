@@ -17,7 +17,7 @@ from .packet import _enums as _enum
 from .listener import DHCPListener, ListenSpec, DHCPRequestContext, UDPTransport
 from .packet._message import DHCPMessage
 from .options import DHCPOptionCode, DHCPOptions
-from .options import type as _type
+from .options import _codecs as _type
 
 LOGGER = _logging.getLogger(__name__)
 

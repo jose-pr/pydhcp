@@ -4,7 +4,7 @@ import asyncio
 import socket
 import time
 from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPOptions
-from pydhcp.options.type import IPv4AddressOption
+from pydhcp.options._codecs import IPv4AddressOption
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4

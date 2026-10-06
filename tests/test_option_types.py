@@ -1,7 +1,7 @@
 import pytest
 import logging
 import json
-from pydhcp.options.type import (
+from pydhcp.options._codecs import (
     List,
     IPv4AddressOption,
     String,
@@ -436,7 +436,7 @@ def test_signed_i32_round_trip():
 
 
 def test_domain_list_option():
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     # Encode list of domains
     dl = DomainList(["example.com", "sub.example.com"])
@@ -457,7 +457,7 @@ def test_domain_list_option():
 def test_domain_list_survives_domain_after_pointer_terminated_domain():
     # Regression test: a domain following one that ends in a compression
     # pointer (rather than a literal 0x00) must not be silently dropped.
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     dl = DomainList(["0", "0.0", "0"])
     buf = bytearray()
@@ -493,7 +493,7 @@ def test_uri_list_option_round_trip_and_truncation():
 
 
 def test_client_identifier_option():
-    from pydhcp.options.type import ClientIdentifier
+    from pydhcp.options._codecs import ClientIdentifier
 
     with pytest.raises(ValueError):
         ClientIdentifier._dhcp_read(memoryview(b"\x01"))  # Too short
@@ -504,7 +504,7 @@ def test_client_identifier_option():
 
 
 def test_option_overload_option():
-    from pydhcp.options.type import OptionOverload
+    from pydhcp.options._codecs import OptionOverload
 
     oo = OptionOverload.BOTH
     buf = bytearray()
@@ -610,7 +610,7 @@ def test_domainlist_rejects_compression_pointer_cycles(payload, label):
     RecursionError is not a ValueError, so it escapes the codec's error contract
     and reaches the listener's receive loop.
     """
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     with pytest.raises(ValueError):
         DomainList._dhcp_read(memoryview(bytearray(payload)))
@@ -626,7 +626,7 @@ def test_domainlist_decode_output_is_bounded_by_the_payload():
     255-octet name limit instead of expanding into names that grow with each
     resolution (tests/conformance/test_rfc3397_names.py covers the shapes).
     """
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     plain = DomainList._dhcp_decode(bytearray(b"\x01a\x00" * 2000))
     assert len(plain) == 2000
@@ -644,7 +644,7 @@ def test_domainlist_decode_output_is_bounded_by_the_payload():
 
 def test_domainlist_still_follows_backward_pointers():
     """The cycle guard must not break legitimate RFC 1035 compression."""
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     # "example.com" at offset 0, then "sub" + pointer back to "example.com".
     payload = bytearray(b"\x07example\x03com\x00\x03sub\xc0\x00")
@@ -664,7 +664,7 @@ def test_client_fqdn_decodes_the_form_windows_clients_send():
     splits at the first NUL -- so a server reading option 81 for DDNS saw no
     name at all, with no error to notice.
     """
-    from pydhcp.options.type import ClientFQDN
+    from pydhcp.options._codecs import ClientFQDN
 
     wire = bytes([0x00, 0x00, 0x00]) + b"DESKTOP-K7N2A91"
     decoded = ClientFQDN._dhcp_decode(bytearray(wire))
@@ -676,7 +676,7 @@ def test_client_fqdn_decodes_the_form_windows_clients_send():
 
 def test_client_fqdn_round_trips_the_canonical_encoded_form():
     """E bit set means RFC 1035 wire format (RFC 4702 s2.1)."""
-    from pydhcp.options.type import ClientFQDN
+    from pydhcp.options._codecs import ClientFQDN
 
     value = ClientFQDN(
         "pc-lab7.example.com", flags=ClientFQDN.FLAG_E | ClientFQDN.FLAG_S
@@ -691,7 +691,7 @@ def test_client_fqdn_round_trips_the_canonical_encoded_form():
 
 
 def test_client_fqdn_rejects_malformed_input():
-    from pydhcp.options.type import ClientFQDN
+    from pydhcp.options._codecs import ClientFQDN
     import pytest as _pytest
 
     with _pytest.raises(ValueError):
@@ -709,7 +709,7 @@ def test_sip_servers_carries_the_encoding_octet():
     """RFC 3361 s3.1: enc 1 is an address list, and its length must be a
     multiple of 4 plus one. Without the octet, a phone reads the first address
     byte as the encoding and rejects the option."""
-    from pydhcp.options.type import SIPServers
+    from pydhcp.options._codecs import SIPServers
 
     value = SIPServers(["192.0.2.1", "192.0.2.2"])
     wire = bytes(value._dhcp_encode())
@@ -724,7 +724,7 @@ def test_sip_servers_carries_the_encoding_octet():
 
 
 def test_sip_servers_domain_encoding():
-    from pydhcp.options.type import SIPServers
+    from pydhcp.options._codecs import SIPServers
 
     value = SIPServers(["sip.example.com"], SIPServers.ENCODING_DOMAIN)
     wire = bytes(value._dhcp_encode())
@@ -736,7 +736,7 @@ def test_sip_servers_domain_encoding():
 
 
 def test_sip_servers_rejects_bad_encodings_and_lengths():
-    from pydhcp.options.type import SIPServers
+    from pydhcp.options._codecs import SIPServers
     import pytest as _pytest
 
     with _pytest.raises(ValueError):
@@ -771,7 +771,7 @@ def test_name_service_search_is_a_list_of_option_codes():
 
 
 def test_domain_helper_round_trips():
-    from pydhcp.options.type.domain import decode_domain_name, encode_domain_name
+    from pydhcp.options._codecs._domain import decode_domain_name, encode_domain_name
 
     wire = encode_domain_name("sip.example.com")
     assert wire == bytes([3]) + b"sip" + bytes([7]) + b"example" + bytes(
@@ -789,7 +789,7 @@ def test_domain_helper_rejects_compression_pointers():
     one. RFC 4702 s3.1, RFC 3361 s3.1 and RFC 3495 all forbid compression here."""
     import pytest as _pytest
 
-    from pydhcp.options.type.domain import decode_domain_name
+    from pydhcp.options._codecs._domain import decode_domain_name
 
     payload = bytes([0x03]) + b"lab" + bytes([0xC0, 0x00])
     with _pytest.raises(ValueError, match="compression pointer"):
@@ -799,7 +799,7 @@ def test_domain_helper_rejects_compression_pointers():
 def test_domain_helper_enforces_the_rfc1035_limits():
     import pytest as _pytest
 
-    from pydhcp.options.type.domain import encode_domain_name
+    from pydhcp.options._codecs._domain import encode_domain_name
 
     with _pytest.raises(ValueError, match="63 octets"):
         encode_domain_name("a" * 64)
@@ -814,7 +814,7 @@ def test_domain_helper_root_name_is_opt_in():
     an empty name is a caller mistake -- and these codecs rejected it before."""
     import pytest as _pytest
 
-    from pydhcp.options.type.domain import encode_domain_name
+    from pydhcp.options._codecs._domain import encode_domain_name
 
     assert encode_domain_name("", allow_root=True) == bytes([0])
     with _pytest.raises(ValueError, match="must not be empty"):
@@ -825,11 +825,11 @@ def test_ccc_and_mos_inherit_the_shared_checks():
     """Convergence has to reach the callers, or it is just a fourth copy."""
     import pytest as _pytest
 
-    from pydhcp.options.type.ccc import (
+    from pydhcp.options._codecs._ccc import (
         _decode_no_compression_domain,
         _encode_no_compression_domain,
     )
-    from pydhcp.options.type import MoSFQDNList, MoSFQDNRecord
+    from pydhcp.options._codecs import MoSFQDNList, MoSFQDNRecord
 
     pointer = memoryview(bytearray(bytes([0x03]) + b"lab" + bytes([0xC0, 0x00])))
     with _pytest.raises(ValueError, match="compression pointer"):
@@ -856,7 +856,7 @@ def test_domainlist_enforces_the_shared_rfc1035_limits() -> None:
     length, and its own decoder then rejected what it had just written. The
     limits now come from the same helper the uncompressed codecs use.
     """
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     for label_len in (64, 192):
         with pytest.raises(ValueError, match="63 octets"):
@@ -879,7 +879,7 @@ def test_domainlist_root_entry_round_trips() -> None:
     Writing both made it decode as *two* names, so a search list containing the
     root gained an entry on every encode/decode cycle.
     """
-    from pydhcp.options.type import DomainList
+    from pydhcp.options._codecs import DomainList
 
     for case in ([""], ["example.com", ""]):
         buf = bytearray()
@@ -940,7 +940,7 @@ def test_status_code_carries_its_optional_message():
     and could not be decoded at all.
     """
     from pydhcp.options import DHCPOptionCode
-    from pydhcp.options.type import StatusCode
+    from pydhcp.options._codecs import StatusCode
 
     codec = DHCPOptionCode(151).get_type()
     assert codec is StatusCode
@@ -969,7 +969,7 @@ def test_dns_name_options_are_label_sequences_not_dotted_text():
     emitted dotted text a conforming receiver cannot parse.
     """
     from pydhcp.options import DHCPOptionCode
-    from pydhcp.options.type import DomainName
+    from pydhcp.options._codecs import DomainName
 
     wire = b"\x07example\x03com\x00"
     for code in (147, 213):
@@ -991,7 +991,7 @@ def test_vendor_class_identifier_keeps_binary_payloads():
     had nothing left to match on.
     """
     from pydhcp.options import DHCPOptionCode
-    from pydhcp.options.type import OctetString
+    from pydhcp.options._codecs import OctetString
 
     codec = DHCPOptionCode(60).get_type()
     assert codec is OctetString
@@ -1050,7 +1050,7 @@ def test_record_codecs_are_hashable_and_lists_are_not():
     genuinely mutable, so `list.__hash__ is None` is correct for them and this
     test asserts that too, to keep a future "fix" from making them hashable.
     """
-    import pydhcp.options.type as _type
+    import pydhcp.options._codecs as _type
 
     records = []
     lists = []

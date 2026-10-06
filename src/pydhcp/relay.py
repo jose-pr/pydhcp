@@ -18,7 +18,7 @@ from .listener import (
 from . import _constants as _const, _network as _net
 from .packet import _enums as _enum
 from .options import DHCPOptionCode
-from .options import type as _type
+from .options import _codecs as _type
 from .server.reply import _is_loopback
 
 LOGGER = _logging.getLogger(__name__)

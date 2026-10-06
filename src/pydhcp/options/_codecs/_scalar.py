@@ -7,7 +7,7 @@ from ... import _nvt as _nvt
 from ..._network import HardwareAddressType as _HardwareAddressType
 
 
-from .base import DHCPOptionType
+from ._base import DHCPOptionType
 
 _BytesT = _ty.TypeVar("_BytesT", bound="Bytes")
 

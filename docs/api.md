@@ -46,7 +46,7 @@ serve a private or vendor option space instead of the IANA registry above.
 
 ## Option Types
 
-::: pydhcp.options.type
+::: pydhcp.options._codecs
 
 ## DHCPServer
 

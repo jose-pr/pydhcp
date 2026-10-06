@@ -8,8 +8,8 @@ encoder wrote character counts, so the two disagreed for every non-ASCII name.
 
 import pytest
 
-from pydhcp.options.type.domain import decode_domain_name
-from pydhcp.options.type.domains import DomainList
+from pydhcp.options._codecs._domain import decode_domain_name
+from pydhcp.options._codecs._domains import DomainList
 
 # "bücher" is 6 characters and 7 octets -- the smallest case that separates
 # len(str) from len(str.encode()).

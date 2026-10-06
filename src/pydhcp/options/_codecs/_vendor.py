@@ -4,8 +4,8 @@ import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from .base import DHCPOptionType, RecordList, hashable_payload
-from .scalar import Bytes
+from ._base import DHCPOptionType, RecordList, hashable_payload
+from ._scalar import Bytes
 
 _LengthPrefixedOpaqueListT = _ty.TypeVar(
     "_LengthPrefixedOpaqueListT", bound="_LengthPrefixedOpaqueList"

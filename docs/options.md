@@ -72,7 +72,7 @@ from ipaddress import ip_network
 from pydhcp import DHCPOptions
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
-from pydhcp.options.type import ClasslessRoute
+from pydhcp.options._codecs import ClasslessRoute
 
 options = DHCPOptions()
 # RFC 3442 carries one or more routes, and a server sending option 121 SHOULD
@@ -103,7 +103,7 @@ from ipaddress import ip_network
 from pydhcp import DHCPOptions
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
-from pydhcp.options.type import Boolean, ClasslessRoute
+from pydhcp.options._codecs import Boolean, ClasslessRoute
 
 options = DHCPOptions()
 options[DHCPOptionCode.RAPID_COMMIT] = True

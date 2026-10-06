@@ -23,8 +23,8 @@ version, read from its metadata).
 not re-exported here. They are option **codecs** and a bare name would not say
 so; the address codec is `IPv4AddressOption` so that the bare name
 `IPv4Address` is only ever the address type, and `isinstance(interface.ip,
-pydhcp.options.type.IPv4AddressOption)` is **False**. Import them from
-**`pydhcp.options.type`**, which is where they have always lived. The stdlib
+pydhcp.options._codecs.IPv4AddressOption)` is **False**. Import them from
+**`pydhcp.options._codecs`**, which is where they have always lived. The stdlib
 address type is **`pydhcp.IPv4`**.
 
 The other codecs stay re-exported, including `U8`/`U16`/`U32` and the

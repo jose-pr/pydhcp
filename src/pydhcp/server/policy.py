@@ -12,7 +12,7 @@ import typing as _ty
 from .. import _constants as _const, _network as _net
 from ..lease import DHCPLease, LeaseBackend
 from ..options import DHCPOptionCode, DHCPOptions
-from ..options import type as _type
+from ..options import _codecs as _type
 from ..packet._message import DHCPMessage
 from math import inf as _inf
 from ._state import _ServerState

@@ -5,7 +5,7 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from ..._generic import GenericMeta
 
 if _ty.TYPE_CHECKING:
-    from ..base import BaseDHCPOptionCode
+    from .._codes import BaseDHCPOptionCode
 
 
 _DHCPOptionTypeT = _ty.TypeVar("_DHCPOptionTypeT", bound="DHCPOptionType")

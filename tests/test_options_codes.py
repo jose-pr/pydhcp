@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 
 from pydhcp.options import DHCPOptions, MAX_OPTION_CODE, MIN_OPTION_CODE
-from pydhcp.options.base import BaseDHCPOptionCode
-from pydhcp.options.code import DHCPOptionCode
+from pydhcp.options._codes import BaseDHCPOptionCode
+from pydhcp.options._codes import DHCPOptionCode
 
 
 def test_pad_and_end_are_not_storable_options() -> None:

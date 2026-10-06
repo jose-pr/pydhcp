@@ -133,8 +133,8 @@ is a separate typing decision.
 - **`HardwareAddressType`** (`IntEnum`) — **defined in `pydhcp._network`** and
   re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
   the spelling to use for the `htype` header field. It lives one layer down
-  because `pydhcp.options.type` needs it too and this module imports
-  `pydhcp.options.type`. See `pydhcp/network/AGENTS.md` for the full entry.
+  because `pydhcp.options._codecs` needs it too and this module imports
+  `pydhcp.options._codecs`. See `pydhcp/network/AGENTS.md` for the full entry.
 
 ## Structured (de)serialization (`structured.py`)
 

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from .code import DHCPOptionCode
+from ._codes import DHCPOptionCode
 from ..packet._enums import DHCPMessageType
-from .type import *
+from ._codecs import *
 
 DHCPOptionCode.TIME_OFFSET.register_type(I32)
 DHCPOptionCode.RFC868_TIMESERVER.register_type(List[IPv4AddressOption])

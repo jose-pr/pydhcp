@@ -2,10 +2,10 @@
 
 Header-file-style reference for `pydhcp.options`: the DHCP options
 container, the option-code registry, and the option payload codecs
-(`pydhcp.options.type`). Most exports are also re-exported from the top-level
+(`pydhcp.options._codecs`). Most exports are also re-exported from the top-level
 `pydhcp` package -- **except `IPv4AddressOption`, `List`, `Bytes`, `String` and
 `Boolean`**, whose bare names did not say they were codecs; import those from
-`pydhcp.options.type`. The top-level package header ships beside this
+`pydhcp.options._codecs`. The top-level package header ships beside this
 one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
 of the installed package).
@@ -130,7 +130,7 @@ automatic. Option 125 is enterprise-number records, not generic TLVs. The
 `DHCPOptionCode.SIXRD` is IANA option 212 (`OPTION_6RD`); `GRD` is an alias member
 of it, so `DHCPOptionCode(212).name` is `SIXRD`.
 
-## Option payload codecs (`pydhcp.options.type`)
+## Option payload codecs (`pydhcp.options._codecs`)
 
 Every codec implements the `DHCPOptionType` protocol: `_dhcp_read(option:
 memoryview) -> tuple[Self, int]` (classmethod decode + bytes consumed),
@@ -203,7 +203,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
 
 Split by family: addresses and routes, domain-name lists and single names, the
 client FQDN, and server-locator/status codecs. Import every one of them from
-`pydhcp.options.type`.
+`pydhcp.options._codecs`.
 
 - **`IPv4AddressOption`** (`ipaddress.IPv4Address` subclass) — single 4-byte IPv4
   address.

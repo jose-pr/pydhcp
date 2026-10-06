@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from .base import DHCPOptionType
-from .domain import decode_domain_name, encode_domain_name
+from ._base import DHCPOptionType
+from ._domain import decode_domain_name, encode_domain_name
 
 _ClientFQDNT = _ty.TypeVar("_ClientFQDNT", bound="ClientFQDN")
 

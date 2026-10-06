@@ -4,10 +4,10 @@ import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from .base import DHCPOptionType, List, RecordList, hashable_payload
-from .domain import decode_domain_name, encode_domain_name
-from .addresses import IPv4AddressOption
-from .scalar import Bytes
+from ._base import DHCPOptionType, List, RecordList, hashable_payload
+from ._domain import decode_domain_name, encode_domain_name
+from ._addresses import IPv4AddressOption
+from ._scalar import Bytes
 
 _MoSLabelListT = _ty.TypeVar("_MoSLabelListT", bound="_MoSLabelList")
 

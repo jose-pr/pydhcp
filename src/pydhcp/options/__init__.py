@@ -3,10 +3,10 @@ from __future__ import annotations
 import logging as _logging
 import typing as _ty
 import builtins as _builtins
-from .base import BaseDHCPOptionCode as BaseDHCPOptionCode, DHCPOption as DHCPOption
-from .type import DHCPOptionType as DHCPOptionType
-from .type import *  # noqa: F403
-from .code import DHCPOptionCode as DHCPOptionCode
+from ._codes import BaseDHCPOptionCode as BaseDHCPOptionCode, DHCPOption as DHCPOption
+from ._codecs import DHCPOptionType as DHCPOptionType
+from ._codecs import *  # noqa: F403
+from ._codes import DHCPOptionCode as DHCPOptionCode
 from .. import _constants as _const
 from .._missing import MISSING as _MISSING
 from math import inf as _inf

@@ -11,7 +11,7 @@ from pydhcp import (
     DHCPOptions,
     IPv4,
 )
-from pydhcp.options.type import IPv4AddressOption
+from pydhcp.options._codecs import IPv4AddressOption
 from pydhcp.options import DHCPOptionCode
 
 

@@ -6,7 +6,7 @@ import typing as _ty
 
 from .. import _constants as _const, _nvt as _nvt
 from ..options import DHCPOptionCode
-from ..options import type as _type
+from ..options import _codecs as _type
 from ._decode import _MessageDecode
 from ._fields import (
     _FIXED_HEADER_SIZE,

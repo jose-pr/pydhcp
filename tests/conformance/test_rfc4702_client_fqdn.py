@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from pydhcp.options import DHCPOptions
-from pydhcp.options.type import ClientFQDN
+from pydhcp.options._codecs import ClientFQDN
 
 E = ClientFQDN.FLAG_E
 S = ClientFQDN.FLAG_S

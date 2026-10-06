@@ -26,7 +26,7 @@ _WITH_ALL = [
     "pydhcp.cli",
     "pydhcp.exceptions",
     "pydhcp.listener",
-    "pydhcp.options.type",
+    "pydhcp.options._codecs",
     "pydhcp.packet",
     "pydhcp.packet._enums",
     "pydhcp.packet._message",
@@ -45,9 +45,9 @@ _WITHOUT_ALL = [
     "pydhcp._network",
     "pydhcp._nvt",
     "pydhcp.options",
-    "pydhcp.options.base",
-    "pydhcp.options.code",
-    "pydhcp.options.registry",
+    "pydhcp.options._codes",
+    "pydhcp.options._codes",
+    "pydhcp.options._registry",
     "pydhcp.packet.structured",
     "pydhcp.relay",
 ]
@@ -123,9 +123,8 @@ def test_the_option_bag_annotations_can_be_evaluated(member: str) -> None:
     assert hints, f"{member} resolved to no hints at all"
 
 
-def test_the_option_submodule_really_does_shadow_the_builtin() -> None:
-    """The premise of the qualification in `pydhcp.options`, pinned."""
+def test_the_option_codec_package_does_not_shadow_the_builtin() -> None:
+    """The codec package is `_codecs`: nothing in `pydhcp.options` is named `type`."""
     import pydhcp.options as options_module
 
-    assert options_module.type is not type
-    assert options_module.type.__name__ == "pydhcp.options.type"
+    assert not hasattr(options_module, "type")

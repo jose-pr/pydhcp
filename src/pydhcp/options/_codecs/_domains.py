@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import typing as _ty
 from ...exceptions import DHCPDecodeError
-from .base import DHCPOptionType
-from .domain import (
+from ._base import DHCPOptionType
+from ._domain import (
     MAX_NAME_OCTETS,
     decode_domain_name,
     encode_domain_name,

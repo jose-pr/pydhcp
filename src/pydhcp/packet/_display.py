@@ -9,7 +9,7 @@ import typing as _ty
 from .. import _nvt as _nvt
 from ..exceptions import NoClientIdentityError
 from ..options import BaseDHCPOptionCode, DHCPOptionCode
-from ..options import type as _type
+from ..options import _codecs as _type
 from ._mapping import _MessageMapping
 
 if _ty.TYPE_CHECKING:

@@ -6,12 +6,12 @@ import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _nvt as _nvt
 from ipaddress import IPv4Address as _IP
-from .base import DHCPOptionType
-from .domain import decode_domain_name, encode_domain_name
+from ._base import DHCPOptionType
+from ._domain import decode_domain_name, encode_domain_name
 from collections.abc import Iterable
 
 
-from .domains import UncompressedDomainList
+from ._domains import UncompressedDomainList
 
 _RDNSSSelectionT = _ty.TypeVar("_RDNSSSelectionT", bound="RDNSSSelection")
 
