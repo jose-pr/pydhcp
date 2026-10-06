@@ -757,30 +757,38 @@ client that is never started will always time out waiting for a reply.
   the type of each `server_addresses` entry: `IPv4AddressLike |
   tuple[IPv4AddressLike, int]`. A bare entry defaults to port 67.
 
-**Gotcha**: a relay reply must not assume the client listens on well-known
-port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
-`DHCPRelay` tracks `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
-recorded on forward and read on reply, so clients on non-standard ports still
-get routed correctly; it falls back to port 68 when the exchange was never
-observed by this relay instance.
+**Where a reply goes.** A reply is sent from the address in its `giaddr`, out of
+the interface that holds it (`netimps.get_interface(giaddr, cache=True)`; RFC
+1542 §4.1.2: "The 'giaddr' field can be used to identify the logical interface
+from which the reply must be sent"), so the relay remembers nothing per exchange
+to choose the interface. The relay stamped `giaddr` with the ingress address and
+the server echoes it. A reply whose `giaddr` is not an address of the relay (0
+included) is **dropped** and counted in `metrics.packets_dropped_unknown_giaddr`
+(§4.1.2: "MUST be silently discarded"). A reply goes to port 68 unless the
+exchange has an entry in the pending table.
 
+- **The pending table holds only the port of a client that is not on port 68.**
+  `DHCPRelay` keeps `(xid, chaddr) -> PendingClient` in `self._pending_clients`,
+  recorded on forward and read on reply, so a client on a non-standard port (a
+  test harness, an unusual deployment) is answered there; a request from port 68
+  records nothing, so a flood from port 68 occupies no entry.
 - **Keyed by client as well as transaction.** An xid alone is not an identity:
   it is cleartext in a broadcast DISCOVER, so any host on the segment can read
-  one and send its own request carrying it. Keyed by xid alone that overwrote
-  the victim's entry and the reply went to the attacker's port. An entry is
-  also never replaced by a request from a *different* source address.
+  one and send its own request carrying it. A request that reuses the
+  transaction of a live entry from a *different* source address is dropped (not
+  forwarded) and counted in `metrics.packets_dropped_reused_transaction`; one from
+  the same address with another port replaces the entry (an unconfigured client's
+  address is 0.0.0.0, so the address is all that can be compared).
 - **Read, not consumed.** Every configured server sends its own reply, and they
   all belong to the same client, so the entry stays until
   `DHCPRelay.PENDING_TTL_SECONDS` (60) rather than being popped by whichever
   arrives first.
-- **The entry is not only a port.** It also carries the ingress interface
-  (`ifindex`/`local_ip`), which is what pins the reply back onto the client's
-  segment on a wildcard bind — so a client on port 68 is recorded too, even
-  though its port needs no lookup.
-- Bounded at `DHCPRelay.MAX_PENDING_CLIENTS` (1024), oldest evicted first, so
-  exchanges whose replies never arrive cannot grow it without limit. An evicted
-  entry costs the port-68 fallback and the interface pin. Raise either class
-  attribute for a deployment with more exchanges genuinely in flight.
+- **At the cap the oldest entry is evicted.** `DHCPRelay.MAX_PENDING_CLIENTS`
+  (1024) bounds the table, so exchanges whose replies never arrive cannot grow it
+  without limit; an evicted entry costs that client's reply the port (it goes to
+  68), and nothing else, because the interface comes from `giaddr`. Expiry pops
+  from the front of the table, which is in the order written, and costs the same
+  whatever a flood left in it.
 
 ## Capture (`capture/`)
 

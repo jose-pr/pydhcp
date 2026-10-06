@@ -800,6 +800,24 @@ def test_a_bootreply_from_an_unconfigured_source_is_limited_and_counted(
     assert relay.metrics.packets_dropped_untrusted == INSIDE + 1
 
 
+def test_a_bootreply_for_a_giaddr_that_is_not_ours_is_limited_and_counted(
+    caplog: pytest.LogCaptureFixture, clock: Clock
+) -> None:
+    relay = _relay(clock)
+    message = build_request(
+        DHCPMessageType.DHCPOFFER,
+        op=DHCPOpcode.BOOTREPLY,
+        giaddr=ipaddress.IPv4Address("10.77.77.1"),
+    )
+    _assert_bounded(
+        caplog,
+        clock,
+        RELAY,
+        lambda: relay.handle(message, _context(clock, client="192.0.2.1")),
+    )
+    assert relay.metrics.packets_dropped_unknown_giaddr == INSIDE + 1
+
+
 def test_an_unknown_op_is_limited(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
@@ -817,13 +835,14 @@ def test_a_reused_transaction_from_another_address_is_limited_and_counted(
     relay = _relay(clock)
     relay.PENDING_TTL_SECONDS = 10_000.0  # the entry outlives the interval
     message = _relay_request()
-    relay.handle(message, _context(clock, client="10.0.0.50"))
+    relay.handle(message, _context(clock, client="10.0.0.50", port=40001))
     _assert_bounded(
         caplog,
         clock,
         RELAY_PENDING,
         lambda: relay.handle(message, _context(clock, client="10.0.0.51")),
     )
+    assert relay.metrics.packets_dropped_reused_transaction == INSIDE + 1
 
 
 def test_a_request_whose_giaddr_is_the_relays_own_is_limited_and_counted(

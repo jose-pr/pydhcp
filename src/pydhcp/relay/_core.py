@@ -28,7 +28,7 @@ from ..packet import _enums as _enum
 from ..options._codes import DHCPOptionCode
 from ..options import _codecs as _type
 from . import _info
-from ._pending import PendingClient, _PendingClients
+from ._pending import _PendingClients
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -82,12 +82,12 @@ class _RelayCore(_PendingClients):
     client, applying the same destination rules a server uses on its own
     client-facing side (broadcast flag, else `yiaddr`/`ciaddr`).
 
-    The `xid -> original client address` map used to route a reply back to a
-    client on a non-standard port is bounded at `MAX_PENDING_CLIENTS` entries,
-    evicting the oldest first: an xid whose reply never arrives would otherwise
-    stay forever and leak memory in a long-running relay. Evicting an entry is
-    not a dropped reply -- a reply for a forgotten xid still goes out, to the
-    well-known client port 68, which is where a real client listens.
+    A reply leaves from the address in its `giaddr`, out of the interface that
+    holds it, and is dropped when no interface does (RFC 1542 s4.1.2); nothing
+    remembered per exchange chooses the interface. The `xid -> client address`
+    table (`_pending_clients`) only keeps the port of a client that is not on port 68,
+    bounded at `MAX_PENDING_CLIENTS` with the oldest evicted first: an evicted
+    entry sends that client's reply to port 68, and no reply is lost for it.
     """
 
     metrics: DHCPMetrics
@@ -178,17 +178,28 @@ class _RelayCore(_PendingClients):
         return transport
 
     def _client_transport(
-        self, transport: _DHCPTransport, pending: _ty.Optional[PendingClient]
+        self,
+        transport: _DHCPTransport,
+        interface: _ty.Optional[_netimps.Interface],
+        giaddr: _ipaddress.IPv4Address,
     ) -> _DHCPTransport:
-        """Send out the interface the client's request arrived on."""
+        """Send from `giaddr`, out of the interface that holds it.
+
+        The reply arrived on the server-facing interface and has to leave on the
+        client-facing one, which on a wildcard bind the kernel cannot work out:
+        a broadcast would go out the default route. The relay stamped `giaddr`
+        with that interface's address and the server echoed it (RFC 1542
+        s4.1.2), so the reply itself names where it goes. Without an interface
+        the reply goes by plain routing.
+        """
         if (
             isinstance(transport, _PktInfoUDPTransport)
-            and pending is not None
-            and pending.ifindex is not None
+            and interface is not None
+            and interface.index
         ):
             out = _PktInfoUDPTransport(transport.socket, transport.endpoint)
-            out.ifindex = pending.ifindex
-            out.local_ip = pending.local_ip
+            out.ifindex = interface.index
+            out.local_ip = giaddr
             out.limit = transport.limit
             out.metrics = transport.metrics
             return out
@@ -316,6 +327,9 @@ class _RelayCore(_PendingClients):
             self.metrics.packets_dropped_hop_limit += 1
             return
 
+        if not self._record_pending(msg, context):
+            return
+
         forwarded = DHCPMessage(**msg.__dict__.copy())
         # A shallow __dict__ copy shares the options container, so stamping this
         # copy would edit the caller's message.
@@ -332,8 +346,6 @@ class _RelayCore(_PendingClients):
         )
         if forwarded.giaddr == _const.WILDCARD_V4:
             forwarded.giaddr = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
-
-        self._record_pending(msg, context)
 
         data = self._encode_request(forwarded, add_info, now)
         transport = self._routed_transport(context.transport)
@@ -380,6 +392,26 @@ class _RelayCore(_PendingClients):
             self.metrics.packets_dropped_untrusted += 1
             return
 
+        # RFC 1542 s4.1.2: "If the content of the 'giaddr' field does not match
+        # one of the relay agent's directly-connected logical interfaces, the
+        # BOOTREPLY messsage MUST be silently discarded." The interface that
+        # holds it is also where the reply leaves.
+        egress = _netimps.get_interface(msg.giaddr, cache=True)
+        if egress is None and not self._is_own_address(msg.giaddr, context):
+            self._log_limit.log(
+                LOGGER,
+                _logging.WARNING,
+                "BOOTREPLY for a giaddr that is not ours",
+                "[XID=%08x] Dropping BOOTREPLY from %s: giaddr %s is not an "
+                "address of this relay",
+                msg.xid,
+                context.client,
+                msg.giaddr,
+                now=self._instant(context).monotonic,
+            )
+            self.metrics.packets_dropped_unknown_giaddr += 1
+            return
+
         pending = self._lookup_pending(msg, self._instant(context).monotonic)
         client_port = (
             pending.client.port if pending is not None else int(_enum.DHCPPort.CLIENT)
@@ -414,11 +446,7 @@ class _RelayCore(_PendingClients):
         reply.log(
             context.interface.ip, _net.SocketAddress(dest, client_port), _logging.INFO
         )
-        # The reply arrived on the server-facing interface and has to leave on the
-        # client-facing one, so re-pin it to the interface the request came in on
-        # rather than reusing this packet's pin or letting the default route
-        # swallow the broadcast.
-        self._client_transport(context.transport, pending).send(
+        self._client_transport(context.transport, egress, msg.giaddr).send(
             data, dest, port=client_port, client_mac=msg.chaddr
         )
         self.metrics.packets_sent += 1

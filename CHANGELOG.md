@@ -101,7 +101,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   nothing and said nothing) and either id without the flag (it was ignored) are a
   `ValueError` at construction, and `pydhcp relay --insert-relay-agent-info` with no id is
   the same error instead of a warning.
-- The relay's reused-transaction record is logged by `pydhcp.relay._pending`.
+- **The relay's reply path is chosen from the reply, not from remembered state.** A reply
+  leaves from its `giaddr`, out of the interface that holds it (RFC 1542 section 4.1.2),
+  where it used to use an entry recorded when the request arrived: 1024 forged requests
+  from distinct clients evicted a real client's entry, and its reply then went through a
+  plain transport that no interface was pinned to. A reply whose `giaddr` is not an
+  address of the relay (including 0) is dropped and counted in
+  `packets_dropped_unknown_giaddr` (it was broadcast to the client segment). The pending
+  table now holds only the port of a client that is not on port 68, evicts the oldest entry
+  at `MAX_PENDING_CLIENTS` (an evicted client's reply goes to port 68), and expires from
+  its front, so the cost of a request or a reply no longer grows with the entries a flood
+  left (about 90 microseconds with a full table, about 1). A request that reuses the
+  transaction of a pending one from another source address is dropped and counted in
+  `packets_dropped_reused_transaction`; it used to be logged as ignored and forwarded
+  all the same. The reused-transaction record is logged by `pydhcp.relay._pending`.
 
 - **Breaking, in behaviour: a reply goes to port 67 when it goes to a relay and port 68
   otherwise, whatever port the request came from** (RFC 1542 section 5.4: "The UDP

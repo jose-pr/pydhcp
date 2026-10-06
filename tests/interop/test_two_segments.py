@@ -15,8 +15,6 @@ wire, not about what the library says it did.
 
 from __future__ import annotations
 
-import pytest
-
 from pydhcp import DHCPRelay
 
 from ._topo import RELAY_CLIENT_SIDE_MAC, relayed, two_homed
@@ -183,14 +181,9 @@ def test_a_reply_leaves_by_the_clients_interface(lab):
     assert [f for f in _offers(tap_server) if f.src_ip == "10.98.0.1"] == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="a flood of forged requests evicts the real client's entry and its "
-    "reply stops leaving by the client's interface",
-)
 def test_a_reply_still_leaves_by_the_clients_interface_after_a_forged_flood(lab):
-    # One request more than the relay remembers (the real client's is the
-    # oldest entry), each from a different client.
+    # One request more than the relay's table holds, each from a different
+    # client, all after the real client's.
     tap_client, tap_server = _relayed_exchange(lab, DHCPRelay.MAX_PENDING_CLIENTS + 1)
 
     assert [f.src_mac for f in _offers(tap_client)] == [RELAY_CLIENT_SIDE_MAC]

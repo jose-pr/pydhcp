@@ -142,7 +142,7 @@ def test_the_pending_table_ages_on_the_receive_time_of_each_datagram() -> None:
     first one is older than the TTL -- measured on the stamps, not on a clock."""
     relay = DHCPRelay(listen=("127.0.0.1", 0), server_addresses=["192.0.2.1"])
     request = build_request(DHCPMessageType.DHCPDISCOVER, xid=7)
-    relay.handle(request, _context(68, 1000.0))
+    relay.handle(request, _context(40001, 1000.0))
     relay.handle(
         request, _context(99, 1000.0 + relay.PENDING_TTL_SECONDS - 1, "10.0.0.6")
     )

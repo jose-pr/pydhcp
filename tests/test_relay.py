@@ -1,7 +1,9 @@
 import ipaddress
-from datetime import timedelta
+from collections import OrderedDict
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
+import netimps
 import pytest
 
 from pydhcp import (
@@ -17,6 +19,7 @@ from pydhcp.options import DHCPOptionCode
 from pydhcp.options import RelayAgentInformation, TLVOption
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
+from pydhcp.relay import _core as relay_core
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 
@@ -529,57 +532,247 @@ def test_upstream_forward_drops_the_pktinfo_pin(relay_class):
     assert routed.socket is pinned.socket
 
 
-def test_reply_is_pinned_to_the_interface_the_request_arrived_on(relay_class):
+def _pinned_reply_setup(relay_class, giaddr="10.99.0.1"):
+    """A relay whose reply arrives on a pinned transport made of mocks.
+
+    Returns the relay, the context and the endpoint mock a pinned send goes
+    through, so a test can read which source (address and interface index) the
+    reply was sent from.
+    """
     from pydhcp.listener import PktInfoUDPTransport
 
-    # the pending-client record is relay state, not exported
-    # `PendingClient` is not public; it is the record the pending table holds.
-    from pydhcp.relay._core import PendingClient
-
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    arrived_on_server_side = PktInfoUDPTransport(Mock())
-    arrived_on_server_side.ifindex, arrived_on_server_side.local_ip = 9, IPv4(
-        "10.98.0.1"
-    )
-    pending = PendingClient(SocketAddress("10.99.0.50", 68), 3, IPv4("10.99.0.1"))
-
-    out = relay._client_transport(arrived_on_server_side, pending)
-
-    assert isinstance(out, PktInfoUDPTransport)
-    assert out.ifindex == 3
-    assert out.local_ip == IPv4("10.99.0.1")
-
-
-def test_reply_without_a_recorded_ingress_falls_back_to_plain_routing(relay_class):
-    from pydhcp.listener import PktInfoUDPTransport, UDPTransport
-
-    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    transport = PktInfoUDPTransport(Mock())
+    endpoint = Mock()
+    endpoint.send.return_value = 1
+    transport = PktInfoUDPTransport(Mock(), endpoint)
+    # What the receive path set from the datagram that arrived from the server:
+    # the server-facing interface, which is the wrong one for the reply.
     transport.ifindex, transport.local_ip = 9, IPv4("10.98.0.1")
-
-    out = relay._client_transport(transport, None)
-
-    assert type(out) is UDPTransport
-
-
-def test_pending_map_records_the_ingress_interface(relay_class):
-    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
     context = DHCPRequestContext(
-        transport=Mock(),
+        transport=transport,
+        interface=NetworkInterface(
+            "sv0", ipaddress.IPv4Interface("10.98.0.1/24"), None
+        ),
+        client=SocketAddress("192.0.2.1", 67),
+        client_mac=CHADDR,
+        ifindex=9,
+        local_ip=IPv4("10.98.0.1"),
+    )
+    return relay, context, endpoint
+
+
+CLIENT_SIDE = netimps.Interface(
+    name="cv0", index=3, ips=[ipaddress.IPv4Interface("10.99.0.1/24")]
+)
+
+
+@pytest.fixture(autouse=True)
+def host(monkeypatch):
+    """The interfaces this host holds, as the relay's lookups see them.
+
+    Empty by default, so the suite does not depend on the addresses of the
+    machine it runs on; a test adds an interface to the dict.
+    """
+    held: "dict[str, netimps.Interface]" = {}
+    monkeypatch.setattr(
+        relay_core._netimps,
+        "get_interface",
+        lambda address, **_kw: held.get(str(address)),
+    )
+    monkeypatch.setattr(
+        relay_core._netimps,
+        "is_local_address",
+        lambda address, **_kw: str(address) in held,
+    )
+    return held
+
+
+def test_a_reply_leaves_by_the_interface_that_holds_its_giaddr(relay_class, host):
+    """RFC 1542 s4.1.2: "The 'giaddr' field can be used to identify the logical
+    interface from which the reply must be sent". The relay has seen no request
+    of this exchange, so nothing it remembers can be what chooses the interface."""
+    host["10.99.0.1"] = CLIENT_SIDE
+    relay, context, endpoint = _pinned_reply_setup(relay_class)
+
+    relay.handle(_reply(giaddr="10.99.0.1", yiaddr="10.99.0.50"), context)
+
+    (_data, dest, port), kwargs = endpoint.send.call_args
+    source = kwargs["src"]
+    assert (dest, port) == ("255.255.255.255", 68)
+    assert source.index == 3
+    assert [str(ip.ip) for ip in source.ips] == ["10.99.0.1"]
+
+
+def test_a_reply_whose_giaddr_no_interface_holds_is_dropped_and_counted(
+    relay_class, host
+):
+    """RFC 1542 s4.1.2: "If the content of the 'giaddr' field does not match one
+    of the relay agent's directly-connected logical interfaces, the BOOTREPLY
+    messsage MUST be silently discarded"."""
+    host["10.99.0.1"] = CLIENT_SIDE
+    relay, context, endpoint = _pinned_reply_setup(relay_class)
+
+    relay.handle(_reply(giaddr="10.77.77.1", yiaddr="10.99.0.50"), context)
+
+    endpoint.send.assert_not_called()
+    assert relay.metrics.packets_dropped_unknown_giaddr == 1
+    assert relay.metrics.packets_sent == 0
+
+
+def test_a_reply_with_giaddr_zero_is_dropped_and_counted(relay_class):
+    """No interface holds 0.0.0.0, so the same clause discards it."""
+    relay, context, endpoint = _pinned_reply_setup(relay_class)
+
+    relay.handle(_reply(giaddr="0.0.0.0", yiaddr="10.99.0.50"), context)
+
+    endpoint.send.assert_not_called()
+    assert relay.metrics.packets_dropped_unknown_giaddr == 1
+
+
+# --- the pending table: what it keeps and what it does at its cap ---
+#
+# It holds only the port of a client that is not on port 68, so that an entry
+# lost costs that client's reply the port and nothing else. At the cap the
+# oldest entry is evicted. The tests set the cap to 2 and pass the time in.
+
+
+def _stamped(
+    port: int, at: float, ip: str = "10.0.0.50", transport=None
+) -> DHCPRequestContext:
+    return DHCPRequestContext(
+        transport=transport or Mock(),
         interface=NetworkInterface(
             "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
         ),
-        client=SocketAddress("10.0.0.50", 68),
+        client=SocketAddress(ip, port),
         client_mac=CHADDR,
-        ifindex=4,
-        local_ip=IPv4("10.0.0.1"),
+        received_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        received_monotonic=at,
     )
 
-    relay.handle(_discover(), context)
 
-    pending = relay._pending_clients[(0x12345678, CHADDR)]
-    assert pending.ifindex == 4
-    assert pending.local_ip == IPv4("10.0.0.1")
+def _request(xid: int, chaddr: bytes = CHADDR) -> DHCPMessage:
+    request = _discover()
+    request.xid = xid
+    request.chaddr = chaddr
+    return request
+
+
+def _reply_goes(relay, xid: int, at: float) -> "tuple[int, int]":
+    """The (port, interface index) a reply for `xid` leaves by."""
+    from pydhcp.listener import PktInfoUDPTransport
+
+    endpoint = Mock()
+    endpoint.send.return_value = 1
+    transport = PktInfoUDPTransport(Mock(), endpoint)
+    transport.ifindex, transport.local_ip = 9, IPv4("10.98.0.1")
+    reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.50")
+    reply.xid = xid
+    relay.handle(reply, _stamped(67, at, ip="192.0.2.1", transport=transport))
+    (_data, _dest, port), kwargs = endpoint.send.call_args
+    return port, kwargs["src"].index
+
+
+def test_a_forged_flood_evicts_the_oldest_entry_and_costs_that_reply_only_its_port(
+    relay_class, host
+):
+    """A bound, stated: at the cap the oldest entry goes. The real client's reply
+    then goes to port 68 and, with its interface chosen from `giaddr`, still
+    leaves by the right one."""
+    host["10.0.0.1"] = netimps.Interface(
+        name="eth0", index=4, ips=[ipaddress.IPv4Interface("10.0.0.1/24")]
+    )
+    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    relay.MAX_PENDING_CLIENTS = 2
+    relay.handle(_request(1), _stamped(40001, 100.0))
+    assert _reply_goes(relay, 1, 101.0) == (40001, 4)
+
+    for forged in (2, 3):
+        relay.handle(
+            _request(forged, bytes([0xAA, 0, 0, 0, 0, forged])),
+            _stamped(40000 + forged, 102.0, ip="10.0.0.66"),
+        )
+
+    assert len(relay._pending_clients) == 2
+    assert _reply_goes(relay, 1, 103.0) == (68, 4)
+
+
+def test_a_flood_from_the_standard_port_occupies_nothing(relay_class):
+    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    relay.MAX_PENDING_CLIENTS = 2
+    relay.handle(_request(1), _stamped(40001, 100.0))
+
+    for forged in range(2, 12):
+        relay.handle(
+            _request(forged, bytes([0xAA, 0, 0, 0, 0, forged])),
+            _stamped(68, 101.0, ip="10.0.0.66"),
+        )
+
+    assert list(relay._pending_clients) == [(1, CHADDR)]
+
+
+def test_an_entry_expires_after_its_ttl(relay_class, host):
+    host["10.0.0.1"] = netimps.Interface(
+        name="eth0", index=4, ips=[ipaddress.IPv4Interface("10.0.0.1/24")]
+    )
+    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    relay.handle(_request(1), _stamped(40001, 100.0))
+
+    held = relay.PENDING_TTL_SECONDS
+    assert _reply_goes(relay, 1, 100.0 + held - 1)[0] == 40001
+    assert _reply_goes(relay, 1, 100.0 + held)[0] == 68
+    assert len(relay._pending_clients) == 0
+
+
+def test_expiring_does_not_walk_the_table(relay_class):
+    """The cost of a request or a reply must not grow with the entries a flood
+    left: the table is in the order its entries were written, so expiry looks at
+    the oldest only."""
+
+    class Counting(OrderedDict):
+        looked_at = 0
+
+        def values(self):
+            for value in super().values():
+                Counting.looked_at += 1
+                yield value
+
+    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    relay._pending_clients = Counting()
+    for xid in range(50):
+        relay.handle(_request(xid), _stamped(40000 + xid, 100.0 + xid))
+    Counting.looked_at = 0
+
+    relay._expire_pending(100.0 + 50)
+
+    assert Counting.looked_at <= 1
+
+
+def test_a_request_that_reuses_a_pending_transaction_from_another_address_is_dropped(
+    relay_class,
+):
+    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    relay.handle(_request(1), _stamped(40001, 100.0, ip="10.0.0.50"))
+    attacker = _stamped(5353, 101.0, ip="10.0.0.66")
+
+    relay.handle(_request(1), attacker)
+
+    attacker.transport.send.assert_not_called()
+    assert relay.metrics.packets_dropped_reused_transaction == 1
+    assert relay._pending_clients[(1, CHADDR)].client == SocketAddress(
+        "10.0.0.50", 40001
+    )
+
+
+def test_a_request_from_the_same_address_replaces_the_entry(relay_class):
+    """Every unconfigured client has source address 0.0.0.0, so the address is
+    all that can tell a client that opened a new socket from another host."""
+    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    relay.handle(_request(1), _stamped(40001, 100.0))
+    relay.handle(_request(1), _stamped(40002, 101.0))
+
+    assert relay._pending_clients[(1, CHADDR)].client.port == 40002
+    assert relay.metrics.packets_dropped_reused_transaction == 0
 
 
 # --- reply routing must survive a client that reuses someone else's xid ---
@@ -649,33 +842,6 @@ def test_every_configured_server_reply_reaches_the_tracked_port(relay_class):
         ports.append(port)
 
     assert ports == [40002, 40002], ports
-
-
-def test_a_client_on_the_standard_port_is_still_tracked(relay_class):
-    """Skipping port 68 would have regressed the reply egress interface.
-
-    It is tempting -- 68 is the fallback, so the *port* needs no entry. But the
-    entry also carries the ingress interface, and that is what pins the reply
-    back onto the client's segment on a wildcard bind; without it every ordinary
-    client's reply goes out the default route instead.
-    """
-    relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
-    context = DHCPRequestContext(
-        transport=Mock(),
-        interface=NetworkInterface(
-            "eth0", ipaddress.IPv4Interface("10.0.0.1/24"), None
-        ),
-        client=SocketAddress("10.0.0.50", 68),
-        client_mac=CHADDR,
-        ifindex=7,
-        local_ip=IPv4("10.0.0.1"),
-    )
-
-    relay.handle(_discover(), context)
-
-    pending = relay._pending_clients[(0x12345678, CHADDR)]
-    assert pending.ifindex == 7
-    assert pending.local_ip == IPv4("10.0.0.1")
 
 
 def test_pending_entries_expire_rather_than_accumulate(relay_class):
