@@ -399,16 +399,19 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
             self.hook = hook
             self.stopped = False
             self.delivered = []
-            # Part of the contract the CLI reads after listen() returns, to tell
+            # Part of the contract the CLI reads after serve_forever() returns, to tell
             # a hook failure from an ordinary shutdown.
             self.hook_error = None
             captures.append(self)
 
-        def bind(self):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
             pass
 
-        def listen(self):
-            # A real listener stops feeding the sink once stop() is called;
+        def serve_forever(self):
+            # A real listener stops feeding the sink once shutdown() is called;
             # without honouring it here, `--count` could not be observed.
             for event in events:
                 if self.stopped:
@@ -418,7 +421,7 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
                 if self.hook is not None:
                     self.hook(event)
 
-        def stop(self):
+        def shutdown(self):
             self.stopped = True
 
     monkeypatch.setattr("pydhcp.cli._capture.DHCPCapture", FakeCapture)
@@ -443,7 +446,7 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
         "DHCPDISCOVER",
     ]
     assert len(captures) == 1
-    # stop() was actually called, and on the second record rather than later.
+    # shutdown() was actually called, and on the second record rather than later.
     assert captures[0].stopped is True
     assert captures[0].delivered == [0xAAAA0001, 0xAAAA0002]
 
@@ -500,8 +503,7 @@ def test_cmd_server(mock_dhcp_server_cls):
     mock_dhcp_server_cls.assert_called_with(
         listen="127.0.0.1:6767", per_interface=False, lease_backend=None
     )
-    assert mock_server.bind.called
-    assert mock_server.listen.called
+    assert mock_server.serve_forever.called
 
 
 def test_parse_server_address_host_only():
@@ -590,8 +592,7 @@ def test_cmd_relay(mock_dhcp_relay_cls):
         remote_id=None,
         per_interface=False,
     )
-    assert mock_relay.bind.called
-    assert mock_relay.listen.called
+    assert mock_relay.serve_forever.called
 
 
 def test_relay_cli_relay_help(monkeypatch, capsys) -> None:
@@ -882,14 +883,14 @@ def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
             captured["per_interface"] = per_interface
             self.lease_backend = lease_backend
 
-        def bind(self):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
             pass
 
-        def listen(self):
+        def serve_forever(self):
             raise KeyboardInterrupt
-
-        def stop(self):
-            pass
 
     monkeypatch.setattr("pydhcp.cli._server.DHCPServer", FakeServer)
 

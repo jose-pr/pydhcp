@@ -38,6 +38,7 @@ from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from conftest import CHADDR, build_request
+from pydhcp.listener import AsyncDHCPListener, DHCPListener
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "pydhcp"
 
@@ -110,15 +111,15 @@ _RECEIVE_PATH = (
     "_context_for",
     "_resolve_interface",
     "_parselisteners",
-    "DHCPListener.listen",
+    "DHCPListener._loop",
     "_ListenerCore.bind",
     "_ListenerCore._dispatch",
     "AsyncDHCPListener._receive",
     "AsyncDHCPListener._dispatch_received",
     "AsyncDHCPListener._handle_datagram",
     "AsyncDHCPListener.start",
-    "AsyncDHCPListener.stop",
-    "AsyncDHCPListener._close_endpoints",
+    "AsyncDHCPListener._begin_receiving",
+    "AsyncDHCPListener._end_receiving",
 )
 
 #: The module holding each async class, and the module holding the core whose
@@ -290,18 +291,18 @@ def test_the_async_class_holds_the_same_state_as_the_sync_one(
 ) -> None:
     """The `test_async_server_has_the_same_state_as_the_sync_one` guard, here.
 
-    Listener internals legitimately differ (a cancellation token and a SIGINT
-    handler against transports and a worker), so this compares the policy layer.
+    Listener internals legitimately differ (a wake socket and a select loop
+    against a worker and receive tasks), so this compares the policy layer.
     """
     missing = set(vars(sync(listen=("127.0.0.1", 0), **kwargs))) - set(
         vars(asyncy(listen=("127.0.0.1", 0), **kwargs))
     )
-    assert missing <= {
-        "_cancellation_token",
-        "_previous_sigint",
-        "_select_timeout",
-        "_sigint_handler",
-    }, f"{asyncy.__name__} is missing {sorted(missing)}"
+    sync_listener_only = set(vars(DHCPListener(listen=("127.0.0.1", 0)))) - set(
+        vars(AsyncDHCPListener(listen=("127.0.0.1", 0)))
+    )
+    assert (
+        missing <= sync_listener_only
+    ), f"{asyncy.__name__} is missing {sorted(missing - sync_listener_only)}"
 
 
 def test_the_async_relay_keeps_the_relays_ports_not_the_listeners() -> None:
@@ -423,7 +424,7 @@ def test_async_relay_forwards_a_request_and_its_reply_over_real_sockets() -> Non
                 await asyncio.sleep(0.01)
             assert relay.metrics.packets_sent == 2
         finally:
-            relay.stop()
+            await relay.aclose()
             upstream.close()
             client.close()
 
@@ -450,7 +451,7 @@ def test_async_capture_records_a_packet_off_the_wire() -> None:
                     break
                 await asyncio.sleep(0.02)
         finally:
-            capture.stop()
+            await capture.aclose()
 
     asyncio.run(main())
 
@@ -485,7 +486,7 @@ def test_async_capture_filter_rejects_on_the_wire_too() -> None:
                     break
                 await asyncio.sleep(0.02)
         finally:
-            capture.stop()
+            await capture.aclose()
 
     asyncio.run(main())
 
@@ -496,14 +497,12 @@ def test_async_capture_filter_rejects_on_the_wire_too() -> None:
 def test_async_capture_hook_fail_fast_actually_stops_the_loop() -> None:
     """The path the plan singles out, on a live loop.
 
-    `hook_fail_fast` calls `stop()` from the handler *worker thread*, and
-    nothing `AsyncDHCPListener.stop()` touches is thread-safe: `remove_reader`,
-    `transport.close()` and `Event.set()` all finish through `loop.call_soon`,
-    which queues a callback without waking the loop. Measured before the fix
-    (a handler calling `stop()` on its worker): Linux's selector loop never
-    woke and `await wait()` blocked forever, while Windows' proactor loop
-    returned in 7 ms. So the assertion is on the *elapsed time*, not merely on
-    `wait()` returning -- `wait_for`'s own timer wakes the loop at the deadline
+    `hook_fail_fast` calls `shutdown()` from the handler *worker thread*, and
+    `Event.set()` finishes through `loop.call_soon`, which queues a callback
+    without waking the loop. Measured (a handler calling it on its worker):
+    Linux's selector loop never woke and `await wait_closed()` blocked forever,
+    while Windows' proactor loop returned in 7 ms. So the assertion is on the
+    *elapsed time*, not merely on `wait_closed()` returning -- `wait_for`'s own timer wakes the loop at the deadline
     and makes a hang look like a pass.
     """
     elapsed: list = []
@@ -521,15 +520,16 @@ def test_async_capture_hook_fail_fast_actually_stops_the_loop() -> None:
         sender.sendto(_discover_bytes(), ("127.0.0.1", port))
         sender.close()
         started = time.monotonic()
-        await asyncio.wait_for(capture.wait(), timeout=10.0)
+        assert await capture.wait_closed(10.0)
         elapsed.append(time.monotonic() - started)
         assert isinstance(capture.hook_error, RuntimeError)
+        await capture.aclose()
         assert capture.bound_addresses == (), "the sockets are still open"
 
     asyncio.run(main())
 
     assert elapsed and elapsed[0] < 3.0, (
-        f"stop() from the handler worker took {elapsed[0]:.2f}s to reach the "
+        f"shutdown() from the handler worker took {elapsed[0]:.2f}s to reach the "
         "loop -- it was not marshalled back onto it"
     )
 
@@ -580,7 +580,7 @@ def test_async_relay_state_is_only_touched_by_one_thread() -> None:
             assert len(threads) == 1, f"handlers ran on {len(threads)} threads"
             assert threading.current_thread().ident not in threads
         finally:
-            relay.stop()
+            await relay.aclose()
             upstream.close()
 
     asyncio.run(main())

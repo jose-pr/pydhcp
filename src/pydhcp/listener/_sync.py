@@ -6,6 +6,7 @@ import logging as _logging
 import select as _select
 import socket as _socket
 import threading as _thread
+import time as _time
 import typing as _ty
 
 import netimps as _netimps
@@ -17,8 +18,21 @@ from ._spec import ListenSpec
 
 LOGGER = _logging.getLogger(__name__)
 
+#: Seconds `close()` waits for a receive loop that has been asked to stop; a
+#: handler still running after that is abandoned (the receive thread is a daemon).
+_CLOSE_WAIT = 5.0
+
 
 class DHCPListener(_ListenerCore):
+    """Receives DHCP datagrams on a thread and hands each to `handle()`.
+
+    `serve_forever()` receives on the calling thread, `start()` on a daemon
+    thread. `shutdown()` ends the receive loop and never blocks, so a handler
+    may call it; `wait_closed()` blocks until the loop has ended; `close()` is
+    both, then releases the sockets, and is final. The library installs no
+    signal handler: Ctrl-C reaches `serve_forever()` as `KeyboardInterrupt`.
+    """
+
     def __init__(
         self,
         listen: ListenSpec = None,
@@ -29,137 +43,192 @@ class DHCPListener(_ListenerCore):
         super().__init__(
             listen=listen, max_packet_size=max_packet_size, per_interface=per_interface
         )
-        self._sigint_handler: _ty.Optional[_ty.Any] = None
-        self._previous_sigint: _ty.Optional[_ty.Any] = None
+        #: Upper bound on one wait for a datagram: a `KeyboardInterrupt` is
+        #: delivered to the main thread between waits, not during one, on Windows.
         self._select_timeout = select_timeout or 1
-        self._cancellation_token: _thread.Event | None = None
+        self._state_lock = _thread.Lock()
+        self._close_lock = _thread.Lock()
+        self._serving = False
+        self._stopping = False
+        self._idle = _thread.Event()
+        self._idle.set()
+        self._serving_ident: _ty.Optional[int] = None
+        self._receive_thread: _ty.Optional[_thread.Thread] = None
+        self._wake_read: _ty.Optional[_socket.socket] = None
+        self._wake_write: _ty.Optional[_socket.socket] = None
 
-    def stop(self) -> None:
-        if self._cancellation_token is not None:
-            self._cancellation_token.set()
+    # -- lifecycle ---------------------------------------------------------
+
+    def _claim(self) -> None:
+        """Bind, then mark this caller as the one that serves."""
+        self.bind()
+        with self._state_lock:
+            if self._closed:
+                raise RuntimeError(f"{type(self).__name__} is closed")
+            if self._serving:
+                raise RuntimeError(f"{type(self).__name__} is already serving")
+            wake_read, wake_write = _socket.socketpair()
+            wake_read.setblocking(False)
+            wake_write.setblocking(False)
+            self._wake_read, self._wake_write = wake_read, wake_write
+            self._serving = True
+            self._stopping = False
+            self._idle.clear()
+
+    def serve_forever(self) -> None:
+        """Bind, then receive on the calling thread until `shutdown()`.
+
+        Raises what `bind()` raised, and `RuntimeError` when already serving or
+        closed. The sockets stay open on return: `close()` releases them.
+        """
+        self._claim()
+        self._serve()
+
+    def start(self) -> None:
+        """Bind, then receive on a new daemon thread.
+
+        Binding happens here, on the caller's thread, so an address that cannot
+        be bound raises what `bind()` raised and leaves the listener unstarted
+        and nothing bound. Raises `RuntimeError` when already serving or closed.
+        """
+        self._claim()
+        # Daemon: nothing in the loop ends on its own, so a non-daemon thread
+        # keeps the interpreter alive after `main` returns.
+        thread = _thread.Thread(target=self._serve, name="pydhcp-listener", daemon=True)
+        self._receive_thread = thread
+        try:
+            thread.start()
+        except BaseException:
+            self._finish_serving()
+            raise
+
+    def shutdown(self) -> None:
+        """Ask the receive loop to end. Returns at once, from any thread and from a handler."""
+        with self._state_lock:
+            if not self._serving:
+                return
+            self._stopping = True
+        self._wake()
+
+    def wait_closed(self, timeout: _ty.Optional[float] = None) -> bool:
+        """Block until the receive loop has ended; `False` if `timeout` seconds passed first.
+
+        Raises `RuntimeError` on the receive thread, which would wait for itself.
+        """
+        if self._serving_ident == _thread.get_ident():
+            raise RuntimeError(
+                "wait_closed() on the receive thread would wait for itself"
+            )
+        began = _time.monotonic()
+        if not self._idle.wait(timeout):
+            return False
+        thread = self._receive_thread
+        if thread is not None and thread is not _thread.current_thread():
+            thread.join(
+                None
+                if timeout is None
+                else max(0.0, timeout - (_time.monotonic() - began))
+            )
+            if thread.is_alive():
+                return False
+        return True
 
     def close(self) -> None:
-        """Close every bound socket and release the SIGINT handler.
+        """Shut down, wait for the receive loop, then release every socket. Final.
 
-        `stop()` only ends the receive loop; without this the sockets stayed
-        open, so a process that creates a listener per operation leaked a bound
-        UDP socket and its port each time, and the next bind to the same port
-        failed or silently shared it.
+        Called on the receive thread itself (from a handler) it shuts down and
+        returns: the loop releases the sockets as it ends. Repeatable.
         """
-        self._close_sockets()
-        self._restore_sigint_handler()
+        if self._serving_ident == _thread.get_ident():
+            with self._state_lock:
+                self._closed = True
+            self.shutdown()
+            return
+        with self._close_lock:
+            with self._state_lock:
+                self._closed = True
+            self.shutdown()
+            if not self.wait_closed(_CLOSE_WAIT):
+                LOGGER.warning(
+                    f"The receive loop did not end within {_CLOSE_WAIT} s of close(); "
+                    "releasing the sockets under it."
+                )
+            self._close_sockets()
 
     def __enter__(self) -> "DHCPListener":
         self.bind()
         return self
 
     def __exit__(self, *_exc: _ty.Any) -> None:
-        self.stop()
         self.close()
 
-    def wait(self) -> None:
-        # Read once per turn, not twice. `listen()` sets `_cancellation_token`
-        # to None from the receive thread as it exits, so a token that was not
-        # None at the `is not None` test could be None at the `.wait()` --
-        # `AttributeError: 'NoneType' object has no attribute 'wait'` out of a
-        # call whose whole job is to block until shutdown.
-        while True:
-            token = self._cancellation_token
-            if token is None:
-                return
-            token.wait(self._select_timeout)
-
-    def _install_sigint_handler(self) -> None:
-        """Install a Ctrl-C handler, if this thread is allowed to.
-
-        `signal.signal` raises off the main thread, which used to propagate out
-        of `start()` *after* the cancellation token was set -- leaving the
-        listener permanently 'started' and impossible to start again. Library
-        code should not claim a process-wide handler as a side effect of
-        starting, so failure here is not an error.
-        """
-        import signal
-
-        if _thread.current_thread() is not _thread.main_thread():
-            return
-
-        def stop(*args: _ty.Any) -> None:
-            self.stop()
-            LOGGER.info("Stopped listening due to Ctrl-C")
-
-        try:
-            self._sigint_handler = stop
-            self._previous_sigint = signal.signal(signal.SIGINT, stop)
-        except (ValueError, OSError):  # pragma: no cover - platform dependent
-            self._sigint_handler = None
-            self._previous_sigint = None
-
-    def _restore_sigint_handler(self) -> None:
-        import signal
-
-        if self._sigint_handler is None:
-            return
-        if _thread.current_thread() is not _thread.main_thread():
-            # `signal.signal` raises off the main thread, so the handler cannot
-            # be given back from here -- and `close()` now runs on the receive
-            # thread too (from `listen()`'s teardown). Leave both the handler
-            # and the bookkeeping in place so a later `close()` on the owning
-            # thread can still restore it; clearing them here would make that
-            # restore a silent no-op and strand the process-wide handler.
-            return
-        try:
-            # Only give it back if nobody else has claimed it since.
-            if signal.getsignal(signal.SIGINT) is self._sigint_handler:
-                signal.signal(signal.SIGINT, self._previous_sigint)
-        except (ValueError, OSError, TypeError):  # pragma: no cover
-            pass
-        self._sigint_handler = None
-        self._previous_sigint = None
-
-    def start(
-        self, cancellation_token: _ty.Optional[_thread.Event] = None
-    ) -> _ty.Optional[_thread.Thread]:
-        """Bind, then receive on a new daemon thread, which is returned.
-
-        Binding happens here, on the caller's thread, so an address that cannot
-        be bound raises what `bind()` raised and leaves the listener unstarted
-        and nothing bound. Returns `None` when it is already started.
-        """
-        if not self._cancellation_token:
-            self.bind()
-            # Daemon: a non-daemon receive thread keeps the interpreter alive
-            # after `main` returns, and nothing in the loop ends on its own.
-            # Measured: a process that started a listener and fell off the end
-            # of `main` without `stop()` was still running after 8 s and had to
-            # be killed. Shutdown is `stop()` plus `join()`, which every
-            # supported entry point does; a caller that forgets now exits
-            # instead of hanging.
-            thread = _thread.Thread(
-                target=self.listen, args=(), name="pydhcp-listener", daemon=True
-            )
-            self._cancellation_token = cancellation_token or _thread.Event()
-            self._install_sigint_handler()
+    def _wake(self) -> None:
+        """End a wait for datagrams from any thread."""
+        wake = self._wake_write
+        if wake is not None:
             try:
-                thread.start()
-            except BaseException:
-                # A thread that cannot start leaves nothing bound and the
-                # listener unstarted, as a bind that fails does.
-                self._cancellation_token = None
-                self.close()
+                wake.send(b"\0")
+            except OSError:  # pragma: no cover - full or closed: already woken
+                pass
+
+    def _finish_serving(self) -> None:
+        """Release what serving held and let `wait_closed()` return."""
+        for sock in (self._wake_read, self._wake_write):
+            if sock is not None:
+                sock.close()
+        self._wake_read = self._wake_write = None
+        if self._closed:
+            self._close_sockets()
+        with self._state_lock:
+            self._serving_ident = None
+            self._serving = False
+        self._idle.set()
+
+    def _serve(self) -> None:
+        self._serving_ident = _thread.get_ident()
+        try:
+            self._loop()
+        finally:
+            self._finish_serving()
+
+    def _loop(self) -> None:
+        wake = self._wake_read
+        assert wake is not None
+        while not self._stopping:
+            try:
+                rlist, _, _ = _select.select(
+                    [*self._sockets, wake], [], [], self._select_timeout
+                )
+            except (OSError, ValueError):
+                if self._stopping:  # a close() that gave up waiting
+                    break
                 raise
-            return thread
-        return None
+            for sock in rlist:
+                if sock is wake:
+                    self._drain_wake(wake)
+                    continue
+                if self._stopping:
+                    # A handler can shut the listener down -- `DHCPCapture`'s
+                    # `--count` sink and `hook_fail_fast` both do -- and the
+                    # rest of the ready set must not be handled after that.
+                    break
+                self._receive_one(sock)
+
+    @staticmethod
+    def _drain_wake(wake: _socket.socket) -> None:
+        try:
+            while wake.recv(64):
+                pass
+        except OSError:
+            pass
 
     def _receive_one(self, sock: _socket.socket) -> None:
         """Receive, decode and dispatch exactly one datagram.
 
         Split into three steps because they fail for three unrelated reasons and
-        need three different reports. One `except Exception` used to cover all of
-        them and log `Encounter error handling request: <class> | <str>` with no
-        traceback -- so a malformed packet from the segment (routine, the peer's
-        doing), a socket error (ours), and a bug inside a `handle()` override
-        were indistinguishable, and the only one whose traceback matters was the
-        one that lost it.
+        need three different reports: a malformed packet from the segment
+        (routine, the peer's doing), a socket error (ours), and a bug inside a
+        `handle()` override, which keeps its traceback.
         """
         try:
             # One octet over the limit, so a datagram that does not fit can be
@@ -194,39 +263,3 @@ class DHCPListener(_ListenerCore):
             return str(_net.SocketAddress(sock))
         except OSError:  # pragma: no cover - closed underneath us
             return "a closed socket"
-
-    def listen(self) -> None:
-        rlist: list[_socket.socket]
-        if self._cancellation_token is None:
-            self._cancellation_token = _thread.Event()
-        token = self._cancellation_token
-        try:
-            self.bind()
-            while not token.is_set():
-                rlist, _, _ = _select.select(
-                    list(self._sockets), [], [], self._select_timeout
-                )
-                if token.is_set():
-                    break
-                for sock in rlist:
-                    if token.is_set():
-                        # A handler can stop the listener -- `DHCPCapture`'s
-                        # `--count` sink and `hook_fail_fast` both do -- and
-                        # this loop then kept draining the rest of the ready
-                        # set. Measured: `capture --count 1` wrote 3 records in
-                        # 3 of 3 trials on a wildcard bind with three sockets
-                        # ready in the same `select()`.
-                        break
-                    self._receive_one(sock)
-        except KeyboardInterrupt:
-            LOGGER.info("Stopped listening due to Ctrl-C")
-            token.set()
-        finally:
-            self._cancellation_token = None
-            # Release the sockets. `stop()` only ends the loop, and nothing else
-            # closed them on this path: measured across three test modules, 7
-            # sockets were still open at the end of the session. `close()` also
-            # gives back the SIGINT handler, but only when it can -- see
-            # `_restore_sigint_handler` for why that part waits for the main
-            # thread.
-            self.close()

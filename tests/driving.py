@@ -79,8 +79,9 @@ def serve(
                     None, exercise, port
                 )
             finally:
-                server.stop()
-                await asyncio.wait_for(server.wait(), WAIT_SECONDS)
+                server.shutdown()
+                assert await asyncio.wait_for(server.wait_closed(), WAIT_SECONDS)
+                await server.aclose()
                 await asyncio.sleep(0)
                 assert len(asyncio.all_tasks()) <= tasks_before + 1, "a task leaked"
 

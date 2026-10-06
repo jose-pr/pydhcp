@@ -24,7 +24,6 @@ client.start()
 try:
     ack = client.dora(bytes.fromhex(args.chaddr), timeout=1.0, retries=3)
 finally:
-    client.stop()
     client.close()
 
 if ack is None:

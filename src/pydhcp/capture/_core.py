@@ -31,7 +31,7 @@ class _CaptureCore(_Timed):
 
     if _ty.TYPE_CHECKING:
 
-        def stop(self) -> _ty.Any: ...
+        def shutdown(self) -> None: ...
 
     def _init_capture_state(
         self,
@@ -83,5 +83,5 @@ class _CaptureCore(_Timed):
                     # and stop the loop, so a caller can tell that it ended
                     # because of the hook rather than because it was asked to.
                     self.hook_error = exc
-                    self.stop()
+                    self.shutdown()
                     raise

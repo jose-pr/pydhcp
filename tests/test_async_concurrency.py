@@ -99,6 +99,6 @@ def test_async_concurrency():
             p99 = latencies[int(len(latencies) * 0.99)]
             print(f"\nLatency: p50={p50:.4f}s, p95={p95:.4f}s, p99={p99:.4f}s")
         finally:
-            await server.stop()
+            await server.aclose()
 
     asyncio.run(main())

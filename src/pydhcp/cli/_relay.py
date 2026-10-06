@@ -125,8 +125,7 @@ class Relay(_Command):
             ", ".join(self.server),
         )
         try:
-            relay.bind()
-            relay.listen()
+            with relay:
+                relay.serve_forever()
         except KeyboardInterrupt:
-            self._logger_.info("Stopping relay...")
-            relay.stop()
+            self._logger_.info("Stopped listening due to Ctrl-C")

@@ -39,7 +39,7 @@ class RecordingListener(DHCPListener):
 def _drain(listener: DHCPListener, turns: int = 1) -> None:
     """Run the receive loop just long enough to take what is already queued."""
     listener._select_timeout = 0.05
-    thread = threading.Thread(target=listener.listen, daemon=True)
+    thread = threading.Thread(target=listener.serve_forever, daemon=True)
     thread.start()
     deadline = time.monotonic() + 3
     while time.monotonic() < deadline:
@@ -54,9 +54,10 @@ def _drain(listener: DHCPListener, turns: int = 1) -> None:
         ):
             break
         time.sleep(0.02)
-    listener.stop()
+    listener.shutdown()
     thread.join(5)
     assert not thread.is_alive()
+    listener.close()
 
 
 # --- transport-29: a datagram that does not fit is dropped, not decoded ---

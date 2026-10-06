@@ -40,9 +40,7 @@ async def main() -> None:
     await capture.start()
     print("capturing", flush=True)
     await done.wait()
-    stopped = capture.stop()
-    if stopped is not None:
-        await stopped
+    await capture.aclose()
 
 
 asyncio.run(main())

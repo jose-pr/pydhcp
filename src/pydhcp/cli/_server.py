@@ -67,11 +67,12 @@ class Server(_Command):
             lease_backend=backend,
         )
         try:
-            server.bind()
-            server.listen()
+            # The library installs no signal handler: Ctrl-C arrives here as
+            # `KeyboardInterrupt`, and leaving the block closes the server.
+            with server:
+                server.serve_forever()
         except KeyboardInterrupt:
-            self._logger_.info("Stopping server...")
-            server.stop()
+            self._logger_.info("Stopped listening due to Ctrl-C")
         finally:
             # Flush a coalescing backend, and let the in-memory one no-op.
             close = getattr(server.lease_backend, "close", None)

@@ -163,7 +163,6 @@ def run_sync() -> None:
     server.start()
     print("serving", flush=True)
     done.wait()
-    server.stop()
     server.close()
     report(server)
 
@@ -176,9 +175,7 @@ async def run_async() -> None:
     await server.start()
     print("serving", flush=True)
     await done.wait()
-    stopped = server.stop()
-    if stopped is not None:
-        await stopped
+    await server.aclose()
     report(server)
 
 

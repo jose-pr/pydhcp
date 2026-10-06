@@ -54,7 +54,7 @@ def test_async_server_lifecycle():
                 == DHCPMessageType.DHCPOFFER
             )
         finally:
-            await server.stop()
+            await server.aclose()
             client_sock.close()
 
     asyncio.run(run_test())
@@ -68,6 +68,7 @@ def test_async_server_has_the_same_state_as_the_sync_one():
     body and drifted: _declined was added to one and not the other, making every
     DHCPDECLINE an AttributeError on the async server."""
     from ipaddress import IPv4Address as IPv4
+    from pydhcp.listener import AsyncDHCPListener, DHCPListener
     from pydhcp.server import AsyncDHCPServer, DHCPServer
 
     sync = DHCPServer(listen=("127.0.0.1", 0))
@@ -81,55 +82,18 @@ def test_async_server_has_the_same_state_as_the_sync_one():
         server.quarantine_address(IPv4("10.0.0.5"))
         assert IPv4("10.0.0.5") in server._declined
         # Every attribute DHCPServer._init_server_state owns must be on both.
-        # Listener internals legitimately differ (the async half has transports
-        # instead of a select loop, a cancellation token and a SIGINT handler),
-        # so this compares the server layer only.
+        # Listener internals legitimately differ (the async half has a worker
+        # and receive tasks, the sync half a wake socket and a select loop), so
+        # this compares the server layer only.
         server_state = set(vars(DHCPServer(listen=("127.0.0.1", 0)))) - set(
             vars(AsyncDHCPServer(listen=("127.0.0.1", 0)))
         )
-        assert server_state <= {
-            "_cancellation_token",
-            "_previous_sigint",
-            "_select_timeout",
-            "_sigint_handler",
-        }
+        sync_listener_only = set(vars(DHCPListener(listen=("127.0.0.1", 0)))) - set(
+            vars(AsyncDHCPListener(listen=("127.0.0.1", 0)))
+        )
+        assert server_state <= sync_listener_only, server_state - sync_listener_only
     finally:
-        server.stop()
         sync.close()
-
-
-def test_async_stop_works_without_await():
-    """stop() is reached through the inherited DHCPListener contract, where
-    nobody awaits it. As a coroutine it silently did nothing and left the ports
-    bound, and mypy accepted the call."""
-    import asyncio
-
-    from pydhcp.server import AsyncDHCPServer
-
-    async def main():
-        server = AsyncDHCPServer(listen=("127.0.0.1", 0))
-        server.bind()
-        assert server.bound_addresses
-        server.stop()  # no await
-        assert server.bound_addresses == ()
-
-    asyncio.run(main())
-
-
-def test_async_stop_still_supports_await():
-    """The documented form in README and docs/index.md."""
-    import asyncio
-
-    from pydhcp.server import AsyncDHCPServer
-
-    async def main():
-        server = AsyncDHCPServer(listen=("127.0.0.1", 0))
-        server.bind()
-        assert server.bound_addresses
-        await server.stop()
-        assert server.bound_addresses == ()
-
-    asyncio.run(main())
 
 
 def test_async_handler_does_not_run_on_the_event_loop() -> None:
@@ -164,7 +128,7 @@ def test_async_handler_does_not_run_on_the_event_loop() -> None:
                     break
                 await asyncio.sleep(0.02)
         finally:
-            server.stop()
+            await server.aclose()
 
     asyncio.run(main())
 
@@ -208,7 +172,7 @@ def test_async_handlers_stay_serialised() -> None:
                     break
                 await asyncio.sleep(0.02)
         finally:
-            server.stop()
+            await server.aclose()
 
     asyncio.run(main())
 
@@ -278,36 +242,6 @@ def test_async_listener_builds_a_packet_info_context():
         sock.close()
 
 
-def test_async_wait_and_listen_do_not_raise_attributeerror():
-    """Both are reachable through the inherited DHCPListener contract.
-
-    AsyncDHCPListener.__init__ never sets `_cancellation_token`, so the sync
-    implementations it inherited through AsyncDHCPServer's MRO failed with
-    `AttributeError: _cancellation_token` several frames deep -- a bug report
-    that says nothing about what to call instead.
-    """
-    from pydhcp.server import AsyncDHCPServer
-
-    async def main():
-        server = AsyncDHCPServer(listen=("127.0.0.1", 0))
-
-        # listen() says what to use, rather than dying on missing state.
-        with pytest.raises(NotImplementedError, match="await start"):
-            server.listen()
-
-        # wait() before start() returns rather than hanging or raising.
-        await asyncio.wait_for(server.wait(), timeout=20)
-
-        await server.start()
-        waiter = asyncio.create_task(server.wait())
-        await asyncio.sleep(0.05)
-        assert not waiter.done(), "wait() returned while the server was serving"
-        server.stop()
-        await asyncio.wait_for(waiter, timeout=20)
-
-    asyncio.run(main())
-
-
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE,
     reason="needs a second loopback address; macOS aliases only 127.0.0.1",
@@ -337,7 +271,7 @@ def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
             assert drop.exception() is None
             assert not keep.done()
         finally:
-            await server.stop()
+            await server.aclose()
         return reports
 
     assert asyncio.run(run_test()) == []
@@ -368,7 +302,7 @@ def test_async_oversized_datagram_is_dropped_rather_than_half_decoded() -> None:
                     break
                 await asyncio.sleep(0.05)
         finally:
-            await server.stop()
+            await server.aclose()
         return (
             len(handled),
             server.metrics.packets_dropped_truncated,

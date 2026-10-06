@@ -39,11 +39,10 @@ listeners = {
     ),
     "wildcard": Counting(listen=("0.0.0.0", base + 2), select_timeout=0.05),
 }
-threads = {name: listener.start() for name, listener in listeners.items()}
+for listener in listeners.values():
+    listener.start()
 print("ready", flush=True)
 time.sleep(seconds)
 for name, listener in listeners.items():
-    listener.stop()
-    threads[name].join(2)
     listener.close()
 print(json.dumps({name: dict(l.seen) for name, l in listeners.items()}))

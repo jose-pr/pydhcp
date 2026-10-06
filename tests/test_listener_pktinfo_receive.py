@@ -71,16 +71,14 @@ def test_a_wildcard_listener_learns_where_a_datagram_arrived() -> None:
     listener = _Recording(listen=("0.0.0.0", 0), select_timeout=0.05)
     listener.bind()
     port = listener.bound_addresses[0].port
-    thread = listener.start()
+    listener.start()
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sender.sendto(build_request().encode(), ("127.0.0.1", port))
         _wait(lambda: listener.contexts)
     finally:
         sender.close()
-        listener.stop()
-        assert thread is not None
-        thread.join(5)
+        listener.close()
 
     assert listener.contexts, "nothing reached handle()"
     context = listener.contexts[0]
@@ -145,13 +143,11 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     server = DHCPServer(listen=spec, select_timeout=0.05)
     server.bind()
     port = server.bound_addresses[0].port
-    thread = server.start()
+    server.start()
     try:
         reply = _exchange_discover(port)
     finally:
-        server.stop()
-        assert thread is not None
-        thread.join(5)
+        server.close()
 
     assert server.metrics.leases_allocated == 1, server.metrics.snapshot()
     assert reply is not None, "the server allocated but no reply arrived"
@@ -179,7 +175,7 @@ def test_every_wildcard_spelling_hears_a_limited_broadcast(spelling) -> None:
 
     listener = _Recording(listen=spec[spelling], select_timeout=0.05)
     listener.bind()
-    thread = listener.start()
+    listener.start()
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sender.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     try:
@@ -187,9 +183,7 @@ def test_every_wildcard_spelling_hears_a_limited_broadcast(spelling) -> None:
         _wait(lambda: listener.contexts)
     finally:
         sender.close()
-        listener.stop()
-        assert thread is not None
-        thread.join(5)
+        listener.close()
 
     assert listener.contexts, f"{spelling}: the broadcast never arrived"
 
@@ -221,8 +215,8 @@ def test_the_async_listener_learns_where_a_datagram_arrived() -> None:
             await loop.run_in_executor(None, listener.seen.wait, 3.0)
         finally:
             sender.close()
-            await listener.stop()
-        assert listener.bound_addresses == (), "stop() did not close the sockets"
+            await listener.aclose()
+        assert listener.bound_addresses == (), "aclose() did not close the sockets"
         return listener.contexts
 
     contexts = asyncio.run(scenario())

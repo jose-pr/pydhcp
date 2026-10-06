@@ -63,6 +63,8 @@ class _ListenerCore:
         #: address; the expansion is read when binding, not when constructing.
         self._expand_wildcard = not self._pktinfo
         self._per_interface = per_interface
+        #: Closed is final: set by `close()`, never cleared.
+        self._closed = False
         self._sockets: list[_socket.socket] = []
         #: The netimps endpoint each socket is received through.
         self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
@@ -89,6 +91,12 @@ class _ListenerCore:
         pass
 
     def bind(self) -> None:
+        """Open the sockets. Idempotent; raises what the bind raised, leaving none open.
+
+        Raises `RuntimeError` once the listener is closed.
+        """
+        if self._closed:
+            raise RuntimeError(f"{type(self).__name__} is closed")
         listen = (
             _expand_wildcards(self._listen) if self._expand_wildcard else self._listen
         )

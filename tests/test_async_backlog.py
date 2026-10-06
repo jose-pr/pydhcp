@@ -92,7 +92,7 @@ def test_a_blocked_handler_queues_no_more_than_the_bound(factory: _ty.Any) -> No
             assert listener.handled == 8
         finally:
             listener.release.set()
-            await listener.stop()
+            await listener.aclose()
 
     _run(factory, scenario())
 
@@ -108,7 +108,7 @@ def test_the_drops_are_reported_at_a_limited_rate(
             await _until(lambda: listener.metrics.packets_dropped_backlog >= 58)
         finally:
             listener.release.set()
-            await listener.stop()
+            await listener.aclose()
 
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         _run(asyncio.new_event_loop, scenario())
@@ -126,10 +126,12 @@ def test_stopping_discards_the_queue_without_errors(
         await listener.start()
         await _flood(listener.bound_addresses[0].port, 30)
         await _until(lambda: listener._pending >= 30)
-        await listener.stop()
+        listener.shutdown()
+        assert await listener.wait_closed(10.0)
         listener.release.set()
         await _until(lambda: listener.handled >= 1)
         await asyncio.sleep(0.3)
+        await listener.aclose()
         return listener
 
     with caplog.at_level(logging.DEBUG, logger="pydhcp"):

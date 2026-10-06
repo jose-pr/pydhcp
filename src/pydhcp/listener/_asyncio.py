@@ -63,11 +63,16 @@ class AsyncDHCPListener(_ListenerCore):
         self._pending = 0
         self._pending_lock = _thread.Lock()
         self._last_backlog_report = float("-inf")
+        #: Set while the worker is aborted: a queued datagram is discarded.
         self._closing = False
         #: One receive task per socket; see `_receive`.
         self._tasks: "list[_asyncio.Task[None]]" = []
         self._loop: _ty.Optional[_asyncio.AbstractEventLoop] = None
         self._stopped: _ty.Optional[_asyncio.Event] = None
+        self._serve_ended: "_ty.Optional[_asyncio.Future[None]]" = None
+        self._serving = False
+        self._serving_task: "_ty.Optional[_asyncio.Task[None]]" = None
+        self._close_task: "_ty.Optional[_asyncio.Future[None]]" = None
         self._worker: _ty.Optional[_futures.ThreadPoolExecutor] = None
 
     async def _receive(
@@ -172,7 +177,7 @@ class AsyncDHCPListener(_ListenerCore):
 
     def _report_worker_result(self, future: "_futures.Future[None]") -> None:
         self._finished()
-        if future.cancelled():  # discarded at stop(), still queued
+        if future.cancelled():  # discarded at shutdown, still queued
             self.metrics.packets_dropped_backlog += 1
             return
         error = future.exception()
@@ -190,114 +195,109 @@ class AsyncDHCPListener(_ListenerCore):
         ifindex: "_ty.Optional[int]" = None,
         local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     ) -> None:
-        if self._closing:  # stop() was called after this was queued
+        if self._closing:  # shut down after this was queued
             self.metrics.packets_dropped_backlog += 1
             return
         self._dispatch(data, client, sock, ifindex, local_ip)
 
-    async def wait(self) -> None:
-        """Block until `stop()` is called.
+    # -- lifecycle ---------------------------------------------------------
 
-        The sync counterpart is `DHCPListener.wait()`, and reaching *that* one
-        through the inherited contract raised `AttributeError: _cancellation_token`
-        -- the async constructor never sets one. A coroutine is the honest shape
-        here: waiting synchronously inside the loop that has to run the handlers
-        would deadlock.
-        """
-        stopped = self._stopped
-        if stopped is None:  # never started, or already stopped
-            return
-        await stopped.wait()
-
-    def listen(self) -> None:
-        """Not available: the async listener is driven by its event loop.
-
-        Inherited from `DHCPListener` through `AsyncDHCPServer`'s MRO, where it
-        used to fail with `AttributeError: _cancellation_token` several frames
-        deep instead of saying what to call.
-        """
-        raise NotImplementedError(
-            "AsyncDHCPListener has no blocking listen(); "
-            "use `await start()` and then `await wait()`."
-        )
-
-    async def start(self) -> None:
+    def _claim(self) -> "_asyncio.AbstractEventLoop":
+        """Bind, then mark this task as the one that serves."""
         self.bind()
+        if self._serving:
+            raise RuntimeError(f"{type(self).__name__} is already serving")
+        loop = _asyncio.get_running_loop()
         if self._worker is None:
             self._worker = _futures.ThreadPoolExecutor(
                 max_workers=1, thread_name_prefix="pydhcp-async-handler"
             )
-        loop = _asyncio.get_running_loop()
         self._loop = loop
         self._closing = False
         self._stopped = _asyncio.Event()
+        self._serve_ended = loop.create_future()
+        self._serving = True
+        return loop
+
+    async def start(self) -> None:
+        """Bind, then receive in background tasks, and return once receiving.
+
+        Raises what `bind()` raised, and `RuntimeError` when already serving or
+        closed; nothing is left open or running in either case.
+        """
+        loop = self._claim()
+        try:
+            self._begin_receiving(loop)
+        except BaseException:
+            self._abort_claim()
+            raise
+        self._serving_task = loop.create_task(self._serve())
+
+    async def serve_forever(self) -> None:
+        """Bind, then receive in the calling task until `shutdown()`.
+
+        Raises what `bind()` raised, and `RuntimeError` when already serving or
+        closed. The sockets stay open on return: `aclose()` releases them.
+        """
+        loop = self._claim()
+        try:
+            self._begin_receiving(loop)
+        except BaseException:
+            self._abort_claim()
+            raise
+        await self._serve()
+
+    def _begin_receiving(self, loop: "_asyncio.AbstractEventLoop") -> None:
         for sock in self._sockets:
             sock.setblocking(False)
-            self._tasks.append(
-                loop.create_task(self._receive(sock, self._endpoints[sock]))
+            task = loop.create_task(self._receive(sock, self._endpoints[sock]))
+            task.add_done_callback(self._receive_ended)
+            self._tasks.append(task)
+
+    def _abort_claim(self) -> None:
+        for task in self._tasks:
+            task.cancel()
+        self._tasks = []
+        worker, self._worker = self._worker, None
+        if worker is not None:
+            worker.shutdown(wait=False, cancel_futures=True)
+        self._release_serving()
+
+    def _receive_ended(self, task: "_asyncio.Task[None]") -> None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            LOGGER.error(
+                f"A receive task ended on an unexpected error: "
+                f"{error.__class__.__name__} | {error}",
+                exc_info=error,
             )
 
-    def stop(self) -> _ty.Any:
-        """Close every transport and socket.
+    async def _serve(self) -> None:
+        stopped = self._stopped
+        assert stopped is not None
+        try:
+            await stopped.wait()
+        finally:
+            await self._end_receiving()
 
-        Deliberately not a coroutine, even though `await listener.stop()` is the
-        documented form and still works. The work here is entirely synchronous,
-        and as `async def` this silently did nothing whenever it was reached
-        through the inherited `DHCPListener` contract: `server.stop()` returned a
-        coroutine nobody awaited, so the server kept running with its ports
-        bound, and mypy accepted it. Returning an already-finished future keeps
-        the `await` form working from inside a running loop.
+    async def _end_receiving(self) -> None:
+        """Cancel the receive tasks, abort the worker and let `wait_closed()` return.
 
-        Called from the handler worker thread -- which is exactly what
-        `DHCPCapture.hook_fail_fast` and the capture CLI's `--count` sink do --
-        the close is handed back to the event loop instead of being run inline.
-        Nothing it touches is thread-safe: `Task.cancel()` and
-        `asyncio.Event.set()` both finish through `loop.call_soon`, which
-        queues a callback *without* waking the loop.
-        Measured with a handler calling `stop()` on its worker: the selector
-        loop (Linux) never woke and `await wait()` blocked forever, while
-        Windows' proactor loop returned in 7 ms -- the same
-        green-on-one-platform shape as every other defect in this file.
-        """
-        loop = self._loop
-        if loop is not None and not loop.is_closed():
-            try:
-                running: "_asyncio.AbstractEventLoop | None" = (
-                    _asyncio.get_running_loop()
-                )
-            except RuntimeError:
-                running = None
-            if running is not loop:
-                try:
-                    loop.call_soon_threadsafe(self._close_endpoints)
-                except RuntimeError:  # pragma: no cover - loop closed since
-                    return self._close_endpoints()
-                return None
-        return self._close_endpoints()
-
-    def _close_endpoints(self) -> _ty.Any:
-        """The body of `stop()`, always on the event loop's own thread.
-
-        Cancel the receive tasks, *then* close the endpoints -- the order netimps
+        The tasks end *before* the sockets are closed, the order netimps
         documents as a clean shutdown: a cancelled `arecv` unregisters its
-        reader, so the loop is not left polling a socket about to close. The
-        close therefore runs once the tasks have finished, and the returned
-        awaitable completes then, so `await stop()` still means "closed". So
-        does `await wait()`: the stop event is set only after the close, since
-        `hook_fail_fast` callers check `bound_addresses` the moment it returns.
+        reader, so the loop is not left polling a socket about to close.
+        Datagrams still queued for the handler are discarded and counted in
+        `metrics.packets_dropped_backlog`; the handler already running
+        finishes, and nothing waits for it, since a handler in flight may be
+        doing exactly the blocking work the worker exists to keep off the loop.
         """
-        stopped, self._stopped = self._stopped, None
-        self._loop = None
         tasks, self._tasks = self._tasks, []
         for task in tasks:
             task.cancel()
         worker, self._worker = self._worker, None
         if worker is not None:
-            # Abort, not drain: datagrams still queued are discarded and counted
-            # in `metrics.packets_dropped_backlog`; the handler already running
-            # finishes. Don't wait: stop() is called from the event loop, and a
-            # handler in flight may be doing exactly the blocking work this
-            # worker exists to keep off it.
             self._closing = True
             discarded_before = self.metrics.packets_dropped_backlog
             worker.shutdown(wait=False, cancel_futures=True)
@@ -307,27 +307,68 @@ class AsyncDHCPListener(_ListenerCore):
                     f"Stopped with {discarded} datagrams still queued; "
                     f"discarded {discarded} unhandled."
                 )
-
         try:
-            running = _asyncio.get_running_loop()
-        except RuntimeError:
-            # No running loop, so the tasks cannot be waited for and nobody can
-            # be awaiting this anyway.
-            self._finish_close(stopped)
-            return None
-        if not tasks:
-            self._finish_close(stopped)
-            future = running.create_future()
-            future.set_result(None)
-            return future
-
-        async def finish() -> None:
             await _asyncio.gather(*tasks, return_exceptions=True)
-            self._finish_close(stopped)
+        finally:
+            self._release_serving()
 
-        return running.create_task(finish())
+    def _release_serving(self) -> None:
+        ended = self._serve_ended
+        self._serving = False
+        self._loop = None
+        self._stopped = None
+        self._serve_ended = None
+        if self._closed:
+            self._close_sockets()
+        if ended is not None and not ended.done():
+            ended.set_result(None)
 
-    def _finish_close(self, stopped: "_ty.Optional[_asyncio.Event]" = None) -> None:
-        self._close_sockets()
-        if stopped is not None:
-            stopped.set()
+    def shutdown(self) -> None:
+        """Ask serving to end. Returns at once, from any thread and from a handler.
+
+        Nothing is closed here: the receive tasks end on the event loop's next
+        turn and `aclose()` releases the sockets. A no-op when nothing serves.
+        """
+        loop, stopped = self._loop, self._stopped
+        if not self._serving or loop is None or stopped is None:
+            return
+        try:
+            # `Event.set` finishes through `loop.call_soon`, which queues a
+            # callback without waking a selector loop from another thread.
+            loop.call_soon_threadsafe(stopped.set)
+        except RuntimeError:  # pragma: no cover - the loop closed since
+            pass
+
+    async def wait_closed(self, timeout: _ty.Optional[float] = None) -> bool:
+        """Wait until serving has ended; `False` if `timeout` seconds passed first."""
+        ended = self._serve_ended
+        if ended is not None and not ended.done():
+            try:
+                await _asyncio.wait_for(_asyncio.shield(ended), timeout)
+            except _asyncio.TimeoutError:
+                return False
+        task, self._serving_task = self._serving_task, None
+        if task is not None and not task.done():
+            await task
+        return True
+
+    async def aclose(self) -> None:
+        """Shut down, wait for serving to end, then release every socket. Final and repeatable."""
+        if self._close_task is None:
+            self._close_task = _asyncio.ensure_future(self._close())
+        await _asyncio.shield(self._close_task)
+
+    async def _close(self) -> None:
+        self._closed = True
+        self.shutdown()
+        try:
+            await self.wait_closed()
+        finally:
+            self._close_sockets()
+
+    async def __aenter__(self) -> "AsyncDHCPListener":
+        self.bind()
+        return self
+
+    async def __aexit__(self, *_exc: _ty.Any) -> None:
+        await self.aclose()

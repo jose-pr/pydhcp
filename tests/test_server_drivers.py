@@ -53,16 +53,26 @@ def test_the_drivers_are_siblings_over_one_core() -> None:
 
 def test_the_core_owns_no_listener() -> None:
     assert not issubclass(_ServerCore, (DHCPListener, AsyncDHCPListener))
-    for name in ("bind", "start", "stop", "wait", "close", "listen", "bound_addresses"):
+    for name in (
+        "bind",
+        "start",
+        "shutdown",
+        "wait_closed",
+        "close",
+        "serve_forever",
+        "bound_addresses",
+    ):
         assert not hasattr(_ServerCore, name), name
 
 
-def test_an_async_server_has_no_synchronous_lifecycle() -> None:
-    """The context manager and `close()` it used to pick up from the sync
-    listener raised `AttributeError` on `_sigint_handler`; they are gone."""
+def test_an_async_server_has_the_asynchronous_lifecycle_only() -> None:
+    """`async with` and `aclose()`; the blocking context manager and `close()` it
+    once picked up from the sync listener raised `AttributeError` and are gone."""
     server = AsyncDHCPServer(listen=("127.0.0.1", 0))
-    for name in ("__enter__", "__exit__", "close"):
+    for name in ("__enter__", "__exit__", "close", "listen", "stop", "wait"):
         assert not hasattr(server, name), name
+    for name in ("__aenter__", "__aexit__", "aclose", "start", "wait_closed"):
+        assert hasattr(server, name), name
     assert not isinstance(server, DHCPServer)
 
 

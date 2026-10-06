@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import socket
 from datetime import datetime, timezone
 
 import pytest
@@ -392,9 +393,9 @@ def test_dhcp_capture_hook_fail_fast_stops_the_capture(capture_class) -> None:
     still exited 0. Measured on loopback before this: the hook fired for all
     three packets and the listener thread was still alive.
 
-    The two listeners stop by different mechanisms (a cancellation token versus
-    closing the endpoints), so what is asserted here is the part that has to be
-    the same on both: the real `stop()` is called and the reason is recorded.
+    The two listeners shut down by different mechanisms (a wake socket versus
+    an event on the loop), so what is asserted here is the part that has to be
+    the same on both: the real `shutdown()` is called and the reason is recorded.
     `tests/test_async.py` drives the async mechanism itself, on a live loop.
     """
 
@@ -404,9 +405,9 @@ def test_dhcp_capture_hook_fail_fast_stops_the_capture(capture_class) -> None:
     class RecordingCapture(capture_class):  # type: ignore[valid-type,misc]
         stop_calls = 0
 
-        def stop(self):
+        def shutdown(self):
             type(self).stop_calls += 1
-            return super().stop()
+            return super().shutdown()
 
     capture = RecordingCapture(
         listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
@@ -421,25 +422,24 @@ def test_dhcp_capture_hook_fail_fast_stops_the_capture(capture_class) -> None:
     assert RecordingCapture.stop_calls == 1
 
 
-def test_dhcp_capture_sync_fail_fast_sets_the_cancellation_token() -> None:
-    """The sync mechanism specifically: `stop()` sets the token `listen()` polls."""
+def test_dhcp_capture_sync_fail_fast_ends_the_receive_loop() -> None:
+    """The sync mechanism specifically: `shutdown()` wakes the loop that `start()`
+    runs, so the capture ends on its own after the failing hook."""
 
     def bad_hook(event):
         raise RuntimeError("boom")
 
-    import threading
-
-    capture = DHCPCapture(
-        listen=("127.0.0.1", 6767), hook=bad_hook, hook_fail_fast=True
-    )
-    # listen() creates this; the token is what stop() acts on, so the loop has to
-    # look like it is running for the test to say anything about stopping it.
-    capture._cancellation_token = threading.Event()
-
-    with pytest.raises(RuntimeError):
-        capture.handle(_message(), _context())
-
-    assert capture._cancellation_token.is_set()
+    capture = DHCPCapture(listen=("127.0.0.1", 0), hook=bad_hook, hook_fail_fast=True)
+    capture.start()
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        address = capture.bound_addresses[0]
+        sender.sendto(_message().encode(), (str(address.ip), address.port))
+        assert capture.wait_closed(5.0), "the capture kept receiving after the failure"
+        assert isinstance(capture.hook_error, RuntimeError)
+    finally:
+        sender.close()
+        capture.close()
 
 
 def test_dhcp_capture_hook_error_stays_none_without_fail_fast(capture_class) -> None:

@@ -234,7 +234,7 @@ class Capture(_Command):
                 )
                 state["count"] += 1
                 if self.count is not None and state["count"] >= self.count:
-                    capture.stop()
+                    capture.shutdown()
 
             hook = _load_capture_hook(self.hook, packet_format, self.hook_fail_fast)
             capture = DHCPCapture(
@@ -245,8 +245,11 @@ class Capture(_Command):
                 hook_fail_fast=self.hook_fail_fast,
                 per_interface=self.per_interface,
             )
-            capture.bind()
-            capture.listen()
+            try:
+                with capture:
+                    capture.serve_forever()
+            except KeyboardInterrupt:
+                self._logger_.info("Stopped listening due to Ctrl-C")
             if capture.hook_error is not None:
                 # --hook-fail-fast asked for this: say why it stopped, and do
                 # not report success.

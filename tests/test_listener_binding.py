@@ -77,19 +77,16 @@ def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
         listener.close()
 
 
-def test_a_closed_listener_gets_a_fresh_ephemeral_port() -> None:
-    """Idempotence is per bind cycle: port 0 still means "any" after close()."""
+def test_a_closed_listener_cannot_bind_again() -> None:
+    """Closed is final: the sockets `close()` released are not reopened."""
     listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
-    first = listener.bound_addresses[0].port
     listener.close()
     assert listener.bound_addresses == ()
 
-    listener.bind()
-    try:
-        assert listener.bound_addresses[0].port != 0
-    finally:
-        listener.close()
+    with pytest.raises(RuntimeError, match="closed"):
+        listener.bind()
+    assert listener.bound_addresses == ()
 
 
 # --- transport-11: the port is claimed exclusively by default ---

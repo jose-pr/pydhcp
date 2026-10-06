@@ -143,7 +143,7 @@ def wait_bound(listener: _ty.Any, timeout: float = 2.0) -> None:
 
 @contextlib.contextmanager
 def running(listener: _ty.Any, timeout: float = 2.0) -> _ty.Iterator[_ty.Any]:
-    """Start `listener`, wait for it to bind, and always stop, join and close it.
+    """Start `listener`, wait for it to bind, and always shut down, join and close it.
 
     Five test sites started a listener and only then entered `try`, so anything
     that raised in between -- `wait_bound` timing out, a `bound_addresses[0]`
@@ -155,18 +155,16 @@ def running(listener: _ty.Any, timeout: float = 2.0) -> _ty.Iterator[_ty.Any]:
     The join is asserted, not best-effort: a thread that outlives its test is
     the defect this exists to catch, and a silent `join(timeout=1)` hides it.
     """
-    thread = listener.start()
+    listener.start()
     try:
         wait_bound(listener, timeout)
         assert listener.bound_addresses, "listener did not bind within the timeout"
         yield listener
     finally:
-        listener.stop()
-        if thread is not None:
-            # Generously more than `select_timeout`, which is what bounds how
-            # long the loop takes to notice the cancellation token.
-            thread.join(timeout + listener._select_timeout + 2)
-            assert not thread.is_alive(), "listener thread outlived the test"
+        listener.shutdown()
+        # The join is asserted, not best-effort: a receive loop that outlives
+        # its test is the defect this exists to catch.
+        assert listener.wait_closed(timeout + 2), "listener thread outlived the test"
         listener.close()
 
 

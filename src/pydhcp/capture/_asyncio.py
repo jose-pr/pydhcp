@@ -18,7 +18,7 @@ class AsyncDHCPCapture(_CaptureCore, AsyncDHCPListener):
     what keeps them safe is that `AsyncDHCPListener` runs handlers on a single
     worker thread, the sink included, so the capture CLI's `--count` budget
     needs no lock. `hook_fail_fast` stops the capture from that worker thread,
-    and `AsyncDHCPListener.stop()` hands the close back to the event loop.
+    and `AsyncDHCPListener.shutdown()` reaches the event loop from any thread.
     """
 
     def __init__(

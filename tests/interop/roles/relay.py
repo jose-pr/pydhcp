@@ -43,9 +43,7 @@ async def run_async() -> None:
     await relay.start()
     print("relaying", flush=True)
     await done.wait()
-    stopped = relay.stop()
-    if stopped is not None:
-        await stopped
+    await relay.aclose()
     report(relay)
 
 
@@ -56,7 +54,6 @@ def run_sync() -> None:
     relay.start()
     print("relaying", flush=True)
     done.wait()
-    relay.stop()
     relay.close()
     report(relay)
 
