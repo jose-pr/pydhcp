@@ -7,8 +7,8 @@ from .base import BaseDHCPOptionCode as BaseDHCPOptionCode, DHCPOption as DHCPOp
 from .type import DHCPOptionType as DHCPOptionType
 from .type import *  # noqa: F403
 from .code import DHCPOptionCode as DHCPOptionCode
-from .. import constants as _const
-from .._utils import MISSING as _MISSING
+from .. import _constants as _const
+from .._missing import MISSING as _MISSING
 from math import inf as _inf
 
 LOGGER = _logging.getLogger(__name__)

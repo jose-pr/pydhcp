@@ -8,8 +8,9 @@ import enum as _enum_base
 import typing as _ty
 
 from . import enums as _enum
-from .. import nvt as _nvt
-from ..options import BaseDHCPOptionCode, DHCPOptions, type as _type
+from .. import _nvt as _nvt
+from ..options import BaseDHCPOptionCode, DHCPOptions
+from ..options import type as _type
 from ._encode import _MessageEncode
 
 

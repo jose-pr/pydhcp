@@ -3,7 +3,7 @@ from collections.abc import Iterable
 import typing as _ty
 import enum as _enum
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ... import nvt as _nvt
+from ... import _nvt as _nvt
 from ...network import HardwareAddressType as _HardwareAddressType
 
 
@@ -114,7 +114,7 @@ class String(DHCPOptionType, str):
 
     Octets that are not valid UTF-8 are preserved rather than replaced, so a
     hostname or boot filename in another encoding survives a decode/encode round
-    trip intact; `__json__` renders the display form. See `pydhcp.nvt`.
+    trip intact; `__json__` renders the display form. See `pydhcp._nvt`.
     """
 
     @classmethod

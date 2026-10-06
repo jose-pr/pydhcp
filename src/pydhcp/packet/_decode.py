@@ -9,7 +9,8 @@ import typing as _ty
 from ..exceptions import DHCPDecodeError
 from . import enums as _enum
 
-from ..options import DHCPOptionCode, DHCPOptions, type as _type
+from ..options import DHCPOptionCode, DHCPOptions
+from ..options import type as _type
 from ._fields import (
     _MessageFields,
     _FIXED_HEADER_SIZE,

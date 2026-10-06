@@ -6,7 +6,7 @@ import typing as _ty
 
 from ..server import DHCPServer
 from ..lease import FileLeaseBackend, LeaseBackend
-from ..config import load_config
+from .._config import load_config
 from ._common import _Command
 
 

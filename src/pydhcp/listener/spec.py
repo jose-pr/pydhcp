@@ -7,7 +7,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import constants as _const, network as _net
+from .. import _constants as _const, network as _net
 
 ListenAddress = _ty.Union[_ipaddress.IPv4Address, str]
 

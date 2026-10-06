@@ -1,7 +1,7 @@
 import logging
 import sys
 
-from pydhcp import DHCPListener, log
+from pydhcp import DHCPListener
 
 LOGGER = logging.getLogger()
 handler = logging.StreamHandler(sys.stdout)
@@ -10,7 +10,7 @@ handler.setFormatter(
     logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 )
 LOGGER.addHandler(handler)
-log.LOGGER.setLevel(logging.DEBUG)
+logging.getLogger("pydhcp").setLevel(logging.DEBUG)
 
 
 if __name__ == "__main__":

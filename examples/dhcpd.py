@@ -7,7 +7,7 @@ import sys
 
 import netimps
 
-from pydhcp import DHCPOptions, DHCPServer, log
+from pydhcp import DHCPOptions, DHCPServer
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet.message import DHCPMessage
 from pydhcp.server import DHCPLease
@@ -19,7 +19,7 @@ handler.setFormatter(
     logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 )
 LOGGER.addHandler(handler)
-log.LOGGER.setLevel(logging.DEBUG)
+logging.getLogger("pydhcp").setLevel(logging.DEBUG)
 
 
 class ExampleDHCPServer(DHCPServer):

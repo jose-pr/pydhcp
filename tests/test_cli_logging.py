@@ -1,6 +1,6 @@
 """Per-module loggers under the `pydhcp` package logger, and no stderr by default.
 
-`pydhcp.log` used to be a single flat `pydhcp` logger that every module shared,
+`pydhcp._log` used to be a single flat `pydhcp` logger that every module shared,
 so nothing could be turned down by module and nothing said which module a line
 came from. And with no handler anywhere on the chain, `logging.lastResort`
 printed WARNING and above straight to stderr -- a library writing to the
@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 import pydhcp.capture as capture_module
 import pydhcp.cli as cli_module
 from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
-from pydhcp.log import LOGGER
+from pydhcp._log import LOGGER
 from ipaddress import IPv4Address as IPv4
 from pydhcp.network import SocketAddress
 from pydhcp.packet import DHCPMessageType
@@ -90,7 +90,7 @@ def test_importing_pydhcp_does_not_write_to_stderr() -> None:
     """
     program = (
         "import logging\n"
-        "import pydhcp.log as log\n"
+        "import pydhcp._log as log\n"
         "log.LOGGER.warning('should not reach the console')\n"
         "logging.getLogger('pydhcp.capture').warning('nor should this')\n"
     )
@@ -108,7 +108,7 @@ def test_importing_pydhcp_does_not_write_to_stderr() -> None:
 def test_a_configured_application_still_sees_the_records() -> None:
     """A NullHandler must not swallow anything -- it only stops `lastResort`."""
     program = (
-        "import logging, pydhcp.log as log\n"
+        "import logging, pydhcp._log as log\n"
         "logging.basicConfig(level=logging.WARNING)\n"
         "logging.getLogger('pydhcp.capture').warning('visible')\n"
     )
@@ -181,7 +181,7 @@ def test_every_module_that_logs_does_so_on_its_own_logger() -> None:
     for name in _pydhcp_modules():
         module = importlib.import_module(name)
         logger = module.__dict__.get("LOGGER")
-        if not isinstance(logger, logging.Logger) or name == "pydhcp.log":
+        if not isinstance(logger, logging.Logger) or name == "pydhcp._log":
             continue
         seen += 1
         if logger.name != name:

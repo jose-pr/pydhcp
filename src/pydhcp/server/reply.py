@@ -8,10 +8,11 @@ import logging as _logging
 import math as _math
 import typing as _ty
 
-from .. import constants as _const, network as _net
+from .. import _constants as _const, network as _net
 from ..lease import DHCPLease
 from ..listener import DHCPRequestContext
-from ..options import DHCPOptionCode, type as _type
+from ..options import DHCPOptionCode
+from ..options import type as _type
 from ..packet import enums as _enum
 from ..packet.message import DHCPMessage
 from math import inf as _inf

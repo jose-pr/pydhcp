@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from pydhcp import config
+from pydhcp import _config as config
 from pydhcp.network import SocketAddress
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.options.type import DomainList, OptionOverload

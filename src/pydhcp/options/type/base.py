@@ -2,7 +2,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ... import _utils
+from ..._generic import GenericMeta
 
 if _ty.TYPE_CHECKING:
     from ..base import BaseDHCPOptionCode
@@ -94,7 +94,7 @@ def hashable_payload(value: _ty.Any) -> _ty.Any:
 _ListT = _ty.TypeVar("_ListT", bound="List[_ty.Any]")
 
 
-class List(DHCPOptionType, list[_T], metaclass=_utils.GenericMeta):
+class List(DHCPOptionType, list[_T], metaclass=GenericMeta):
     """Typed DHCP option list container."""
 
     _args_: _ty.ClassVar[tuple[_T]]

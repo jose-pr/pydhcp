@@ -15,7 +15,7 @@ from .listener import (
     DHCPTransport as _DHCPTransport,
     UDPTransport as _UDPTransport,
 )
-from . import constants as _const, network as _net
+from . import _constants as _const, network as _net
 from .packet import enums as _enum
 from .options import DHCPOptionCode
 from .options import type as _type

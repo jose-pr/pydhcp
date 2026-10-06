@@ -12,7 +12,7 @@ them** — the previous wording said "everything", and 17 documented or
 subpackage names are not importable from `pydhcp`, among them `DHCPMetrics`,
 `ListenSpec`, `load_config`, `main`, `DHCPMessageType`, `DHCPPort`, `DHCPFlags`,
 `HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_V4`
-(the last now lives in `pydhcp.constants`).
+(the last now lives in `pydhcp._constants`).
 `from pydhcp import DHCPMessage` works; `from pydhcp import DHCPMessageType`
 does not. Import from the owning module when a name is not in `__all__`
 (83 names today, `__version__` among them: the installed distribution's
@@ -646,7 +646,7 @@ IPv6-only interface can break at runtime.
 
 ## Constants (`constants.py`)
 
-Not re-exported from the top-level package — import from `pydhcp.constants`.
+Not re-exported from the top-level package — import from `pydhcp._constants`.
 
 - **`WILDCARD_V4`** — `IPv4Address("0.0.0.0")`: the "every address" bind target, and
   the source of a client that has none yet. netimps has no such constant.
@@ -732,7 +732,7 @@ for logging (`-v`/`-q`/`--loglevel`, `self._logger_`); there is no
 per-subcommand `--log-level` flag anymore (superseded by duho's verbosity
 scheme). Every subcommand derives from an internal `_Command` base that sets
 `_logger_name_ = "pydhcp"`, so `self._logger_` resolves the package logger
-every module logger is a child of (`pydhcp.log.LOGGER`), and `-v`/`-q`
+every module logger is a child of (`pydhcp._log.LOGGER`), and `-v`/`-q`
 change that logger's level. The attribute has to live on the subcommand: duho
 resolves the logger on the *parsed* instance, so setting it only on `App` left
 `-v` raising the level of a logger named after the subcommand while `pydhcp`

@@ -370,7 +370,7 @@ def test_min_legal_size_is_the_rfc2131_capability_floor():
     be prepared to receive DHCP messages with an 'options' field of at least
     length 312 octets".
     """
-    from pydhcp import constants as const
+    from pydhcp import _constants as const
 
     fixed_header = 236  # op..file, RFC 2131 s2 figure 1
     ipv4_and_udp = 20 + 8

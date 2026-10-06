@@ -9,7 +9,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import constants as _const
+from .. import _constants as _const
 
 LOGGER = _logging.getLogger(__name__)
 

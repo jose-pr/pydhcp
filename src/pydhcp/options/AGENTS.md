@@ -80,7 +80,7 @@ of the installed package).
     the mutations write straight back into the source.
 
 - The `MISSING` sentinel this module uses to tell "no default given" from
-  "default is `None`" lives in `pydhcp._utils`, not in `pydhcp.constants` — it
+  "default is `None`" lives in `pydhcp._generic`, not in `pydhcp._constants` — it
   is a Python idiom rather than a DHCP constant, and it is private.
 
 ## Option codes (`code.py`, `base.py`)
@@ -176,7 +176,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   the value re-encodes to exactly what arrived — a hostname or boot filename in
   another encoding survives being forwarded. They are held as surrogates, so
   such a value cannot go to a strict encoder: `__json__()` returns the display
-  form, with U+FFFD, and is what structured output uses. See `pydhcp.nvt`.
+  form, with U+FFFD, and is what structured output uses. See `pydhcp._nvt`.
 - **`OctetString`** (`String` subclass) — text that is the **whole** payload:
   no NUL terminator, no truncation. RFC 2132 §9.13 defines option 60 as "a
   string of n octets", so `String`'s partition at the first NUL threw away a

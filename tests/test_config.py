@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import pytest
 
-from pydhcp import config
-from pydhcp.config import load_config
+from pydhcp import _config as config
+from pydhcp._config import load_config
 
 
 def test_load_config_json(tmp_path) -> None:

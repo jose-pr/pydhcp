@@ -10,7 +10,7 @@ import typing as _ty
 
 from ..exceptions import DHCPValueError
 from . import enums as _enum
-from .. import constants as _const, nvt as _nvt
+from .. import _constants as _const, _nvt as _nvt
 from ..options import DHCPOptions
 
 _NULL = 0x00.to_bytes(1, "big")
@@ -97,7 +97,7 @@ def _decode_bootp_field(raw: memoryview, field: str) -> str:
     encodings there, and rejecting the field threw away the whole packet -- its
     message type and client id included -- over a name the receiver usually does
     not read. Undecodable octets are preserved rather than replaced, so a relay
-    re-encoding the message emits the name it received; `pydhcp.nvt` explains
+    re-encoding the message emits the name it received; `pydhcp._nvt` explains
     why that matters most for `file`, which is the PXE boot filename.
     """
     text = raw.tobytes().split(_NULL, 1)[0]

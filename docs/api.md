@@ -102,7 +102,7 @@ Every `DHCPListener` (and therefore `DHCPServer`, `DHCPClient`) owns its own `me
 instance — counters are per-instance, not global, so running multiple listeners in one process
 (e.g. in tests) never cross-contaminates counts. Call `.snapshot()` for a plain `dict[str, int]`.
 
-::: pydhcp.metrics.DHCPMetrics
+::: pydhcp._metrics.DHCPMetrics
 
 ## pydhcp.client
 

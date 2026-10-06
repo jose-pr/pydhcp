@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from importlib.metadata import version as _version
 
-from . import log as _log  # noqa: F401 -- attaches the package logger's NullHandler
+from . import _log  # noqa: F401 -- attaches the package logger's NullHandler
 from .exceptions import (
     DHCPError as DHCPError,
     DHCPDecodeError as DHCPDecodeError,

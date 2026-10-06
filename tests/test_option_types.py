@@ -1027,7 +1027,7 @@ def test_two_generic_classes_do_not_share_a_cache():
     Invisible while the cache never hit -- and fixing the lookup alone would
     have exposed it, serving one class's subscription from another's entry.
     """
-    from pydhcp._utils import GenericMeta
+    from pydhcp._generic import GenericMeta
 
     class Other(list, metaclass=GenericMeta):
         pass

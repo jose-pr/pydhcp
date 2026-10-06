@@ -9,9 +9,10 @@ import netimps as _netimps
 import time as _time
 import typing as _ty
 
-from .. import constants as _const, network as _net
+from .. import _constants as _const, network as _net
 from ..lease import DHCPLease, LeaseBackend
-from ..options import DHCPOptionCode, DHCPOptions, type as _type
+from ..options import DHCPOptionCode, DHCPOptions
+from ..options import type as _type
 from ..packet.message import DHCPMessage
 from math import inf as _inf
 from ._state import _ServerState

@@ -11,7 +11,7 @@ from .message import DHCPMessage
 # `..config` imports nothing from `pydhcp`, so the dependency is one-way and
 # adds no cycle; the optional-TOML ladder and its three near-identical error
 # messages used to be duplicated verbatim between the two modules.
-from ..config import (
+from .._config import (
     _import_toml_reader,
     _import_toml_writer,
     _toml_reader_unavailable,

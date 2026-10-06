@@ -32,7 +32,7 @@ from pydhcp.cli import (
     _write_capture_record,
     main,
 )
-from pydhcp.config import load_config
+from pydhcp._config import load_config
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.packet.structured import dump_message
 from pydhcp.options import DHCPOptionCode
@@ -913,7 +913,7 @@ def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> Non
     """ConfigParser.read() ignores a path that does not exist, so a typo'd
     --config silently started a server on its defaults -- while the same typo in
     a .yaml or .json path raised."""
-    from pydhcp.config import load_config
+    from pydhcp._config import load_config
 
     for suffix in (".ini", ".json", ".yaml"):
         with pytest.raises((FileNotFoundError, OSError)):

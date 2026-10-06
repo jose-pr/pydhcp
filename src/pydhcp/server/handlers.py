@@ -6,11 +6,12 @@ import ipaddress as _ipaddress
 import logging as _logging
 import typing as _ty
 
-from .. import constants as _const
+from .. import _constants as _const
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
 from ..lease import DHCPLease
 from ..listener import DHCPRequestContext
-from ..options import DHCPOptionCode, type as _type
+from ..options import DHCPOptionCode
+from ..options import type as _type
 from ..packet import enums as _enum
 from ..packet.message import DHCPMessage
 from math import inf as _inf

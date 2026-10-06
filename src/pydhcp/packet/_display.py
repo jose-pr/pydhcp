@@ -6,9 +6,10 @@ import logging as _logging
 import textwrap as _tw
 import typing as _ty
 
-from .. import nvt as _nvt
+from .. import _nvt as _nvt
 from ..exceptions import NoClientIdentityError
-from ..options import BaseDHCPOptionCode, DHCPOptionCode, type as _type
+from ..options import BaseDHCPOptionCode, DHCPOptionCode
+from ..options import type as _type
 from ._mapping import _MessageMapping
 
 if _ty.TYPE_CHECKING:
@@ -55,7 +56,7 @@ class _MessageDisplay(_MessageMapping):
         """A human-readable multi-line summary: header fields, then each option.
 
         What `log`/`log_str` and the CLI's ``--format summary`` print. Text fields go
-        through `pydhcp.nvt.display`, so it is always safe for a terminal. `codemap`
+        through `pydhcp._nvt.display`, so it is always safe for a terminal. `codemap`
         names the options; it defaults to the message's own.
         """
         lines = []

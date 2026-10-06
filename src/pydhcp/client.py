@@ -12,7 +12,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from . import constants as _const
+from . import _constants as _const
 from .packet import enums as _enum
 from .listener import DHCPListener, ListenSpec, DHCPRequestContext, UDPTransport
 from .packet.message import DHCPMessage
