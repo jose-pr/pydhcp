@@ -272,7 +272,8 @@ def test_flush_writes_at_once_and_cancels_the_timer(tmp_path: pathlib.Path) -> N
 
     backend.flush()
     assert sorted(_on_disk(path)) == ["first", "second"]
-    assert _timers() == 0
+    # A cancelled timer's thread ends a moment after cancel() returns.
+    _wait_for(lambda: _timers() == 0, "the timer thread to end")
 
 
 def test_close_writes_what_is_pending_and_leaves_no_timer(
@@ -286,7 +287,8 @@ def test_close_writes_what_is_pending_and_leaves_no_timer(
         backend.allocate("first", IPv4("10.0.0.10"), 3600)
         backend.allocate("second", IPv4("10.0.0.11"), 3600)
     assert sorted(_on_disk(path)) == ["first", "second"]
-    assert _timers() == 0
+    # A cancelled timer's thread ends a moment after cancel() returns.
+    _wait_for(lambda: _timers() == 0, "the timer thread to end")
 
 
 def test_the_default_writes_every_change_and_starts_no_thread(
@@ -297,7 +299,8 @@ def test_the_default_writes_every_change_and_starts_no_thread(
     for n in range(3):
         backend.allocate(f"c{n}", IPv4(f"10.0.0.{10 + n}"), 3600)
         assert len(_on_disk(path)) == n + 1
-    assert _timers() == 0
+    # A cancelled timer's thread ends a moment after cancel() returns.
+    _wait_for(lambda: _timers() == 0, "the timer thread to end")
 
 
 # --- expiry is an instant: a clock change does not move it -----------------------
