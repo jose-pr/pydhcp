@@ -149,9 +149,9 @@ class _BaseAllocation:
 
     calls: "list[tuple[str, str]]"
 
-    def lease_seconds(self, msg: DHCPMessage) -> float:
-        self.calls.append(("lease_seconds", threading.current_thread().name))
-        return super().lease_seconds(msg)  # type: ignore[misc,no-any-return]
+    def get_lease_seconds(self, msg: DHCPMessage) -> float:
+        self.calls.append(("get_lease_seconds", threading.current_thread().name))
+        return super().get_lease_seconds(msg)  # type: ignore[misc,no-any-return]
 
 
 class _BaseAllocationSync(_BaseAllocation, DHCPServer):
@@ -279,7 +279,7 @@ def test_the_lease_policy_hook_is_called_by_the_base_allocator(
             [_datagram(DHCPMessageType.DHCPDISCOVER, REQUESTED_IP=IPv4("127.0.0.77"))],
             replies=0,
         )
-        _wait_for_calls(server, {"lease_seconds"})
+        _wait_for_calls(server, {"get_lease_seconds"})
 
     serve(server, exercise, loop_type)
     assert server.metrics.leases_allocated == 1

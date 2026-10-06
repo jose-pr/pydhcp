@@ -39,8 +39,17 @@ class FrozenDHCPOptions(DHCPOptions):
     def append(self, option: _ty.Any) -> None:
         self._read_only()
 
-    def decode(self, options: memoryview, base_offset: int = 0) -> memoryview:
+    def _decode_into(self, options: memoryview, base_offset: int = 0) -> memoryview:
         self._read_only()
+
+    @classmethod
+    def decode(
+        cls,
+        data: _ty.Union[bytes, bytearray, memoryview],
+        *,
+        codemap: _ty.Any = None,
+    ) -> _ty.Any:
+        return cls(DHCPOptions.decode(data, codemap=codemap))
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, DHCPOptions):

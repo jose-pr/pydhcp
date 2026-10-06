@@ -43,6 +43,7 @@ EXPECTED_ROOT = [
     "DHCPValueError",
     "DomainList",
     "FileLeaseBackend",
+    "IPv4AddressLike",
     "InMemoryLeaseBackend",
     "LeaseBackend",
     "NetworkInterface",
@@ -95,10 +96,7 @@ EXPECTED_LISTENER = [
     "DHCPMetrics",
     "DHCPRequestContext",
     "DHCPTransport",
-    "ListenAddress",
-    "ListenBinding",
-    "ListenPort",
-    "ListenSpec",
+    "ListenLike",
     "PktInfoUDPTransport",
     "UDPTransport",
 ]
@@ -179,10 +177,6 @@ EXPECTED_PACKET = [
     "DHCPOpcode",
     "DHCPPort",
     "HardwareAddressType",
-    "dump_mapping",
-    "dump_message",
-    "load_mapping",
-    "load_message",
 ]
 
 EXPECTED_PACKET_ENUMS = [
@@ -214,14 +208,14 @@ EXPECTED_OPTIONS = sorted(
     ]
 )
 
-EXPECTED_CLIENT = ["AsyncDHCPClient", "DHCPClient"]
+EXPECTED_CLIENT = ["AsyncDHCPClient", "ClientIdentifierLike", "DHCPClient"]
 
 EXPECTED_RELAY = [
     "AsyncDHCPRelay",
     "DEFAULT_MAX_HOPS",
     "DHCPRelay",
     "RFC1542_MAX_HOPS",
-    "ServerAddress",
+    "ServerAddressLike",
 ]
 
 EXPECTED_CAPTURE = [
@@ -232,6 +226,7 @@ EXPECTED_CAPTURE = [
     "CaptureSink",
     "DHCPCapture",
     "FILENAME_FIELDS",
+    "PacketFilterLike",
     "UNIQUE_FILENAME_FIELDS",
     "compile_capture_filter",
     "validate_filename_pattern",
@@ -245,10 +240,8 @@ EXPECTED_LEASE = [
 ]
 
 EXPECTED_STRUCTURED = [
-    "dump_mapping",
-    "dump_message",
-    "load_mapping",
-    "load_message",
+    "dumps",
+    "loads",
 ]
 
 SURFACE = {

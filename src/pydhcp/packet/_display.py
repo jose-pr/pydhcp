@@ -22,9 +22,9 @@ LOGGER = _logging.getLogger(__name__)
 
 
 class _MessageDisplay(_MessageMapping):
-    """`client_id`, `dumps`, `log_str`, `log` and `in`."""
+    """`get_client_id`, `summary`, `log_str`, `log` and `in`."""
 
-    def client_id(
+    def get_client_id(
         self, func: _ty.Optional[_ty.Callable[["DHCPMessage"], bytearray]] = None
     ) -> str:
         """Stable identity for this client, used to key leases.
@@ -53,7 +53,7 @@ class _MessageDisplay(_MessageMapping):
                 cid.extend(self.chaddr)
         return cid.hex(":").upper()
 
-    def dumps(self, codemap: _ty.Optional[type[BaseDHCPOptionCode]] = None) -> str:
+    def summary(self, codemap: _ty.Optional[type[BaseDHCPOptionCode]] = None) -> str:
         """A human-readable multi-line summary: header fields, then each option.
 
         What `log`/`log_str` and the CLI's ``--format summary`` print. Text fields go
@@ -70,7 +70,10 @@ class _MessageDisplay(_MessageMapping):
             ("Client Current Address", str(self.ciaddr)),
             ("Allocated Address", str(self.yiaddr)),
             ("Gateway Address", str(self.giaddr)),
-            ("Hardware Address", f"{self.htype.name}({self.htype.dumps(self.chaddr)})"),
+            (
+                "Hardware Address",
+                f"{self.htype.name}({self.htype.format_address(self.chaddr)})",
+            ),
             ("Next Server (siaddr)", str(self.siaddr)),
             ("Server Host Name", _nvt.display(self.sname)),
             ("Bootfile", _nvt.display(self.file)),
@@ -111,10 +114,10 @@ class _MessageDisplay(_MessageMapping):
         return "\n".join(lines)
 
     def log_str(self, src: _ty.Any, dst: _ty.Any) -> str:
-        """`dumps()` under a one-line header naming the op, XID, source and destination."""
+        """`summary()` under a one-line header naming the op, XID, source and destination."""
         return (
             f"{self.op.name} XID={self.xid:08X} Src: {src} Dst: {dst}\n"
-            f"{self.dumps()}"
+            f"{self.summary()}"
         )
 
     def __contains__(self, __key: object) -> bool:
@@ -135,6 +138,6 @@ class _MessageDisplay(_MessageMapping):
                 f"{'#' * 10} {self.op.name} XID={self.xid:08X} "
                 f"Src: {src} Dst: {dst} {'#' * 10}"
             )
-            LOGGER.log(level, f"\n{header}\n{self.dumps()}\n{'#' * len(header)}")
-        except Exception:  # pragma: no cover - defensive, dumps() is already tolerant
+            LOGGER.log(level, f"\n{header}\n{self.summary()}\n{'#' * len(header)}")
+        except Exception:  # pragma: no cover - defensive, summary() is already tolerant
             LOGGER.log(level, "Could not format packet for logging", exc_info=True)

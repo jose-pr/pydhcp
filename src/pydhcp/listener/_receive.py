@@ -13,7 +13,7 @@ import netimps as _netimps
 from .. import _network as _net
 from .._clock import _Instant
 from ._interfaces import _resolve_interface
-from ._spec import ListenSpec, _listen_uses_wildcard
+from ._spec import ListenLike, _listen_uses_wildcard
 from ._transport import PktInfoUDPTransport, DHCPTransport, UDPTransport
 
 LOGGER = _logging.getLogger(__name__)
@@ -57,7 +57,7 @@ def _is_loopback(context: DHCPRequestContext) -> bool:
     return False
 
 
-def _pktinfo_supported(listen: ListenSpec, per_interface: "_ty.Optional[bool]") -> bool:
+def _pktinfo_supported(listen: ListenLike, per_interface: "_ty.Optional[bool]") -> bool:
     """Whether this listener receives through the packet-info path.
 
     Only a wildcard bind needs it. Without it a wildcard has to be expanded into

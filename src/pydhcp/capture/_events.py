@@ -70,7 +70,7 @@ class CaptureEvent:
     @property
     def client_id(self) -> str:
         try:
-            return self.message.client_id()
+            return self.message.get_client_id()
         except NoClientIdentityError:
             # A capture reports what arrived; a client with no identity is
             # exactly the sort of packet someone runs a capture to look at.
@@ -94,6 +94,8 @@ class CaptureEvent:
 
 
 CapturePredicate = _ty.Callable[[CaptureEvent], bool]
+#: What `packet_filter` accepts: a filter expression, or the predicate itself.
+PacketFilterLike = _ty.Union[str, CapturePredicate]
 CaptureHook = _ty.Callable[[CaptureEvent], None]
 CaptureSink = _ty.Callable[[CaptureEvent], None]
 
@@ -193,7 +195,7 @@ def _compile_clause(key: str, value: str) -> CapturePredicate:
         xid = _filter_int(key, value, base=0)
         return lambda event: event.message.xid == xid
     if key == "client_id":
-        # `DHCPMessage.client_id()` always returns colon-separated hex, so
+        # `DHCPMessage.get_client_id()` always returns colon-separated hex, so
         # stripping separators cannot corrupt a free-form identifier -- while
         # `pydhcp interfaces` prints hardware addresses uppercase-hyphenated
         # (`MACAddress.__str__`, e.g. 68-F7-D8-E5-1E-83), which was the one form

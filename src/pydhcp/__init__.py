@@ -52,6 +52,7 @@ from .options._codecs import (
 from ._network import (
     SocketAddress as SocketAddress,
     NetworkInterface as NetworkInterface,
+    IPv4AddressLike as IPv4AddressLike,
 )
 from .server import DHCPServer as DHCPServer, AsyncDHCPServer as AsyncDHCPServer
 from .client import AsyncDHCPClient as AsyncDHCPClient, DHCPClient as DHCPClient
@@ -109,6 +110,7 @@ __all__ = [
     "U8",
     "U16",
     "U32",
+    "IPv4AddressLike",
     "SocketAddress",
     "NetworkInterface",
     "DHCPServer",

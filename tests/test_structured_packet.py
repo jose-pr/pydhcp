@@ -5,7 +5,6 @@ import pytest
 from pydhcp import DHCPMessage, DHCPOptions
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
-from pydhcp.packet.structured import dump_message, load_mapping, load_message
 from pydhcp.packet import structured
 from conftest import build_request
 
@@ -23,8 +22,8 @@ def test_packet_structured_round_trip_for_each_format(format_name: str) -> None:
 
     packet = _sample_packet()
 
-    text = dump_message(packet, format_name)
-    restored = load_message(text, format_name)
+    text = packet.to_text(format_name)
+    restored = DHCPMessage.from_text(text, format_name)
 
     assert restored.to_mapping() == packet.to_mapping()
     assert restored.encode() == packet.encode()
@@ -38,7 +37,7 @@ def test_toml_decode_without_reader_reports_not_implemented(monkeypatch) -> None
     monkeypatch.setattr(structured, "_tomllib", None)
 
     with pytest.raises(NotImplementedError, match="INI format as a stdlib fallback"):
-        load_mapping("[message]\nop = 'BOOTREQUEST'\n", "toml")
+        structured.loads("[message]\nop = 'BOOTREQUEST'\n", "toml")
 
 
 def test_toml_encode_without_writer_reports_not_implemented(monkeypatch) -> None:
@@ -46,7 +45,7 @@ def test_toml_encode_without_writer_reports_not_implemented(monkeypatch) -> None
     monkeypatch.setattr(structured, "_tomli_w", None)
 
     with pytest.raises(NotImplementedError, match="INI format as a stdlib fallback"):
-        dump_message(packet, "toml")
+        packet.to_text("toml")
 
 
 # --- the structured round trip must not change the packet ---
@@ -91,11 +90,10 @@ def test_structured_round_trip_preserves_option_octets(code, payload, why, fmt):
     every other unnamed code shared, and which then failed on int("UNKNOWN").
     """
     from pydhcp.options import DHCPOptionCode
-    from pydhcp.packet.structured import dump_message, load_message
 
     _require_format(fmt)
     original = _message_with_option(code, payload)
-    reloaded = load_message(dump_message(original, fmt), fmt)
+    reloaded = DHCPMessage.from_text(original.to_text(fmt), fmt)
 
     got = bytes(reloaded.options.get(DHCPOptionCode(code), decode=False) or b"")
     assert got == payload, f"{why}: {got.hex()} != {payload.hex()}"
@@ -110,14 +108,13 @@ def test_integer_options_serialize_as_plain_integers(fmt):
     which is most real packets, could not round-trip through either.
     """
     from pydhcp.options import DHCPOptionCode
-    from pydhcp.packet.structured import dump_message, load_message
 
     _require_format(fmt)
     original = _message_with_option(57, bytes.fromhex("05dc"))
     mapping = original.to_mapping()
     assert type(mapping["options"]["MAXIMUM_DHCP_MESSAGE_SIZE"]) is int
 
-    reloaded = load_message(dump_message(original, fmt), fmt)
+    reloaded = DHCPMessage.from_text(original.to_text(fmt), fmt)
     assert bytes(
         reloaded.options.get(DHCPOptionCode(57), decode=False)
     ) == bytes.fromhex("05dc")

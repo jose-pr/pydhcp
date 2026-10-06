@@ -17,6 +17,7 @@ import typing as _ty
 import netimps as _netimps
 
 from .. import _constants as _const
+from .._network import IPv4AddressLike
 from .._metrics import DHCPMetrics
 from ..listener._receive import DHCPRequestContext
 from ..options import DHCPOptions
@@ -26,6 +27,9 @@ from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 
 LOGGER = _logging.getLogger(__name__)
+
+#: What a function accepts as a client identifier: the octets of option 61.
+ClientIdentifierLike = _ty.Union[bytes, bytearray]
 
 #: Where a message goes when the caller names no destination.
 BROADCAST_DESTINATION = _ipaddress.IPv4Address("255.255.255.255")
@@ -81,7 +85,7 @@ class _ClientCore:
         chaddr: bytes,
         *,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
     ) -> DHCPMessage:
@@ -97,10 +101,10 @@ class _ClientCore:
         chaddr: bytes,
         *,
         xid: _ty.Optional[int] = None,
-        requested_ip: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
-        server_identifier: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
-        ciaddr: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        requested_ip: _ty.Optional[IPv4AddressLike] = None,
+        server_identifier: _ty.Optional[IPv4AddressLike] = None,
+        ciaddr: _ty.Optional[IPv4AddressLike] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
     ) -> DHCPMessage:
@@ -125,9 +129,9 @@ class _ClientCore:
         self,
         chaddr: bytes,
         *,
-        ciaddr: _ty.Union[_ipaddress.IPv4Address, str],
+        ciaddr: IPv4AddressLike,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
     ) -> DHCPMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
@@ -140,10 +144,10 @@ class _ClientCore:
         self,
         chaddr: bytes,
         *,
-        ciaddr: _ty.Union[_ipaddress.IPv4Address, str],
-        server_identifier: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
+        ciaddr: IPv4AddressLike,
+        server_identifier: _ty.Optional[IPv4AddressLike] = None,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
     ) -> DHCPMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
         msg.ciaddr = _ipaddress.IPv4Address(ciaddr)
@@ -161,10 +165,10 @@ class _ClientCore:
         self,
         chaddr: bytes,
         *,
-        requested_ip: _ty.Union[_ipaddress.IPv4Address, str],
-        server_identifier: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
+        requested_ip: IPv4AddressLike,
+        server_identifier: _ty.Optional[IPv4AddressLike] = None,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
     ) -> DHCPMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=True)
         msg.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = (
@@ -248,7 +252,7 @@ class _ClientCore:
         message.secs = _dt.timedelta(seconds=max(0.0, elapsed))
 
     @staticmethod
-    def _encode(message: DHCPMessage) -> _ty.Union[bytes, bytearray]:
+    def _encode(message: DHCPMessage) -> bytes:
         return message.encode(_const.DHCP_MIN_LEGAL_PACKET_SIZE)
 
     def _note_sent(self, message: DHCPMessage) -> None:
@@ -260,7 +264,7 @@ class _ClientCore:
         offer: DHCPMessage,
         chaddr: bytes,
         *,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]],
+        client_identifier: _ty.Optional[ClientIdentifierLike],
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]],
         broadcast: bool,
     ) -> _ty.Optional[DHCPMessage]:
@@ -335,7 +339,7 @@ class _ClientCore:
     def _add_client_options(
         self,
         msg: DHCPMessage,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]],
+        client_identifier: _ty.Optional[ClientIdentifierLike],
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]],
     ) -> None:
         if client_identifier is not None:

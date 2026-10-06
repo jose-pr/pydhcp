@@ -100,7 +100,7 @@ class _MessageDecode(_MessageFields):
             )
 
         options = DHCPOptions()
-        remaining_opts = options.decode(data[240:], base_offset=240)
+        remaining_opts = options._decode_into(data[240:], base_offset=240)
         if remaining_opts and remaining_opts[0] != 255:
             raise DHCPDecodeError(
                 f"Bad options terminator: expected 255 (END), got {remaining_opts[0]}"
@@ -116,7 +116,7 @@ class _MessageDecode(_MessageFields):
         if overload is not None and bool(
             overload.value & _type.OptionOverload.FILE.value
         ):
-            options.decode(file_data, base_offset=108)
+            options._decode_into(file_data, base_offset=108)
             file_raw: _ty.Optional[memoryview] = None
         else:
             file_raw = file_data
@@ -124,7 +124,7 @@ class _MessageDecode(_MessageFields):
         if overload is not None and bool(
             overload.value & _type.OptionOverload.SNAME.value
         ):
-            options.decode(sname_data, base_offset=44)
+            options._decode_into(sname_data, base_offset=44)
             sname_raw: _ty.Optional[memoryview] = None
         else:
             sname_raw = sname_data

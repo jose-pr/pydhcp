@@ -137,7 +137,7 @@ def test_json_round_trip_shapes():
     route = ClasslessRoute(IPv4("192.168.1.1"), ip_network("10.0.0.0/8"))
 
     assert type(ipv4)(json.loads(json.dumps(ipv4.__json__()))) == ipv4
-    assert type(raw)(json.loads(json.dumps(raw.__json__()))) == raw
+    assert type(raw).parse(json.loads(json.dumps(raw.__json__()))) == raw
     assert type(flag)(json.loads(json.dumps(flag.__json__()))) == flag
     assert type(addrs)(json.loads(json.dumps(addrs.__json__()))) == addrs
     assert ClasslessRoute(*json.loads(json.dumps(route.__json__()))) == route

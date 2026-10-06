@@ -34,7 +34,7 @@ class _Handlers(_Replies):
             )
             return
         try:
-            client_id = msg.client_id()
+            client_id = msg.get_client_id()
         except NoClientIdentityError as e:
             # Nothing to key a lease on, and RFC 2131 s4.2 requires the client to
             # supply one. Serving it would hand out an address under an identity
@@ -106,7 +106,7 @@ class _Handlers(_Replies):
 
     def handle_discover(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDISCOVER by offering a lease returned from `acquire_lease`."""
-        client_id = msg.client_id()
+        client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPDISCOVER from {context.client}|{client_id}"
@@ -127,7 +127,7 @@ class _Handlers(_Replies):
 
     def handle_request(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPREQUEST by ACKing or NAKing the lease returned from `acquire_lease`."""
-        client_id = msg.client_id()
+        client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPREQUEST from {context.client}|{client_id}"
@@ -190,7 +190,7 @@ class _Handlers(_Replies):
 
     def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
-        client_id = msg.client_id()
+        client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.warning(
             f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}"
@@ -214,7 +214,7 @@ class _Handlers(_Replies):
 
     def handle_release(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPRELEASE, but only for the address the client actually holds."""
-        client_id = msg.client_id()
+        client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPRELEASE from {context.client}|{client_id}"
@@ -239,7 +239,7 @@ class _Handlers(_Replies):
 
     def handle_inform(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPINFORM without requiring address allocation."""
-        client_id = msg.client_id()
+        client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(f"[XID={msg.xid:08x}] DHCPINFORM from {context.client}|{client_id}")
         # RFC 2131 4.3.5: a DHCPINFORM client already has its address and is

@@ -33,7 +33,6 @@ from pydhcp.cli._relay import _parse_server_address
 # the loader behind the command line is not public
 from pydhcp._config import load_config
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
-from pydhcp.packet.structured import dump_message
 from pydhcp.options import DHCPOptionCode
 from netimps import MACAddress
 from ipaddress import IPv4Address as IPv4
@@ -129,7 +128,7 @@ def test_cmd_packet_malformed_exits_with_error(capsys, monkeypatch) -> None:
 def test_cmd_packet_encode_from_file(tmp_path) -> None:
     packet = _sample_packet()
     source = tmp_path / "packet.json"
-    source.write_text(dump_message(packet, "json"), encoding="utf-8")
+    source.write_text(packet.to_text("json"), encoding="utf-8")
     output = tmp_path / "packet.hex"
     cmd = Packet(
         mode=False, packet_format="json", input=str(source), output=str(output)
@@ -146,7 +145,7 @@ def test_packet_cli_main_encode_from_stdin(monkeypatch, capsys) -> None:
         "sys.argv",
         ["pydhcp", "packet", "--encode", "--input", "-", "--format", "json"],
     )
-    monkeypatch.setattr("sys.stdin", io.StringIO(dump_message(packet, "json")))
+    monkeypatch.setattr("sys.stdin", io.StringIO(packet.to_text("json")))
 
     with pytest.raises(SystemExit) as exc_info:
         main()

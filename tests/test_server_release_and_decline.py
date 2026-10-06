@@ -49,7 +49,7 @@ def server() -> DHCPServer:
 
 
 def _seed(server: DHCPServer, ip: str = "10.0.0.50") -> str:
-    client_id = _message(DHCPMessageType.DHCPREQUEST).client_id()
+    client_id = _message(DHCPMessageType.DHCPREQUEST).get_client_id()
     server.lease_backend.allocate(client_id, IPv4(ip), 3600.0, DHCPOptions())
     return client_id
 

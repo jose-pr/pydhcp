@@ -71,7 +71,7 @@ def _code_lines(node: ast.AST, lines: "list[str]") -> "set[str]":
 
     `def`/`class` header lines are excluded deliberately. A constructor's
     parameter list is the public API and is bound to read the same on both
-    halves -- `listen: ListenSpec = None,` proves nothing. What must not be
+    halves -- `listen: ListenLike = None,` proves nothing. What must not be
     shared is a *statement*: a line that does work.
     """
     skip: set[int] = set()

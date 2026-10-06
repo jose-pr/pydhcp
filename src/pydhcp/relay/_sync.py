@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import typing as _ty
 
-from ..listener._spec import ListenSpec
+from ..listener._spec import ListenLike
 from ..listener._sync import DHCPListener
-from ._core import DEFAULT_MAX_HOPS, ServerAddress, _RelayCore
+from ._core import DEFAULT_MAX_HOPS, ServerAddressLike, _RelayCore
 
 
 class DHCPRelay(_RelayCore, DHCPListener):
@@ -18,8 +18,8 @@ class DHCPRelay(_RelayCore, DHCPListener):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
-        server_addresses: _ty.Sequence[ServerAddress] = (),
+        listen: ListenLike = None,
+        server_addresses: _ty.Sequence[ServerAddressLike] = (),
         *,
         max_hops: int = DEFAULT_MAX_HOPS,
         insert_relay_agent_info: bool = False,

@@ -13,6 +13,7 @@ from ..options._codes import BaseDHCPOptionCode
 from ..options import DHCPOptions
 from ..options import _codecs as _type
 from ._encode import _MessageEncode
+from . import structured as _structured
 
 
 def _strip_hex_text(value: str) -> str:
@@ -91,6 +92,9 @@ def _coerce_option_value(
 ) -> _ty.Any:
     if isinstance(value, str) and issubclass(option_type, _enum_base.Enum):
         return _coerce_enum_value(option_type, value)
+    if isinstance(value, str) and issubclass(option_type, _type.Bytes):
+        # A document writes octets as hex text; `Bytes` itself is built from bytes.
+        return option_type.parse(value)
     return value
 
 
@@ -182,6 +186,22 @@ class _MessageMapping(_MessageEncode):
             "file": _nvt.display(self.file),
             "options": options,
         }
+
+    def to_text(self, format: str) -> str:
+        """The message as a document in `format`: ``"json"``, ``"yaml"``, ``"toml"`` or ``"ini"``.
+
+        `to_mapping` written out by `pydhcp.packet.structured.dumps`; a format
+        that is not one of the four raises `ValueError`.
+        """
+        return _structured.dumps(self.to_mapping(), format)
+
+    @classmethod
+    def from_text(cls: "type[_Mapped]", text: str, format: str) -> _Mapped:
+        """Build a message from a document `to_text` (or the capture command) wrote.
+
+        `pydhcp.packet.structured.loads` then `from_mapping`; the same errors.
+        """
+        return cls.from_mapping(_structured.loads(text, format))
 
     def _survives_round_trip(
         self, code: int, option_value: _ty.Any, original: _ty.Any

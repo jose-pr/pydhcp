@@ -55,7 +55,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   closing the sockets) and `.start(cancellation_token)`. Subclass either driver
   and override the same hooks as before: `handle_discover`, `handle_request`,
   `handle_decline`, `handle_release`, `handle_inform`, `acquire_lease`,
-  `release_lease`, `get_inform_options` and `lease_seconds`; each is an ordinary
+  `release_lease`, `get_inform_options` and `get_lease_seconds`; each is an ordinary
   blocking method that runs on the one handler thread of either driver.
 - **Breaking: `AsyncDHCPRelay` is no longer a subclass of `DHCPRelay`.** Same
   split as the server: one private core holds the forwarding rules, the
@@ -334,6 +334,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   expiry, and then had its address and lease time removed); what the client
   receives is unchanged.
 
+- **Breaking: one name per conversion.**
+  - `DHCPMessage.summary()` is the display `dumps()` was; nothing reads it back,
+    and `dumps` now means only what `json.dumps` means. `HardwareAddressType.dumps`
+    is `format_address`.
+  - A structured document is `DHCPMessage.from_text(text, format)` and
+    `message.to_text(format)`. `pydhcp.packet.structured` holds `loads(text,
+    format)` and `dumps(data, format)` for a mapping; `load_message`,
+    `dump_message`, `load_mapping` and `dump_mapping` are gone, from
+    `pydhcp.packet` as well. The four formats are the same: a file the capture
+    command wrote with an earlier version loads unchanged.
+  - `DHCPMessage.encode()` returns `bytes`, not `bytearray`, and `bytes(message)`
+    works. Write `bytearray(message.encode())` to patch an octet.
+  - `DHCPOptions.decode(data)` is a classmethod that returns the options; it no
+    longer fills an instance, takes a `base_offset` or returns the unconsumed tail.
+  - `SocketAddress.compat()` is `to_tuple()`.
+  - `DHCPMessage.client_id(func=None)` is `get_client_id(func=None)` and
+    `DHCPServer.lease_seconds(msg)` (a hook) is `get_lease_seconds(msg)`.
+  - `DHCPClient.send` and `AsyncDHCPClient.send` take the message and then
+    keywords: `send(message, *, dst=..., port=...)` (`destination` is `dst`).
+    `DHCPTransport.send(data, dst, *, port, client_mac)` takes its destination as
+    `dst` and the port and hardware address as keywords; a transport a caller
+    wrote accepts the same call.
+  - `Bytes(value=None)` is built from bytes only (its keyword was `src`); hex
+    text goes through `Bytes.parse(text)`. A structured document still writes
+    and reads octets as hex.
+- **Text a value type accepts is `Type.parse(text)`** (and `Type.try_parse(text,
+  default=None)`, which answers `default` for text that does not parse): on
+  `SocketAddress` (`"192.0.2.1:67"`, what `str()` writes), `ClasslessRoute`
+  (`"10.0.0.0/8 via 192.0.2.1"`), `StatusCode` (`"2 message"`), `ClientFQDN` (the
+  name, then `[flags=0x05 rcode1=0 rcode2=0 partial]` when any of those is set)
+  and `Bytes` (hex). Each raises `DHCPValueError` for text that is not a value
+  of the type and `TypeError` for an argument that is not text, and
+  `parse(str(value)) == value`. `str()` of a `ClasslessRoute`, `StatusCode` and
+  `ClientFQDN` is now that text.
+- **Named aliases for what a function accepts**, exported and listed in the
+  headers: `IPv4AddressLike` (`pydhcp`), `ListenLike` (`pydhcp.listener`, was
+  `ListenSpec`), `ServerAddressLike` (`pydhcp.relay`, was `ServerAddress`),
+  `ClientIdentifierLike` (`pydhcp.client`) and `PacketFilterLike`
+  (`pydhcp.capture`). `ListenAddress`, `ListenBinding` and `ListenPort` are no
+  longer exported.
+
 ### Renamed
 
 **Breaking.** Every public class name spells its acronyms in capitals, and the
@@ -409,6 +450,17 @@ importable. Replace each name in the left column with the one beside it.
 | `pydhcp.network.WILDCARD_IPv4` | `WILDCARD_V4` |
 | `HardwareAddressType.IP_ARP_over_ISO_7816_3` | `HardwareAddressType.IP_ARP_OVER_ISO_7816_3` |
 | `DHCPOptionCode.GRD` (option 212) | `DHCPOptionCode.SIXRD`; `GRD` stays as an alias member, so `DHCPOptionCode(212).name` is now `SIXRD` |
+| `DHCPMessage.dumps()` | `DHCPMessage.summary()` |
+| `HardwareAddressType.dumps(address)` | `HardwareAddressType.format_address(address)` |
+| `load_message(text, format)`, `dump_message(message, format)` | `DHCPMessage.from_text(text, format)`, `message.to_text(format)` |
+| `load_mapping(text, format)`, `dump_mapping(data, format)` | `pydhcp.packet.structured.loads(text, format)`, `.dumps(data, format)` |
+| `SocketAddress.compat()` | `SocketAddress.to_tuple()` |
+| `DHCPMessage.client_id()` | `DHCPMessage.get_client_id()` |
+| `DHCPServer.lease_seconds(msg)` | `DHCPServer.get_lease_seconds(msg)` |
+| `ListenSpec` | `ListenLike` |
+| `ServerAddress` | `ServerAddressLike` |
+| `send(..., destination=...)`, `DHCPTransport.send(..., dest, ...)` | `dst` |
+| `Bytes(src=...)` | `Bytes(value=...)` |
 
 ### Fixed
 

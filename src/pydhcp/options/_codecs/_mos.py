@@ -14,7 +14,7 @@ from ._base import (
 )
 from ._domain import decode_domain_name, encode_domain_name
 from ._addresses import IPv4AddressOption
-from ._scalar import Bytes
+from ._scalar import Bytes, _octets
 
 _MoSLabelListT = _ty.TypeVar("_MoSLabelListT", bound="_MoSLabelList")
 
@@ -90,13 +90,13 @@ class _MoSSubOption(_Record):
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
-        return Bytes(payload)
+        return _octets(payload)
 
     def _write_payload(self, data: bytearray) -> int:
         payload = self.value
         if isinstance(payload, DHCPOptionType):
             return payload._dhcp_write(data)
-        payload_bytes = Bytes(payload)
+        payload_bytes = _octets(payload)
         data.extend(payload_bytes)
         return len(payload_bytes)
 
@@ -146,7 +146,7 @@ class _MoSIPv4AddressSubOption(_MoSSubOption):
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
         if code not in cls._KNOWN_CODES:
-            return Bytes(value)
+            return _octets(value)
         if isinstance(value, List):
             return value
         return List[IPv4AddressOption](value)
@@ -164,12 +164,12 @@ class _MoSIPv4AddressSubOption(_MoSSubOption):
         cls: type[_MoSIPv4AddressSubOptionT], code: int, payload: memoryview
     ) -> _MoSIPv4AddressSubOptionT:
         if code not in cls._KNOWN_CODES:
-            return cls(code, Bytes(payload))
+            return cls(code, _octets(payload))
         return cls(code, cls._read_payload(payload))
 
     def _write_payload(self, data: bytearray) -> int:
         if self.code not in self._KNOWN_CODES:
-            return Bytes(self.value)._dhcp_write(data)
+            return _octets(self.value)._dhcp_write(data)
         payload = _ty.cast(DHCPOptionType, self.value)
         return payload._dhcp_write(data)
 
@@ -183,7 +183,7 @@ class _MoSFQDNSubOption(_MoSSubOption):
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
         if code not in cls._KNOWN_CODES:
-            return Bytes(value)
+            return _octets(value)
         if isinstance(value, _MoSLabelList):
             return value
         return _MoSLabelList(value)
@@ -197,12 +197,12 @@ class _MoSFQDNSubOption(_MoSSubOption):
         cls: type[_MoSFQDNSubOptionT], code: int, payload: memoryview
     ) -> _MoSFQDNSubOptionT:
         if code not in cls._KNOWN_CODES:
-            return cls(code, Bytes(payload))
+            return cls(code, _octets(payload))
         return cls(code, cls._read_payload(payload))
 
     def _write_payload(self, data: bytearray) -> int:
         if self.code not in self._KNOWN_CODES:
-            return Bytes(self.value)._dhcp_write(data)
+            return _octets(self.value)._dhcp_write(data)
         payload = _ty.cast(DHCPOptionType, self.value)
         return payload._dhcp_write(data)
 

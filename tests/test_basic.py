@@ -15,7 +15,7 @@ def test_socket_address():
     addr = SocketAddress("127.0.0.1", 8080)
     assert addr.ip == IPv4("127.0.0.1")
     assert addr.port == 8080
-    assert addr.compat() == ("127.0.0.1", 8080)
+    assert addr.to_tuple() == ("127.0.0.1", 8080)
     assert str(addr) == "127.0.0.1:8080"
 
 

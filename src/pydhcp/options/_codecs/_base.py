@@ -118,6 +118,35 @@ def hashable_payload(value: _ty.Any) -> _ty.Any:
 _set = object.__setattr__
 
 
+def _text_argument(cls: type, text: _ty.Any) -> str:
+    """`text` when it is text; `TypeError` otherwise, naming `cls`."""
+    if not isinstance(text, str):
+        raise TypeError(f"{cls.__name__}.parse takes text, not {type(text).__name__}")
+    return text
+
+
+class _TextForm:
+    """A codec with a text form: `parse` reads what `str()` writes.
+
+    A subclass defines `parse(text)`, which raises `DHCPValueError` for text that
+    is not a value of the type and `TypeError` for an argument that is not text.
+    """
+
+    __slots__ = ()
+
+    @classmethod
+    def parse(cls, text: str) -> _ty.Any:
+        raise NotImplementedError()
+
+    @classmethod
+    def try_parse(cls, text: str, default: _ty.Any = None) -> _ty.Any:
+        """`parse`, or `default` for text that does not parse; `TypeError` for a non-text."""
+        try:
+            return cls.parse(text)
+        except DHCPValueError:
+            return default
+
+
 def _field_repr(value: _ty.Any) -> str:
     if type(value).__module__ == "ipaddress":
         return repr(str(value))

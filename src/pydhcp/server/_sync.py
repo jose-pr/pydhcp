@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as _ty
 
 from ..lease import LeaseBackend
-from ..listener._spec import ListenSpec
+from ..listener._spec import ListenLike
 from ..listener._sync import DHCPListener
 from ._core import _ServerCore
 
@@ -14,13 +14,13 @@ class DHCPServer(_ServerCore, DHCPListener):
     """A DHCP server: a `DHCPListener` that allocates leases and sends the RFC 2131 replies.
 
     Override any method or constant here: the `handle_*` hooks, `acquire_lease`,
-    `release_lease`, `get_inform_options`, `lease_seconds` and the lease-policy
+    `release_lease`, `get_inform_options`, `get_lease_seconds` and the lease-policy
     constants. They run on the receive thread.
     """
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
         poll_interval: _ty.Optional[float] = None,
         max_packet_size: _ty.Optional[int] = None,

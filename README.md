@@ -96,7 +96,7 @@ from pydhcp.client import DHCPClient
 
 client = DHCPClient(listen=("127.0.0.1", 6768))
 discover = client.build_discover(b"\x00\x11\x22\x33\x44\x55")
-client.send(discover, destination="127.0.0.1", port=6767)
+client.send(discover, dst="127.0.0.1", port=6767)
 ```
 
 `AsyncDHCPClient` is the same client on an event loop: `send`, `discover_offer` and

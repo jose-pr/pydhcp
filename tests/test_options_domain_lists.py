@@ -109,8 +109,7 @@ def test_a_compressed_payload_is_still_accepted_on_receive() -> None:
     unambiguously inside the option, and refusing it would turn a readable
     packet into a decode failure.
     """
-    options = DHCPOptions()
-    options.decode(
+    options = DHCPOptions.decode(
         memoryview(bytearray(b"\x58" + bytes([len(COMPRESSED)]) + COMPRESSED))
     )
     assert list(options.get(88)) == SHARED_SUFFIX

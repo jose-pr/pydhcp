@@ -6,7 +6,7 @@ import typing as _ty
 
 from ..lease import LeaseBackend
 from ..listener._asyncio import AsyncDHCPListener
-from ..listener._spec import ListenSpec
+from ..listener._spec import ListenLike
 from ._core import _ServerCore
 
 
@@ -20,7 +20,7 @@ class AsyncDHCPServer(_ServerCore, AsyncDHCPListener):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
         max_packet_size: _ty.Optional[int] = None,
         lease_backend: _ty.Optional[LeaseBackend] = None,

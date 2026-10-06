@@ -54,13 +54,13 @@ of the installed package).
     `DHCPOption` or `(code, value)` tuple; `.append` concatenates onto any
     existing bytes for that code (RFC 3396 long-option splitting on
     decode/reassembly), `.replace` overwrites.
-  - **`.decode(options: memoryview, base_offset=0) -> memoryview`** — parses
-    a raw TLV options buffer into `self`, returning any unconsumed tail
-    (used internally by `DHCPMessage.decode` for the options field and, on
-    **RFC 2132 §9.3** option overload, the `file`/`sname` fields — that is
-    option 52, a different mechanism from the RFC 3396 long-option
-    splitting cited above). Malformed lengths log a
-    warning rather than raising.
+  - **`DHCPOptions.decode(data: bytes | bytearray | memoryview, *, codemap=None)
+    -> DHCPOptions`** (classmethod) — parses a raw TLV options buffer into a
+    new bag: PAD is skipped, END stops the parse, octets after END are
+    ignored, a repeated code is joined (RFC 3396 long-option splitting).
+    Malformed lengths log a warning rather than raising. (`DHCPMessage.decode`
+    reads the options field and, on **RFC 2132 §9.3** option overload, the
+    `file`/`sname` fields into one bag — option 52, a different mechanism.)
   - **`.encode(word_size=1) -> bytearray`** / **`.partial_encode(maxsize,
     word_size=1) -> tuple[bytearray, DHCPOptions | None]`** — serialize to
     TLV bytes; `partial_encode` stops once `maxsize` is reached and returns
@@ -178,8 +178,15 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
 
 ### Scalars (`_scalar.py`)
 
-- **`Bytes(src=None)`** — opaque byte payload; `src` a `str` (hex),
-  bytes-like, or `None`. The default codec fallback for unregistered codes.
+- **`Bytes(value=None)`** — opaque byte payload; `value` is bytes-like or
+  `None`, and text is a `TypeError`. **`Bytes.parse(text)`** reads hex text
+  (spaces and colons between octets are ignored; `DHCPValueError` for anything
+  that is not whole hex octets, `TypeError` for a non-text) and
+  **`Bytes.try_parse(text, default=None)`** answers `default` for text that
+  does not parse. `str(Bytes(...))` is the upper-case hex that `parse` reads
+  back; a structured document writes octets as hex text and `from_text` /
+  `from_mapping` read it with `parse`. The default codec fallback for
+  unregistered codes.
 - **`String`** — RFC 2132 NVT-ASCII text. **Not** null-terminated: the
   length octet delimits it, so a trailing NUL would be part of the value.
   Measured, `String("abc")` encodes to `b"abc"`. (Some senders do append
@@ -223,7 +230,9 @@ client FQDN, and server-locator/status codecs. Import every one of them from
 - **`ClasslessRoute(gateway, network)`** — RFC 3442 classless static route
   (variable-length prefix + gateway). Also accepts a single
   `(gateway, network)` pair or an existing instance, so routes normalize from
-  JSON/YAML/config input. Options 121 and 249 are registered as
+  JSON/YAML/config input. `str(route)` is `"10.0.0.0/8 via 192.0.2.1"` and
+  `ClasslessRoute.parse(text)` / `.try_parse(text, default=None)` read that
+  (`DHCPValueError` for anything else, host bits in the network included). Options 121 and 249 are registered as
   **`List[ClasslessRoute]`**, not a bare `ClasslessRoute`: RFC 3442 defines one
   or more routes and a server sending the option SHOULD include the default
   route, so assign and expect a list.
@@ -277,6 +286,9 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   flag bits (`0xF0`) are ignored on decode and `flags` holds only the low
   four; constructing with one set raises `DHCPValueError`. A compression
   pointer, a label cut short or data after the terminator is a `DHCPDecodeError`.
+  `str()` is the name, followed by ` [flags=0x05 rcode1=0 rcode2=0 partial]` when any of
+  those is set; `ClientFQDN.parse(text)` / `.try_parse(text, default=None)` read that
+  (`DHCPValueError` for a malformed bracket or a reserved flag bit).
 - **`SIPServers(values=(), encoding=None)`** — RFC 3361 SIP servers (option
   120): `ENCODING_DOMAIN` (0) for RFC 1035 names, `ENCODING_ADDRESS` (1) for
   IPv4 addresses, written as a leading encoding octet. A plain list infers its
@@ -292,7 +304,10 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   sequences rather than dotted text.
 - **`StatusCode(code=0, message="")`** — RFC 6926 §6.2.2: a one-octet status
   code then an optional UTF-8 message. `.code` / `.message`; accepts a
-  `(code, message)` pair or a mapping. Registered for `STATUS_CODE` (151),
+  `(code, message)` pair or a mapping. `str()` is `"<code> <message>"` (just
+  the code when there is no message); `StatusCode.parse(text)` /
+  `.try_parse(text, default=None)` read it, the message being everything after
+  the first space. Registered for `STATUS_CODE` (151),
   where a bare `U8` made any reply carrying the message undecodable.
 - **`PCPServerList`** — RFC 7291 §4 PCP servers: a list of **entries**, each a
   list of IPv4 addresses written with a leading List-Length octet. A flat

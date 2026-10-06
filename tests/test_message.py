@@ -133,15 +133,15 @@ def _discover_with(code, payload):
         (DHCPOptionCode.RAPID_COMMIT, b"", "zero-length RAPID_COMMIT (RFC 4039)"),
     ],
 )
-def test_dumps_tolerates_undecodable_options(code, payload, label):
-    """dumps() must degrade per option to hex, the way to_mapping() already does.
+def test_summary_tolerates_undecodable_options(code, payload, label):
+    """summary() must degrade per option to hex, the way to_mapping() already does.
 
     93 of 254 option codes are not enum members, including 28 in the private-use
     range, so raising here means a client sending any of them gets no service.
     """
     message = _discover_with(code, payload)
 
-    dumped = message.dumps()
+    dumped = message.summary()
 
     assert "DHCPDISCOVER" in dumped
     assert str(int(code)) in dumped
@@ -153,23 +153,23 @@ def test_log_is_lazy_and_never_raises(caplog):
     message = _discover_with(224, b"\x01\x02\x03")
 
     calls = []
-    original_dumps = type(message).dumps
+    original_dumps = type(message).summary
 
     def counting_dumps(self, *args, **kwargs):
         calls.append(1)
         return original_dumps(self, *args, **kwargs)
 
-    type(message).dumps = counting_dumps
+    type(message).summary = counting_dumps
     try:
         with caplog.at_level(logging.WARNING, logger="pydhcp"):
             message.log("src", "dst", logging.DEBUG)
-        assert calls == [], "dumps() ran even though DEBUG was disabled"
+        assert calls == [], "summary() ran even though DEBUG was disabled"
 
         with caplog.at_level(logging.DEBUG, logger="pydhcp"):
             message.log("src", "dst", logging.DEBUG)
-        assert calls == [1], "dumps() did not run when DEBUG was enabled"
+        assert calls == [1], "summary() did not run when DEBUG was enabled"
     finally:
-        type(message).dumps = original_dumps
+        type(message).summary = original_dumps
 
 
 def test_encode_clears_a_stale_option_overload():
@@ -262,7 +262,7 @@ def test_non_utf8_sname_and_file_survive_a_re_encode():
     assert out[108:236] == file.ljust(128, b"\x00"), "file octets were not preserved"
 
     # Rendering stays safe: no preserved octet reaches a terminal or serializer.
-    decoded.dumps().encode("utf-8")
+    decoded.summary().encode("utf-8")
     mapping = decoded.to_mapping()
     assert "�" in mapping["sname"] and "�" in mapping["file"]
     json.dumps(mapping, ensure_ascii=False).encode("utf-8")
@@ -300,7 +300,7 @@ def test_unidentifiable_client_does_not_collide_with_every_other_one():
     decoded = DHCPMessage.decode(bytearray(wire))
     assert decoded.chaddr == b""
     with pytest.raises(NoClientIdentityError):
-        decoded.client_id()
+        decoded.get_client_id()
 
     # The legal IPoIB shape -- hlen 0, htype 32, option 61 present -- still works.
     ipoib = _discover_with(DHCPOptionCode.CLIENT_IDENTIFIER, b"\xff\x01\x02\x03")
@@ -309,7 +309,7 @@ def test_unidentifiable_client_does_not_collide_with_every_other_one():
     wire[2] = 0
     decoded = DHCPMessage.decode(bytearray(wire))
     assert decoded.htype == 32
-    assert decoded.client_id() == "FF:01:02:03"
+    assert decoded.get_client_id() == "FF:01:02:03"
 
 
 def test_unnamed_htype_survives_a_mapping_round_trip():

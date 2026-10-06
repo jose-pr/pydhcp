@@ -4,7 +4,7 @@ import typing as _ty
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ._base import DHCPOptionType, RecordList, _NormalizedList, _Record, _set, frozen
-from ._scalar import Bytes
+from ._scalar import Bytes, _octets
 
 _LengthPrefixedOpaqueListT = _ty.TypeVar(
     "_LengthPrefixedOpaqueListT", bound="_LengthPrefixedOpaqueList"
@@ -27,7 +27,7 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
             return item
         if isinstance(item, str):
             raise TypeError(f"{cls.__name__} entries must be opaque bytes")
-        item_bytes: Bytes = Bytes(item)
+        item_bytes: Bytes = _octets(item)
         if not item_bytes:
             raise DHCPValueError(f"{cls.__name__} entries must be non-empty")
         return item_bytes
@@ -48,7 +48,7 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
                 )
             if idx + length > size:
                 raise DHCPDecodeError(f"{cls.__name__} option is truncated")
-            self.append(Bytes(option[idx : idx + length]))
+            self.append(_octets(option[idx : idx + length]))
             idx += length
         return self, size
 
@@ -83,7 +83,7 @@ class TLVOption(_Record):
         self, code: int, value: _ty.Union[bytes, bytearray, memoryview, Bytes]
     ) -> None:
         _set(self, "code", int(code))
-        _set(self, "value", Bytes(value))
+        _set(self, "value", _octets(value))
 
     def __json__(self) -> list[_ty.Any]:
         return [self.code, self.value.__json__()]
@@ -159,7 +159,7 @@ class VIVendorSpecificInformationRecord(_Record):
         value: _ty.Union[bytes, bytearray, memoryview, Bytes],
     ) -> None:
         _set(self, "enterprise_number", int(enterprise_number))
-        _set(self, "value", Bytes(value))
+        _set(self, "value", _octets(value))
 
     def __json__(self) -> list[_ty.Any]:
         return [self.enterprise_number, self.value.__json__()]

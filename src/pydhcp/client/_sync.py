@@ -10,13 +10,19 @@ import time as _time
 import typing as _ty
 
 from ..listener._receive import DHCPRequestContext
-from ..listener._spec import ListenSpec
+from ..listener._spec import ListenLike
 from ..listener._sync import DHCPListener
 from ..listener._transport import UDPTransport
 from ..options._codes import DHCPOptionCode
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from ._core import BROADCAST_DESTINATION, Reply, _ClientCore
+from .._network import IPv4AddressLike
+from ._core import (
+    BROADCAST_DESTINATION,
+    ClientIdentifierLike,
+    Reply,
+    _ClientCore,
+)
 
 __all__ = ["DHCPClient"]
 
@@ -33,7 +39,7 @@ class DHCPClient(_ClientCore, DHCPListener):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
         poll_interval: _ty.Optional[float] = None,
         max_packet_size: _ty.Optional[int] = None,
@@ -64,7 +70,8 @@ class DHCPClient(_ClientCore, DHCPListener):
     def send(
         self,
         message: DHCPMessage,
-        destination: _ty.Union[_ipaddress.IPv4Address, str] = BROADCAST_DESTINATION,
+        *,
+        dst: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
     ) -> int:
         if not self._sockets:
@@ -72,7 +79,10 @@ class DHCPClient(_ClientCore, DHCPListener):
         transport = UDPTransport(self._sockets[0])
         data = self._encode(message)
         sent = transport.send(
-            data, _ipaddress.IPv4Address(destination), int(port), message.chaddr
+            data,
+            _ipaddress.IPv4Address(dst),
+            port=int(port),
+            client_mac=message.chaddr,
         )
         self._note_sent(message)
         return sent
@@ -92,7 +102,7 @@ class DHCPClient(_ClientCore, DHCPListener):
         message: DHCPMessage,
         msg_type: _enum.DHCPMessageType,
         *,
-        destination: _ty.Union[_ipaddress.IPv4Address, str],
+        destination: IPv4AddressLike,
         port: int,
         timeout: float,
         retries: int,
@@ -112,7 +122,7 @@ class DHCPClient(_ClientCore, DHCPListener):
             with self._waiting_for(key) as waiter:
                 for interval in self._retransmit_intervals(timeout, retries):
                     self._stamp_secs(message, self._monotonic() - started_at)
-                    self.send(message, destination, port)
+                    self.send(message, dst=destination, port=port)
                     reply = self._wait_for(waiter, msg_type, interval)
                     if reply is not None:
                         return reply
@@ -176,10 +186,10 @@ class DHCPClient(_ClientCore, DHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _ty.Union[_ipaddress.IPv4Address, str] = BROADCAST_DESTINATION,
+        destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
     ) -> _ty.Optional[DHCPMessage]:
@@ -213,10 +223,10 @@ class DHCPClient(_ClientCore, DHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _ty.Union[_ipaddress.IPv4Address, str] = BROADCAST_DESTINATION,
+        destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
     ) -> _ty.Optional[DHCPMessage]:

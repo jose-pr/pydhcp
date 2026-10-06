@@ -366,7 +366,9 @@ def test_a_failed_broadcast_is_not_retried_as_the_same_broadcast() -> None:
     transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     with pytest.raises(OSError):
-        transport.send(b"x" * 20, IPv4("255.255.255.255"), 68, b"\x00" * 6)
+        transport.send(
+            b"x" * 20, IPv4("255.255.255.255"), port=68, client_mac=b"\x00" * 6
+        )
 
     assert sock.sendto_calls == [("255.255.255.255", 68)], sock.sendto_calls
 
@@ -378,7 +380,7 @@ def test_a_wildcard_destination_is_also_only_tried_once() -> None:
     transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     with pytest.raises(OSError):
-        transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6)
+        transport.send(b"x" * 20, IPv4("0.0.0.0"), port=68, client_mac=b"\x00" * 6)
 
     assert sock.sendto_calls == [("255.255.255.255", 68)]
 
@@ -413,7 +415,7 @@ def test_a_failed_unicast_is_not_escalated_to_a_broadcast() -> None:
     transport = UDPTransport(sock)  # type: ignore[arg-type]
 
     with pytest.raises(OSError):
-        transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6)
+        transport.send(b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\x00" * 6)
 
     assert calls == [("192.0.2.9", 68)], "the reply was escalated to a broadcast"
 
@@ -425,7 +427,7 @@ def test_a_wildcard_destination_is_still_broadcast() -> None:
     sock = FailingSocket()
     transport = UDPTransport(sock)  # type: ignore[arg-type]
 
-    transport.send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6)
+    transport.send(b"x" * 20, IPv4("0.0.0.0"), port=68, client_mac=b"\x00" * 6)
 
     assert sock.sendto_calls == [("255.255.255.255", 68)]
 
@@ -465,7 +467,10 @@ def test_the_pktinfo_send_maps_a_wildcard_destination_to_broadcast() -> None:
     sock, endpoint = FailingSocket(), RecordingEndpoint()
 
     assert (
-        _pinned(sock, endpoint).send(b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6) == 20
+        _pinned(sock, endpoint).send(
+            b"x" * 20, IPv4("0.0.0.0"), port=68, client_mac=b"\x00" * 6
+        )
+        == 20
     )
 
     assert [dest for dest, _src in endpoint.sends] == [("255.255.255.255", 68)]
@@ -480,7 +485,7 @@ def test_the_pktinfo_send_falls_back_to_plain_udp() -> None:
 
     assert (
         _pinned(sock, endpoint, ifindex=99999).send(
-            b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6
+            b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\x00" * 6
         )
         == 20
     )
@@ -515,7 +520,7 @@ def test_the_pktinfo_fallback_never_escalates_a_unicast_to_a_broadcast() -> None
 
     with pytest.raises(OSError):
         _pinned(sock, endpoint, ifindex=99999).send(
-            b"x" * 20, IPv4("192.0.2.50"), 68, b"\x00" * 6
+            b"x" * 20, IPv4("192.0.2.50"), port=68, client_mac=b"\x00" * 6
         )
 
     assert sock.sendto_calls == [("192.0.2.50", 68)], sock.sendto_calls
@@ -531,7 +536,7 @@ def test_the_pktinfo_fallback_still_broadcasts_for_an_unconfigured_client() -> N
 
     assert (
         _pinned(sock, endpoint, ifindex=99999).send(
-            b"x" * 20, IPv4("0.0.0.0"), 68, b"\x00" * 6
+            b"x" * 20, IPv4("0.0.0.0"), port=68, client_mac=b"\x00" * 6
         )
         == 20
     )
@@ -545,7 +550,9 @@ def test_the_pin_names_exactly_the_receiving_address_and_interface() -> None:
     with several IPv4 addresses must answer from the one the client used, and
     a bare address would make netimps enumerate every adapter per reply."""
     endpoint = RecordingEndpoint()
-    _pinned(FailingSocket(), endpoint).send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\0" * 6)
+    _pinned(FailingSocket(), endpoint).send(
+        b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\0" * 6
+    )
 
     ((_dest, src),) = endpoint.sends
     assert isinstance(src, netimps.Interface)
@@ -559,7 +566,7 @@ def test_no_local_address_means_no_pin() -> None:
     transport = PktInfoUDPTransport(sock, endpoint)  # type: ignore[arg-type]
     transport.ifindex = 3
 
-    transport.send(b"x" * 20, IPv4("192.0.2.9"), 68, b"\x00" * 6)
+    transport.send(b"x" * 20, IPv4("192.0.2.9"), port=68, client_mac=b"\x00" * 6)
 
     assert endpoint.sends == []
     assert sock.sendto_calls == [("192.0.2.9", 68)]
@@ -591,7 +598,12 @@ def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
         transport.ifindex = loopback.index
         transport.local_ip = IPv4("127.0.0.2")
         with caplog.at_level(logging.WARNING, logger="pydhcp"):
-            transport.send(b"x" * 20, IPv4("127.0.0.1"), receiver.getsockname()[1], b"")
+            transport.send(
+                b"x" * 20,
+                IPv4("127.0.0.1"),
+                port=receiver.getsockname()[1],
+                client_mac=b"",
+            )
         _data, (source, _port) = receiver.recvfrom(64)
     finally:
         sender.close()

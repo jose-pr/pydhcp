@@ -8,12 +8,6 @@ from ._enums import (
     HardwareAddressType as HardwareAddressType,
 )
 from ._message import DHCPMessage as DHCPMessage
-from .structured import (
-    dump_mapping as dump_mapping,
-    dump_message as dump_message,
-    load_mapping as load_mapping,
-    load_message as load_message,
-)
 
 __all__ = [
     "DHCPMessageType",
@@ -22,8 +16,4 @@ __all__ = [
     "DHCPFlags",
     "HardwareAddressType",
     "DHCPMessage",
-    "dump_mapping",
-    "dump_message",
-    "load_mapping",
-    "load_message",
 ]

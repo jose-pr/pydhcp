@@ -86,8 +86,7 @@ def test_decode_still_accepts_what_arrives() -> None:
     `decode()` handles 0 and 255 as framing and stays liberal about
     everything else -- a packet is not rejected for what a sender did.
     """
-    options = DHCPOptions()
-    options.decode(memoryview(bytearray(b"\x00\x00\x35\x01\x05\x00\xff")))
+    options = DHCPOptions.decode(memoryview(bytearray(b"\x00\x00\x35\x01\x05\x00\xff")))
     assert bytes(options[53]) == b"\x05"
     assert 0 not in options and 255 not in options
 

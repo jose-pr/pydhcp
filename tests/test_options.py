@@ -111,8 +111,7 @@ def test_options_encode_round_trip():
     assert encoded[-1] == 255  # END mark
 
     # Decode back
-    decoded_opts = DHCPOptions()
-    decoded_opts.decode(memoryview(encoded))
+    decoded_opts = DHCPOptions.decode(memoryview(encoded))
     assert (
         decoded_opts.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
         == DHCPMessageType.DHCPDISCOVER
@@ -147,8 +146,7 @@ def test_options_partial_encode_splits_and_returns_leftovers():
     # The fragment that did fit is a complete, decodable option in its own
     # right -- RFC 3396 s4 requires each instance to carry its own code and
     # length octet -- rather than a dangling continuation.
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
     assert decoded.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPDISCOVER
     assert decoded.get(DHCPOptionCode.HOSTNAME, decode=String) == "te"
 
@@ -520,8 +518,7 @@ def test_registered_option_code_round_trips():
     ]
 
     encoded = opts.encode()
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert decoded.get(DHCPOptionCode.SIP_SERVERS).values[0] == "192.0.2.10"
     assert decoded.get(DHCPOptionCode.BCMCS_DOMAIN_NAME_LIST) == [
@@ -660,8 +657,7 @@ def test_raw_wire_decoding_for_opaque_and_enterprise_specific_options():
     encoded.extend(vi_payload)
     encoded.append(255)
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert decoded.get(
         DHCPOptionCode.VENDOR_SPECIFIC_INFORMATION
@@ -690,8 +686,7 @@ def test_raw_wire_decoding_for_new_primitive_registrations():
     encoded.extend(b"\x05alpha\x07example\x00")
     encoded.append(255)
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert decoded.get(DHCPOptionCode.ASSOCIATED_IP) == [
         IPv4AddressOption("192.0.2.25")
@@ -712,8 +707,7 @@ def test_raw_wire_decoding_for_new_string_registrations():
     encoded.extend(pcode)
     encoded.append(255)
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert (
         decoded.get(DHCPOptionCode.DHCP_CAPTIVE_PORTAL, decode=String)
@@ -733,8 +727,7 @@ def test_raw_wire_decoding_for_v4_sztp_redirect_registration():
     encoded.extend(payload)
     encoded.append(255)
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert decoded.get(DHCPOptionCode.V4_SZTP_REDIRECT) == URIList(
         [
@@ -760,8 +753,7 @@ def test_raw_wire_decoding_for_vi_vendor_class_registration():
     encoded.extend(payload)
     encoded.append(255)
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert decoded.get(DHCPOptionCode.VI_VENDOR_CLASS) == VIVendorClass(
         [
@@ -794,8 +786,7 @@ def test_ccc_option_code_registration_and_round_trip():
     opts[DHCPOptionCode.CCC] = value
     encoded = opts.encode()
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert decoded.get(DHCPOptionCode.CCC) == value
     assert decoded.get(DHCPOptionCode.CCC)[-1].code == 99
@@ -850,8 +841,7 @@ def test_zero_length_option_keeps_its_length_byte():
 
     assert bytes(options.encode()) == b"\x50\x00\x35\x01\x01\xff"
 
-    roundtrip = DHCPOptions()
-    roundtrip.decode(options.encode())
+    roundtrip = DHCPOptions.decode(options.encode())
     assert dict(roundtrip.items(decoded=False)) == {
         DHCPOptionCode.RAPID_COMMIT: bytearray(),
         DHCPOptionCode.DHCP_MESSAGE_TYPE: bytearray([DHCPMessageType.DHCPDISCOVER]),
@@ -880,8 +870,7 @@ def test_long_options_repeat_the_code_byte_on_every_fragment(size):
     assert all(code == 224 for code, _ in fragments)
     assert sum(length for _, length in fragments) == size
 
-    roundtrip = DHCPOptions()
-    roundtrip.decode(bytearray(wire))
+    roundtrip = DHCPOptions.decode(bytearray(wire))
     assert bytes(roundtrip.get(224, decode=False)) == payload
 
 
@@ -946,8 +935,7 @@ def test_unregistered_codes_fall_back_to_opaque_bytes():
         # Pseudo-members are cached, so a code compares and hashes consistently.
         assert DHCPOptionCode(value) is code
 
-    options = DHCPOptions()
-    options.decode(bytearray(b"\x35\x01\x01\xe0\x03\x01\x02\x03\xff"))
+    options = DHCPOptions.decode(bytearray(b"\x35\x01\x01\xe0\x03\x01\x02\x03\xff"))
     assert bytes(options.get(224)) == b"\x01\x02\x03"
     assert dict(options.items(decoded=False))[224] == bytearray(b"\x01\x02\x03")
     assert options == options

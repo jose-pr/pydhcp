@@ -19,6 +19,6 @@ class _ServerCore(_Handlers):
     Override any method or constant on the public class as before: the hooks
     (`handle_discover`, `handle_request`, `handle_decline`, `handle_release`,
     `handle_inform`, `acquire_lease`, `release_lease`, `get_inform_options`,
-    `lease_seconds`, `quarantine_address`) run synchronously on the one handler
+    `get_lease_seconds`, `quarantine_address`) run synchronously on the one handler
     thread of either driver.
     """

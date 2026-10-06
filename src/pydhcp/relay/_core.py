@@ -28,9 +28,8 @@ from ..options import _codecs as _type
 
 LOGGER = _logging.getLogger(__name__)
 
-ServerAddress = _ty.Union[
-    _ipaddress.IPv4Address, str, tuple[_ty.Union[_ipaddress.IPv4Address, str], int]
-]
+#: What the relay accepts for a server: an address, or an address and a port.
+ServerAddressLike = _ty.Union[_net.IPv4AddressLike, tuple[_net.IPv4AddressLike, int]]
 
 #: Hard ceiling from RFC 1542 4.1.1: "The relay agent MUST silently discard
 #: BOOTREQUEST messages whose `hops` field exceeds the value 16." A threshold
@@ -63,7 +62,7 @@ class PendingClient(_ty.NamedTuple):
 
 
 def _normalize_server_address(
-    address: ServerAddress,
+    address: ServerAddressLike,
 ) -> tuple[_ipaddress.IPv4Address, int]:
     """Coerce one upstream server entry to `(IPv4, port)`.
 
@@ -120,7 +119,7 @@ class _RelayCore(_Timed):
 
     def _init_relay_state(
         self,
-        server_addresses: _ty.Sequence[ServerAddress] = (),
+        server_addresses: _ty.Sequence[ServerAddressLike] = (),
         *,
         max_hops: int = DEFAULT_MAX_HOPS,
         insert_relay_agent_info: bool = False,
@@ -193,7 +192,7 @@ class _RelayCore(_Timed):
             return out
         return self._routed_transport(transport)
 
-    def _encode_for_forward(self, msg: DHCPMessage) -> bytearray:
+    def _encode_for_forward(self, msg: DHCPMessage) -> bytes:
         """Encode a message being forwarded without shrinking it.
 
         `encode()` defaults to the 576-octet minimum, which is not a limit this
@@ -265,7 +264,7 @@ class _RelayCore(_Timed):
                 _net.SocketAddress(server_ip, server_port),
                 _logging.INFO,
             )
-            transport.send(data, server_ip, server_port, msg.chaddr)
+            transport.send(data, server_ip, port=server_port, client_mac=msg.chaddr)
             self.metrics.packets_sent += 1
 
     def _insert_relay_agent_info(self, msg: DHCPMessage) -> None:
@@ -403,6 +402,6 @@ class _RelayCore(_Timed):
         # rather than reusing this packet's pin or letting the default route
         # swallow the broadcast.
         self._client_transport(context.transport, pending).send(
-            data, dest, client_port, msg.chaddr
+            data, dest, port=client_port, client_mac=msg.chaddr
         )
         self.metrics.packets_sent += 1

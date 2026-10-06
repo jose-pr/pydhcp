@@ -105,10 +105,15 @@ class HardwareAddressType(_enum.IntEnum):
         # which reads as the NONE member (value 0) rather than "no name".
         return f"<{type(self).__name__}.{self.label()}: {self.value}>"
 
-    def dumps(self, address: bytes) -> str:
+    def format_address(self, address: bytes) -> str:
+        """`address` as text: colon-separated hex for Ethernet, else its `repr`."""
         if self is HardwareAddressType.ETHERNET:
             return address.hex(":", 1).upper()
         return repr(address)
+
+
+#: What a function accepts for an IPv4 address: the address or its dotted text.
+IPv4AddressLike = _ty.Union[_ip.IPv4Address, str]
 
 
 class _SocketAddress(_ty.NamedTuple):
@@ -128,8 +133,36 @@ class SocketAddress(_SocketAddress):
         ip, port = sock.getsockname()[:2]
         return cls(ip, port)
 
-    def compat(self) -> tuple[str, int]:
+    def to_tuple(self) -> tuple[str, int]:
+        """The plain `(host, port)` pair the standard `socket` calls take."""
         return (str(self.ip), self.port)
+
+    @classmethod
+    def parse(cls, text: str) -> "SocketAddress":
+        """Build from ``"host:port"``, the text `str()` produces.
+
+        Raises `DHCPValueError` when the text is not an IPv4 address and a port
+        in 0-65535, and `TypeError` when it is not text.
+        """
+        if not isinstance(text, str):
+            raise TypeError(
+                f"SocketAddress.parse takes text, not {type(text).__name__}"
+            )
+        try:
+            host, port = _netimps.split_host(text)
+            if port is None:
+                raise ValueError("it has no port")
+            return cls(host, int(port))
+        except (ValueError, _netimps.NetimpsValueError) as exc:
+            raise _DHCPValueError(f"not a SocketAddress, {text!r}: {exc}") from exc
+
+    @classmethod
+    def try_parse(cls, text: str, default: _ty.Any = None) -> _ty.Any:
+        """`parse`, or `default` for text that does not parse; still `TypeError` for a non-text."""
+        try:
+            return cls.parse(text)
+        except _DHCPValueError:
+            return default
 
     def __str__(self) -> str:
         return _netimps.join_host(self.ip, self.port)

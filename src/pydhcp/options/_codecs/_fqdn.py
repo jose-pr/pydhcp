@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import re as _re
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ._base import _Record, _set
+from ._base import _Record, _set, _TextForm, _text_argument
 from ._domain import decode_domain_name, encode_domain_name
 
 _ClientFQDNT = _ty.TypeVar("_ClientFQDNT", bound="ClientFQDN")
 
 
-class ClientFQDN(_Record):
+class ClientFQDN(_Record, _TextForm):
     """RFC 4702 Client FQDN: flags, RCODE1, RCODE2, then the name.
 
     With the E bit the name is a fully qualified name (RFC 1035 labels and the
@@ -91,6 +92,41 @@ class ClientFQDN(_Record):
         _set(self, "rcode1", int(rcode1))
         _set(self, "rcode2", int(rcode2))
         _set(self, "partial", bool(partial))
+
+    _TEXT = _re.compile(
+        r"(?P<name>.*?)(?: \[flags=(?P<flags>0x[0-9a-fA-F]+|[0-9]+)"
+        r" rcode1=(?P<rcode1>[0-9]+) rcode2=(?P<rcode2>[0-9]+)(?P<partial> partial)?\])?",
+        _re.DOTALL,
+    )
+
+    def __str__(self) -> str:
+        """The name; with ``[flags=0x05 rcode1=0 rcode2=0 partial]`` after it when those are set."""
+        if not (self.flags or self.rcode1 or self.rcode2 or self.partial):
+            return self.name
+        return (
+            f"{self.name} [flags={self.flags:#04x} rcode1={self.rcode1} "
+            f"rcode2={self.rcode2}{' partial' if self.partial else ''}]"
+        )
+
+    @classmethod
+    def parse(cls: type[_ClientFQDNT], text: str) -> _ClientFQDNT:
+        """Build from the name, or from the text `str()` produces when flags are set.
+
+        Raises `DHCPValueError` for a bracketed part that is malformed or that
+        sets a reserved flag bit.
+        """
+        found = cls._TEXT.fullmatch(_text_argument(cls, text))
+        if found is None or (found["flags"] is None and " [flags=" in text):
+            raise DHCPValueError(f"not a client FQDN, {text!r}")
+        if found["flags"] is None:
+            return cls(found["name"])
+        return cls(
+            found["name"],
+            int(found["flags"], 0),
+            int(found["rcode1"]),
+            int(found["rcode2"]),
+            bool(found["partial"]),
+        )
 
     @property
     def encoded(self) -> bool:

@@ -14,7 +14,6 @@ import sys
 import typing as _ty
 
 from ..capture._events import CaptureEvent
-from ..packet.structured import dump_message
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ def _serialize_capture_event(event: CaptureEvent, packet_format: str) -> str:
     two modules import in one direction only."""
     if packet_format == "json":
         return _json.dumps(event.message.to_mapping()) + "\n"
-    return dump_message(event.message, packet_format)
+    return event.message.to_text(packet_format)
 
 
 #: How long a command hook may run before it is treated as a failure. The hook

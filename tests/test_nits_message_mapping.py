@@ -12,7 +12,6 @@ import pytest
 import yaml
 
 from pydhcp.packet import DHCPMessage
-from pydhcp.packet.structured import load_message
 
 
 def _sample_message() -> DHCPMessage:
@@ -90,7 +89,7 @@ def test_hand_authored_yaml_with_empty_sname_and_file_round_trips() -> None:
     mapping["chaddr"] = "10:20:30:40:50:55"
     text = yaml.safe_dump(mapping, sort_keys=False)
 
-    loaded = load_message(text, "yaml")
+    loaded = DHCPMessage.from_text(text, "yaml")
     assert loaded.sname == ""
     assert loaded.file == ""
     assert loaded.chaddr == bytes.fromhex("102030405055")

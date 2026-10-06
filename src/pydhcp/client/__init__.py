@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from ._asyncio import AsyncDHCPClient
+from ._core import ClientIdentifierLike
 from ._sync import DHCPClient
 
 __all__ = [
     "AsyncDHCPClient",
+    "ClientIdentifierLike",
     "DHCPClient",
 ]

@@ -6,7 +6,6 @@ from io import StringIO as _StringIO
 import typing as _ty
 
 from ..exceptions import DHCPDecodeError
-from ._message import DHCPMessage
 
 # `.._config` imports nothing from `pydhcp`, so the dependency is one-way and
 # adds no cycle; the optional-TOML ladder and its three near-identical error
@@ -20,12 +19,7 @@ from .._config import (
 
 import yaml as _yaml  # type: ignore[import-untyped]
 
-__all__ = [
-    "dump_mapping",
-    "dump_message",
-    "load_mapping",
-    "load_message",
-]
+__all__ = ["dumps", "loads"]
 
 _tomllib = _import_toml_reader()
 _tomli_w = _import_toml_writer()
@@ -51,7 +45,7 @@ def _json_or_text(value: str) -> _ty.Any:
         return value
 
 
-def load_mapping(text: str, format: str) -> dict[str, _ty.Any]:
+def loads(text: str, format: str) -> dict[str, _ty.Any]:
     normalized = _normalize_format(format)
     if normalized == "json":
         return _ensure_mapping(_json.loads(text))
@@ -78,7 +72,7 @@ def load_mapping(text: str, format: str) -> dict[str, _ty.Any]:
     return data
 
 
-def dump_mapping(data: dict[str, _ty.Any], format: str) -> str:
+def dumps(data: dict[str, _ty.Any], format: str) -> str:
     normalized = _normalize_format(format)
     if normalized == "json":
         return _json.dumps(data, indent=2) + "\n"
@@ -105,11 +99,3 @@ def dump_mapping(data: dict[str, _ty.Any], format: str) -> str:
     buffer = _StringIO()
     parser.write(buffer)
     return buffer.getvalue()
-
-
-def dump_message(message: DHCPMessage, format: str) -> str:
-    return dump_mapping(message.to_mapping(), format)
-
-
-def load_message(text: str, format: str) -> DHCPMessage:
-    return DHCPMessage.from_mapping(load_mapping(text, format))

@@ -7,21 +7,25 @@ project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 private `_network` package and the `options` and `packet` subpackages have
 their own headers (they ship as `pydhcp/{_network,options,packet}/AGENTS.md`).
 
-**What the root holds** (`pydhcp.__all__`, 53 names, `__version__` among them:
+**What the root holds** (`pydhcp.__all__`, 54 names, `__version__` among them:
 the installed distribution's version, read from its metadata): the main
 classes of each role (`DHCPServer`, `DHCPClient`, `DHCPRelay`, `DHCPCapture`
 and their async twins, the listeners and transports), `DHCPMessage` and the
 enums a caller passes (`DHCPMessageType`, `DHCPOpcode`, `DHCPFlags`,
 `DHCPPort`), the option container and its generic codecs, the lease backends,
-`SocketAddress` and `NetworkInterface`, and the exceptions. Everything else
+`SocketAddress`, `NetworkInterface` and `IPv4AddressLike` (what a function
+accepts for an IPv4 address: the address or its dotted text), and the exceptions. Everything else
 is imported from the module that owns it:
 
 | Name | Home |
 | --- | --- |
 | `CCC*`, `MoS*`, `VI*` codecs, `IPv4AddressOption`, `List`, `Bytes`, `String`, `Boolean`, `BaseDHCPOptionCode` | `pydhcp.options` |
-| `HardwareAddressType`, `load_message`, `dump_message`, `load_mapping`, `dump_mapping` | `pydhcp.packet` |
-| `DHCPMetrics`, `ListenSpec`, `BROADCAST_ADDRESS` | `pydhcp.listener` |
-| `ServerAddress`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
+| `HardwareAddressType` | `pydhcp.packet` |
+| `loads`, `dumps` (the four structured formats, as mappings) | `pydhcp.packet.structured` |
+| `DHCPMetrics`, `ListenLike`, `BROADCAST_ADDRESS` | `pydhcp.listener` |
+| `ServerAddressLike`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
+| `ClientIdentifierLike` | `pydhcp.client` |
+| `PacketFilterLike` | `pydhcp.capture` |
 | `validate_filename_pattern`, `FILENAME_FIELDS` | `pydhcp.capture` |
 | `main`, `App` | `pydhcp.cli` |
 
@@ -41,7 +45,7 @@ constants are in private modules and are not importable from a public one.
 - **`DHCPValueError(DHCPError, ValueError)`** — a value a codec or message
   field cannot represent (an entry past 255 octets, a header field out of
   range).
-- **`NoClientIdentityError(DHCPError, ValueError)`** — `DHCPMessage.client_id()`
+- **`NoClientIdentityError(DHCPError, ValueError)`** — `DHCPMessage.get_client_id()`
   on a message with neither option 61 nor a hardware address.
 
 A caller's own mistake (a wrong argument type, a bad option code, a bad
@@ -236,7 +240,7 @@ everything below from `pydhcp.listener` itself.
     without an error.
     Serving ends by cancelling those tasks *before* the sockets are closed, the
     order netimps documents for a clean shutdown.
-- **`DHCPTransport`** — abstract `.send(data, dest: IPv4, port: int, client_mac:
+- **`DHCPTransport`** — abstract `.send(data, dst: IPv4, *, port: int, client_mac:
   bytes) -> int`; base raises `NotImplementedError`.
 - **`UDPTransport(socket)`** — plain UDP send. It does not own the socket and
   never closes it: the listener that bound the socket closes it. A destination of `0.0.0.0`
@@ -274,7 +278,8 @@ everything below from `pydhcp.listener` itself.
   `None` for both and the hooks use the driver's clock instead. Handlers use
   `context.transport`/`context.interface` to reply out the same interface a
   request arrived on.
-- **`ListenSpec`** — type alias for the `listen` argument accepted above.
+- **`ListenLike`** — type alias for the `listen` argument accepted above (`None`, an
+  address, an address and its ports, or a sequence of those).
 
 **Gotcha**: a socket bound to a specific loopback address (`127.0.0.1`, not
 `0.0.0.0`) cannot originate a UDP broadcast send on POSIX (Windows is lenient
@@ -319,7 +324,7 @@ A test that patches a module global patches it in the private module that reads 
       `ROUTER` or `DNS`: this host is not known to route or resolve, and
       naming it as both told clients to send off-link traffic and name lookups
       into a black hole. Supply the real ones by overriding this method.
-  - `.lease_seconds(msg) -> float` — how long a lease to grant, applying this
+  - `.get_lease_seconds(msg) -> float` — how long a lease to grant, applying this
     server's policy to the client's requested time. RFC 2131 §4.3.1 honours
     that request only "if acceptable to local policy", so it is clamped to
     `[MIN_LEASE_SECONDS, MAX_LEASE_SECONDS]` (60 s … 1 day), defaulting to
@@ -413,7 +418,7 @@ A test that patches a module global patches it in the private module that reads 
     the message; DECLINE names the address being refused. None of the three is
     sent by a client with no address, so none has a broadcast flag to set.
     `parameter_request_list` is accepted only where a reply carries options.
-  - `.send(message, destination=IPv4("255.255.255.255"),
+  - `.send(message, *, dst=IPv4("255.255.255.255"),
     port=DHCPPort.SERVER) -> int` — binds lazily on first call, sends via a
     fresh `UDPTransport`, and tracks the message's `(xid, chaddr)` in
     `self._pending_keys` so `.handle()` only queues matching replies. A reply
@@ -472,7 +477,7 @@ A test that patches a module global patches it in the private module that reads 
   - Lifecycle as on the other asyncio classes: `await .start()` /
     `await .serve_forever()`, `.shutdown()`, `await .wait_closed(timeout=None)`,
     `await .aclose()`, `async with` (which binds, and does not serve).
-  - `await .send(message, destination=..., port=...) -> int`,
+  - `await .send(message, *, dst=..., port=...) -> int`,
     `await .discover_offer(chaddr, *, ...) -> DHCPMessage | None` and
     `await .dora(chaddr, *, ...) -> DHCPMessage | None` take the keywords of
     the synchronous methods and return what they return. `send` works before
@@ -542,9 +547,9 @@ client that is never started will always time out waiting for a reply.
     is still serialised and in arrival order — the same guarantee the lease
     backends rely on. A handler pool would make this a data race.
 
-- **`ServerAddress`** (`pydhcp.relay`, not re-exported from the top level) —
-  the type of each `server_addresses` entry: `IPv4 | str | tuple[IPv4 | str,
-  int]`. A bare entry defaults to port 67.
+- **`ServerAddressLike`** (`pydhcp.relay`, not re-exported from the top level) —
+  the type of each `server_addresses` entry: `IPv4AddressLike |
+  tuple[IPv4AddressLike, int]`. A bare entry defaults to port 67.
 
 **Gotcha**: a relay reply must not assume the client listens on well-known
 port 68 — DHCPOFFER/ACK never carries the original client's UDP source port.
@@ -796,7 +801,7 @@ lossless on the wire and safe on a screen; use them rather than calling
 **Gotcha**: a string from `decode()` may hold surrogates, so
 `str.encode("utf-8")` on it raises and `json.dumps(..., ensure_ascii=False)`
 fails at write time. Anything rendering one must call `display()` first —
-`DHCPMessage.dumps()`, `.to_mapping()` and `String.__json__()` already do.
+`DHCPMessage.summary()`, `.to_mapping()` and `String.__json__()` already do.
 
 ## Logging
 
@@ -931,5 +936,5 @@ stayed at the root level and the library's output never appeared.
   drift out of sync with the real default.
 - Capture's newline-delimited JSON stream output (`--format json` in
   `stream`/`single` mode) is compact JSON by design (one object per line);
-  use `dump_message(..., "json")` directly only for single structured packet
+  use `message.to_text("json")` directly only for single structured packet
   files where pretty JSON is acceptable.

@@ -98,7 +98,7 @@ def test_no_lease_is_allocated_from_a_link_local_network(host) -> None:
     server = DHCPServer(lease_backend=InMemoryLeaseBackend())
     msg = _request("169.254.11.200")
 
-    lease = server.acquire_lease(msg.client_id(), IPv4("169.254.11.89"), msg)
+    lease = server.acquire_lease(msg.get_client_id(), IPv4("169.254.11.89"), msg)
 
     assert lease is None, "allocated a lease from a link-local network"
 

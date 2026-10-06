@@ -6,7 +6,7 @@ from ._asyncio import AsyncDHCPRelay
 from ._core import (
     DEFAULT_MAX_HOPS,
     RFC1542_MAX_HOPS,
-    ServerAddress,
+    ServerAddressLike,
 )
 from ._sync import DHCPRelay
 
@@ -15,5 +15,5 @@ __all__ = [
     "DEFAULT_MAX_HOPS",
     "DHCPRelay",
     "RFC1542_MAX_HOPS",
-    "ServerAddress",
+    "ServerAddressLike",
 ]

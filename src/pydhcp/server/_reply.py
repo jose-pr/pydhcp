@@ -154,7 +154,10 @@ class _Replies(_LeasePolicy):
     ) -> None:
         datagram = self._reply_datagram(msg, resp, context, resp_ty)
         context.transport.send(
-            datagram.data, datagram.dst, datagram.port, datagram.client_mac
+            datagram.data,
+            datagram.dst,
+            port=datagram.port,
+            client_mac=datagram.client_mac,
         )
         self.metrics.packets_sent += 1
 
@@ -196,7 +199,7 @@ class _Replies(_LeasePolicy):
                 DHCPOptionCode.RELAY_AGENT_INFORMATION,
             ]
             resp.options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray.fromhex(
-                msg.client_id().replace(":", "")
+                msg.get_client_id().replace(":", "")
             )
         if requests_params:
 

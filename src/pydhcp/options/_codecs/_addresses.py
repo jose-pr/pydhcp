@@ -5,7 +5,14 @@ from __future__ import annotations
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ipaddress import IPv4Address as _IP, IPv4Network as _Network
-from ._base import DHCPOptionType, _NormalizedList, _Record, _set
+from ._base import (
+    DHCPOptionType,
+    _NormalizedList,
+    _Record,
+    _set,
+    _TextForm,
+    _text_argument,
+)
 
 _IPv4AddressOptionT = _ty.TypeVar("_IPv4AddressOptionT", bound="IPv4AddressOption")
 
@@ -44,7 +51,7 @@ class IPv4AddressOption(DHCPOptionType, _IP):
 _ClasslessRouteT = _ty.TypeVar("_ClasslessRouteT", bound="ClasslessRoute")
 
 
-class ClasslessRoute(_Record):
+class ClasslessRoute(_Record, _TextForm):
     """RFC 3442 classless static route entry.
 
     Accepts either ``ClasslessRoute(gateway, network)`` or a single
@@ -77,6 +84,26 @@ class ClasslessRoute(_Record):
                 ) from None
         _set(self, "gateway", _IP(gw))
         _set(self, "network", _Network(net))
+
+    def __str__(self) -> str:
+        return f"{self.network} via {self.gateway}"
+
+    @classmethod
+    def parse(cls: type[_ClasslessRouteT], text: str) -> _ClasslessRouteT:
+        """Build from ``"10.0.0.0/8 via 192.0.2.1"``, the text `str()` produces.
+
+        Raises `DHCPValueError` for anything else, host bits set in the network
+        included.
+        """
+        words = _text_argument(cls, text).split()
+        if len(words) != 3 or words[1] != "via":
+            raise DHCPValueError(
+                f"not a route, {text!r}: write it as 'network/prefix via gateway'"
+            )
+        try:
+            return cls(words[2], words[0])
+        except ValueError as exc:
+            raise DHCPValueError(f"not a route, {text!r}: {exc}") from exc
 
     @classmethod
     def _dhcp_read(

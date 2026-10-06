@@ -22,14 +22,15 @@ class DHCPTransport:
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        dest: _ipaddress.IPv4Address,
+        dst: _ipaddress.IPv4Address,
+        *,
         port: int,
         client_mac: bytes,
     ) -> int:
         raise NotImplementedError()
 
 
-def _dest_string(dest: _ipaddress.IPv4Address) -> str:
+def _dest_string(dst: _ipaddress.IPv4Address) -> str:
     """The address to actually send a reply to.
 
     0.0.0.0 in a DHCP header means "this client has no address yet", which on
@@ -37,7 +38,7 @@ def _dest_string(dest: _ipaddress.IPv4Address) -> str:
     0.0.0.0, which is what `str()` would produce and what `sendto` would then
     reject or silently route nowhere.
     """
-    return BROADCAST_ADDRESS if dest == _const.WILDCARD_V4 else str(dest)
+    return BROADCAST_ADDRESS if dst == _const.WILDCARD_V4 else str(dst)
 
 
 class UDPTransport(DHCPTransport):
@@ -56,7 +57,8 @@ class UDPTransport(DHCPTransport):
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        dest: _ipaddress.IPv4Address,
+        dst: _ipaddress.IPv4Address,
+        *,
         port: int,
         client_mac: bytes,
     ) -> int:
@@ -81,7 +83,7 @@ class UDPTransport(DHCPTransport):
         # Future RawTransport can be plugged in here to craft L2 Ethernet frames
         # targeting client_mac, which is the real answer for an unconfigured
         # client on a segment where broadcast is unwanted.
-        return self._send_to(data, _dest_string(dest), port)
+        return self._send_to(data, _dest_string(dst), port)
 
 
 class PktInfoUDPTransport(UDPTransport):
@@ -126,11 +128,12 @@ class PktInfoUDPTransport(UDPTransport):
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        dest: _ipaddress.IPv4Address,
+        dst: _ipaddress.IPv4Address,
+        *,
         port: int,
         client_mac: bytes,
     ) -> int:
-        dest_str = _dest_string(dest)
+        dest_str = _dest_string(dst)
         if self.local_ip is not None and self.endpoint.has_src_pinning:
             try:
                 # `_dest_string`, not `str(dest)`: this path took a yiaddr of
@@ -165,7 +168,7 @@ class PktInfoUDPTransport(UDPTransport):
                     f"{dest_str}."
                 )
                 return self._send_to(data, dest_str, port)
-        return super().send(data, dest, port, client_mac)
+        return super().send(data, dst, port=port, client_mac=client_mac)
 
 
 class _Datagram(_ty.NamedTuple):

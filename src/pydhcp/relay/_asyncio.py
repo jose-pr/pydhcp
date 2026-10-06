@@ -5,8 +5,8 @@ from __future__ import annotations
 import typing as _ty
 
 from ..listener._asyncio import AsyncDHCPListener
-from ..listener._spec import ListenSpec
-from ._core import DEFAULT_MAX_HOPS, ServerAddress, _RelayCore
+from ..listener._spec import ListenLike
+from ._core import DEFAULT_MAX_HOPS, ServerAddressLike, _RelayCore
 
 
 class AsyncDHCPRelay(_RelayCore, AsyncDHCPListener):
@@ -19,8 +19,8 @@ class AsyncDHCPRelay(_RelayCore, AsyncDHCPListener):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
-        server_addresses: _ty.Sequence[ServerAddress] = (),
+        listen: ListenLike = None,
+        server_addresses: _ty.Sequence[ServerAddressLike] = (),
         *,
         max_hops: int = DEFAULT_MAX_HOPS,
         insert_relay_agent_info: bool = False,

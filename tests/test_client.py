@@ -144,8 +144,10 @@ def test_client_send_uses_bound_udp_transport(monkeypatch) -> None:
 
     message = client.build_discover(CHADDR, xid=0xCAFEBABE)
 
-    assert client.send(message, destination="192.0.2.1", port=6767) == 300
-    data, dest, port, mac = transport.send.call_args.args
+    assert client.send(message, dst="192.0.2.1", port=6767) == 300
+    data, dest = transport.send.call_args.args
+    port = transport.send.call_args.kwargs["port"]
+    mac = transport.send.call_args.kwargs["client_mac"]
     assert DHCPMessage.decode(data).xid == 0xCAFEBABE
     assert dest == IPv4("192.0.2.1")
     assert port == 6767
@@ -283,7 +285,7 @@ class _RecordingClient(DHCPClient):
         self.sent = []
         self.offer_has_server_id = offer_has_server_id
 
-    def send(self, message, destination=IPv4("255.255.255.255"), port=67):
+    def send(self, message, dst=IPv4("255.255.255.255"), port=67):
         self.sent.append(message)
         self._pending_keys.add(self._pending_key(message))
         if message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) is (
@@ -326,7 +328,7 @@ def test_dora_repeats_the_client_id_and_parameter_list_in_the_request():
     assert request.options.get(DHCPOptionCode.CLIENT_IDENTIFIER, decode=False) == cid
     assert request.options.get(DHCPOptionCode.PARAMETER_REQUEST_LIST, decode=False)
     # and the two messages are the same client as far as a server is concerned
-    assert request.client_id() == discover.client_id()
+    assert request.get_client_id() == discover.get_client_id()
 
 
 def test_dora_refuses_an_offer_without_a_server_identifier():
@@ -405,7 +407,7 @@ class _StubbedClockClient(DHCPClient):
     def _monotonic(self):
         return self.now
 
-    def send(self, message, destination=IPv4("255.255.255.255"), port=67):
+    def send(self, message, dst=IPv4("255.255.255.255"), port=67):
         self.secs_sent.append(int(message.secs.total_seconds()))
         self._pending_keys.add(self._pending_key(message))
         message_type = message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
@@ -548,7 +550,7 @@ class _NakOnRequestClient(_StubbedClockClient):
         super().__init__(*args, **kwargs)
         self.naks_delivered = 0
 
-    def send(self, message, destination=IPv4("255.255.255.255"), port=67):
+    def send(self, message, dst=IPv4("255.255.255.255"), port=67):
         self.secs_sent.append(int(message.secs.total_seconds()))
         self._pending_keys.add(self._pending_key(message))
         message_type = message.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE)
@@ -648,7 +650,7 @@ def test_concurrent_exchanges_each_receive_their_own_reply():
     results = {}
 
     class _TwoExchangeClient(DHCPClient):
-        def send(self, message, destination=IPv4("255.255.255.255"), port=67):
+        def send(self, message, dst=IPv4("255.255.255.255"), port=67):
             self._pending_keys.add(self._pending_key(message))
             sent[message.chaddr] = message
             started[message.chaddr].set()

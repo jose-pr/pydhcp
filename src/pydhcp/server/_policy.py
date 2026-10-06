@@ -118,7 +118,7 @@ class _NonExtendingBackend:
 class _LeasePolicy(_ServerState):
     """Allocation, lease time, address ownership, quarantine and release."""
 
-    def lease_seconds(self, msg: DHCPMessage) -> float:
+    def get_lease_seconds(self, msg: DHCPMessage) -> float:
         """Lease length to grant for `msg`, applying this server's policy.
 
         RFC 2131 s4.3.1 lets the server honour a client's requested lease time
@@ -181,7 +181,7 @@ class _LeasePolicy(_ServerState):
         nor a lease time. RFC 2131 Table 3 makes option 51 a MUST in an ACK to a
         REQUEST; clients either reject that reply or configure 0.0.0.0.
 
-        `lease_seconds` enforces MIN_LEASE_SECONDS, so the base server cannot
+        `get_lease_seconds` enforces MIN_LEASE_SECONDS, so the base server cannot
         reach this. An overriding `acquire_lease` can, which is exactly why the
         check lives on the reply path rather than in the allocator.
 
@@ -234,7 +234,7 @@ class _LeasePolicy(_ServerState):
         )
         existing = backend.lookup(client_id)
         if existing:
-            renewed = backend.renew(client_id, self.lease_seconds(msg))
+            renewed = backend.renew(client_id, self.get_lease_seconds(msg))
             if renewed:
                 # `_NonExtendingBackend.renew` hands back the object `lookup`
                 # returned, so identity is what separates a real renewal from a
@@ -248,7 +248,7 @@ class _LeasePolicy(_ServerState):
         requested_ip = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
-        ttl = self.lease_seconds(msg)
+        ttl = self.get_lease_seconds(msg)
 
         ip: _ty.Optional[_ipaddress.IPv4Address] = None
         if requested_ip:

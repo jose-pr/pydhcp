@@ -44,17 +44,16 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
     p5 = memoryview(build_options_payload(5))
     p20 = memoryview(build_options_payload(20))
 
-    t0 = timeit.timeit(lambda: DHCPOptions().decode(p0), number=iterations)
-    t5 = timeit.timeit(lambda: DHCPOptions().decode(p5), number=iterations)
-    t20 = timeit.timeit(lambda: DHCPOptions().decode(p20), number=iterations)
+    t0 = timeit.timeit(lambda: DHCPOptions.decode(p0), number=iterations)
+    t5 = timeit.timeit(lambda: DHCPOptions.decode(p5), number=iterations)
+    t20 = timeit.timeit(lambda: DHCPOptions.decode(p20), number=iterations)
 
     opts = DHCPOptions()
     opts[DHCPOptionCode.SUBNET_MASK] = IPv4("255.255.255.0")
 
     def round_trip() -> None:
         encoded = opts.encode()
-        decoded = DHCPOptions()
-        decoded.decode(memoryview(encoded))
+        decoded = DHCPOptions.decode(memoryview(encoded))
 
     trt = timeit.timeit(round_trip, number=iterations)
     t_mem = timeit.timeit(test_memory_usage, number=100)

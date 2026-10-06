@@ -1,10 +1,9 @@
 from pydhcp.capture import DHCPCapture
-from pydhcp.packet.structured import dump_message
 
 
 def on_capture(event) -> None:
     print(f"{event.captured_at.isoformat()} {event.message_type} {event.client_id}")
-    print(dump_message(event.message, "json"))
+    print(event.message.to_text("json"))
 
 
 def main() -> None:

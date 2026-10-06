@@ -1,7 +1,8 @@
 # `pydhcp.packet` — public API header
 
 Header-file-style reference for `pydhcp.packet`: the DHCP wire message
-format plus JSON/YAML/TOML/INI structured (de)serialization. `DHCPMessage` and
+format plus JSON/YAML/TOML/INI structured text (`DHCPMessage.from_text` /
+`.to_text`, and `pydhcp.packet.structured`). `DHCPMessage` and
 the enums `DHCPMessageType`, `DHCPOpcode`, `DHCPFlags` and `DHCPPort` are also
 re-exported from the top-level `pydhcp` package. The top-level package
 header ships beside this one as `pydhcp/AGENTS.md`; for the project overview
@@ -43,7 +44,9 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     RFC 3396 `OPTION_OVERLOAD` (decodes overflow options packed into the
     `file`/`sname` fields).
   - **`.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) ->
-    bytearray`** — serializes to wire bytes. `max_packetsize` budgets the
+    bytes`** — serializes to wire bytes; `bytes(message)` is the same call
+    with the default size. The result is immutable: write `bytearray(...)`
+    to patch an octet. `max_packetsize` budgets the
     whole **IP datagram**, not the message: the options field gets
     `max_packetsize − 268`, where `268 = 20 (IPv4) + 8 (UDP) + 236 (fixed
     header) + 4 (magic cookie)`.
@@ -94,7 +97,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       subclass — YAML cannot represent the subclass and TOML writes something
       it cannot read back.
     Backs the JSON/YAML/TOML/INI helpers below.
-  - **`.client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
+  - **`.get_client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
     `htype.value + chaddr`; returned as uppercase colon-hex. Raises
     **`NoClientIdentityError`** (`pydhcp.exceptions`; a `ValueError`) when the message has
@@ -102,12 +105,19 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     than returning the hardware-type octet alone, which every such client
     would share. `DHCPServer` drops such a message; `CaptureEvent.client_id`
     reports `"UNKNOWN"`.
-  - **`.dumps(codemap=None) -> str`** — human-readable multi-line summary
-    (used by `.log_str()`/`.log()` and the CLI's `--format summary`).
-  - **`.log(src, dst, level: int) -> None`** — logs `.dumps()` framed with a
+  - **`.summary(codemap=None) -> str`** — human-readable multi-line summary
+    (used by `.log_str()`/`.log()` and the CLI's `--format summary`); nothing
+    reads it back.
+  - **`.to_text(format: str) -> str`** / **`DHCPMessage.from_text(text: str,
+    format: str) -> DHCPMessage`** — the message as a document and back;
+    `format` is `"json"`, `"yaml"`, `"toml"` or `"ini"` (case-insensitive),
+    anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
+    out by `pydhcp.packet.structured` (below). `"toml"` needs Python 3.11+ or
+    `pydhcp[toml]`. A file the capture command wrote loads with `from_text`.
+  - **`.log(src, dst, level: int) -> None`** — logs `.summary()` framed with a
     header, at `pydhcp`'s `LOGGER`, at the given `logging` level.
 
-**Hand-authoring a message for `load_message`** — two traps, both of which used
+**Hand-authoring a message for `from_text`** — two traps, both of which used
 to corrupt silently rather than fail:
 
 - **Quote the MAC.** `chaddr: 10:20:30:40:50:55` unquoted is read by PyYAML as
@@ -137,20 +147,17 @@ is a separate typing decision.
   because the option codecs need it too and this module imports them. See
   `pydhcp/_network/AGENTS.md` for the full entry.
 
-## Structured (de)serialization (`structured.py`)
+## Structured text (`structured.py`, public as `pydhcp.packet.structured`)
 
-- **`load_message(text: str, format: str) -> DHCPMessage`** /
-  **`dump_message(message: DHCPMessage, format: str) -> str`** — round-trip
-  a `DHCPMessage` through a structured text format. `format` is one of
-  `"json"`, `"yaml"`, `"toml"`, `"ini"` (case-insensitive); anything else
-  raises `ValueError`. `"toml"` requires Python 3.11+ (`tomllib`) or the
-  optional `tomli`/`tomli-w` packages (`pydhcp[toml]`) — raises
-  `NotImplementedError` with an actionable message otherwise.
-- **`load_mapping(text: str, format: str) -> dict[str, Any]`** /
-  **`dump_mapping(data: dict[str, Any], format: str) -> str`** — the
-  lower-level mapping (de)serializers `load_message`/`dump_message` build
-  on; useful when you want `DHCPMessage.from_mapping`/`.to_mapping()`
-  control over the intermediate dict.
+- **`loads(text: str, format: str) -> dict[str, Any]`** /
+  **`dumps(data: dict[str, Any], format: str) -> str`** — a mapping in a
+  structured text format, with `json`'s meanings: `loads` takes content (never
+  a file name), `dumps` returns text. `format` is one of `"json"`, `"yaml"`,
+  `"toml"`, `"ini"` (case-insensitive); anything else raises `ValueError`.
+  `"toml"` requires Python 3.11+ (`tomllib`) or the optional `tomli`/`tomli-w`
+  packages (`pydhcp[toml]`) and raises `NotImplementedError` with an
+  actionable message otherwise. `DHCPMessage.from_text` / `.to_text` are these
+  two around `from_mapping` / `to_mapping`.
 
 **Gotcha**: the INI loader/dumper sets `ConfigParser.optionxform = str`
 before parsing — any code that builds its own `ConfigParser` for packet or

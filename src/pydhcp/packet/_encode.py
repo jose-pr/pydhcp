@@ -128,9 +128,7 @@ class _MessageEncode(_MessageDecode):
             f"{left_over} option(s) did not fit"
         )
 
-    def encode(
-        self, max_packetsize: int = _const.DHCP_MIN_LEGAL_PACKET_SIZE
-    ) -> bytearray:
+    def encode(self, max_packetsize: int = _const.DHCP_MIN_LEGAL_PACKET_SIZE) -> bytes:
         """Serialize the message, fitting it into `max_packetsize` octets.
 
         `max_packetsize` is the whole **IP datagram**, not the DHCP message, so
@@ -234,4 +232,7 @@ class _MessageEncode(_MessageDecode):
         floor = min(_const.BOOTP_MIN_PACKET_SIZE, max_packetsize)
         if len(data) < floor:
             data.extend(bytes(floor - len(data)))
-        return data
+        return bytes(data)
+
+    def __bytes__(self) -> bytes:
+        return self.encode()

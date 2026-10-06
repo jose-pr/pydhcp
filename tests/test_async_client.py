@@ -473,7 +473,9 @@ def test_send_works_before_serving_starts(loop_type: type) -> None:
         try:
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 sent = await client.send(
-                    client.build_discover(CHADDR, xid=9), "127.0.0.1", peer.port
+                    client.build_discover(CHADDR, xid=9),
+                    dst="127.0.0.1",
+                    port=peer.port,
                 )
                 assert sent >= 300
                 await _until(lambda: peer.received, "the datagram at the peer")
@@ -491,7 +493,7 @@ def test_send_after_close_is_refused(loop_type: type) -> None:
         client = AsyncDHCPClient(listen=LOCAL)
         await client.aclose()
         with pytest.raises(RuntimeError, match="closed"):
-            await client.send(client.build_discover(CHADDR), "127.0.0.1", 9)
+            await client.send(client.build_discover(CHADDR), dst="127.0.0.1", port=9)
 
     _run(loop_type, main)
 
@@ -538,7 +540,7 @@ def test_a_failed_send_leaves_no_transaction_accepted(loop_type: type) -> None:
             try:
                 message = client.build_discover(CHADDR, xid=3)
                 with pytest.raises(OSError, match="unreachable"):
-                    await client.send(message, "127.0.0.1", 9)
+                    await client.send(message, dst="127.0.0.1", port=9)
                 assert client._pending_keys == set()
                 assert client.metrics.packets_sent == 0
             finally:

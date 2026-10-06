@@ -10,12 +10,18 @@ import typing as _ty
 
 from ..listener._asyncio import AsyncDHCPListener
 from ..listener._receive import DHCPRequestContext
-from ..listener._spec import ListenSpec
+from ..listener._spec import ListenLike
 from ..listener._transport import _dest_string
 from ..options._codes import DHCPOptionCode
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from ._core import BROADCAST_DESTINATION, Reply, _ClientCore
+from .._network import IPv4AddressLike
+from ._core import (
+    BROADCAST_DESTINATION,
+    ClientIdentifierLike,
+    Reply,
+    _ClientCore,
+)
 
 __all__ = ["AsyncDHCPClient"]
 
@@ -39,7 +45,7 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
@@ -64,7 +70,8 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
     async def send(
         self,
         message: DHCPMessage,
-        destination: _ty.Union[_ipaddress.IPv4Address, str] = BROADCAST_DESTINATION,
+        *,
+        dst: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
     ) -> int:
         if not self._sockets:
@@ -79,7 +86,7 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         try:
             sent = await endpoint.asend(
                 bytes(data),
-                _dest_string(_ipaddress.IPv4Address(destination)),
+                _dest_string(_ipaddress.IPv4Address(dst)),
                 int(port),
             )
         except BaseException:
@@ -98,7 +105,7 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         message: DHCPMessage,
         msg_type: _enum.DHCPMessageType,
         *,
-        destination: _ty.Union[_ipaddress.IPv4Address, str],
+        destination: IPv4AddressLike,
         port: int,
         timeout: float,
         retries: int,
@@ -110,7 +117,7 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
             with self._waiting_for(key) as waiter:
                 for interval in self._retransmit_intervals(timeout, retries):
                     self._stamp_secs(message, self._monotonic() - started_at)
-                    await self.send(message, destination, port)
+                    await self.send(message, dst=destination, port=port)
                     reply = await self._wait_for(waiter, msg_type, interval)
                     if reply is not None:
                         return reply
@@ -167,10 +174,10 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _ty.Union[_ipaddress.IPv4Address, str] = BROADCAST_DESTINATION,
+        destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
     ) -> _ty.Optional[DHCPMessage]:
@@ -202,10 +209,10 @@ class AsyncDHCPClient(_ClientCore, AsyncDHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _ty.Union[_ipaddress.IPv4Address, str] = BROADCAST_DESTINATION,
+        destination: IPv4AddressLike = BROADCAST_DESTINATION,
         port: int = _SERVER_PORT,
         xid: _ty.Optional[int] = None,
-        client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
+        client_identifier: _ty.Optional[ClientIdentifierLike] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
     ) -> _ty.Optional[DHCPMessage]:

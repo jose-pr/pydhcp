@@ -25,6 +25,7 @@ def test_network_holds_only_pydhcps_own_names() -> None:
 
     assert public == {
         "HardwareAddressType",
+        "IPv4AddressLike",
         "NetworkInterface",
         "SocketAddress",
         "host_ip_interfaces",

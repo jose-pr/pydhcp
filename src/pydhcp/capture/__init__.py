@@ -10,6 +10,7 @@ from ._events import (
     CaptureHook,
     CapturePredicate,
     CaptureSink,
+    PacketFilterLike,
     compile_capture_filter,
     validate_filename_pattern,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "CapturePredicate",
     "CaptureSink",
     "DHCPCapture",
+    "PacketFilterLike",
     "FILENAME_FIELDS",
     "UNIQUE_FILENAME_FIELDS",
     "compile_capture_filter",

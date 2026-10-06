@@ -9,7 +9,7 @@ import netimps as _netimps
 
 from .. import _constants as _const, _network as _net
 
-ListenAddress = _ty.Union[_ipaddress.IPv4Address, str]
+ListenAddress = _net.IPv4AddressLike
 
 
 ListenPort = _ty.Union[int, _ty.Sequence[int]]
@@ -18,7 +18,9 @@ ListenPort = _ty.Union[int, _ty.Sequence[int]]
 ListenBinding = _ty.Union[ListenAddress, tuple[ListenAddress, ListenPort]]
 
 
-ListenSpec = _ty.Optional[_ty.Union[ListenBinding, _ty.Sequence[ListenBinding]]]
+#: What `listen` accepts: nothing (every interface), an address, an address and
+#: its ports, or a sequence of those.
+ListenLike = _ty.Optional[_ty.Union[ListenBinding, _ty.Sequence[ListenBinding]]]
 
 
 def _split_listen_string(value: str) -> list[str]:
@@ -41,7 +43,7 @@ def _split_host_port(value: str) -> tuple[str, _ty.Optional[int]]:
     return host or "0.0.0.0", port
 
 
-def _iter_listen_bindings(listen: ListenSpec) -> _ty.Iterator[ListenBinding]:
+def _iter_listen_bindings(listen: ListenLike) -> _ty.Iterator[ListenBinding]:
     if listen is None:
         return
     if isinstance(listen, str):
@@ -83,7 +85,7 @@ def _binding_host(binding: ListenBinding) -> ListenAddress:
         return ip
 
 
-def _listen_uses_wildcard(listen: ListenSpec) -> bool:
+def _listen_uses_wildcard(listen: ListenLike) -> bool:
     return any(
         _netimps.is_wildcard(_binding_host(binding))
         for binding in _iter_listen_bindings(listen)
@@ -91,7 +93,7 @@ def _listen_uses_wildcard(listen: ListenSpec) -> bool:
 
 
 def _parselisteners(
-    listen: ListenSpec = None,
+    listen: ListenLike = None,
     default_ports: _ty.Sequence[int] = (),
     expand_wildcard: bool = True,
 ) -> list[_net.SocketAddress]:

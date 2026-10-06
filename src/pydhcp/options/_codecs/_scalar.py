@@ -6,23 +6,38 @@ from ... import _nvt as _nvt
 from ..._network import HardwareAddressType as _HardwareAddressType
 
 
-from ._base import DHCPOptionType, _NormalizedList
+from ._base import DHCPOptionType, _NormalizedList, _TextForm, _text_argument
 
 _BytesT = _ty.TypeVar("_BytesT", bound="Bytes")
 
 
-class Bytes(DHCPOptionType, bytes):
-    """Opaque byte payload."""
+class Bytes(DHCPOptionType, _TextForm, bytes):
+    """Opaque byte payload: built from bytes, written as hex text."""
 
     def __new__(
         cls: type[_BytesT],
-        src: _ty.Optional[_ty.Union[bytes, bytearray, memoryview, str]] = None,
+        value: _ty.Optional[_ty.Union[bytes, bytearray, memoryview]] = None,
     ) -> _BytesT:
-        if isinstance(src, str):
-            return cls.fromhex(src)
-        if src is None:
+        if isinstance(value, str):
+            raise TypeError(
+                f"{cls.__name__} is built from bytes, not text: "
+                f"use {cls.__name__}.parse for hex text"
+            )
+        if value is None:
             return super().__new__(cls)
-        return super().__new__(cls, src)
+        return super().__new__(cls, value)
+
+    @classmethod
+    def parse(cls: type[_BytesT], text: str) -> _BytesT:
+        """Build from hex text; spaces and colons between octets are ignored.
+
+        Raises `DHCPValueError` for anything that is not whole hex octets.
+        """
+        digits = _text_argument(cls, text).replace(":", "")
+        try:
+            return cls(bytes.fromhex(digits))
+        except ValueError as exc:
+            raise DHCPValueError(f"not hex octets, {text!r}: {exc}") from exc
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}({bytes.__repr__(self)})"
@@ -43,6 +58,17 @@ class Bytes(DHCPOptionType, bytes):
 
     def __json__(self) -> str:
         return self.hex()
+
+
+def _octets(value: _ty.Any) -> Bytes:
+    """`value` as octets: bytes-like as is, hex text read as a document holds it.
+
+    The record codecs take their payload from a structured document, where
+    octets are written as hex text.
+    """
+    if isinstance(value, str):
+        return Bytes.parse(value)
+    return Bytes(value)
 
 
 _URIListT = _ty.TypeVar("_URIListT", bound="URIList")

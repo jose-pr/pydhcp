@@ -17,7 +17,7 @@ from __future__ import annotations
 from .._metrics import DHCPMetrics
 from ._asyncio import AsyncDHCPListener
 from ._receive import DHCPRequestContext
-from ._spec import ListenAddress, ListenBinding, ListenPort, ListenSpec
+from ._spec import ListenLike
 from ._sync import DHCPListener
 from ._transport import (
     BROADCAST_ADDRESS,
@@ -31,10 +31,7 @@ __all__ = [
     "BROADCAST_ADDRESS",
     "DHCPListener",
     "DHCPMetrics",
-    "ListenAddress",
-    "ListenBinding",
-    "ListenPort",
-    "ListenSpec",
+    "ListenLike",
     "PktInfoUDPTransport",
     "DHCPRequestContext",
     "DHCPTransport",

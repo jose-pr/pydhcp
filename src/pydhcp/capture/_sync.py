@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import typing as _ty
 
-from ..listener._spec import ListenSpec
+from ..listener._spec import ListenLike
 from ..listener._sync import DHCPListener
 from ._core import _CaptureCore
-from ._events import CaptureHook, CapturePredicate, CaptureSink
+from ._events import CaptureHook, CapturePredicate, CaptureSink, PacketFilterLike
 
 
 class DHCPCapture(_CaptureCore, DHCPListener):
@@ -15,9 +15,9 @@ class DHCPCapture(_CaptureCore, DHCPListener):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
-        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
+        packet_filter: _ty.Optional[PacketFilterLike] = None,
         sink: _ty.Optional[CaptureSink] = None,
         hook: _ty.Optional[CaptureHook] = None,
         hook_fail_fast: bool = False,

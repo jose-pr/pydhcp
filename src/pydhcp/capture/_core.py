@@ -17,6 +17,7 @@ from ._events import (
     CaptureEvent,
     CaptureHook,
     CapturePredicate,
+    PacketFilterLike,
     CaptureSink,
     compile_capture_filter,
 )
@@ -35,7 +36,7 @@ class _CaptureCore(_Timed):
 
     def _init_capture_state(
         self,
-        packet_filter: _ty.Optional[_ty.Union[str, CapturePredicate]] = None,
+        packet_filter: _ty.Optional[PacketFilterLike] = None,
         sink: _ty.Optional[CaptureSink] = None,
         hook: _ty.Optional[CaptureHook] = None,
         hook_fail_fast: bool = False,

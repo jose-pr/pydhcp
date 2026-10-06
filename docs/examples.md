@@ -119,7 +119,7 @@ discover = client.build_discover(
     b"\x00\x11\x22\x33\x44\x55",
     parameter_request_list=[DHCPOptionCode.SUBNET_MASK, DHCPOptionCode.ROUTER],
 )
-client.send(discover, destination="127.0.0.1", port=6767)
+client.send(discover, dst="127.0.0.1", port=6767)
 reply = client.next_reply(timeout=5)
 ```
 

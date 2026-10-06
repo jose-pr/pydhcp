@@ -44,7 +44,7 @@ def capture_class(request):
 
 
 class _Transport:
-    def send(self, data, dest, port, client_mac):
+    def send(self, data, dst, port, client_mac):
         return len(data)
 
 
@@ -245,7 +245,7 @@ def test_capture_event_formats_safe_filenames() -> None:
 class _ForgedIdentityMessage(DHCPMessage):
     """A message whose rendered client identity is attacker-chosen text.
 
-    `DHCPMessage.client_id()` hex-encodes option 61, so today a real client
+    `DHCPMessage.get_client_id()` hex-encodes option 61, so today a real client
     cannot get a `/` or a `..` into it however it crafts the option -- checked,
     and worth knowing rather than assuming. But `format_filename` is what
     stands between a remote value and a path, `_sanitize_filename_value` exists
@@ -256,7 +256,7 @@ class _ForgedIdentityMessage(DHCPMessage):
 
     forged = ""
 
-    def client_id(self, func=None) -> str:
+    def get_client_id(self, func=None) -> str:
         return self.forged
 
 

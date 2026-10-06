@@ -9,7 +9,6 @@ import typing as _ty
 from duho import Meta
 
 from ..packet._message import DHCPMessage
-from ..packet.structured import dump_message, load_message
 from ._common import PACKET_FORMATS, _Command
 
 
@@ -70,13 +69,13 @@ class Packet(_Command):
                 if self.packet_format == "summary":
                     output = packet.log_str("capture", "decoded")
                 else:
-                    output = dump_message(packet, self.packet_format)
+                    output = packet.to_text(self.packet_format)
             else:
                 if self.packet_format == "summary":
                     raise ValueError(
                         "summary output is only supported when decoding packets"
                     )
-                packet = load_message(payload_text, self.packet_format)
+                packet = DHCPMessage.from_text(payload_text, self.packet_format)
                 output = packet.encode().hex()
 
             if self.output == "-":

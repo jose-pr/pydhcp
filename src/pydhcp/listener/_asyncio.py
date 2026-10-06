@@ -16,7 +16,7 @@ import netimps as _netimps
 from .. import _network as _net
 from ._core import _ListenerCore
 from ._receive import _TruncatedDatagram, _arrival
-from ._spec import ListenSpec
+from ._spec import ListenLike
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -41,7 +41,7 @@ class AsyncDHCPListener(_ListenerCore):
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,

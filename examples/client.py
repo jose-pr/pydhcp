@@ -12,7 +12,7 @@ def main() -> None:
             DHCPOptionCode.DNS,
         ],
     )
-    client.send(discover, destination="127.0.0.1", port=6767)
+    client.send(discover, dst="127.0.0.1", port=6767)
     print(f"sent DHCPDISCOVER xid={discover.xid:08X}")
 
 

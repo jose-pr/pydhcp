@@ -37,7 +37,7 @@ def build_dhcp_packet(htype=1, cookie=b"\x63\x82\x53\x63") -> bytearray:
 
     # We manually override the htype representation during packing if needed,
     # or just encode first and overwrite the specific fields.
-    encoded = msg.encode()
+    encoded = bytearray(msg.encode())
     if htype != 1:
         encoded[1] = htype
     if cookie != b"\x63\x82\x53\x63":

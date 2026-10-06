@@ -91,8 +91,7 @@ def test_the_rfc_3397_example_is_decoded_from_its_three_instances() -> None:
         b"\x77\x09rketing\xc0\x04"
         b"\xff"
     )
-    options = DHCPOptions()
-    options.decode(memoryview(bytearray(wire)))
+    options = DHCPOptions.decode(memoryview(bytearray(wire)))
     assert list(options.get(119)) == ["eng.apple.com", "marketing.apple.com"]
 
 
@@ -109,8 +108,7 @@ def test_a_long_valid_search_list_spans_several_option_instances() -> None:
     payload = bytes(DomainList(domains)._dhcp_encode())
     assert len(payload) > 255
     wire = _wire(119, payload)
-    options = DHCPOptions()
-    options.decode(memoryview(bytearray(wire)))
+    options = DHCPOptions.decode(memoryview(bytearray(wire)))
     assert list(options.get(119)) == domains
 
 
@@ -135,8 +133,9 @@ def test_a_name_over_255_octets_is_refused(codec, prefix) -> None:
 
 @pytest.mark.parametrize("code,prefix", CODES)
 def test_every_option_that_reads_a_name_list_refuses_it(code, prefix) -> None:
-    options = DHCPOptions()
-    options.decode(memoryview(bytearray(_wire(int(code), prefix + _chain(6)))))
+    options = DHCPOptions.decode(
+        memoryview(bytearray(_wire(int(code), prefix + _chain(6))))
+    )
     with pytest.raises(ValueError, match="255 octets"):
         options.get(int(code))
 

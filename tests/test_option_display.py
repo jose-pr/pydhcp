@@ -1,6 +1,6 @@
 """The text the message display shows for each decoded option.
 
-`DHCPMessage.dumps()` and the capture formats print an option through
+`DHCPMessage.summary()` and the capture formats print an option through
 `_option_text`. The table below is that text for the first sample of every
 codec class, pinned so a change to a value's `repr` cannot change what a user
 reads.
@@ -104,7 +104,7 @@ def test_a_message_dump_shows_the_option_text() -> None:
     options[DHCPOptionCode.ROUTER] = ["192.0.2.1", "192.0.2.2"]
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPACK
     options[DHCPOptionCode.HOSTNAME] = "host"
-    dump = DHCPMessage.decode(build_request(options=options).encode()).dumps()
+    dump = DHCPMessage.decode(build_request(options=options).encode()).summary()
     assert ": 192.0.2.1\n" in dump
     assert ": DHCPACK" in dump
     assert ": 'host'" in dump

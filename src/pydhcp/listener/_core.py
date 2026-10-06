@@ -20,7 +20,7 @@ from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
 from ._binding import _bind_sockets, _close_socket
 from ._receive import DHCPRequestContext, _context_for, _pktinfo_supported
-from ._spec import ListenSpec, _expand_wildcards, _parselisteners
+from ._spec import ListenLike, _expand_wildcards, _parselisteners
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class _ListenerCore:
 
     def __init__(
         self,
-        listen: ListenSpec = None,
+        listen: ListenLike = None,
         *,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,

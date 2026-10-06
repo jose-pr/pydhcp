@@ -63,7 +63,9 @@ def test_subclass_can_allocate_fixed_lease_and_custom_options() -> None:
     server = FixedLeaseServer()
     server.handle(_message(DHCPMessageType.DHCPDISCOVER), _context(transport))
 
-    data, dest, port, _ = transport.send.call_args.args
+    data, dest = transport.send.call_args.args
+    port = transport.send.call_args.kwargs["port"]
+    _ = transport.send.call_args.kwargs["client_mac"]
     response = DHCPMessage.decode(data)
     # Unicast here because this exchange is over loopback, where there is no ARP
     # to fail and POSIX refuses a broadcast anyway. On a real segment the same
@@ -85,7 +87,9 @@ def test_inform_can_customize_options_without_allocating_address() -> None:
     server = InformOnlyServer()
     server.handle(_message(DHCPMessageType.DHCPINFORM), _context(transport))
 
-    data, dest, port, _ = transport.send.call_args.args
+    data, dest = transport.send.call_args.args
+    port = transport.send.call_args.kwargs["port"]
+    _ = transport.send.call_args.kwargs["client_mac"]
     response = DHCPMessage.decode(data)
     assert dest == IPv4("255.255.255.255")
     assert port == 68
@@ -123,7 +127,7 @@ def test_parameter_request_list_filtering_does_not_delete_lease_options() -> Non
     msg.options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
         [int(DHCPOptionCode.SUBNET_MASK)]
     )
-    client_id = msg.client_id()
+    client_id = msg.get_client_id()
     backend = _seeded_backend(client_id)
 
     server = _BackendServer(lease_backend=backend)
@@ -146,7 +150,7 @@ def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
     msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("127.0.0.10")
     relay_info = bytearray(b"\x01\x04port")
     msg.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = relay_info
-    client_id = msg.client_id()
+    client_id = msg.get_client_id()
     backend = _seeded_backend(client_id)
     seeded = backend.lookup(client_id)
     assert seeded is not None
@@ -157,7 +161,9 @@ def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
     server.handle(msg, _context(transport))
 
     # The echo reaches the wire ...
-    data, _dest, _port, _ = transport.send.call_args.args
+    data, _dest = transport.send.call_args.args
+    _port = transport.send.call_args.kwargs["port"]
+    _ = transport.send.call_args.kwargs["client_mac"]
     response = DHCPMessage.decode(data)
     assert (
         response.options.get(DHCPOptionCode.RELAY_AGENT_INFORMATION, decode=False)
@@ -171,7 +177,7 @@ def test_relay_agent_information_echo_is_not_stored_in_the_lease() -> None:
 
 def test_inform_does_not_strip_lease_time_from_the_stored_lease() -> None:
     msg = _message(DHCPMessageType.DHCPINFORM)
-    client_id = msg.client_id()
+    client_id = msg.get_client_id()
     backend = InMemoryLeaseBackend()
     options = DHCPOptions()
     options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = 3600
@@ -215,7 +221,9 @@ def _nak_request(giaddr: str = "0.0.0.0", requested: str = "10.0.0.99") -> DHCPM
 
 
 def _sent(transport: Mock) -> tuple[DHCPMessage, str, int]:
-    data, dest, port, _ = transport.send.call_args.args
+    data, dest = transport.send.call_args.args
+    port = transport.send.call_args.kwargs["port"]
+    _ = transport.send.call_args.kwargs["client_mac"]
     return DHCPMessage.decode(bytearray(data)), str(dest), port
 
 
@@ -319,7 +327,7 @@ def test_reply_carries_exactly_the_requested_options_and_the_machinery() -> None
     msg.options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
         [int(DHCPOptionCode.SUBNET_MASK), int(DHCPOptionCode.ROUTER)]
     )
-    backend = _seeded_backend(msg.client_id())
+    backend = _seeded_backend(msg.get_client_id())
     transport = Mock()
 
     _BackendServer(lease_backend=backend).handle(msg, _context(transport))
@@ -342,7 +350,7 @@ def test_a_client_that_sends_no_request_list_is_told_everything() -> None:
     """
     msg = _message(DHCPMessageType.DHCPDISCOVER)
     assert DHCPOptionCode.PARAMETER_REQUEST_LIST not in msg.options
-    backend = _seeded_backend(msg.client_id())
+    backend = _seeded_backend(msg.get_client_id())
     transport = Mock()
 
     _BackendServer(lease_backend=backend).handle(msg, _context(transport))
@@ -378,7 +386,7 @@ def test_init_reboot_from_a_known_client_is_answered() -> None:
     server = _NakServer()
     msg = _message(DHCPMessageType.DHCPREQUEST)
     msg.options[DHCPOptionCode.REQUESTED_IP] = IPv4("10.0.0.10")
-    server.lease_backend.allocate(msg.client_id(), IPv4("10.0.0.10"), 3600)
+    server.lease_backend.allocate(msg.get_client_id(), IPv4("10.0.0.10"), 3600)
     transport = Mock()
 
     server.handle(msg, _context(transport))
@@ -412,7 +420,7 @@ def test_inform_does_not_create_a_lease() -> None:
     )
     assert reply.yiaddr == IPv4("0.0.0.0")
     assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
-    assert server.lease_backend.lookup(msg.client_id()) is None
+    assert server.lease_backend.lookup(msg.get_client_id()) is None
 
 
 def test_inform_uses_the_documented_allocation_free_hook() -> None:
@@ -428,7 +436,7 @@ def test_inform_uses_the_documented_allocation_free_hook() -> None:
     server = InformServer()
     msg = _message(DHCPMessageType.DHCPINFORM)
     msg.ciaddr = IPv4("10.0.0.77")
-    server.lease_backend.allocate(msg.client_id(), IPv4("10.0.0.10"), 3600)
+    server.lease_backend.allocate(msg.get_client_id(), IPv4("10.0.0.10"), 3600)
     transport = Mock()
 
     server.handle(msg, _context(transport))
@@ -634,16 +642,19 @@ def test_client_cannot_choose_its_own_lease_length():
     """
     server = DHCPServer(listen=("127.0.0.1", 0))
     try:
-        assert server.lease_seconds(_discover_requesting(None)) == (
+        assert server.get_lease_seconds(_discover_requesting(None)) == (
             server.DEFAULT_LEASE_SECONDS
         )
-        assert server.lease_seconds(_discover_requesting(3600)) == 3600
+        assert server.get_lease_seconds(_discover_requesting(3600)) == 3600
         # clamped at both ends
-        assert server.lease_seconds(_discover_requesting(1)) == server.MIN_LEASE_SECONDS
-        assert server.lease_seconds(_discover_requesting(999_999)) == (
+        assert (
+            server.get_lease_seconds(_discover_requesting(1))
+            == server.MIN_LEASE_SECONDS
+        )
+        assert server.get_lease_seconds(_discover_requesting(999_999)) == (
             server.MAX_LEASE_SECONDS
         )
-        assert server.lease_seconds(_discover_requesting(0xFFFFFFFE)) == (
+        assert server.get_lease_seconds(_discover_requesting(0xFFFFFFFE)) == (
             server.MAX_LEASE_SECONDS
         )
     finally:
@@ -666,12 +677,12 @@ def test_infinity_sentinel_is_infinity_not_136_years():
     allowed = Permissive(listen=("127.0.0.1", 0))
     try:
         # Default policy: not granted, but clamped -- never a 136-year lease.
-        assert denied.lease_seconds(_discover_requesting(0xFFFFFFFF)) == (
+        assert denied.get_lease_seconds(_discover_requesting(0xFFFFFFFF)) == (
             denied.MAX_LEASE_SECONDS
         )
         # Opted in: actually infinite, which the reply path renders as the
         # sentinel rather than as a finite countdown.
-        assert math.isinf(allowed.lease_seconds(_discover_requesting(0xFFFFFFFF)))
+        assert math.isinf(allowed.get_lease_seconds(_discover_requesting(0xFFFFFFFF)))
     finally:
         denied.close()
         allowed.close()
@@ -687,9 +698,9 @@ def test_lease_policy_is_overridable():
 
     server = Corporate(listen=("127.0.0.1", 0))
     try:
-        assert server.lease_seconds(_discover_requesting(None)) == 7200
-        assert server.lease_seconds(_discover_requesting(10)) == 300
-        assert server.lease_seconds(_discover_requesting(86400)) == 4 * 3600
+        assert server.get_lease_seconds(_discover_requesting(None)) == 7200
+        assert server.get_lease_seconds(_discover_requesting(10)) == 300
+        assert server.get_lease_seconds(_discover_requesting(86400)) == 4 * 3600
     finally:
         server.close()
 

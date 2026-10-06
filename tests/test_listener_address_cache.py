@@ -44,8 +44,8 @@ class Silent(DHCPTransport):
     def __init__(self) -> None:
         self.sent: list = []
 
-    def send(self, data, dest, port, client_mac) -> int:
-        self.sent.append((dest, port))
+    def send(self, data, dst, port, client_mac) -> int:
+        self.sent.append((dst, port))
         return len(data)
 
 

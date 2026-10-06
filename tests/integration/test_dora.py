@@ -99,7 +99,7 @@ def test_routing_rfc2131():
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.1")
-    assert args[2] == 67
+    assert kwargs["port"] == 67
     assert server.metrics.packets_sent == 1
 
     # Test case 2: ciaddr set (should send to ciaddr on port 68)
@@ -109,7 +109,7 @@ def test_routing_rfc2131():
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.15")
-    assert args[2] == 68
+    assert kwargs["port"] == 68
     assert server.metrics.packets_sent == 2
 
     # Test case 3: broadcast flag set (should send to 255.255.255.255 on port 68)
@@ -119,7 +119,7 @@ def test_routing_rfc2131():
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("255.255.255.255")
-    assert args[2] == 68
+    assert kwargs["port"] == 68
 
 
 def test_relay_agent_information_echoed_in_reply():
@@ -147,7 +147,7 @@ def test_relay_agent_information_echoed_in_reply():
     server.handle(msg, context)
     args, kwargs = transport_mock.send.call_args
     assert args[1] == IPv4("192.168.1.1")
-    assert args[2] == 67
+    assert kwargs["port"] == 67
 
     reply = _DHCPMessage.decode(memoryview(args[0]))
     replied_relay_info = reply.options.get(
@@ -222,7 +222,7 @@ def test_dora_with_lease_persistence(tmp_path):
         assert offer.yiaddr == IPv4("127.0.0.1")
 
         # Check backend has a lease allocated
-        client_id = discover.client_id()
+        client_id = discover.get_client_id()
         lease = backend.lookup(client_id)
         assert lease is not None
         assert lease.ip == IPv4("127.0.0.1")

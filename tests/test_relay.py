@@ -131,7 +131,9 @@ def test_forward_to_servers_stamps_giaddr_and_increments_hops(relay_class):
     relay.handle(msg, context)
 
     assert context.transport.send.call_count == 1
-    data, dest, port, mac = context.transport.send.call_args.args
+    data, dest = context.transport.send.call_args.args
+    port = context.transport.send.call_args.kwargs["port"]
+    mac = context.transport.send.call_args.kwargs["client_mac"]
     assert dest == IPv4("192.0.2.1")
     assert port == 67
     assert mac == CHADDR
@@ -152,7 +154,10 @@ def test_forward_to_servers_sends_to_every_configured_server(relay_class):
     relay.handle(msg, context)
 
     assert context.transport.send.call_count == 2
-    destinations = {call.args[1:3] for call in context.transport.send.call_args_list}
+    destinations = {
+        (call.args[1], call.kwargs["port"])
+        for call in context.transport.send.call_args_list
+    }
     assert destinations == {(IPv4("192.0.2.1"), 67), (IPv4("192.0.2.2"), 6767)}
     assert relay.metrics.packets_sent == 2
 
@@ -321,7 +326,9 @@ def test_forward_to_client_broadcast_flag(relay_class):
 
     relay.handle(reply, context)
 
-    data, dest, port, mac = context.transport.send.call_args.args
+    data, dest = context.transport.send.call_args.args
+    port = context.transport.send.call_args.kwargs["port"]
+    mac = context.transport.send.call_args.kwargs["client_mac"]
     assert dest == IPv4("255.255.255.255")
     assert port == 68
 
@@ -333,7 +340,9 @@ def test_forward_to_client_ciaddr(relay_class):
 
     relay.handle(reply, context)
 
-    data, dest, port, mac = context.transport.send.call_args.args
+    data, dest = context.transport.send.call_args.args
+    port = context.transport.send.call_args.kwargs["port"]
+    mac = context.transport.send.call_args.kwargs["client_mac"]
     assert dest == IPv4("10.0.0.50")
     assert port == 68
 
@@ -351,7 +360,9 @@ def test_forward_to_client_without_ciaddr_is_broadcast(relay_class):
 
     relay.handle(reply, context)
 
-    data, dest, port, mac = context.transport.send.call_args.args
+    data, dest = context.transport.send.call_args.args
+    port = context.transport.send.call_args.kwargs["port"]
+    mac = context.transport.send.call_args.kwargs["client_mac"]
     assert dest == IPv4("255.255.255.255")
     assert port == 68
 
@@ -370,7 +381,9 @@ def test_forward_to_client_uses_original_client_port_when_known(relay_class):
     reply = _reply(giaddr="10.0.0.1", ciaddr="10.0.0.50")
     relay.handle(reply, reply_context)
 
-    data, dest, port, mac = reply_context.transport.send.call_args.args
+    data, dest = reply_context.transport.send.call_args.args
+    port = reply_context.transport.send.call_args.kwargs["port"]
+    mac = reply_context.transport.send.call_args.kwargs["client_mac"]
     assert dest == IPv4("10.0.0.50")
     assert port == 54321
 
@@ -409,7 +422,9 @@ def test_reply_for_an_evicted_xid_falls_back_to_the_well_known_client_port(relay
     context = _server_context(server_ip="10.0.0.2")
     relay.handle(reply, context)
 
-    _data, _dest, port, _mac = context.transport.send.call_args.args
+    _data, _dest = context.transport.send.call_args.args
+    port = context.transport.send.call_args.kwargs["port"]
+    _mac = context.transport.send.call_args.kwargs["client_mac"]
     assert port == 68
 
 
@@ -596,7 +611,9 @@ def test_a_reused_xid_cannot_redirect_another_clients_reply(relay_class):
     reply.xid = 0xAAAA
     relay.handle(reply, context)
 
-    _data, _dest, port, _mac = context.transport.send.call_args.args
+    _data, _dest = context.transport.send.call_args.args
+    port = context.transport.send.call_args.kwargs["port"]
+    _mac = context.transport.send.call_args.kwargs["client_mac"]
     assert port == 40001, "the victim's reply was redirected to the attacker"
 
 
@@ -618,7 +635,9 @@ def test_every_configured_server_reply_reaches_the_tracked_port(relay_class):
         reply = _reply(giaddr="10.0.0.1", yiaddr="10.0.0.50")
         reply.xid = 0xBBBB
         relay.handle(reply, context)
-        _data, _dest, port, _mac = context.transport.send.call_args.args
+        _data, _dest = context.transport.send.call_args.args
+        port = context.transport.send.call_args.kwargs["port"]
+        _mac = context.transport.send.call_args.kwargs["client_mac"]
         ports.append(port)
 
     assert ports == [40002, 40002], ports

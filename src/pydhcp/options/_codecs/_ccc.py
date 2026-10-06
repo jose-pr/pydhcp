@@ -16,7 +16,7 @@ from ._base import (
 )
 from ._domain import decode_domain_name, encode_domain_name
 from ._addresses import IPv4AddressOption
-from ._scalar import Boolean, Bytes, U8
+from ._scalar import Boolean, Bytes, U8, _octets
 
 
 def _encode_no_compression_domain(domain: str) -> bytes:
@@ -318,17 +318,17 @@ class CCCSubOption(_Record):
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
         if isinstance(value, DHCPOptionType):
             return value
-        return Bytes(value)
+        return _octets(value)
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
-        return Bytes(payload)
+        return _octets(payload)
 
     def _write_payload(self, data: bytearray) -> int:
         payload = self.value
         if isinstance(payload, DHCPOptionType):
             return payload._dhcp_write(data)
-        payload_bytes = Bytes(payload)
+        payload_bytes = _octets(payload)
         data.extend(payload_bytes)
         return len(payload_bytes)
 
@@ -353,7 +353,7 @@ class CCCSubOption(_Record):
         if isinstance(value, DHCPOptionType):
             value = value.__json__()
         else:
-            value = Bytes(value).__json__()
+            value = _octets(value).__json__()
         return [self.code, value]
 
 

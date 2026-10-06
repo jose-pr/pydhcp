@@ -2,8 +2,9 @@
 
 Header-file-style reference for `pydhcp._network`: pydhcp's own address and
 interface types. Nothing here is an alias of a `netimps` or `ipaddress` object:
-those are imported from `netimps` and `ipaddress`. `SocketAddress` and
-`NetworkInterface` are re-exported from the top-level `pydhcp` package, and
+those are imported from `netimps` and `ipaddress`. `SocketAddress`,
+`NetworkInterface` and `IPv4AddressLike` (`Union[IPv4Address, str]`, what a
+function accepts for an IPv4 address) are re-exported from the top-level `pydhcp` package, and
 `HardwareAddressType` from `pydhcp.packet`; the package itself is private. The
 top-level package header ships beside this one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
@@ -19,8 +20,8 @@ of the installed package).
     Use this, not `.name`, which is `None` for unnamed members;
     `to_mapping()` emits it and `HardwareAddressType("HTYPE_<n>")` reads it
     back.
-  - `.dumps(address: bytes) -> str` renders colon-hex for `ETHERNET`, else
-    `repr(address)`.
+  - `.format_address(address: bytes) -> str` renders colon-hex for `ETHERNET`,
+    else `repr(address)`.
   - Also re-exported as `pydhcp.packet.HardwareAddressType`, which is where
     the rest of the message-header enums live and the spelling most code
     uses. It is *defined* here because the option codecs need it to name a client
@@ -32,8 +33,12 @@ of the installed package).
   `DHCPValueError`. `str()` is `"host:port"`.
   - `SocketAddress.from_socket(sock) -> SocketAddress` — the local address a
     socket is bound to; it asks the socket (`getsockname()`).
-  - `.compat() -> tuple[str, int]` — plain `(str, int)` pair for stdlib socket
+  - `.to_tuple() -> tuple[str, int]` — plain `(str, int)` pair for stdlib socket
     calls.
+  - `SocketAddress.parse(text) -> SocketAddress` — from `"host:port"`, which is
+    what `str()` writes; `DHCPValueError` for anything else, `TypeError` for a
+    non-text. `SocketAddress.try_parse(text, default=None)` answers `default`
+    for text that does not parse.
   - It does not bind: the listener calls `netimps.bind()`, which raises
     **`netimps.AddressInUseError`** for every "the port is taken" shape and
     whose message is what the caller sees. It is a different thing from

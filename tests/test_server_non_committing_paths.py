@@ -79,7 +79,7 @@ def backend() -> InMemoryLeaseBackend:
 
 
 def _client_id(msg: DHCPMessage) -> str:
-    return msg.client_id()
+    return msg.get_client_id()
 
 
 def test_discover_does_not_extend_an_existing_lease(backend) -> None:

@@ -6,7 +6,14 @@ import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import _nvt as _nvt
 from ipaddress import IPv4Address as _IP
-from ._base import _NormalizedList, _Record, _set, frozen
+from ._base import (
+    _NormalizedList,
+    _Record,
+    _set,
+    _TextForm,
+    _text_argument,
+    frozen,
+)
 from ._domain import decode_domain_name, encode_domain_name
 
 
@@ -191,7 +198,7 @@ class SIPServers(_Record):
 _StatusCodeT = _ty.TypeVar("_StatusCodeT", bound="StatusCode")
 
 
-class StatusCode(_Record):
+class StatusCode(_Record, _TextForm):
     """RFC 6926 s6.2.2 status: one code octet, then an optional UTF-8 message.
 
     Registered as a bare `U8` the message made the option the wrong size, so a
@@ -218,6 +225,23 @@ class StatusCode(_Record):
             raise DHCPValueError(f"StatusCode code must fit one octet, got {value}")
         _set(self, "code", value)
         _set(self, "message", str(message or ""))
+
+    def __str__(self) -> str:
+        return f"{self.code} {self.message}" if self.message else str(self.code)
+
+    @classmethod
+    def parse(cls: type[_StatusCodeT], text: str) -> _StatusCodeT:
+        """Build from ``"<code>"`` or ``"<code> <message>"``, the text `str()` produces.
+
+        The message is everything after the first space. Raises `DHCPValueError`
+        for a code that is not a number in 0-255.
+        """
+        digits, _, message = _text_argument(cls, text).partition(" ")
+        if not (digits.isascii() and digits.isdigit()):
+            raise DHCPValueError(
+                f"not a status code, {text!r}: it starts with a number"
+            )
+        return cls(int(digits), message)
 
     @classmethod
     def _dhcp_read(

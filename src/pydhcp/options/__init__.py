@@ -16,6 +16,7 @@ LOGGER = _logging.getLogger(__name__)
 _T = _ty.TypeVar("_T", bound=DHCPOptionType)
 _C = _ty.TypeVar("_C", bound=BaseDHCPOptionCode)
 _R = _ty.TypeVar("_R")
+_OptionsT = _ty.TypeVar("_OptionsT", bound="DHCPOptions")
 
 #: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
 #: markers rather than options -- see `_check_code`.
@@ -165,7 +166,28 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({list(self._options.keys())})"
 
-    def decode(self, options: memoryview, base_offset: int = 0) -> memoryview:
+    @classmethod
+    def decode(
+        cls: "_builtins.type[_OptionsT]",
+        data: _ty.Union[bytes, bytearray, memoryview],
+        *,
+        codemap: _ty.Optional[_builtins.type[BaseDHCPOptionCode]] = None,
+    ) -> _OptionsT:
+        """Parse a TLV options buffer into a new bag.
+
+        Liberal on receive: PAD octets are skipped, parsing stops at END, and a
+        truncated option logs a warning and keeps what arrived. Octets after END
+        are ignored. A repeated code is joined (RFC 3396).
+        """
+        options = cls(codemap)
+        options._decode_into(memoryview(data))
+        return options
+
+    def _decode_into(self, options: memoryview, base_offset: int = 0) -> memoryview:
+        """Add the options in `options` to this bag; the unconsumed tail comes back.
+
+        `base_offset` is where the buffer starts in the message, for log lines.
+        """
         offset = base_offset
         while options:
             code = options[0]

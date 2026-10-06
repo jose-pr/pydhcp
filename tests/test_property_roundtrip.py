@@ -263,8 +263,7 @@ def test_option_bag_round_trip(options: DHCPOptions) -> None:
     encoded = options.encode()
     assert encoded[-1] == 255
 
-    decoded = DHCPOptions()
-    decoded.decode(memoryview(encoded))
+    decoded = DHCPOptions.decode(memoryview(encoded))
 
     assert list(decoded.items(decoded=False)) == list(options.items(decoded=False))
     assert bytes(decoded.encode()) == bytes(encoded)
