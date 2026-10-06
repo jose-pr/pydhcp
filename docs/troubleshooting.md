@@ -81,9 +81,10 @@ a file that is not executable is refused at start-up.
   Windows delivers a broadcast to an address-bound socket. pydhcp logs a WARNING once per
   process when it binds such an address.
 - To serve one interface only, name it: `listen="eth1"` (an adapter name, a MAC or a
-  `netimps.Interface`). That is one wildcard socket that drops what arrives on the other
-  interfaces and counts it in `metrics.packets_dropped_other_interface`; a number there that
-  grows is traffic from a segment the listener was told not to serve. An address would hear
+  `netimps.Interface`). That is one wildcard socket: on Linux it is bound to the device, elsewhere it drops what
+  arrives on the other interfaces and counts it in `metrics.packets_dropped_other_interface`;
+  a number there that grows is traffic from a segment the listener was told not to serve
+  (on Linux it stays 0, the kernel delivers none). An address would hear
   no broadcast on Linux.
 - Explicit endpoint lists avoid interface-enumeration surprises while debugging, and are right
   for a unicast peer (a relay's server address, a test on loopback).

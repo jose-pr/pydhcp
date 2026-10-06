@@ -133,12 +133,22 @@ everything below from `pydhcp.listener` itself.
     binds **one wildcard socket** (so a broadcast is heard) and **drops, before
     decoding, a datagram that arrived on another interface**, counting it in
     `metrics.packets_dropped_other_interface` (and writing a DEBUG line through
-    the log limit). Several interfaces on one port share the socket; naming the
+    the log limit). **On Linux** (`netimps.has_device_binding()`) a socket that
+    serves exactly one adapter is also **bound to that device**, so the kernel
+    delivers nothing from another interface, a broadcast included, and the count
+    stays 0 in normal operation; the drop stays as a second check. Elsewhere
+    (Windows, macOS, FreeBSD have no such option) the drop is the whole limit.
+    A socket serving several adapters (a MAC several carry, or several
+    interfaces on one port) is limited by the drop alone. If the kernel refuses
+    the device (`DeviceBindingUnsupportedError`, or `PermissionError` where the
+    option needs a capability) the socket is bound without it and one WARNING
+    says so through the log limit: the listener then behaves as it does
+    elsewhere. The class attribute `USE_DEVICE_BINDING = False` forces the drop
+    alone. Several interfaces on one port share the socket; naming the
     wildcard plainly on that port (`"*:67"`, `"0.0.0.0:67"`) takes precedence and
     removes the limit. It needs packet info (`ValueError` at `.bind()` where the
     socket reports none) and cannot be combined with `per_interface=True`
     (`ValueError` at construction). Every listener, role and the client take it.
-    A device-bound socket is not used: netimps offers none.
   - **`host:port` text is read strictly** (netimps' `split_host`): the port is
     ASCII digits only, and square brackets may enclose only an IPv6 literal.
     `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`, `"127.0.0.1:8_0"` and
@@ -1081,7 +1091,8 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     be pinned to the interface the request arrived on, with or without its index,
     and was dropped rather than sent by an interface the routing table picks) and
     `packets_dropped_other_interface` (a datagram dropped before decoding because it
-    arrived on an interface the listener was not told to serve),
+    arrived on an interface the listener was not told to serve; on Linux the socket is
+    bound to its device and the kernel delivers none, so the count stays 0),
     `informs_ignored` (a DHCPINFORM whose `ciaddr` is neither the sender's address nor
     in the served network, or absent), `relay_info_omitted` (a message sent without
     option 82 because it would not fit in the options field: a reply the server

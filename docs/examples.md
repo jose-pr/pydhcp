@@ -135,9 +135,11 @@ address or a MAC, is passed as a `netimps.Interface`. The adapter is looked up w
 listener binds, and one that does not exist is an error then.
 
 This is one wildcard socket: a socket bound to an address hears no broadcast on Linux, so
-the listener has to hear every interface to hear a client that has no address. It drops,
-before decoding, a datagram that arrived on another interface, and counts it in
-`metrics.packets_dropped_other_interface`. Naming the wildcard on the same port (`"*:67"`)
+the listener has to hear every interface to hear a client that has no address. On Linux
+the socket is bound to the device, so the kernel delivers only that interface's datagrams;
+elsewhere the listener drops, before decoding, a datagram that arrived on another interface,
+and counts it in `metrics.packets_dropped_other_interface` (which stays 0 on Linux in normal
+operation). Naming the wildcard on the same port (`"*:67"`)
 removes the limit.
 
 For deterministic local testing or tools that need several explicit sockets, pass a list of

@@ -74,7 +74,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   datagram that arrived on another interface, counting it in the new
   `DHCPMetrics.packets_dropped_other_interface`. The adapter is looked up by `bind()`,
   and one that does not exist is a `ValueError` there. Cannot be combined with
-  `per_interface=True`.
+  `per_interface=True`. On Linux the socket is also bound to that device
+  (`netimps.has_device_binding()`), so the kernel delivers only its datagrams and
+  `packets_dropped_other_interface` stays 0; where the option is refused, or the
+  socket serves several adapters, the drop does the whole work, with one warning for
+  a refusal. Windows, macOS and FreeBSD have no such option.
 - **An offered state in the lease store.** `LeaseBackend` gains
   `offer(client_id, ip, hold_seconds, options=None)` and `commit(client_id, ttl)`,
   `DHCPLease` gains `offered` (keyword-only, default `False`, part of equality and
