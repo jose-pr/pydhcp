@@ -46,6 +46,31 @@ def build_benchmark_payload() -> bytes:
 PAYLOAD_BYTES = build_benchmark_payload()
 
 
+def build_reply() -> DHCPMessage:
+    """A server's ACK: the twelve options a stock reply carries."""
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = bytearray(
+        [DHCPMessageType.DHCPACK.value]
+    )
+    options[DHCPOptionCode.SERVER_IDENTIFIER] = bytearray([10, 0, 0, 1])
+    options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = bytearray([0, 1, 81, 128])
+    options[DHCPOptionCode.SUBNET_MASK] = bytearray([255, 255, 255, 0])
+    options[DHCPOptionCode.ROUTER] = bytearray([10, 0, 0, 1])
+    options[DHCPOptionCode.DNS] = bytearray([10, 0, 0, 2, 10, 0, 0, 3])
+    options[DHCPOptionCode.DOMAIN_NAME] = bytearray(b"example.com")
+    options[DHCPOptionCode.BROADCAST_ADDRESS] = bytearray([10, 0, 0, 255])
+    options[DHCPOptionCode.RENEWAL_TIME] = bytearray([0, 0, 168, 192])
+    options[DHCPOptionCode.REBINDING_TIME] = bytearray([0, 1, 38, 80])
+    options[DHCPOptionCode.NTP_SERVERS] = bytearray([10, 0, 0, 4])
+    options[DHCPOptionCode.HOSTNAME] = bytearray(b"client-host")
+    return DHCPMessage(
+        DHCPOpcode.BOOTREPLY,
+        xid=0x3903F326,
+        chaddr=b"\x00\x11\x22\x33\x44\x55",
+        options=options,
+    )
+
+
 def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
     payload_mv = memoryview(PAYLOAD_BYTES)
 
@@ -62,6 +87,14 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
 
     encode_time = timeit.timeit(test_encode, number=iterations)
     encode_ops_per_sec = iterations / encode_time
+
+    reply = build_reply()
+
+    def test_encode_reply() -> None:
+        reply.encode()
+
+    reply_time = timeit.timeit(test_encode_reply, number=iterations)
+    reply_ops_per_sec = iterations / reply_time
     return OrderedDict(
         [
             (
@@ -80,6 +113,14 @@ def _measure_benchmarks(iterations: int) -> OrderedDict[str, dict[str, Any]]:
                     "iterations": iterations,
                 },
             ),
+            (
+                "encode_reply",
+                {
+                    "seconds": reply_time,
+                    "ops_per_sec": reply_ops_per_sec,
+                    "iterations": iterations,
+                },
+            ),
         ]
     )
 
@@ -95,6 +136,10 @@ def _print_benchmarks(
     print(
         f"Encode: {benchmarks['encode_packet']['seconds']:.4f} seconds "
         f"({benchmarks['encode_packet']['ops_per_sec']:.1f} ops/sec)"
+    )
+    print(
+        f"Encode reply: {benchmarks['encode_reply']['seconds']:.4f} seconds "
+        f"({benchmarks['encode_reply']['ops_per_sec']:.1f} ops/sec)"
     )
 
 

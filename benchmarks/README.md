@@ -36,7 +36,9 @@ A realistic `DHCPDISCOVER` (message type, client identifier, a 14-entry
 parameter request list) encoded once at import and reused.
 
 - `parse.decode_packet` — `DHCPMessage.decode` over that payload.
-- `parse.encode_packet` — `DHCPMessage.encode` back to bytes.
+- `parse.encode_packet` — `DHCPMessage.encode` back to bytes (a three-option
+  DISCOVER).
+- `parse.encode_reply` — `DHCPMessage.encode` of a twelve-option server ACK.
 
 ### `options` — `bench_options.py`
 

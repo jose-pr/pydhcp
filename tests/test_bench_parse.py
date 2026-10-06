@@ -19,20 +19,21 @@ def _load_module():
 
 def test_run_benchmarks_returns_named_metrics(monkeypatch) -> None:
     module = _load_module()
-    timings = iter([2.0, 4.0])
+    timings = iter([2.0, 4.0, 8.0])
     monkeypatch.setattr(module.timeit, "timeit", lambda func, number: next(timings))
 
     results = module.run_benchmarks(iterations=1000)
 
-    assert list(results) == ["decode_packet", "encode_packet"]
+    assert list(results) == ["decode_packet", "encode_packet", "encode_reply"]
     assert results["decode_packet"]["iterations"] == 1000
     assert results["decode_packet"]["ops_per_sec"] == 500.0
     assert results["encode_packet"]["ops_per_sec"] == 250.0
+    assert results["encode_reply"]["ops_per_sec"] == 125.0
 
 
 def test_write_json_report_creates_expected_payload(tmp_path, monkeypatch) -> None:
     module = _load_module()
-    timings = iter([2.0, 4.0])
+    timings = iter([2.0, 4.0, 8.0])
     monkeypatch.setattr(module.timeit, "timeit", lambda func, number: next(timings))
     output_path = tmp_path / "benchmarks" / "bench_parse.json"
     results = module._measure_benchmarks(iterations=1)
