@@ -19,13 +19,13 @@ from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_without_the_flag_the_backend_is_still_the_default(mock_server) -> None:
     Server(config=None, listen="127.0.0.1:6767")()
     assert mock_server.call_args.kwargs["lease_backend"] is None
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_the_flag_selects_a_file_backend(mock_server, tmp_path) -> None:
     path = tmp_path / "leases.json"
     Server(config=None, listen="127.0.0.1:6767", lease_file=str(path))()
@@ -35,7 +35,7 @@ def test_the_flag_selects_a_file_backend(mock_server, tmp_path) -> None:
     assert backend.filepath == str(path)
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_the_config_file_can_set_it_too(mock_server, tmp_path) -> None:
     cfg = tmp_path / "pydhcp.json"
     leases = tmp_path / "from-config.json"
@@ -50,7 +50,7 @@ def test_the_config_file_can_set_it_too(mock_server, tmp_path) -> None:
     assert backend.filepath == str(leases)
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_an_explicit_flag_beats_the_config_file(mock_server, tmp_path) -> None:
     """Same precedence `--listen` already has, for the same reason."""
     cfg = tmp_path / "pydhcp.json"
@@ -65,7 +65,7 @@ def test_an_explicit_flag_beats_the_config_file(mock_server, tmp_path) -> None:
     assert mock_server.call_args.kwargs["lease_backend"].filepath == str(wanted)
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_lease_file_is_not_reported_as_an_unsupported_config_key(
     mock_server, tmp_path, caplog
 ) -> None:

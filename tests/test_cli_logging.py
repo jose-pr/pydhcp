@@ -18,6 +18,9 @@ from unittest.mock import MagicMock
 
 import pydhcp.capture as capture_module
 import pydhcp.cli as cli_module
+from pydhcp.cli import (
+    _capture_hook as capture_hook_module,
+)  # patches the hook's subprocess call
 from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
 from pydhcp._log import LOGGER
 from ipaddress import IPv4Address as IPv4
@@ -138,9 +141,7 @@ def test_the_capture_hook_logs_through_the_module_logger(
         stderr = "boom"
         returncode = 3
 
-    monkeypatch.setattr(
-        cli_module.capture_hook.subprocess, "run", lambda *a, **k: Result()
-    )
+    monkeypatch.setattr(capture_hook_module.subprocess, "run", lambda *a, **k: Result())
 
     hook = cli_module._load_capture_hook(str(command), "json", fail_fast=False)
     assert hook is not None
@@ -155,8 +156,8 @@ def test_the_capture_hook_logs_through_the_module_logger(
 
     by_message = {r.getMessage().split(":")[0]: r for r in caplog.records}
     failure = by_message["Capture hook command failed (3)"]
-    assert failure.name == "pydhcp.cli.capture_hook"
-    assert by_message["Capture hook command output"].name == "pydhcp.cli.capture_hook"
+    assert failure.name == "pydhcp.cli._capture_hook"
+    assert by_message["Capture hook command output"].name == "pydhcp.cli._capture_hook"
 
 
 def _pydhcp_modules() -> "list[str]":

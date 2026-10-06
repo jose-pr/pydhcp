@@ -1,7 +1,7 @@
 """The `pydhcp` command line.
 
-`App` and `main` live here; each subcommand has its own module (`interfaces`,
-`server`, `relay`, `packet`, `capture`), with what they share in `_common`.
+`App` and `main` live here; each subcommand has its own module (`_interfaces`,
+`_server`, `_relay`, `_packet`, `_capture`), with what they share in `_common`.
 Every name the single-module CLI had is re-exported, so imports are unchanged.
 """
 
@@ -15,17 +15,17 @@ import duho
 from duho import AUTO, Cli, DefaultsFormatter
 
 from ._common import PACKET_FORMATS, CAPTURE_FORMATS, _Command
-from .interfaces import Interfaces
-from .server import Server
-from .relay import _parse_server_address, Relay
-from .packet import Packet
-from .capture_hook import (
+from ._interfaces import Interfaces
+from ._server import Server
+from ._relay import _parse_server_address, Relay
+from ._packet import Packet
+from ._capture_hook import (
     HOOK_TIMEOUT_SECONDS,
     _cwd_on_sys_path,
     _load_capture_hook,
     _serialize_capture_event,
 )
-from .capture import (
+from ._capture import (
     _infer_capture_format,
     _infer_output_mode,
     _stream_separator,

@@ -16,7 +16,7 @@ from ..capture import (
     validate_filename_pattern,
 )
 from ._common import CAPTURE_FORMATS, _Command
-from .capture_hook import _load_capture_hook, _serialize_capture_event
+from ._capture_hook import _load_capture_hook, _serialize_capture_event
 
 LOGGER = _logging.getLogger(__name__)
 

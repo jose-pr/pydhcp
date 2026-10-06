@@ -715,7 +715,7 @@ has its own module (`cli.interfaces`, `cli.server`, `cli.relay`, `cli.packet`,
 `cli.capture`, with `cli.capture_hook` for `--hook` loading and `cli._common`
 for the shared base). `from pydhcp.cli import ...` works for every name as
 before; patch a name where the command module looks it up
-(`pydhcp.cli.server.DHCPServer`, not `pydhcp.cli.DHCPServer`).
+(`pydhcp.cli._server.DHCPServer`, not `pydhcp.cli.DHCPServer`).
 
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both

@@ -48,7 +48,7 @@ def test_cmd_interfaces(capsys, monkeypatch) -> None:
     for every adapter, passed. Enumeration is stubbed because the real one
     depends on the host -- what is under test is the rendering."""
     monkeypatch.setattr(
-        "pydhcp.cli.interfaces.host_ip_interfaces",
+        "pydhcp.cli._interfaces.host_ip_interfaces",
         lambda *args, **kwargs: iter(
             [
                 NetworkInterface(
@@ -422,7 +422,7 @@ def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
         def stop(self):
             self.stopped = True
 
-    monkeypatch.setattr("pydhcp.cli.capture.DHCPCapture", FakeCapture)
+    monkeypatch.setattr("pydhcp.cli._capture.DHCPCapture", FakeCapture)
     cmd = Capture(
         listen="127.0.0.1:6767",
         packet_filter="msg_type=DHCPDISCOVER",
@@ -490,7 +490,7 @@ def test_load_ini_config(tmp_path):
     assert loaded == {"server": {"listen": "127.0.0.1:6767"}}
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_cmd_server(mock_dhcp_server_cls):
     mock_server = MagicMock()
     mock_dhcp_server_cls.return_value = mock_server
@@ -566,7 +566,7 @@ def test_relay_listen_flag_refuses_what_the_listener_refuses(listen):
         Relay(listen=listen, server=("192.0.2.1",))()
 
 
-@patch("pydhcp.cli.relay.DHCPRelay")
+@patch("pydhcp.cli._relay.DHCPRelay")
 def test_cmd_relay(mock_dhcp_relay_cls):
     mock_relay = MagicMock()
     mock_dhcp_relay_cls.return_value = mock_relay
@@ -663,7 +663,7 @@ def test_per_interface_is_reachable_from_every_listening_subcommand(
     assert parser.parse_args([subcommand]).per_interface is False
 
 
-@patch("pydhcp.cli.server.DHCPServer")
+@patch("pydhcp.cli._server.DHCPServer")
 def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
     Server(config=None, listen="127.0.0.1:6767", per_interface=True)()
 
@@ -672,7 +672,7 @@ def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
     )
 
 
-@patch("pydhcp.cli.relay.DHCPRelay")
+@patch("pydhcp.cli._relay.DHCPRelay")
 def test_cmd_relay_forwards_per_interface(mock_dhcp_relay_cls) -> None:
     Relay(server=("192.0.2.1",), per_interface=True)()
 
@@ -683,7 +683,7 @@ def test_cmd_relay_forwards_per_interface(mock_dhcp_relay_cls) -> None:
     "flag, value",
     [("circuit_id", "0a01"), ("remote_id", "0b02")],
 )
-@patch("pydhcp.cli.relay.DHCPRelay")
+@patch("pydhcp.cli._relay.DHCPRelay")
 def test_relay_rejects_ids_without_insert_flag(
     mock_dhcp_relay_cls, flag: str, value: str
 ) -> None:
@@ -702,7 +702,7 @@ def test_relay_rejects_ids_without_insert_flag(
     assert not mock_dhcp_relay_cls.called
 
 
-@patch("pydhcp.cli.relay.DHCPRelay")
+@patch("pydhcp.cli._relay.DHCPRelay")
 def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
     Relay(
         server=("192.0.2.1",),
@@ -717,7 +717,7 @@ def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
     assert kwargs["remote_id"] == b"\x0b\x02"
 
 
-@patch("pydhcp.cli.relay.DHCPRelay")
+@patch("pydhcp.cli._relay.DHCPRelay")
 def test_relay_warns_when_insert_flag_has_no_ids(mock_dhcp_relay_cls, caplog) -> None:
     """The flag alone builds an empty sub-option list and inserts nothing."""
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
@@ -891,7 +891,7 @@ def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
         def stop(self):
             pass
 
-    monkeypatch.setattr("pydhcp.cli.server.DHCPServer", FakeServer)
+    monkeypatch.setattr("pydhcp.cli._server.DHCPServer", FakeServer)
 
     command = Server()
     command.config = str(config)
