@@ -160,7 +160,8 @@ class Capture(_Configured):
     ("--filter",)
 
     packet_format: _ty.Annotated[
-        _ty.Optional[str], Meta(choices=CAPTURE_FORMATS, env="PYDHCP_CAPTURE_FORMAT")
+        _ty.Optional[str],
+        Meta(choices=CAPTURE_FORMATS, env="PYDHCP_CAPTURE_RECORD_FORMAT"),
     ] = None
     "Record format. Default: from the --output extension, else json"
     ("--format", "-f")
@@ -200,7 +201,6 @@ class Capture(_Configured):
     ("--per-interface",)
 
     def __call__(self) -> None:
-        self._begin()
         output = self.output
         output_mode = _infer_output_mode(output, self.output_mode)
         if output_mode == "per-capture":

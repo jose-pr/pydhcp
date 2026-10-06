@@ -87,7 +87,6 @@ class Relay(_Configured):
     ("--per-interface",)
 
     def __call__(self) -> None:
-        self._begin()
         # The ids are named by their flags here; the constructor refuses the same
         # combinations in the library's words.
         ignored = [

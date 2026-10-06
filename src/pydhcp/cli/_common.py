@@ -11,7 +11,7 @@ import typing as _ty
 from duho import Cmd, LoggingArgs, Meta
 
 from .._config import CONFIG_FORMATS
-from ._settings import CONFIG_ENV, CONFIG_FORMAT_ENV, check_loaded
+from ._settings import CONFIG_ENV, CONFIG_FORMAT_ENV
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 
@@ -87,7 +87,3 @@ class _Configured(_Command):
     ] = None
     "Format of the configuration file. Default: from the file's extension"
     ("--config-format",)
-
-    def _begin(self) -> None:
-        """Refuse a `--config` the loader did not read; call first in `__call__`."""
-        check_loaded(self.config)

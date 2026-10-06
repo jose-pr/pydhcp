@@ -118,6 +118,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`PYDHCP_MCP=stdio` no longer serves the commands as tools**: the root sets
   `_mcp_ = False`, so the variable is not read. `server`, `relay` and `capture` never
   return, which makes them poor tools.
+- **Configuration errors are one line and status 2**: a malformed YAML, TOML, JSON or INI
+  file, a top level that is not a mapping, a misspelled section (`sever:`), another
+  command's section, a key the command does not have, an extension that is not one of the
+  four and `--config -` without `--config-format` each print
+  `pydhcp: error: <file>:<line>:<col>: <problem>` with no text from the document. They were
+  a traceback (YAML, INI), a bare parser message (JSON, TOML) or silently started a server
+  on every interface (a misspelled section). An INI value is no longer interpolated, so a
+  `%` in a path is text; a `.conf` file is no longer parsed as JSON.
+- **Settings follow one order for every command**: the option, then an environment
+  variable (`PYDHCP_<COMMAND>_<OPTION>`, listed in the README and the shipped header), then
+  the configuration file, then the default. `relay` and `capture` read the file too, and any
+  field of a command can be set from it. The file is explicit (`--config` or
+  `PYDHCP_CONFIG`; `--config -` reads standard input), with no default location.
+- **`PYDHCP_TRACEBACK` is a boolean**: `0`, `false`, `no` and `off` no longer enable
+  tracebacks; any text that is neither a true nor a false word is an error naming the
+  variable.
 - **Every option has a help line**: `packet --decode`, `--encode` and `capture --format`
   had none, and `capture --filter` showed the field name `PACKET_FILTER`.
 - **The relay follows RFC 3046 section 2.1 on the request side.** It adds option 82 only to

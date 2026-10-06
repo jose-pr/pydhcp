@@ -35,7 +35,6 @@ class Server(_Configured):
     ("--lease-file",)
 
     def __call__(self) -> None:
-        self._begin()
         # An empty `--listen` names no address and the listener says so, rather
         # than serving the wildcard: `is None`, not falsiness.
         listen = "*" if self.listen is None else self.listen

@@ -4,7 +4,7 @@ This page collects a few short patterns that are useful when you start wiring `p
 
 ## Server config file
 
-`pydhcp server --config` accepts JSON, YAML, TOML, or INI, selected by file extension. A YAML config:
+`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, YAML, TOML, or INI, selected by file extension (`--config-format` names it when the file name does not; `--config -` reads standard input). The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A YAML config:
 
 ```yaml
 server:

@@ -1150,11 +1150,21 @@ fails at write time. Anything rendering one must call `display()` first —
 
 ## Config loading (private)
 
-- **`load_config(filepath: str) -> dict[str, Any]`** — dispatches on the
-  file extension: `.ini` (via `configparser`, one dict per section), `.yaml`/
-  `.yml`, `.toml` (raises `NotImplementedError` with an actionable message on
-  Python <3.11 without `tomli` installed), else JSON. Used by the `server`/
-  `relay` CLI subcommands' `--config` flag.
+- **`load_config(source, format=None) -> dict[str, Any]`** — one configuration
+  file as a mapping of sections. `source` is a path or `-` (standard input,
+  which has no name and so needs `format`). The format is `format` (`json`,
+  `yaml`, `toml` or `ini`, any case) or else the file name's suffix (`.json`,
+  `.yaml`, `.yml`, `.toml`, `.ini`, any case); any other suffix is refused,
+  content is never sniffed. The text is UTF-8, with or without a byte-order
+  mark. An empty YAML file is `{}`. INI values are read without interpolation
+  (a `%` is text) and a duplicate section or key is an error; YAML is
+  `safe_load`. `.toml` needs Python 3.11+ or `tomli`
+  (`NotImplementedError` otherwise).
+- A file that cannot be read raises the `OSError`. A document that does not parse,
+  whose top level is not a mapping, or whose format cannot be told raises
+  **`DHCPConfigError`** with `path`, `lineno` and `colno` (1-based, `None` when the
+  parser gave none) and `msg`; the message and the exception chain carry no text from
+  the document.
 
 ## CLI (`cli/`)
 
@@ -1217,6 +1227,31 @@ stayed at the root level and the library's output never appeared.
   `--version` (via `App._version_ = duho.AUTO`, resolved from installed
   package metadata) for free. Every option has one line of help, with its
   default.
+- **Settings** come, highest first, from the option, the environment variable,
+  the configuration file and the field's default, and duho applies that order
+  to every field of every command (see "Environment variables" below for the
+  names). `server`, `relay` and `capture` take `--config FILE` (or
+  `PYDHCP_CONFIG`) and `--config-format json|yaml|toml|ini`; `FILE` is `-` for
+  standard input, which needs the format. **There is no default location**: a
+  daemon does not pick up a file nobody named. The file has one section per
+  command, named for it, and its keys are the command's field names
+  (`listen`, `per_interface`, `lease_file`; `server`, `max_hops`,
+  `insert_relay_agent_info`, `circuit_id`, `remote_id`; `packet_filter`,
+  `packet_format`, `output`, `output_mode`, `count`, `hook`, `hook_fail_fast`):
+
+  ```yaml
+  server:
+    listen: 127.0.0.1:6767
+    lease_file: /var/lib/pydhcp/leases.json
+  ```
+
+  A list is a list (`server: [192.0.2.1, 192.0.2.2]`); `listen` also takes
+  the listener's pair, list and null-host forms (`listen: [127.0.0.1, 6767]`).
+  A file that does not parse, a top-level key that is not a command, a section
+  that is not a mapping, a key the command does not have, and a section of
+  *another* command than the one run are each refused by name, status 2, one
+  line with the file's path and, where the parser gives one, the position:
+  `pydhcp: error: server.yaml:12:5: expected ',' or ']'`.
 - A `Cmd` returns `None` (status 0) or a status; a wrong invocation is a
   `ValueError` out of `__call__`, a failed run is an `OSError` or the private
   `_Failed`, and `main` is the one place that prints and maps them. Tests drive a
@@ -1287,3 +1322,23 @@ stayed at the root level and the library's output never appeared.
   `stream`/`single` mode) is compact JSON by design (one object per line);
   use `message.to_text("json")` directly only for single structured packet
   files where pretty JSON is acceptable.
+
+## Environment variables
+
+Read when the command starts, by the command line only: `import pydhcp` reads
+none of them. A boolean accepts `1`, `true`, `yes`, `on` and `0`, `false`, `no`,
+`off`, in any case; empty counts as unset; any other text is an error naming the
+variable (status 2).
+
+| Variable | Sets |
+| --- | --- |
+| `PYDHCP_CONFIG` | the configuration file, as `--config`; `-` is standard input. Default: none |
+| `PYDHCP_CONFIG_FORMAT` | `json`, `yaml`, `toml` or `ini`, as `--config-format`. Default: from the file's extension |
+| `PYDHCP_TRACEBACK` | a boolean: when on, an error is raised with its traceback (status 1) instead of one `pydhcp: error:` line. Default: off; `0` is off |
+| `PYDHCP_MCP` | not read: the root disables the tool server, and the variable is left untouched |
+| `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE` | `server --listen`, `--per-interface`, `--lease-file` |
+| `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
+| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_OUTPUT_MODE`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--output-mode`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
+| `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` (`--decode` and `--encode` choose a mode and are not settings) |
+| `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
+| `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input |

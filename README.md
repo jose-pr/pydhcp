@@ -158,6 +158,49 @@ pydhcp server --listen 127.0.0.1:6767 -v
 pydhcp server --listen 127.0.0.1:6767 --loglevel pydhcp=DEBUG
 ```
 
+### Exit status and errors
+
+`pydhcp` exits 0 on success (also after Ctrl-C), 1 when a run fails (an address in
+use, a file that cannot be written) and 2 when the invocation is wrong (a bad option, a
+malformed `--listen`, `relay` without `--server`, a configuration file that cannot be
+used). An error is one line on stderr, `pydhcp: error: ...`; results go to stdout.
+`pydhcp.cli.main(argv)` returns the same status instead of exiting.
+
+### Settings and environment variables
+
+Every option can also come from an environment variable, and `server`, `relay` and
+`capture` from a configuration file. The order is: the option, then the variable, then the
+file, then the default. The file is named, never searched for: `--config FILE` or
+`PYDHCP_CONFIG` (`-` reads standard input and needs `--config-format json|yaml|toml|ini`).
+It has one section per command and the keys are the field names:
+
+```yaml
+# server.yaml
+server:
+  listen: 127.0.0.1:6767
+  lease_file: /var/lib/pydhcp/leases.json
+relay:
+  server: [192.0.2.1, 192.0.2.2]
+```
+
+A file that does not parse, a section or key the command does not have (a misspelled
+`sever:`, another command's section) is refused by name with status 2, naming the file and
+the position; nothing starts on defaults by mistake.
+
+| Variable | Sets |
+| --- | --- |
+| `PYDHCP_CONFIG`, `PYDHCP_CONFIG_FORMAT` | `--config`, `--config-format` |
+| `PYDHCP_TRACEBACK` | `1`, `true`, `yes`, `on` (any case) print a traceback for an error; `0`, `false`, `no`, `off` or empty do not; any other text is an error |
+| `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE` | `server --listen`, `--per-interface`, `--lease-file` |
+| `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
+| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_OUTPUT_MODE`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE` | `capture --listen`, `--filter`, `--format`, `--output`, `--output-mode`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface` |
+| `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` |
+| `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
+
+A boolean accepts `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`. `PYDHCP_MCP` is not
+read: no command is served as a tool. A command hook is given `PYDHCP_CAPTURE_CLIENT_ID`,
+`PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and `PYDHCP_CAPTURE_FORMAT`.
+
 ## Development
 
 See [`AGENTS.md`](https://github.com/jose-pr/pydhcp/blob/main/AGENTS.md) for environment setup, dependency install, and test commands.

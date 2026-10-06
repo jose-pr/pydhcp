@@ -16,7 +16,6 @@ import pathlib as _pathlib
 import typing as _ty
 
 from .._config import STDIN_NAME, check_sections, load_config
-from ..exceptions import DHCPConfigError
 
 #: The variable that names the configuration file (`--config` beats it).
 CONFIG_ENV = "PYDHCP_CONFIG"
@@ -29,7 +28,9 @@ _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
 
 #: The configuration keys that are not settings of a command.
-_NOT_SETTINGS = frozenset({"config", "config_format", "verbose", "quiet", "loglevel"})
+_NOT_SETTINGS = frozenset(
+    {"config", "config_format", "verbose", "quiet", "loglevel", "loglevels"}
+)
 
 
 def traceback_requested(environ: "_ty.Mapping[str, str]" = _os.environ) -> bool:
@@ -74,8 +75,6 @@ class _Run:
     command: _ty.Optional[str] = None
     config: _ty.Optional[str] = None
     config_format: _ty.Optional[str] = None
-    #: The path the loader read, for the command to compare with its `--config`.
-    loaded: _ty.Optional[str] = None
     #: Each command's name mapped to the keys its section accepts.
     sections: "_ty.Mapping[str, _ty.Collection[str]]" = _dataclasses.field(
         default_factory=dict
@@ -149,26 +148,10 @@ def load_layer(path: _pathlib.Path) -> _ty.Dict[str, _ty.Any]:
     table = load_config(name, run.config_format)
     shown = STDIN_NAME if name == "-" else name
     check_sections(table, run.sections, shown, running=run.command)
-    run.loaded = run.config
     for body in table.values():
         if "listen" in body and not isinstance(body["listen"], str):
             body["listen"] = Listen(body["listen"])
     return table
-
-
-def check_loaded(configured: _ty.Optional[_pathlib.Path]) -> None:
-    """Refuse a `--config` that the file loader did not see.
-
-    The loader reads the option as written in full; an abbreviation duho would
-    accept (`--conf`) must not start the command on a file nobody read.
-    """
-    run = _RUN.get()
-    if run is None or configured is None:
-        return
-    if run.loaded is None or _pathlib.Path(run.loaded) != configured:
-        raise DHCPConfigError(
-            "name the file with the full option, --config", str(configured)
-        )
 
 
 def sections_of(
