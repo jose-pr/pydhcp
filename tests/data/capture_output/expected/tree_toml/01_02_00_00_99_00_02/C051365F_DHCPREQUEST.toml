@@ -1,0 +1,42 @@
+op = "BOOTREQUEST"
+htype = "ETHERNET"
+hlen = 6
+hops = 1
+xid = 3226547807
+secs = 0
+flags = "UNICAST"
+ciaddr = "0.0.0.0"
+yiaddr = "0.0.0.0"
+siaddr = "0.0.0.0"
+giaddr = "10.99.0.1"
+chaddr = "02:00:00:99:00:02"
+sname = ""
+file = ""
+
+[options]
+DHCP_MESSAGE_TYPE = "DHCPREQUEST"
+REQUESTED_IP = "10.99.0.100"
+SERVER_IDENTIFIER = "10.98.0.2"
+MAXIMUM_DHCP_MESSAGE_SIZE = 576
+PARAMETER_REQUEST_LIST = [
+    1,
+    3,
+    6,
+    12,
+    15,
+    28,
+    42,
+]
+HOSTNAME = "lab-client"
+VENDOR_CLASS_IDENTIFIER = "udhcp 1.37.0"
+CLIENT_IDENTIFIER = "01020000990002"
+RELAY_AGENT_INFORMATION = [
+    [
+        1,
+        "6c61622d63697263756974",
+    ],
+    [
+        2,
+        "6c61622d72656c6179",
+    ],
+]

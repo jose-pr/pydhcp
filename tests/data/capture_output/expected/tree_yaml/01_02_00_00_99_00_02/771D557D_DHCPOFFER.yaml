@@ -1,0 +1,31 @@
+op: BOOTREPLY
+htype: ETHERNET
+hlen: 6
+hops: 0
+xid: 1998411133
+secs: 0
+flags: UNICAST
+ciaddr: 0.0.0.0
+yiaddr: 10.99.0.100
+siaddr: 0.0.0.0
+giaddr: 10.99.0.1
+chaddr: 02:00:00:99:00:02
+sname: ''
+file: ''
+options:
+  DHCP_MESSAGE_TYPE: DHCPOFFER
+  SUBNET_MASK: 255.255.255.0
+  BROADCAST_ADDRESS: 10.99.0.255
+  ROUTER:
+  - 10.99.0.1
+  DNS:
+  - 10.99.0.1
+  DOMAIN_NAME: lab.test
+  INTERFACE_MTU: 1400
+  IP_ADDRESS_LEASE_TIME: 600
+  SERVER_IDENTIFIER: 10.98.0.2
+  RELAY_AGENT_INFORMATION:
+  - - 1
+    - 6c61622d63697263756974
+  - - 2
+    - 6c61622d72656c6179

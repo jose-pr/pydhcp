@@ -1,0 +1,43 @@
+op = "BOOTREQUEST"
+htype = "ETHERNET"
+hlen = 6
+hops = 1
+xid = 1998411133
+secs = 0
+flags = "UNICAST"
+ciaddr = "0.0.0.0"
+yiaddr = "0.0.0.0"
+siaddr = "0.0.0.0"
+giaddr = "10.99.0.1"
+chaddr = "02:00:00:99:00:02"
+sname = ""
+file = ""
+
+[options]
+DHCP_MESSAGE_TYPE = "DHCPDISCOVER"
+HOSTNAME = "lab-client"
+PARAMETER_REQUEST_LIST = [
+    1,
+    28,
+    2,
+    121,
+    15,
+    6,
+    12,
+    40,
+    41,
+    42,
+    26,
+    119,
+    3,
+]
+RELAY_AGENT_INFORMATION = [
+    [
+        1,
+        "6c61622d63697263756974",
+    ],
+    [
+        2,
+        "6c61622d72656c6179",
+    ],
+]

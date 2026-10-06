@@ -1,0 +1,19 @@
+{
+ "budget": {
+  "last_line": "pydhcp: error: capture stopped: 3 files written, the limit of --max-files; 1 records refused. The filename pattern includes a value the client chooses, so a flood of forged identifiers would otherwise fill the disk: raise --max-files, or use a pattern without {client_id}",
+  "status": 1
+ },
+ "statuses": {
+  "growing_json_run1": 0,
+  "growing_json_run2": 0,
+  "growing_yaml_run1": 0,
+  "growing_yaml_run2": 0,
+  "stdout_json": 0,
+  "stdout_yaml": 0,
+  "tree_ending": 0,
+  "tree_ini": 0,
+  "tree_json": 0,
+  "tree_toml": 0,
+  "tree_yaml": 0
+ }
+}

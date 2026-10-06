@@ -2,3 +2,6 @@
 # ending; a tool writing LF into a CRLF file leaves it MIXED, which defeats
 # diffs and hides real changes inside whitespace churn.
 * text=auto eol=lf
+
+# What the command wrote before the record writer moved: bytes, not text.
+tests/data/capture_output/expected/** -text
