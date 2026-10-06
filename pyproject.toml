@@ -30,6 +30,9 @@ dependencies = [
     # Datagram.destination and truncated, LINK_LOCAL_V4, MACAddress.format --
     # and netimps 0.3 spells them differently, with no alias.
     "netimps>=0.4.0,<0.5",
+    # The capture filter grammar and the record writer (one growing file, or one
+    # file per record under a name pattern, with a file budget).
+    "pktcap>=0.1.0,<0.2",
     "duho>=0.6.0,<0.7",
 ]
 
