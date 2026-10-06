@@ -55,7 +55,7 @@ def _warn_if_address_bound_hears_no_broadcast(address: _net.SocketAddress) -> No
     global _ADDRESS_BOUND_WARNED
     if _ADDRESS_BOUND_WARNED or not _address_bound_hears_no_broadcast():
         return
-    if address.ip == _net.WILDCARD_IPv4 or address.ip.is_loopback:
+    if address.ip == _net.WILDCARD_V4 or address.ip.is_loopback:
         return
     _ADDRESS_BOUND_WARNED = True
     LOGGER.warning(
@@ -201,7 +201,7 @@ def _bind_sockets(
             if receive_buffer:
                 _grow_receive_buffer(sock, address, receive_buffer)
             endpoints[sock] = _netimps.UDPEndpoint(
-                sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_IPv4
+                sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_V4
             )
         except BaseException:
             _release(opened, sockets, endpoints)

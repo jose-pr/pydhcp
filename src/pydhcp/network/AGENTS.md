@@ -13,7 +13,7 @@ of the installed package).
   `ipaddress.IPv6Address`. **`IP`** — `IPv4 | IPv6`. **`IPv4Network`** /
   **`IPv6Network`** / **`IPNetwork`** — `ipaddress` network types.
   **`IPv4Interface`** — alias for `ipaddress.IPv4Interface`.
-- **`WILDCARD_IPv4`** — `IPv4("0.0.0.0")` constant.
+- **`WILDCARD_V4`** — `IPv4("0.0.0.0")` constant.
 - **`LINK_LOCAL_V4`** — `169.254.0.0/16` as an `IPv4Network`, re-exported from
   `netimps` under the same name; the default `host_ip_interfaces()` filter
   excludes addresses in this range.

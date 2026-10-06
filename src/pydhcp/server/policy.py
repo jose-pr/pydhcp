@@ -245,7 +245,7 @@ class _LeasePolicy(_ServerState):
         ip: _ty.Optional[_net.IPv4] = None
         if requested_ip:
             ip = requested_ip
-        elif msg.ciaddr != _net.WILDCARD_IPv4:
+        elif msg.ciaddr != _net.WILDCARD_V4:
             ip = msg.ciaddr
 
         if ip is None:

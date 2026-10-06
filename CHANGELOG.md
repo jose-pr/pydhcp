@@ -143,6 +143,9 @@ importable. Replace each name in the left column with the one beside it.
 | `CccAsReqAsRepBackoffRetrySubOption` | `CCCASBackoffRetrySubOption` |
 | `CccApReqApRepBackoffRetry` | `CCCAPBackoffRetry` |
 | `CccApReqApRepBackoffRetrySubOption` | `CCCAPBackoffRetrySubOption` |
+| `pydhcp.network.WILDCARD_IPv4` | `WILDCARD_V4` |
+| `HardwareAddressType.IP_ARP_over_ISO_7816_3` | `HardwareAddressType.IP_ARP_OVER_ISO_7816_3` |
+| `DHCPOptionCode.GRD` (option 212) | `DHCPOptionCode.SIXRD`; `GRD` stays as an alias member, so `DHCPOptionCode(212).name` is now `SIXRD` |
 
 ### Fixed
 

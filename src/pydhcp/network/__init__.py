@@ -15,7 +15,7 @@ IPv6Network = _ip.IPv6Network
 IPNetwork = _ty.Union[IPv4Network, IPv6Network]
 IPv4Interface = _ip.IPv4Interface
 
-WILDCARD_IPv4 = IPv4("0.0.0.0")
+WILDCARD_V4 = IPv4("0.0.0.0")
 
 
 class MACAddress(_netimps.MACAddress):
@@ -87,7 +87,7 @@ class HardwareAddressType(_enum.IntEnum):
     TWINAXIAL = 26
     EUI_64 = 27
     HIPARP = 28
-    IP_ARP_over_ISO_7816_3 = 29
+    IP_ARP_OVER_ISO_7816_3 = 29
     ARPSEC = 30
     IPSEC_TUNNEL = 31
     INFINIBAND = 32

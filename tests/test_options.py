@@ -1066,3 +1066,11 @@ def test_get_decodes_and_getitem_does_not():
     assert [value for _code, value in decoded_items] == [DHCPMessageType.DHCPACK]
     assert not isinstance(options.items(decoded=False), list)
     assert dict(options.items(decoded=False)) == {code: raw}
+
+
+def test_option_212_is_named_sixrd_and_grd_is_its_alias() -> None:
+    """IANA option 212 is OPTION_6RD; a leading digit is not a name, so the member
+    is SIXRD and GRD stays as an alias member that resolves to it."""
+    assert DHCPOptionCode(212).name == "SIXRD"
+    assert DHCPOptionCode.GRD is DHCPOptionCode.SIXRD
+    assert DHCPOptionCode["GRD"] is DHCPOptionCode.SIXRD

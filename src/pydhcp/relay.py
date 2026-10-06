@@ -230,7 +230,7 @@ class DHCPRelay(_Base):
         self, msg: DHCPMessage, context: DHCPRequestContext
     ) -> None:
         if (
-            msg.giaddr == _net.WILDCARD_IPv4
+            msg.giaddr == _net.WILDCARD_V4
             and DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options
             and not self.trust_client_relay_agent_info
         ):
@@ -269,7 +269,7 @@ class DHCPRelay(_Base):
         forwarded.options = msg.options.copy()
         forwarded.hops = msg.hops + 1
 
-        if forwarded.giaddr == _net.WILDCARD_IPv4:
+        if forwarded.giaddr == _net.WILDCARD_V4:
             forwarded.giaddr = _ty.cast(_net.IPv4, context.interface.ip)
 
         self._record_pending(msg, context)
@@ -388,9 +388,9 @@ class DHCPRelay(_Base):
         dest: _net.IPv4
         if msg.flags is _enum.DHCPFlags.BROADCAST:
             dest = _net.IPv4("255.255.255.255")
-        elif msg.ciaddr != _net.WILDCARD_IPv4:
+        elif msg.ciaddr != _net.WILDCARD_V4:
             dest = msg.ciaddr
-        elif msg.yiaddr != _net.WILDCARD_IPv4 and _is_loopback(context):
+        elif msg.yiaddr != _net.WILDCARD_V4 and _is_loopback(context):
             # Loopback has no ARP to fail, and POSIX refuses a broadcast from a
             # socket bound to 127.0.0.1 -- see _is_loopback.
             dest = msg.yiaddr

@@ -144,7 +144,7 @@ class _Handlers(_Replies):
                 DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
             )
             is not None
-            and msg.ciaddr == _net.WILDCARD_IPv4
+            and msg.ciaddr == _net.WILDCARD_V4
             and self.lease_backend.lookup(client_id) is None
         ):
             LOGGER.warning(
@@ -194,7 +194,7 @@ class _Handlers(_Replies):
         declined: _ty.Optional[_net.IPv4] = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
-        if declined is None and msg.ciaddr != _net.WILDCARD_IPv4:
+        if declined is None and msg.ciaddr != _net.WILDCARD_V4:
             declined = msg.ciaddr
         if declined is None:
             existing = self.lease_backend.lookup(client_id)
@@ -221,7 +221,7 @@ class _Handlers(_Replies):
         # holds now -- and the address then went to someone else while the
         # client was still using it.
         existing = self.lease_backend.lookup(client_id)
-        if existing is not None and msg.ciaddr != _net.WILDCARD_IPv4:
+        if existing is not None and msg.ciaddr != _net.WILDCARD_V4:
             if existing.ip != msg.ciaddr:
                 LOGGER.warning(
                     f"[XID={msg.xid:08x}] Ignoring DHCPRELEASE from "
@@ -245,7 +245,7 @@ class _Handlers(_Replies):
         # allocation-free hook documented for exactly this path whenever a
         # binding happened to exist.
         lease = DHCPLease(
-            _net.WILDCARD_IPv4,
+            _net.WILDCARD_V4,
             _inf,
             self.get_inform_options(actual_server_id, msg),
         )
@@ -254,5 +254,5 @@ class _Handlers(_Replies):
         )
         if DHCPOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
             del resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME]
-        resp.yiaddr = _net.WILDCARD_IPv4
+        resp.yiaddr = _net.WILDCARD_V4
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPACK)

@@ -109,11 +109,11 @@ def _parselisteners(
         if not ip:
             ip = "127.0.0.1"
         elif ip == "*":
-            ip = _net.WILDCARD_IPv4
+            ip = _net.WILDCARD_V4
         if not isinstance(ip, _net.IPv4):
             ip = _net.IPv4(ip)
 
-        if ip == _net.WILDCARD_IPv4 and expand_wildcard:
+        if ip == _net.WILDCARD_V4 and expand_wildcard:
             ips = [
                 i.ip for i in _net.host_ip_interfaces() if isinstance(i.ip, _net.IPv4)
             ]

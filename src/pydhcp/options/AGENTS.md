@@ -127,7 +127,8 @@ storable: `options[0]` / `options[255]` raise, see `DHCPOptions` above.
 **Gotcha**: option 43 (`VENDOR_SPECIFIC_INFORMATION`) is registered as
 opaque `Bytes` by default — TLV parsing is opt-in via `TLVOption`, not
 automatic. Option 125 is enterprise-number records, not generic TLVs. The
-local `DHCPOptionCode.GRD` alias is IANA option 212 (`OPTION_6RD`).
+`DHCPOptionCode.SIXRD` is IANA option 212 (`OPTION_6RD`); `GRD` is an alias member
+of it, so `DHCPOptionCode(212).name` is `SIXRD`.
 
 ## Option payload codecs (`pydhcp.options.type`)
 

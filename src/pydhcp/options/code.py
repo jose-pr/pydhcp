@@ -497,8 +497,8 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
     # docstrings as markdown, and python-markdown reads the adjacent pair "[19] [20]"
     # as a reference link, which mkdocs-autorefs then cannot resolve --
     # "Could not find cross-reference target '20'", one warning, which is enough to
-    # abort `mkdocs build --strict`. Measured 2026-09-20: this is the only adjacent
-    # pair among the 163 members, so the isolated RFC citations elsewhere are safe.
+    # abort `mkdocs build --strict`. This is the only adjacent pair among the 163
+    # members, so the isolated RFC citations elsewhere are safe.
     NBNS_SERVERS = 44
     r"""The NetBIOS name server (NBNS) option specifies a list of RFC
    1001/1002 \[19\] \[20\] NBNS name servers listed in order of preference.
@@ -913,7 +913,10 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
     CONFIGURATION_FILE = 209
     PATH_PREFIX = 210
     REBOOT_TIME = 211
+    SIXRD = 212
+    """IANA option 212, `OPTION_6RD` (RFC 5969)."""
     GRD = 212
+    """An alias of `SIXRD`: `DHCPOptionCode(212).name` is `SIXRD`."""
     V4_ACCESS_DOMAIN = 213
     # 214-219
     SUBNET_ALLOCATION = 220

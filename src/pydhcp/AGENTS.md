@@ -11,7 +11,7 @@ project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
 them** — the previous wording said "everything", and 17 documented or
 subpackage names are not importable from `pydhcp`, among them `DHCPMetrics`,
 `ListenSpec`, `load_config`, `main`, `DHCPMessageType`, `DHCPPort`, `DHCPFlags`,
-`HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_IPv4`.
+`HardwareAddressType`, `DHCPOpcode`, `host_ip_interfaces` and `WILDCARD_V4`.
 `from pydhcp import DHCPMessage` works; `from pydhcp import DHCPMessageType`
 does not. Import from the owning module when a name is not in `__all__`
 (83 names today, `__version__` among them: the installed distribution's

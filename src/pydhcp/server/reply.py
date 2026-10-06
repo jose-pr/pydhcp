@@ -67,22 +67,22 @@ class _Replies(_LeasePolicy):
         # giaddr is deliberately *not* reset: Table 3 says a reply echoes it,
         # and it is what lets the relay route the answer back to the segment the
         # request came from. Clearing it would strand every relayed client.
-        resp.siaddr = _net.WILDCARD_IPv4
+        resp.siaddr = _net.WILDCARD_V4
         resp.sname = ""
         resp.file = ""
         if resp_ty is _enum.DHCPMessageType.DHCPOFFER:
             # Table 3: ciaddr is 0 in a DHCPOFFER. In a DHCPACK it is the
             # ciaddr from the DHCPREQUEST, so the clone is right there and this
             # must not be widened to cover both.
-            resp.ciaddr = _net.WILDCARD_IPv4
+            resp.ciaddr = _net.WILDCARD_V4
         if resp_ty is _enum.DHCPMessageType.DHCPNAK:
             # RFC 2131 Table 3: a DHCPNAK carries no address and no lease time --
             # it refuses the client's. Cloning the request left ciaddr set and
             # the lease's address in yiaddr, i.e. a refusal that still looked
             # like an offer of the very address being refused.
-            resp.yiaddr = _net.WILDCARD_IPv4
-            resp.ciaddr = _net.WILDCARD_IPv4
-            resp.siaddr = _net.WILDCARD_IPv4
+            resp.yiaddr = _net.WILDCARD_V4
+            resp.ciaddr = _net.WILDCARD_V4
+            resp.siaddr = _net.WILDCARD_V4
             resp.sname = ""
             resp.file = ""
         elif lease.ip:
@@ -211,17 +211,17 @@ class _Replies(_LeasePolicy):
             # to the relay. Falling through to the normal rules unicast the
             # refusal to the very address the client was told it may not use, so
             # the client never saw it and retried until its timers expired.
-            if msg.giaddr != _net.WILDCARD_IPv4:
+            if msg.giaddr != _net.WILDCARD_V4:
                 resp.flags = _enum.DHCPFlags.BROADCAST
                 data = resp.encode(max_size)
                 dest = msg.giaddr
                 dest_port = 67 if context.client.port == 68 else context.client.port
             else:
                 dest = _net.IPv4("255.255.255.255")
-        elif msg.giaddr != _net.WILDCARD_IPv4:
+        elif msg.giaddr != _net.WILDCARD_V4:
             dest = msg.giaddr
             dest_port = 67 if context.client.port == 68 else context.client.port
-        elif msg.ciaddr != _net.WILDCARD_IPv4:
+        elif msg.ciaddr != _net.WILDCARD_V4:
             dest = msg.ciaddr
         elif msg.flags is _enum.DHCPFlags.BROADCAST:
             dest = _net.IPv4("255.255.255.255")
@@ -231,7 +231,7 @@ class _Replies(_LeasePolicy):
             # cannot deliver to yiaddr before the client owns it. Loopback is the
             # exception both ways -- there is no ARP to fail, and POSIX refuses a
             # broadcast from a socket bound to 127.0.0.1 outright.
-            if resp.yiaddr != _net.WILDCARD_IPv4 and (
+            if resp.yiaddr != _net.WILDCARD_V4 and (
                 self.UNICAST_TO_UNCONFIGURED_CLIENT or _is_loopback(context)
             ):
                 dest = resp.yiaddr
