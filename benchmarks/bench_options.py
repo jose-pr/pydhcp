@@ -19,7 +19,7 @@ sys.path.insert(0, SRC_DIR.as_posix())
 
 from pydhcp.options import DHCPOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
 
 

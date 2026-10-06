@@ -10,7 +10,7 @@ import weakref as _weakref
 
 import netimps as _netimps
 
-from .. import network as _net
+from .. import constants as _const, network as _net
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def _warn_if_address_bound_hears_no_broadcast(address: _net.SocketAddress) -> No
     global _ADDRESS_BOUND_WARNED
     if _ADDRESS_BOUND_WARNED or not _address_bound_hears_no_broadcast():
         return
-    if address.ip == _net.WILDCARD_V4 or address.ip.is_loopback:
+    if address.ip == _const.WILDCARD_V4 or address.ip.is_loopback:
         return
     _ADDRESS_BOUND_WARNED = True
     LOGGER.warning(
@@ -64,28 +64,6 @@ def _warn_if_address_bound_hears_no_broadcast(address: _net.SocketAddress) -> No
         'will not reach it. Listen on the wildcard (listen="*") to serve '
         "unconfigured clients."
     )
-
-
-def _raise_bind_error(error: OSError, address: _net.SocketAddress) -> "_ty.NoReturn":
-    """Re-raise a failed bind with the DHCP-specific next step appended.
-
-    "The port is taken" is decided by netimps, which raises
-    `AddressInUseError` for every shape of it: WSAEADDRINUSE, POSIX
-    EADDRINUSE, and Windows' WSAEACCES against an exclusive holder -- which
-    Python maps onto errno 13 and so used to arrive as a `PermissionError`,
-    for a port that is merely in use (Windows has no privileged ports). That
-    type is kept, so `except PermissionError` never catches an in-use port.
-    """
-    if isinstance(error, _netimps.AddressInUseError):
-        raise _netimps.AddressInUseError(
-            error.errno, f"{error.strerror or error}; try port {address.port + 1000}."
-        ) from error
-    hint = _netimps.bind_error_hint(error, address.port)
-    if hint is None:
-        raise error
-    if isinstance(error, PermissionError) or "permission" in hint.lower():
-        raise PermissionError(f"{hint}. Try 6767 for testing.") from error
-    raise OSError(error.errno, hint) from error
 
 
 def _grow_receive_buffer(
@@ -184,24 +162,26 @@ def _bind_sockets(
             # an earlier reply otherwise surfaces as ConnectionResetError on a
             # *later, unrelated* receive -- measured, one client that had gone
             # away logged a full ERROR traceback on the server.
-            sock = address.listen(
-                _socket.AF_INET,
-                _socket.SOCK_DGRAM,
-                _socket.IPPROTO_UDP,
-                broadcast=True,
+            sock = _netimps.bind(
+                str(address.ip),
+                address.port,
+                family=_socket.AF_INET,
+                kind=_socket.SOCK_DGRAM,
+                reuse_address=False,
                 allow_address_takeover=reuse_address,
+                broadcast=True,
                 connreset=False,
             )
-        except OSError as e:
+        except OSError:
             _release(opened, sockets, endpoints)
-            _raise_bind_error(e, address)
+            raise
         opened.append(sock)
         sockets.append(sock)
         try:
             if receive_buffer:
                 _grow_receive_buffer(sock, address, receive_buffer)
             endpoints[sock] = _netimps.UDPEndpoint(
-                sock, pktinfo=pktinfo and address.ip == _net.WILDCARD_V4
+                sock, pktinfo=pktinfo and address.ip == _const.WILDCARD_V4
             )
         except BaseException:
             _release(opened, sockets, endpoints)

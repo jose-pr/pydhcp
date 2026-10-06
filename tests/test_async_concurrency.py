@@ -7,7 +7,7 @@ from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPOptions
 from pydhcp.options.type import IPv4AddressOption
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from conftest import build_request
 
 

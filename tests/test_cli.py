@@ -36,7 +36,9 @@ from pydhcp.config import load_config
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.packet.structured import dump_message
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import IPv4, MACAddress, SocketAddress
+from netimps import MACAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from conftest import build_request
 
 
@@ -1077,7 +1079,8 @@ def _capture_event_with_client_id(client_id: bytes):
 
     from pydhcp.capture import CaptureEvent
     from pydhcp.listener import DHCPRequestContext
-    from pydhcp.network import IPv4, NetworkInterface, SocketAddress
+    from ipaddress import IPv4Address as IPv4
+    from pydhcp.network import NetworkInterface, SocketAddress
     from pydhcp.options import DHCPOptionCode, DHCPOptions
     from pydhcp.packet import (
         DHCPMessageType,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import datetime as _dt
 import logging as _logging
 import math as _math
@@ -41,7 +42,7 @@ class _Replies(_LeasePolicy):
         self,
         msg: DHCPMessage,
         lease: DHCPLease,
-        actual_server_id: _net.IPv4,
+        actual_server_id: _ipaddress.IPv4Address,
         resp_ty: _enum.DHCPMessageType,
     ) -> DHCPMessage:
         resp = DHCPMessage(**msg.__dict__.copy())
@@ -67,22 +68,22 @@ class _Replies(_LeasePolicy):
         # giaddr is deliberately *not* reset: Table 3 says a reply echoes it,
         # and it is what lets the relay route the answer back to the segment the
         # request came from. Clearing it would strand every relayed client.
-        resp.siaddr = _net.WILDCARD_V4
+        resp.siaddr = _const.WILDCARD_V4
         resp.sname = ""
         resp.file = ""
         if resp_ty is _enum.DHCPMessageType.DHCPOFFER:
             # Table 3: ciaddr is 0 in a DHCPOFFER. In a DHCPACK it is the
             # ciaddr from the DHCPREQUEST, so the clone is right there and this
             # must not be widened to cover both.
-            resp.ciaddr = _net.WILDCARD_V4
+            resp.ciaddr = _const.WILDCARD_V4
         if resp_ty is _enum.DHCPMessageType.DHCPNAK:
             # RFC 2131 Table 3: a DHCPNAK carries no address and no lease time --
             # it refuses the client's. Cloning the request left ciaddr set and
             # the lease's address in yiaddr, i.e. a refusal that still looked
             # like an offer of the very address being refused.
-            resp.yiaddr = _net.WILDCARD_V4
-            resp.ciaddr = _net.WILDCARD_V4
-            resp.siaddr = _net.WILDCARD_V4
+            resp.yiaddr = _const.WILDCARD_V4
+            resp.ciaddr = _const.WILDCARD_V4
+            resp.siaddr = _const.WILDCARD_V4
             resp.sname = ""
             resp.file = ""
         elif lease.ip:
@@ -201,7 +202,7 @@ class _Replies(_LeasePolicy):
         # a jumbo-frame segment that legitimately asked for more.
         data = resp.encode(max_size)
 
-        dest: _net.IPv4
+        dest: _ipaddress.IPv4Address
         dest_port: int = context.client.port
 
         if resp_ty is _enum.DHCPMessageType.DHCPNAK:
@@ -211,32 +212,32 @@ class _Replies(_LeasePolicy):
             # to the relay. Falling through to the normal rules unicast the
             # refusal to the very address the client was told it may not use, so
             # the client never saw it and retried until its timers expired.
-            if msg.giaddr != _net.WILDCARD_V4:
+            if msg.giaddr != _const.WILDCARD_V4:
                 resp.flags = _enum.DHCPFlags.BROADCAST
                 data = resp.encode(max_size)
                 dest = msg.giaddr
                 dest_port = 67 if context.client.port == 68 else context.client.port
             else:
-                dest = _net.IPv4("255.255.255.255")
-        elif msg.giaddr != _net.WILDCARD_V4:
+                dest = _ipaddress.IPv4Address("255.255.255.255")
+        elif msg.giaddr != _const.WILDCARD_V4:
             dest = msg.giaddr
             dest_port = 67 if context.client.port == 68 else context.client.port
-        elif msg.ciaddr != _net.WILDCARD_V4:
+        elif msg.ciaddr != _const.WILDCARD_V4:
             dest = msg.ciaddr
         elif msg.flags is _enum.DHCPFlags.BROADCAST:
-            dest = _net.IPv4("255.255.255.255")
+            dest = _ipaddress.IPv4Address("255.255.255.255")
         else:
             # The client has no address yet (ciaddr 0) and did not ask for a
             # broadcast. See UNICAST_TO_UNCONFIGURED_CLIENT: a plain UDP socket
             # cannot deliver to yiaddr before the client owns it. Loopback is the
             # exception both ways -- there is no ARP to fail, and POSIX refuses a
             # broadcast from a socket bound to 127.0.0.1 outright.
-            if resp.yiaddr != _net.WILDCARD_V4 and (
+            if resp.yiaddr != _const.WILDCARD_V4 and (
                 self.UNICAST_TO_UNCONFIGURED_CLIENT or _is_loopback(context)
             ):
                 dest = resp.yiaddr
             else:
-                dest = _net.IPv4("255.255.255.255")
+                dest = _ipaddress.IPv4Address("255.255.255.255")
 
         resp.log(
             context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.INFO

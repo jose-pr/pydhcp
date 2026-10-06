@@ -74,11 +74,13 @@ from .options.type import (
     U16 as U16,
     U32 as U32,
 )
-from .network import (
-    IPv4 as IPv4,
+from ipaddress import (
+    IPv4Address as IPv4,
     IPv4Interface as IPv4Interface,
     IPv4Network as IPv4Network,
-    MACAddress as MACAddress,
+)
+from netimps import MACAddress as MACAddress
+from .network import (
     SocketAddress as SocketAddress,
     NetworkInterface as NetworkInterface,
 )

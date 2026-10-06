@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import logging as _logging
 import time as _time
 import typing as _ty
@@ -14,7 +15,7 @@ from .listener import (
     DHCPTransport as _DHCPTransport,
     UDPTransport as _UDPTransport,
 )
-from . import network as _net, constants as _const
+from . import constants as _const, network as _net
 from .packet import enums as _enum
 from .options import DHCPOptionCode
 from .options import type as _type
@@ -22,7 +23,9 @@ from .server.reply import _is_loopback
 
 LOGGER = _logging.getLogger(__name__)
 
-ServerAddress = _ty.Union[_net.IPv4, str, tuple[_ty.Union[_net.IPv4, str], int]]
+ServerAddress = _ty.Union[
+    _ipaddress.IPv4Address, str, tuple[_ty.Union[_ipaddress.IPv4Address, str], int]
+]
 
 #: Hard ceiling from RFC 1542 4.1.1: "The relay agent MUST silently discard
 #: BOOTREQUEST messages whose `hops` field exceeds the value 16." A threshold
@@ -48,13 +51,15 @@ class PendingClient(_ty.NamedTuple):
 
     client: _net.SocketAddress
     ifindex: _ty.Optional[int] = None
-    local_ip: _ty.Optional[_net.IPv4] = None
+    local_ip: _ty.Optional[_ipaddress.IPv4Address] = None
     #: When it was recorded, so a stale entry ages out instead of being popped
     #: by whichever reply happens to arrive first.
     recorded_at: float = 0.0
 
 
-def _normalize_server_address(address: ServerAddress) -> tuple[_net.IPv4, int]:
+def _normalize_server_address(
+    address: ServerAddress,
+) -> tuple[_ipaddress.IPv4Address, int]:
     """Coerce one upstream server entry to `(IPv4, port)`.
 
     The error says what is wrong and what is accepted. `IPv4()`'s own message
@@ -68,7 +73,7 @@ def _normalize_server_address(address: ServerAddress) -> tuple[_net.IPv4, int]:
         address if isinstance(address, tuple) else (address, _enum.DHCPPort.SERVER)
     )
     try:
-        return _net.IPv4(ip), int(port)
+        return _ipaddress.IPv4Address(ip), int(port)
     except (ValueError, TypeError) as e:
         raise ValueError(
             f"upstream server address {ip!r} is not an IPv4 address ({e}). "
@@ -230,7 +235,7 @@ class DHCPRelay(_Base):
         self, msg: DHCPMessage, context: DHCPRequestContext
     ) -> None:
         if (
-            msg.giaddr == _net.WILDCARD_V4
+            msg.giaddr == _const.WILDCARD_V4
             and DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options
             and not self.trust_client_relay_agent_info
         ):
@@ -269,8 +274,8 @@ class DHCPRelay(_Base):
         forwarded.options = msg.options.copy()
         forwarded.hops = msg.hops + 1
 
-        if forwarded.giaddr == _net.WILDCARD_V4:
-            forwarded.giaddr = _ty.cast(_net.IPv4, context.interface.ip)
+        if forwarded.giaddr == _const.WILDCARD_V4:
+            forwarded.giaddr = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
 
         self._record_pending(msg, context)
         self._insert_relay_agent_info(forwarded)
@@ -385,12 +390,12 @@ class DHCPRelay(_Base):
             pending.client.port if pending is not None else int(_enum.DHCPPort.CLIENT)
         )
 
-        dest: _net.IPv4
+        dest: _ipaddress.IPv4Address
         if msg.flags is _enum.DHCPFlags.BROADCAST:
-            dest = _net.IPv4("255.255.255.255")
-        elif msg.ciaddr != _net.WILDCARD_V4:
+            dest = _ipaddress.IPv4Address("255.255.255.255")
+        elif msg.ciaddr != _const.WILDCARD_V4:
             dest = msg.ciaddr
-        elif msg.yiaddr != _net.WILDCARD_V4 and _is_loopback(context):
+        elif msg.yiaddr != _const.WILDCARD_V4 and _is_loopback(context):
             # Loopback has no ARP to fail, and POSIX refuses a broadcast from a
             # socket bound to 127.0.0.1 -- see _is_loopback.
             dest = msg.yiaddr
@@ -398,7 +403,7 @@ class DHCPRelay(_Base):
             # The client has no address yet, so it cannot answer ARP for yiaddr
             # and a unicast is dropped by the kernel with no error -- the same
             # trap DHCPServer.UNICAST_TO_UNCONFIGURED_CLIENT documents.
-            dest = _net.IPv4("255.255.255.255")
+            dest = _ipaddress.IPv4Address("255.255.255.255")
 
         reply = DHCPMessage(**msg.__dict__.copy())
         reply.options = msg.options.copy()

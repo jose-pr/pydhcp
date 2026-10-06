@@ -13,7 +13,6 @@ from .. import network as _net
 from .interfaces import _resolve_interface
 from .spec import ListenSpec, _listen_uses_wildcard
 from .transport import (
-    BROADCAST_ADDRESS,
     PktInfoUDPTransport,
     DHCPTransport,
     UDPTransport,
@@ -37,7 +36,7 @@ class DHCPRequestContext(_ty.NamedTuple):
     client: _net.SocketAddress
     client_mac: bytes
     ifindex: _ty.Optional[int] = None
-    local_ip: _ty.Optional[_net.IPv4] = None
+    local_ip: _ty.Optional[_ipaddress.IPv4Address] = None
 
 
 def _pktinfo_supported(listen: ListenSpec, per_interface: "_ty.Optional[bool]") -> bool:
@@ -60,7 +59,7 @@ def _pktinfo_supported(listen: ListenSpec, per_interface: "_ty.Optional[bool]") 
 
 
 Arrival = _ty.Tuple[
-    bytes, _net.SocketAddress, _ty.Optional[int], _ty.Optional[_net.IPv4]
+    bytes, _net.SocketAddress, _ty.Optional[int], _ty.Optional[_ipaddress.IPv4Address]
 ]
 
 
@@ -77,14 +76,15 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
     `ipi_spec_dst` instead, the kernel's choice of local address, which macOS
     zero-fills and Windows does not report at all -- so it only ever worked on
     Linux. When the destination is not one of the interface's own addresses,
-    the interface's IPv4 address stands in for it, a non-APIPA one first.
+    the interface's `primary_ip()` stands in for it: a routable address, else a
+    loopback one, else a link-local one.
     """
     data = datagram.data
     sender = datagram.sender
     # Every listener socket is AF_INET, so the sender is IPv4; `unmap` only
     # normalises the type (and would undo a v4-mapped form if that changed).
     client = _net.SocketAddress(
-        _ty.cast(_net.IPv4, _netimps.unmap(sender[0])), int(sender[1])
+        _ty.cast(_ipaddress.IPv4Address, _netimps.unmap(sender[0])), int(sender[1])
     )
     # Either signal means the payload was cut: `truncated` is MSG_TRUNC, and a
     # datagram that fills the one-octet-larger buffer was longer than the limit
@@ -105,11 +105,11 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
             f"{client}; the receiving interface may be resolved wrongly."
         )
     ifindex = datagram.interface_index or None
-    local: "_net.IPv4 | None" = None
+    local: "_ipaddress.IPv4Address | None" = None
     destination = datagram.destination
     if destination is not None:
         unmapped = _netimps.unmap(destination)
-        if isinstance(unmapped, _net.IPv4) and not unmapped.is_unspecified:
+        if isinstance(unmapped, _ipaddress.IPv4Address) and not unmapped.is_unspecified:
             local = unmapped
     interface = datagram.interface
     if interface is not None:
@@ -119,9 +119,15 @@ def _arrival(datagram: _netimps.Datagram, max_packet_size: int) -> Arrival:
             if isinstance(address, _ipaddress.IPv4Interface)
         ]
         if local not in own:
-            preferred = [ip for ip in own if ip not in _net.LINK_LOCAL_V4] or own
-            local = preferred[0] if preferred else None
-    elif local is not None and (local.is_multicast or str(local) == BROADCAST_ADDRESS):
+            primary = interface.primary_ip()
+            # primary_ip() is typed for both families and answers from the IPv4
+            # entries unless asked for IPv6.
+            local = (
+                _ty.cast(_ipaddress.IPv4Address, primary.ip)
+                if primary is not None
+                else None
+            )
+    elif local is not None and datagram.is_unicast is False:
         local = None
     return data, client, ifindex, local
 
@@ -131,7 +137,7 @@ def _context_for(
     client: _net.SocketAddress,
     client_mac: bytes,
     ifindex: "_ty.Optional[int]" = None,
-    local_ip: "_ty.Optional[_net.IPv4]" = None,
+    local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     endpoint: "_ty.Optional[_netimps.UDPEndpoint]" = None,
 ) -> DHCPRequestContext:
     """Build the context for one received datagram.

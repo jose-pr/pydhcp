@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import typing as _ty
 
+#: The unspecified IPv4 address, the "every address" bind target and the source
+#: of a client that has none yet.
+WILDCARD_V4: _ty.Final = _ipaddress.IPv4Address("0.0.0.0")
 INFINITE_LEASE_TIME: _ty.Final = 0xFFFFFFFF
 DHCP_MIN_LEGAL_PACKET_SIZE: _ty.Final = 576
 

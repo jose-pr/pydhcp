@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 from pydhcp.packet.message import DHCPMessage
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
 from pydhcp.server import DHCPServer, DHCPLease
 from pydhcp.options.type import U16, U32, String

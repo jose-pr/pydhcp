@@ -13,7 +13,8 @@ from pydhcp import (
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.network import IPv4, SocketAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from pydhcp.server import DHCPServer
 from conftest import build_request
 
@@ -785,7 +786,8 @@ def _servable_interface():
     the predicate -- the same trap that put this check in `_servable_interface`
     on the server side.
     """
-    from pydhcp.network import LINK_LOCAL_V4, host_ip_interfaces
+    from netimps import LINK_LOCAL_V4
+    from pydhcp.network import host_ip_interfaces
 
     for interface in host_ip_interfaces(
         lambda i: not i.ip.is_loopback and i.ip not in LINK_LOCAL_V4

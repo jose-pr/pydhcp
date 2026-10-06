@@ -7,7 +7,9 @@ import pytest
 hypothesis = pytest.importorskip("hypothesis")
 from hypothesis import HealthCheck, given, settings, strategies as st
 
-from pydhcp.network import IPv4, IPv4Network
+from ipaddress import IPv4Address as IPv4
+
+from ipaddress import IPv4Network
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.packet.message import DHCPMessage

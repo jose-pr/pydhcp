@@ -1,41 +1,11 @@
 from __future__ import annotations
 
 import enum as _enum
-import typing as _ty
 import ipaddress as _ip
+import socket as _socket
+import typing as _ty
 
 import netimps as _netimps
-import socket as _socket
-
-IPv4 = _ip.IPv4Address
-IPv6 = _ip.IPv6Address
-IP = _ty.Union[IPv4, IPv6]
-IPv4Network = _ip.IPv4Network
-IPv6Network = _ip.IPv6Network
-IPNetwork = _ty.Union[IPv4Network, IPv6Network]
-IPv4Interface = _ip.IPv4Interface
-
-WILDCARD_V4 = IPv4("0.0.0.0")
-
-
-class MACAddress(_netimps.MACAddress):
-    """A hardware address rendered the way DHCP tooling expects.
-
-    Only the *presentation* differs from :class:`netimps.MACAddress`:
-    uppercase-hyphenated (``00-11-22-33-44-55``) rather than lowercase-colon,
-    because that is the form this project's CLI and logs have always used.
-    Parsing, comparison and hashing are inherited unchanged, so instances
-    compare equal to the base type and interoperate with it as dict keys.
-
-    Note this is a *display* type. The wire hardware address (``chaddr``,
-    option 61) is raw ``bytes`` throughout ``packet/`` and never passes through
-    here -- deliberately, since ``chaddr`` permits ``hlen`` up to 16 for
-    non-Ethernet ``htype`` while a MAC is exactly 6.
-    """
-
-    def __str__(self) -> str:
-        return self.format("-", upper=True)
-
 
 #: Pseudo-members for hardware types with no name, cached so identity holds.
 _HTYPE_PSEUDO_MEMBERS: "dict[int, HardwareAddressType]" = {}
@@ -53,9 +23,7 @@ class HardwareAddressType(_enum.IntEnum):
     the `options` -> `packet` -> `options` import cycle: `ClientIdentifier`
     names its leading type octet with this enum, and reaching `packet.enums`
     for it meant a function-local import re-executed on every `__repr__`. This
-    module imports nothing from the package, and it is where `MACAddress`
-    already lives -- this enum says what kind of hardware address `chaddr`
-    holds.
+    module imports nothing from the package.
     """
 
     NONE = 0
@@ -142,19 +110,14 @@ class HardwareAddressType(_enum.IntEnum):
 
 
 class _SocketAddress(_ty.NamedTuple):
-    ip: IPv4
+    ip: _ip.IPv4Address
     port: int
-
-
-#: One ``setsockopt`` call, ``(level, name, value)``. netimps' own type, so the
-#: options a caller builds here go straight to :func:`netimps.bind`.
-SocketOption = _netimps.SocketOption
 
 
 class SocketAddress(_SocketAddress):
     def __new__(
         cls,
-        ip: _ty.Union[str, IPv4, _socket.socket],
+        ip: _ty.Union[str, _ip.IPv4Address, _socket.socket],
         port: _ty.Optional[int] = None,
     ) -> "SocketAddress":
         if isinstance(ip, _socket.socket):
@@ -166,7 +129,9 @@ class SocketAddress(_SocketAddress):
             )
         else:
             ip_val, port_val = ip, port
-        return super(SocketAddress, cls).__new__(cls, IPv4(ip_val), int(port_val))
+        return super(SocketAddress, cls).__new__(
+            cls, _ip.IPv4Address(ip_val), int(port_val)
+        )
 
     def compat(self) -> tuple[str, int]:
         return (str(self.ip), self.port)
@@ -177,62 +142,11 @@ class SocketAddress(_SocketAddress):
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(ip={self.ip}, port={self.port})"
 
-    def listen(
-        self,
-        family: _socket.AddressFamily = _socket.AF_INET,
-        kind: _socket.SocketKind = _socket.SOCK_DGRAM,
-        proto: int = 0,
-        fileno: _ty.Optional[int] = None,
-        options: _ty.Iterable[SocketOption] = (),
-        *,
-        broadcast: bool = False,
-        allow_address_takeover: bool = False,
-        connreset: bool = True,
-    ) -> _socket.socket:
-        """Create and bind a socket at this address.
-
-        Delegates to :func:`netimps.bind`, which closes the socket before any
-        exception propagates -- so a failed bind leaks nothing -- and raises
-        :class:`netimps.AddressInUseError` for every "the port is taken" shape.
-        ``options`` are extra ``(level, name, value)`` triples applied before
-        the bind; ``broadcast``, ``allow_address_takeover`` and ``connreset``
-        are :func:`netimps.bind`'s own.
-
-        The address is exclusive unless ``allow_address_takeover`` is set:
-        netimps sets ``SO_EXCLUSIVEADDRUSE`` on Windows, where without it a
-        more specific ``SO_REUSEADDR`` bind can take a wildcard holder's
-        traffic, and sets no ``SO_REUSEADDR`` on POSIX, where two UDP sockets
-        holding it can share a port. ``reuse_address`` stays off for the same
-        reason it always was here: this never set ``SO_REUSEADDR`` implicitly.
-        """
-        if fileno is not None:
-            # netimps.bind() creates the socket itself, so an existing fd has
-            # to keep the direct path.
-            sock = _socket.socket(family, kind, proto, fileno)
-            if broadcast:
-                sock.setsockopt(_socket.SOL_SOCKET, _socket.SO_BROADCAST, 1)
-            for opt in options:
-                sock.setsockopt(*opt)
-            sock.bind((str(self.ip), self.port))
-            return sock
-
-        return _netimps.bind(
-            str(self.ip),
-            self.port,
-            family=family,
-            kind=kind,
-            reuse_address=False,
-            allow_address_takeover=allow_address_takeover,
-            broadcast=broadcast,
-            connreset=connreset,
-            options=tuple(options),
-        )
-
 
 class NetworkInterface(_ty.NamedTuple):
     name: str
     ip_interface: _ty.Union[_ip.IPv4Interface, _ip.IPv6Interface]
-    mac: _ty.Optional[MACAddress] = None
+    mac: _ty.Optional[_netimps.MACAddress] = None
 
     @property
     def ip(self) -> _ty.Union[_ip.IPv4Address, _ip.IPv6Address]:
@@ -241,12 +155,6 @@ class NetworkInterface(_ty.NamedTuple):
     @property
     def network(self) -> _ty.Union[_ip.IPv4Network, _ip.IPv6Network]:
         return self.ip_interface.network
-
-
-#: RFC 3927 link-local. A host assigns itself one of these when DHCP fails, so
-#: their presence usually means "no lease" -- which is why they are filtered by
-#: default. Re-exported from netimps so the definition lives in one place.
-LINK_LOCAL_V4 = _netimps.LINK_LOCAL_V4
 
 
 def host_ip_interfaces(
@@ -258,30 +166,25 @@ def host_ip_interfaces(
     """Yield one :class:`NetworkInterface` per local address.
 
     One entry *per address*, not per adapter, since callers here select and
-    filter by address. ``filter`` defaults to excluding APIPA; pass ``False``
-    for everything, or a predicate of your own.
+    filter by address. ``filter`` defaults to excluding APIPA (RFC 3927: a host
+    assigns itself one of those when DHCP fails, so one usually means "no
+    lease"); pass ``False`` for everything, or a predicate of your own.
 
-    ``family`` defaults to **4**: this is a DHCPv4 implementation, and the
-    enumeration it replaced was IPv4-only, so yielding IPv6 addresses would
-    silently change what existing callers iterate over. Pass ``None`` for both
-    families or ``6`` for IPv6 only.
+    ``family`` defaults to **4**: this is a DHCPv4 implementation. Pass ``None``
+    for both families or ``6`` for IPv6 only.
 
     Enumeration comes from :func:`netimps.iter_addresses`, which reports real
-    prefix lengths and human-readable adapter names on every platform.
+    prefix lengths and human-readable adapter names on every platform. ``cache``
+    is netimps' enumeration cache: ``False`` enumerates now, ``True`` reuses an
+    enumeration up to ``netimps.INTERFACE_CACHE_TTL`` old, a number is that TTL
+    in seconds. Per-packet callers pass ``True``.
     """
     if filter is True:
-        filter = lambda ni: ni.ip not in LINK_LOCAL_V4
-    # `cache` is netimps' enumeration cache: False (the default) enumerates
-    # now, True reuses one up to `netimps.INTERFACE_CACHE_TTL` old (1 s), and a
-    # number is that TTL in seconds. Per-packet callers pass True.
-    adapters = _netimps.get_interfaces() if cache is False else None
-    if adapters is None:
-        adapters = _netimps.get_interfaces(cache=cache)
+        filter = lambda ni: ni.ip not in _netimps.LINK_LOCAL_V4
+    adapters = _netimps.get_interfaces(cache=cache)
     for iface, address in _netimps.iter_addresses(adapters, family=family):
         ni = NetworkInterface(
-            name=iface.name,
-            ip_interface=address,
-            mac=MACAddress(iface.mac) if iface.mac else None,
+            name=iface.name, ip_interface=address, mac=iface.mac or None
         )
         if not filter or filter(ni):
             yield ni

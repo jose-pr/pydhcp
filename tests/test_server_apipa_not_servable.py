@@ -11,15 +11,16 @@ predicate. Measured: looking up a link-local address returned the adapter
 holding it.
 """
 
+import netimps
 import ipaddress
 from unittest.mock import Mock
 
 import pytest
 
 from pydhcp import DHCPOptions, NetworkInterface, DHCPRequestContext
-from pydhcp import network as net
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.network import IPv4, SocketAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from pydhcp.server import DHCPServer
@@ -41,7 +42,7 @@ def host(monkeypatch):
 
     def fake(filter=True, family=4, *, cache=False):
         if filter is True:
-            filter = lambda ni: ni.ip not in net.LINK_LOCAL_V4
+            filter = lambda ni: ni.ip not in netimps.LINK_LOCAL_V4
         for ni in interfaces:
             if not filter or filter(ni):
                 yield ni

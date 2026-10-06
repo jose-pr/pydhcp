@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import logging as _logging
 import contextlib as _contextlib
 import datetime as _dt
@@ -11,7 +12,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from . import constants as _const, network as _net
+from . import constants as _const
 from .packet import enums as _enum
 from .listener import DHCPListener, ListenSpec, DHCPRequestContext, UDPTransport
 from .packet.message import DHCPMessage
@@ -98,9 +99,9 @@ class DHCPClient(DHCPListener):
         chaddr: bytes,
         *,
         xid: _ty.Optional[int] = None,
-        requested_ip: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
-        server_identifier: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
-        ciaddr: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        requested_ip: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
+        server_identifier: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
+        ciaddr: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
         client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
         broadcast: bool = True,
@@ -110,11 +111,15 @@ class DHCPClient(DHCPListener):
             _enum.DHCPMessageType.DHCPREQUEST
         )
         if ciaddr is not None:
-            msg.ciaddr = _net.IPv4(ciaddr)
+            msg.ciaddr = _ipaddress.IPv4Address(ciaddr)
         if requested_ip is not None:
-            msg.options[DHCPOptionCode.REQUESTED_IP] = _net.IPv4(requested_ip)
+            msg.options[DHCPOptionCode.REQUESTED_IP] = _ipaddress.IPv4Address(
+                requested_ip
+            )
         if server_identifier is not None:
-            msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = _net.IPv4(server_identifier)
+            msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = _ipaddress.IPv4Address(
+                server_identifier
+            )
         self._add_client_options(msg, client_identifier, parameter_request_list)
         return msg
 
@@ -122,13 +127,13 @@ class DHCPClient(DHCPListener):
         self,
         chaddr: bytes,
         *,
-        ciaddr: _ty.Union[_net.IPv4, str],
+        ciaddr: _ty.Union[_ipaddress.IPv4Address, str],
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
         parameter_request_list: _ty.Optional[_ty.Iterable[DHCPOptionCode]] = None,
     ) -> DHCPMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
-        msg.ciaddr = _net.IPv4(ciaddr)
+        msg.ciaddr = _ipaddress.IPv4Address(ciaddr)
         msg.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = _enum.DHCPMessageType.DHCPINFORM
         self._add_client_options(msg, client_identifier, parameter_request_list)
         return msg
@@ -137,18 +142,20 @@ class DHCPClient(DHCPListener):
         self,
         chaddr: bytes,
         *,
-        ciaddr: _ty.Union[_net.IPv4, str],
-        server_identifier: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        ciaddr: _ty.Union[_ipaddress.IPv4Address, str],
+        server_identifier: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
     ) -> DHCPMessage:
         msg = self._base_request(chaddr, xid=xid, broadcast=False)
-        msg.ciaddr = _net.IPv4(ciaddr)
+        msg.ciaddr = _ipaddress.IPv4Address(ciaddr)
         msg.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = (
             _enum.DHCPMessageType.DHCPRELEASE
         )
         if server_identifier is not None:
-            msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = _net.IPv4(server_identifier)
+            msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = _ipaddress.IPv4Address(
+                server_identifier
+            )
         self._add_client_options(msg, client_identifier, None)
         return msg
 
@@ -156,8 +163,8 @@ class DHCPClient(DHCPListener):
         self,
         chaddr: bytes,
         *,
-        requested_ip: _ty.Union[_net.IPv4, str],
-        server_identifier: _ty.Optional[_ty.Union[_net.IPv4, str]] = None,
+        requested_ip: _ty.Union[_ipaddress.IPv4Address, str],
+        server_identifier: _ty.Optional[_ty.Union[_ipaddress.IPv4Address, str]] = None,
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
     ) -> DHCPMessage:
@@ -165,23 +172,29 @@ class DHCPClient(DHCPListener):
         msg.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = (
             _enum.DHCPMessageType.DHCPDECLINE
         )
-        msg.options[DHCPOptionCode.REQUESTED_IP] = _net.IPv4(requested_ip)
+        msg.options[DHCPOptionCode.REQUESTED_IP] = _ipaddress.IPv4Address(requested_ip)
         if server_identifier is not None:
-            msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = _net.IPv4(server_identifier)
+            msg.options[DHCPOptionCode.SERVER_IDENTIFIER] = _ipaddress.IPv4Address(
+                server_identifier
+            )
         self._add_client_options(msg, client_identifier, None)
         return msg
 
     def send(
         self,
         message: DHCPMessage,
-        destination: _ty.Union[_net.IPv4, str] = _net.IPv4("255.255.255.255"),
+        destination: _ty.Union[_ipaddress.IPv4Address, str] = _ipaddress.IPv4Address(
+            "255.255.255.255"
+        ),
         port: int = int(_enum.DHCPPort.SERVER),
     ) -> int:
         if not self._sockets:
             self.bind()
         transport = UDPTransport(self._sockets[0])
         data = message.encode(_const.DHCP_MIN_LEGAL_PACKET_SIZE)
-        sent = transport.send(data, _net.IPv4(destination), int(port), message.chaddr)
+        sent = transport.send(
+            data, _ipaddress.IPv4Address(destination), int(port), message.chaddr
+        )
         self._pending_keys.add(self._pending_key(message))
         self.metrics.packets_sent += 1
         return sent
@@ -240,7 +253,7 @@ class DHCPClient(DHCPListener):
         message: DHCPMessage,
         msg_type: _enum.DHCPMessageType,
         *,
-        destination: _ty.Union[_net.IPv4, str],
+        destination: _ty.Union[_ipaddress.IPv4Address, str],
         port: int,
         timeout: float,
         retries: int,
@@ -331,7 +344,9 @@ class DHCPClient(DHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _ty.Union[_net.IPv4, str] = _net.IPv4("255.255.255.255"),
+        destination: _ty.Union[_ipaddress.IPv4Address, str] = _ipaddress.IPv4Address(
+            "255.255.255.255"
+        ),
         port: int = int(_enum.DHCPPort.SERVER),
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
@@ -368,7 +383,9 @@ class DHCPClient(DHCPListener):
         *,
         timeout: float = 2.0,
         retries: int = 2,
-        destination: _ty.Union[_net.IPv4, str] = _net.IPv4("255.255.255.255"),
+        destination: _ty.Union[_ipaddress.IPv4Address, str] = _ipaddress.IPv4Address(
+            "255.255.255.255"
+        ),
         port: int = int(_enum.DHCPPort.SERVER),
         xid: _ty.Optional[int] = None,
         client_identifier: _ty.Optional[_ty.Union[bytes, bytearray]] = None,
@@ -507,10 +524,10 @@ class DHCPClient(DHCPListener):
             # `_exchange` stamps the real elapsed time before each send.
             secs=_dt.timedelta(seconds=0),
             flags=_enum.DHCPFlags.BROADCAST if broadcast else _enum.DHCPFlags.UNICAST,
-            ciaddr=_net.WILDCARD_V4,
-            yiaddr=_net.WILDCARD_V4,
-            siaddr=_net.WILDCARD_V4,
-            giaddr=_net.WILDCARD_V4,
+            ciaddr=_const.WILDCARD_V4,
+            yiaddr=_const.WILDCARD_V4,
+            siaddr=_const.WILDCARD_V4,
+            giaddr=_const.WILDCARD_V4,
             chaddr=bytes(chaddr),
             sname="",
             file="",

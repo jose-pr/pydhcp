@@ -20,7 +20,8 @@ import pydhcp.capture as capture_module
 import pydhcp.cli as cli_module
 from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
 from pydhcp.log import LOGGER
-from pydhcp.network import IPv4, SocketAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from pydhcp.packet import DHCPMessageType
 
 from conftest import build_request

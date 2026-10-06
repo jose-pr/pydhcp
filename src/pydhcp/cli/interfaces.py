@@ -17,5 +17,6 @@ class Interfaces(_Command):
         for interface in host_ip_interfaces():
             print(f"Name: {interface.name}")
             print(f"  IP:   {interface.ip}")
-            print(f"  MAC:  {interface.mac}")
+            mac = interface.mac
+            print(f"  MAC:  {mac.format('-', upper=True) if mac else None}")
             print(f"  Net:  {interface.network}")

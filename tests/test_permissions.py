@@ -1,46 +1,39 @@
-import pytest
 import errno
-from unittest.mock import MagicMock
+
+import netimps
+import pytest
+
 from pydhcp import DHCPServer
-from pydhcp.network import SocketAddress, IPv4
 
 
-def test_bind_permission_error():
+def _bind_raising(monkeypatch, error: OSError) -> None:
+    def refuse(*args, **kwargs):
+        raise error
+
+    monkeypatch.setattr(netimps, "bind", refuse)
+
+
+def test_bind_permission_error(monkeypatch):
+    """The bind error is netimps' own, raised as it came."""
     server = DHCPServer(listen=[("127.0.0.1", 67)])
-    mock_address = MagicMock()
-    mock_address.port = 67
-    mock_address.ip = IPv4("127.0.0.1")
-    mock_address.listen.side_effect = PermissionError("[Errno 13] Permission denied")
-    server._listen = [mock_address]
+    error = PermissionError(errno.EACCES, "permission denied binding port 67")
+    _bind_raising(monkeypatch, error)
 
     with pytest.raises(PermissionError) as exc_info:
         server.bind()
-    # Wording comes from netimps.bind_error_hint plus the DHCP-specific
-    # suggestion; assert the facts a user needs rather than the exact phrasing.
-    message = str(exc_info.value)
-    assert "67" in message
-    assert "root" in message.lower()
-    assert "6767" in message
+
+    assert exc_info.value is error
 
 
-def test_bind_address_in_use():
-    """`netimps.bind` raises `AddressInUseError` for every in-use shape, so
-    that is what the mocked `listen` raises; the DHCP suggestion is appended."""
-    import netimps
-
+def test_bind_address_in_use(monkeypatch):
+    """`netimps.bind` raises `AddressInUseError` for every in-use shape; it
+    reaches the caller as it was, with no suggestion appended."""
     server = DHCPServer(listen=[("127.0.0.1", 6767)])
-    mock_address = MagicMock()
-    mock_address.port = 6767
-    mock_address.ip = IPv4("127.0.0.1")
-    err = netimps.AddressInUseError(errno.EADDRINUSE, "Port 6767 is already in use")
-    mock_address.listen.side_effect = err
-    server._listen = [mock_address]
+    error = netimps.AddressInUseError(errno.EADDRINUSE, "Port 6767 is already in use")
+    _bind_raising(monkeypatch, error)
 
-    with pytest.raises(OSError) as exc_info:
+    with pytest.raises(netimps.AddressInUseError) as exc_info:
         server.bind()
-    message = str(exc_info.value)
-    assert "6767" in message
-    assert "in use" in message
-    assert "7767" in message  # the suggested alternative
-    assert isinstance(exc_info.value, netimps.AddressInUseError)
+
+    assert exc_info.value is error
     assert not isinstance(exc_info.value, PermissionError)

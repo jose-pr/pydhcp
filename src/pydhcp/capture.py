@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import dataclasses as _data
 import datetime as _dt
 import enum as _enum_base
@@ -51,7 +52,7 @@ class CaptureEvent:
     @property
     def destination(self) -> _net.SocketAddress:
         local_ip = self.context.local_ip or _ty.cast(
-            _net.IPv4, self.context.interface.ip
+            _ipaddress.IPv4Address, self.context.interface.ip
         )
         # The port the packet was received on. Hardcoding 0 here made the
         # documented `dst_port=` filter key unable to match anything, while
@@ -377,9 +378,9 @@ def _filter_int(key: str, value: str, base: int = 10) -> int:
         ) from None
 
 
-def _filter_ip(key: str, value: str) -> _net.IPv4:
+def _filter_ip(key: str, value: str) -> _ipaddress.IPv4Address:
     try:
-        return _net.IPv4(value)
+        return _ipaddress.IPv4Address(value)
     except ValueError:
         raise ValueError(
             f"Capture filter {key}= expects an IPv4 address, got {value!r}"

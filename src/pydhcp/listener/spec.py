@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import typing as _ty
 
 import netimps as _netimps
 
-from .. import network as _net
+from .. import constants as _const, network as _net
 
-ListenAddress = _ty.Union[_net.IPv4, str]
+ListenAddress = _ty.Union[_ipaddress.IPv4Address, str]
 
 
 ListenPort = _ty.Union[int, _ty.Sequence[int]]
@@ -50,7 +51,7 @@ def _iter_listen_bindings(listen: ListenSpec) -> _ty.Iterator[ListenBinding]:
     if isinstance(listen, tuple):
         yield listen
         return
-    if isinstance(listen, _net.IPv4):
+    if isinstance(listen, _ipaddress.IPv4Address):
         yield listen
         return
     for binding in listen:
@@ -109,13 +110,15 @@ def _parselisteners(
         if not ip:
             ip = "127.0.0.1"
         elif ip == "*":
-            ip = _net.WILDCARD_V4
-        if not isinstance(ip, _net.IPv4):
-            ip = _net.IPv4(ip)
+            ip = _const.WILDCARD_V4
+        if not isinstance(ip, _ipaddress.IPv4Address):
+            ip = _ipaddress.IPv4Address(ip)
 
-        if ip == _net.WILDCARD_V4 and expand_wildcard:
+        if ip == _const.WILDCARD_V4 and expand_wildcard:
             ips = [
-                i.ip for i in _net.host_ip_interfaces() if isinstance(i.ip, _net.IPv4)
+                i.ip
+                for i in _net.host_ip_interfaces()
+                if isinstance(i.ip, _ipaddress.IPv4Address)
             ]
         else:
             ips = [ip]

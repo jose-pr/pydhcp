@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import asyncio as _asyncio
 import concurrent.futures as _futures
 import logging as _logging
@@ -148,7 +149,7 @@ class AsyncDHCPListener:
         client: _net.SocketAddress,
         sock: _socket.socket,
         ifindex: "_ty.Optional[int]" = None,
-        local_ip: "_ty.Optional[_net.IPv4]" = None,
+        local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     ) -> None:
         """Run one datagram's handling off the event loop.
 
@@ -215,7 +216,7 @@ class AsyncDHCPListener:
         client: _net.SocketAddress,
         sock: _socket.socket,
         ifindex: "_ty.Optional[int]" = None,
-        local_ip: "_ty.Optional[_net.IPv4]" = None,
+        local_ip: "_ty.Optional[_ipaddress.IPv4Address]" = None,
     ) -> None:
         if self._closing:  # stop() was called after this was queued
             self.metrics.packets_dropped_backlog += 1

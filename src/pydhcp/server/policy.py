@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import logging as _logging
 import datetime as _dt
 import netimps as _netimps
@@ -18,7 +19,9 @@ from ._state import _ServerState
 LOGGER = _logging.getLogger(__name__)
 
 
-def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterface]:
+def _servable_interface(
+    server_id: _ipaddress.IPv4Address,
+) -> _ty.Optional[_net.NetworkInterface]:
     """The host IPv4 interface holding `server_id`, or None if there is none to
     serve from -- in which case there is no network to derive a lease from.
 
@@ -46,7 +49,7 @@ def _servable_interface(server_id: _net.IPv4) -> _ty.Optional[_net.NetworkInterf
     return next(
         _net.host_ip_interfaces(
             lambda interface: interface.ip == server_id
-            and interface.ip not in _net.LINK_LOCAL_V4,
+            and interface.ip not in _netimps.LINK_LOCAL_V4,
             cache=True,
         ),
         None,
@@ -87,7 +90,7 @@ class _NonExtendingBackend:
     def allocate(
         self,
         client_id: str,
-        ip: _net.IPv4,
+        ip: _ipaddress.IPv4Address,
         ttl: float,
         options: _ty.Optional[DHCPOptions] = None,
     ) -> _ty.Optional[DHCPLease]:
@@ -138,7 +141,9 @@ class _LeasePolicy(_ServerState):
         return float(max(self.MIN_LEASE_SECONDS, min(value, self.MAX_LEASE_SECONDS)))
 
     def _is_our_server_id(
-        self, server_id: _net.IPv4, actual_server_id: _net.IPv4
+        self,
+        server_id: _ipaddress.IPv4Address,
+        actual_server_id: _ipaddress.IPv4Address,
     ) -> bool:
         """Whether option 54 names *this* server, on any of its addresses.
 
@@ -187,7 +192,7 @@ class _LeasePolicy(_ServerState):
     def acquire_lease(
         self,
         client_id: str,
-        server_id: _net.IPv4,
+        server_id: _ipaddress.IPv4Address,
         msg: DHCPMessage,
         *,
         commit: bool = True,
@@ -242,10 +247,10 @@ class _LeasePolicy(_ServerState):
         )
         ttl = self.lease_seconds(msg)
 
-        ip: _ty.Optional[_net.IPv4] = None
+        ip: _ty.Optional[_ipaddress.IPv4Address] = None
         if requested_ip:
             ip = requested_ip
-        elif msg.ciaddr != _net.WILDCARD_V4:
+        elif msg.ciaddr != _const.WILDCARD_V4:
             ip = msg.ciaddr
 
         if ip is None:
@@ -278,7 +283,7 @@ class _LeasePolicy(_ServerState):
 
     def _address_refusal(
         self,
-        ip: _net.IPv4,
+        ip: _ipaddress.IPv4Address,
         interface: _net.NetworkInterface,
         client_id: str,
     ) -> _ty.Optional[str]:
@@ -315,7 +320,7 @@ class _LeasePolicy(_ServerState):
                 return f"already leased to {holder}"
         return None
 
-    def quarantine_address(self, ip: _net.IPv4) -> None:
+    def quarantine_address(self, ip: _ipaddress.IPv4Address) -> None:
         """Stop offering `ip` for `DECLINE_QUARANTINE_SECONDS`.
 
         RFC 2131 4.3.3: a DHCPDECLINE says the client found the address already
@@ -331,7 +336,7 @@ class _LeasePolicy(_ServerState):
             self._declined.popitem(last=False)
 
     def release_lease(
-        self, client_id: str, server_id: _net.IPv4, msg: DHCPMessage
+        self, client_id: str, server_id: _ipaddress.IPv4Address, msg: DHCPMessage
     ) -> bool:
         """Release any lease associated with `client_id`; True if one went away.
 
@@ -346,7 +351,9 @@ class _LeasePolicy(_ServerState):
         """
         return self.lease_backend.release(client_id)
 
-    def get_inform_options(self, server_id: _net.IPv4, msg: DHCPMessage) -> DHCPOptions:
+    def get_inform_options(
+        self, server_id: _ipaddress.IPv4Address, msg: DHCPMessage
+    ) -> DHCPOptions:
         """Return configuration options for DHCPINFORM responses.
 
         DHCPINFORM does not allocate an address. Override this method when clients

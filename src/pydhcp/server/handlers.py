@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import logging as _logging
 import typing as _ty
 
-from .. import network as _net
+from .. import constants as _const
 from ..exceptions import DHCPDecodeError, NoClientIdentityError
 from ..lease import DHCPLease
 from ..listener import DHCPRequestContext
@@ -68,10 +69,10 @@ class _Handlers(_Replies):
         LOGGER.debug(
             "[XID=%08x] Received %s from %s", msg.xid, msg_ty_name, context.client.ip
         )
-        server_id: _ty.Optional[_net.IPv4] = msg.options.get(
+        server_id: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
             DHCPOptionCode.SERVER_IDENTIFIER, decode=_type.IPv4AddressOption
         )
-        actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
 
         if server_id is not None and not self._is_our_server_id(
             server_id, actual_server_id
@@ -105,7 +106,7 @@ class _Handlers(_Replies):
     def handle_discover(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDISCOVER by offering a lease returned from `acquire_lease`."""
         client_id = msg.client_id()
-        actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPDISCOVER from {context.client}|{client_id}"
         )
@@ -125,7 +126,7 @@ class _Handlers(_Replies):
     def handle_request(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPREQUEST by ACKing or NAKing the lease returned from `acquire_lease`."""
         client_id = msg.client_id()
-        actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPREQUEST from {context.client}|{client_id}"
         )
@@ -144,7 +145,7 @@ class _Handlers(_Replies):
                 DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
             )
             is not None
-            and msg.ciaddr == _net.WILDCARD_V4
+            and msg.ciaddr == _const.WILDCARD_V4
             and self.lease_backend.lookup(client_id) is None
         ):
             LOGGER.warning(
@@ -162,7 +163,7 @@ class _Handlers(_Replies):
                 f"[XID={msg.xid:08x}] No lease available for {context.client}|{client_id} at {actual_server_id} ignoring"
             )
             return
-        ip_req: _ty.Optional[_net.IPv4] = msg.options.get(
+        ip_req: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
         if not ip_req:
@@ -187,14 +188,14 @@ class _Handlers(_Replies):
     def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPDECLINE by releasing the client's lease through `release_lease`."""
         client_id = msg.client_id()
-        actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.warning(
             f"[XID={msg.xid:08x}] DHCPDECLINE from {context.client}|{client_id}"
         )
-        declined: _ty.Optional[_net.IPv4] = msg.options.get(
+        declined: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
-        if declined is None and msg.ciaddr != _net.WILDCARD_V4:
+        if declined is None and msg.ciaddr != _const.WILDCARD_V4:
             declined = msg.ciaddr
         if declined is None:
             existing = self.lease_backend.lookup(client_id)
@@ -211,7 +212,7 @@ class _Handlers(_Replies):
     def handle_release(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPRELEASE, but only for the address the client actually holds."""
         client_id = msg.client_id()
-        actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(
             f"[XID={msg.xid:08x}] DHCPRELEASE from {context.client}|{client_id}"
         )
@@ -221,7 +222,7 @@ class _Handlers(_Replies):
         # holds now -- and the address then went to someone else while the
         # client was still using it.
         existing = self.lease_backend.lookup(client_id)
-        if existing is not None and msg.ciaddr != _net.WILDCARD_V4:
+        if existing is not None and msg.ciaddr != _const.WILDCARD_V4:
             if existing.ip != msg.ciaddr:
                 LOGGER.warning(
                     f"[XID={msg.xid:08x}] Ignoring DHCPRELEASE from "
@@ -236,7 +237,7 @@ class _Handlers(_Replies):
     def handle_inform(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
         """Handle DHCPINFORM without requiring address allocation."""
         client_id = msg.client_id()
-        actual_server_id = _ty.cast(_net.IPv4, context.interface.ip)
+        actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
         LOGGER.info(f"[XID={msg.xid:08x}] DHCPINFORM from {context.client}|{client_id}")
         # RFC 2131 4.3.5: a DHCPINFORM client already has its address and is
         # asking only for configuration. Routing this through acquire_lease
@@ -245,7 +246,7 @@ class _Handlers(_Replies):
         # allocation-free hook documented for exactly this path whenever a
         # binding happened to exist.
         lease = DHCPLease(
-            _net.WILDCARD_V4,
+            _const.WILDCARD_V4,
             _inf,
             self.get_inform_options(actual_server_id, msg),
         )
@@ -254,5 +255,5 @@ class _Handlers(_Replies):
         )
         if DHCPOptionCode.IP_ADDRESS_LEASE_TIME in resp.options:
             del resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME]
-        resp.yiaddr = _net.WILDCARD_V4
+        resp.yiaddr = _const.WILDCARD_V4
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPACK)

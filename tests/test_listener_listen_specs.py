@@ -3,7 +3,8 @@ import ipaddress
 import pytest
 
 from pydhcp.listener import DHCPListener, _parselisteners
-from pydhcp.network import IPv4, NetworkInterface, SocketAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import NetworkInterface, SocketAddress
 from pydhcp.server import AsyncDHCPServer, DHCPServer
 
 
@@ -140,7 +141,7 @@ def _a_real_interface():
     import netimps
     import pytest
 
-    from pydhcp.network import LINK_LOCAL_V4
+    from netimps import LINK_LOCAL_V4
 
     for adapter in netimps.get_interfaces():
         if not adapter.index or adapter.is_loopback:
@@ -201,7 +202,7 @@ def test_resolve_interface_by_index_alone_answers_from_the_adapter() -> None:
 
     assert resolved.name == expected.name
     assert not resolved.name.startswith("unknown[")
-    assert resolved.ip not in __import__("pydhcp").network.LINK_LOCAL_V4
+    assert resolved.ip not in netimps.LINK_LOCAL_V4
 
 
 def test_resolve_interface_falls_back_to_address_when_index_is_unknown() -> None:

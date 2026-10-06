@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import datetime as dt
+import ipaddress
 import logging
 import sys
 
-from pydhcp import DHCPOptions, DHCPServer, log, network
+import netimps
+
+from pydhcp import DHCPOptions, DHCPServer, log
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet.message import DHCPMessage
 from pydhcp.server import DHCPLease
@@ -25,7 +28,7 @@ class ExampleDHCPServer(DHCPServer):
     def acquire_lease(
         self,
         client_id: str,
-        server_id: network.IPv4,
+        server_id: ipaddress.IPv4Address,
         msg: DHCPMessage,
         *,
         commit: bool = True,
@@ -34,8 +37,13 @@ class ExampleDHCPServer(DHCPServer):
         if lease is not None:
             return lease
 
+        adapter = netimps.get_interface(server_id, cache=True)
         server_interface = next(
-            network.host_ip_interfaces(lambda interface: interface.ip == server_id),
+            (
+                (entry for entry in adapter.ips if entry.ip == server_id)
+                if adapter
+                else ()
+            ),
             None,
         )
         if server_interface is None:

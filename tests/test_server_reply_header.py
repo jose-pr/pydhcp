@@ -12,7 +12,7 @@ import pytest
 
 from pydhcp import DHCPMessage, DHCPOptions
 from pydhcp.lease import DHCPLease, InMemoryLeaseBackend
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.server import DHCPServer

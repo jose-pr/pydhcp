@@ -9,7 +9,7 @@ import typing as _ty
 
 import netimps as _netimps
 
-from .. import network as _net
+from .. import constants as _const
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -22,14 +22,14 @@ class DHCPTransport:
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        dest: _net.IPv4,
+        dest: _ipaddress.IPv4Address,
         port: int,
         client_mac: bytes,
     ) -> int:
         raise NotImplementedError()
 
 
-def _dest_string(dest: _net.IPv4) -> str:
+def _dest_string(dest: _ipaddress.IPv4Address) -> str:
     """The address to actually send a reply to.
 
     0.0.0.0 in a DHCP header means "this client has no address yet", which on
@@ -37,7 +37,7 @@ def _dest_string(dest: _net.IPv4) -> str:
     0.0.0.0, which is what `str()` would produce and what `sendto` would then
     reject or silently route nowhere.
     """
-    return BROADCAST_ADDRESS if dest == _net.WILDCARD_V4 else str(dest)
+    return BROADCAST_ADDRESS if dest == _const.WILDCARD_V4 else str(dest)
 
 
 class UDPTransport(DHCPTransport):
@@ -56,7 +56,7 @@ class UDPTransport(DHCPTransport):
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        dest: _net.IPv4,
+        dest: _ipaddress.IPv4Address,
         port: int,
         client_mac: bytes,
     ) -> int:
@@ -101,7 +101,7 @@ class PktInfoUDPTransport(UDPTransport):
     ):
         super().__init__(socket)
         self.ifindex: int | None = None
-        self.local_ip: _net.IPv4 | None = None
+        self.local_ip: _ipaddress.IPv4Address | None = None
         self.endpoint = endpoint or _netimps.UDPEndpoint(socket, pktinfo=False)
 
     def _source(self) -> _netimps.Interface:
@@ -126,7 +126,7 @@ class PktInfoUDPTransport(UDPTransport):
     def send(
         self,
         data: _ty.Union[bytes, bytearray, memoryview],
-        dest: _net.IPv4,
+        dest: _ipaddress.IPv4Address,
         port: int,
         client_mac: bytes,
     ) -> int:

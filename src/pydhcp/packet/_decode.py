@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import datetime as _dt
 import typing as _ty
 
 from ..exceptions import DHCPDecodeError
 from . import enums as _enum
-from .. import network as _net
+
 from ..options import DHCPOptionCode, DHCPOptions, type as _type
 from ._fields import (
     _MessageFields,
@@ -83,10 +84,10 @@ class _MessageDecode(_MessageFields):
         htype = _enum.HardwareAddressType(htype)
         secs = _dt.timedelta(seconds=secs)
         flags = _enum.DHCPFlags(flags & _enum.DHCPFlags.BROADCAST.value)
-        ciaddr = _net.IPv4(ciaddr)
-        yiaddr = _net.IPv4(yiaddr)
-        siaddr = _net.IPv4(siaddr)
-        giaddr = _net.IPv4(giaddr)
+        ciaddr = _ipaddress.IPv4Address(ciaddr)
+        yiaddr = _ipaddress.IPv4Address(yiaddr)
+        siaddr = _ipaddress.IPv4Address(siaddr)
+        giaddr = _ipaddress.IPv4Address(giaddr)
         chaddr = data[28 : 28 + hlen].tobytes()
         sname_data = data[44:108]
         file_data = data[108:236]

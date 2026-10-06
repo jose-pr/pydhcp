@@ -1,6 +1,7 @@
 from __future__ import annotations
 import logging as _logging
 import datetime as _dt
+import ipaddress as _ipaddress
 import json as _json
 import os as _os
 import tempfile as _tempfile
@@ -9,14 +10,13 @@ import threading as _threading
 import typing as _ty
 from math import inf as _inf
 
-from .network import IPv4
 from .options import DHCPOptions
 
 LOGGER = _logging.getLogger(__name__)
 
 
 class DHCPLease(_ty.NamedTuple):
-    ip: _ty.Optional[IPv4]
+    ip: _ty.Optional[_ipaddress.IPv4Address]
     expires: _ty.Union[_dt.datetime, float]
     options: DHCPOptions
 
@@ -34,7 +34,7 @@ class LeaseBackend(_ty.Protocol):
     def allocate(
         self,
         client_id: str,
-        ip: IPv4,
+        ip: _ipaddress.IPv4Address,
         ttl: float,
         options: _ty.Optional[DHCPOptions] = None,
     ) -> _ty.Optional[DHCPLease]: ...
@@ -81,7 +81,7 @@ class InMemoryLeaseBackend:
     def allocate(
         self,
         client_id: str,
-        ip: IPv4,
+        ip: _ipaddress.IPv4Address,
         ttl: float,
         options: _ty.Optional[DHCPOptions] = None,
     ) -> _ty.Optional[DHCPLease]:
@@ -152,7 +152,7 @@ class InMemoryLeaseBackend:
                 return None
             return lease
 
-    def lookup_by_ip(self, ip: IPv4) -> _ty.Optional[str]:
+    def lookup_by_ip(self, ip: _ipaddress.IPv4Address) -> _ty.Optional[str]:
         """Return the client currently holding `ip`, if any.
 
         Optional backend extension, not part of the `LeaseBackend` Protocol: a
@@ -237,7 +237,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                 data = _json.load(f)
             for client_id, lease_data in data.items():
                 ip_str = lease_data.get("ip")
-                ip = IPv4(ip_str) if ip_str else None
+                ip = _ipaddress.IPv4Address(ip_str) if ip_str else None
                 exp_str = lease_data.get("expires")
                 if exp_str == "inf":
                     expires: _ty.Union[_dt.datetime, float] = _inf
@@ -385,7 +385,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
     def allocate(
         self,
         client_id: str,
-        ip: IPv4,
+        ip: _ipaddress.IPv4Address,
         ttl: float,
         options: _ty.Optional[DHCPOptions] = None,
     ) -> _ty.Optional[DHCPLease]:

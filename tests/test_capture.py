@@ -18,7 +18,8 @@ from pydhcp import (
 from pydhcp.capture import compile_capture_filter
 from pydhcp.packet import DHCPMessageType, DHCPFlags
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import IPv4, SocketAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from conftest import build_request
 
 CHADDR = b"\x00\x11\x22\x33\x44\x55"

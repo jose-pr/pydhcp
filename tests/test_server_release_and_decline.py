@@ -7,7 +7,8 @@ import pytest
 
 from pydhcp import DHCPMessage, DHCPOptions, NetworkInterface, DHCPRequestContext
 from pydhcp.lease import InMemoryLeaseBackend
-from pydhcp.network import IPv4, SocketAddress
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from pydhcp.server import DHCPServer

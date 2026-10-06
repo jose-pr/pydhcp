@@ -51,7 +51,7 @@ from pydhcp.options.type import (
     CCCSecurityTicketControlSubOption,
     CCCKDCServerAddressSubOption,
 )
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from ipaddress import ip_network
 
 

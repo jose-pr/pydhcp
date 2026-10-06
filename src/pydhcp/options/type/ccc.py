@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import typing as _ty
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ... import network as _net
+
 from .base import DHCPOptionType, List, RecordList, hashable_payload
 from .domain import decode_domain_name, encode_domain_name
 from .addresses import IPv4AddressOption
@@ -85,7 +86,7 @@ class CCCProvisioningServerAddress(DHCPOptionType):
             raise DHCPValueError(
                 "CCC provisioning server address kind must be ipv4 or fqdn"
             )
-        if isinstance(value, _net.IPv4):
+        if isinstance(value, _ipaddress.IPv4Address):
             return "ipv4", IPv4AddressOption(value)
         if isinstance(value, str):
             try:

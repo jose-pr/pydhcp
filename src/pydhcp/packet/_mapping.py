@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import datetime as _dt
 import enum as _enum_base
 import typing as _ty
 
 from . import enums as _enum
-from .. import network as _net, nvt as _nvt
+from .. import nvt as _nvt
 from ..options import BaseDHCPOptionCode, DHCPOptions, type as _type
 from ._encode import _MessageEncode
 
@@ -251,10 +252,10 @@ class _MessageMapping(_MessageEncode):
             xid=_coerce_int(data["xid"]),
             secs=_dt.timedelta(seconds=_coerce_int(data["secs"])),
             flags=_coerce_enum_value(_enum.DHCPFlags, data["flags"]),
-            ciaddr=_net.IPv4(data["ciaddr"]),
-            yiaddr=_net.IPv4(data["yiaddr"]),
-            siaddr=_net.IPv4(data["siaddr"]),
-            giaddr=_net.IPv4(data["giaddr"]),
+            ciaddr=_ipaddress.IPv4Address(data["ciaddr"]),
+            yiaddr=_ipaddress.IPv4Address(data["yiaddr"]),
+            siaddr=_ipaddress.IPv4Address(data["siaddr"]),
+            giaddr=_ipaddress.IPv4Address(data["giaddr"]),
             chaddr=_coerce_chaddr(data["chaddr"]),
             sname=_coerce_bootp_text(data["sname"], "sname"),
             file=_coerce_bootp_text(data["file"], "file"),

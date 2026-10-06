@@ -34,7 +34,7 @@ from pydhcp import (
     DHCPOptions,
     DHCPRelay,
 )
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from conftest import CHADDR, build_request

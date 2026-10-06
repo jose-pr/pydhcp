@@ -88,7 +88,7 @@ def test_options_set_get():
     # Test setting raw bytes
     opts[DHCPOptionCode.ROUTER] = b"\xc0\xa8\x01\x01"  # 192.168.1.1
     # Test decoding with type
-    from pydhcp.network import IPv4
+    from ipaddress import IPv4Address as IPv4
 
     assert opts.get(DHCPOptionCode.ROUTER, decode=IPv4AddressOption) == IPv4(
         "192.168.1.1"

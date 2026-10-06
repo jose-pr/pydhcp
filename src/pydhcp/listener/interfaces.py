@@ -16,31 +16,33 @@ LOGGER = _logging.getLogger(__name__)
 
 
 def _network_interface(
-    interface: _netimps.Interface, address: "_ty.Optional[_net.IPv4]" = None
+    interface: _netimps.Interface,
+    address: "_ty.Optional[_ipaddress.IPv4Address]" = None,
 ) -> "_ty.Optional[_net.NetworkInterface]":
     """pydhcp's per-address view of one netimps adapter.
 
     ``address`` picks which of its addresses -- a NIC may hold several, and the
-    reply's SERVER_IDENTIFIER must be the right one. Without one, the adapter's
-    first IPv4 address stands in, a non-APIPA one first. None if the adapter
-    holds no such address.
+    reply's SERVER_IDENTIFIER must be the right one. Without one,
+    `Interface.primary_ip()` stands in: a routable address, else a loopback one,
+    else a link-local one. None if the adapter holds no such address.
     """
-    candidates = [
-        entry
-        for entry in interface.ips
-        if isinstance(entry, _ipaddress.IPv4Interface)
-        and (address is None or entry.ip == address)
-    ]
     if address is None:
-        candidates = [
-            e for e in candidates if e.ip not in _net.LINK_LOCAL_V4
-        ] or candidates
-    if not candidates:
+        chosen = interface.primary_ip()
+    else:
+        chosen = next(
+            (
+                entry
+                for entry in interface.ips
+                if isinstance(entry, _ipaddress.IPv4Interface) and entry.ip == address
+            ),
+            None,
+        )
+    if chosen is None:
         return None
     return _net.NetworkInterface(
         name=interface.name,
-        ip_interface=candidates[0],
-        mac=_net.MACAddress(interface.mac) if interface.mac else None,
+        ip_interface=chosen,
+        mac=interface.mac,
     )
 
 
@@ -61,7 +63,7 @@ def _warn_synthetic(local_ip: str) -> None:
 
 def _resolve_interface(
     sock: _socket.socket,
-    pkt_local_ip: _ty.Optional[_net.IPv4] = None,
+    pkt_local_ip: _ty.Optional[_ipaddress.IPv4Address] = None,
     pkt_ifindex: _ty.Optional[int] = None,
 ) -> _net.NetworkInterface:
     """Find the NetworkInterface a datagram actually arrived on.
@@ -107,7 +109,7 @@ def _resolve_interface(
     # searched here, degrading to the synthetic `unknown[...]` below with a /32
     # and no MAC -- losing the prefix the server derives its pool from.
     address = _ipaddress.ip_address(local_ip)
-    if isinstance(address, _net.IPv4) and not address.is_unspecified:
+    if isinstance(address, _ipaddress.IPv4Address) and not address.is_unspecified:
         held = _netimps.get_interface(address, cache=True)
         if held is not None:
             found = _network_interface(held, address)
@@ -124,9 +126,9 @@ def _resolve_interface(
                 return found
 
     try:
-        ip_addr = _net.IPv4(local_ip)
+        ip_addr = _ipaddress.IPv4Address(local_ip)
     except Exception:
-        ip_addr = _net.IPv4("127.0.0.1")
+        ip_addr = _ipaddress.IPv4Address("127.0.0.1")
     _warn_synthetic(local_ip)
     return _net.NetworkInterface(
         name=f"unknown[{local_ip}]",

@@ -1,24 +1,10 @@
 import pytest
-from pydhcp.network import MACAddress, SocketAddress, IPv4
-
-
-def test_mac_address():
-    mac = MACAddress("00-11-22-33-44-55")
-    assert str(mac) == "00-11-22-33-44-55"
-    assert mac.hex("-").upper() == "00-11-22-33-44-55"
-
-    with pytest.raises(ValueError):
-        MACAddress("00-11-22")
-
-
-def test_mac_address_renders_the_same_through_every_formatting_path():
-    mac = MACAddress("00:11:22:aa:bb:cc")
-    assert str(mac) == f"{mac}" == "%s" % mac == "00-11-22-AA-BB-CC"
-    assert isinstance(MACAddress.try_parse("00:11:22:aa:bb:cc"), MACAddress)
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 
 
 def test_link_local_network_is_the_rfc_3927_range():
-    from pydhcp.network import LINK_LOCAL_V4
+    from netimps import LINK_LOCAL_V4
 
     assert str(LINK_LOCAL_V4) == "169.254.0.0/16"
     assert IPv4("169.254.1.1") in LINK_LOCAL_V4
@@ -35,7 +21,7 @@ def test_socket_address():
 
 def test_classless_route():
     from pydhcp.options.type import ClasslessRoute
-    from pydhcp.network import IPv4Network
+    from ipaddress import IPv4Network
 
     # 24-bit subnet, router 192.168.1.1, network 192.168.1.0/24
     net = IPv4Network("192.168.1.0/24")

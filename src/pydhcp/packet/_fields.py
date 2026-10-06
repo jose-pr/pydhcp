@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import dataclasses as _data
 import datetime as _dt
 import struct as _struct
@@ -9,7 +10,7 @@ import typing as _ty
 
 from ..exceptions import DHCPValueError
 from . import enums as _enum
-from .. import constants as _const, network as _net, nvt as _nvt
+from .. import constants as _const, nvt as _nvt
 from ..options import DHCPOptions
 
 _NULL = 0x00.to_bytes(1, "big")
@@ -149,16 +150,16 @@ class _MessageFields:
     began address acquisition or renewal process."""
     flags: _enum.DHCPFlags  # 2 bytes
     """Only use for the BROADCAST flag in clients"""
-    ciaddr: _net.IPv4
+    ciaddr: _ipaddress.IPv4Address
     """Client IP address; only filled in if client is in
     BOUND, RENEW or REBINDING state and can respond
     to ARP requests."""
-    yiaddr: _net.IPv4
+    yiaddr: _ipaddress.IPv4Address
     """'your' (client) IP address."""
-    siaddr: _net.IPv4
+    siaddr: _ipaddress.IPv4Address
     """IP address of next server to use in bootstrap;
     returned in DHCPOFFER, DHCPACK by server."""
-    giaddr: _net.IPv4
+    giaddr: _ipaddress.IPv4Address
     """Relay agent IP address, used in booting via a
     relay agent."""
     chaddr: bytes  # 16 bytes

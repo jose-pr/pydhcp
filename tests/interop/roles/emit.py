@@ -20,7 +20,7 @@ import socket
 import time
 
 from pydhcp import DHCPClient
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 
 parser = argparse.ArgumentParser()
 parser.add_argument("mode")

@@ -18,6 +18,8 @@ order, and the host lookup that fixture makes would otherwise be counted.
 
 from __future__ import annotations
 
+import netimps
+from ipaddress import IPv4Address as IPv4
 import ipaddress
 
 import pytest
@@ -60,7 +62,7 @@ def _context(interface) -> DHCPRequestContext:
     return DHCPRequestContext(
         transport=Silent(),
         interface=interface,
-        client=net.SocketAddress(net.IPv4("0.0.0.0"), 68),
+        client=net.SocketAddress(IPv4("0.0.0.0"), 68),
         client_mac=b"\x00\x11\x22\x33\x44\x55",
     )
 
@@ -72,7 +74,7 @@ def test_twenty_packets_cost_at_most_one_enumeration(
     server = DHCPServer(listen=("127.0.0.1", 0))
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
-    options[DHCPOptionCode.REQUESTED_IP] = net.IPv4(
+    options[DHCPOptionCode.REQUESTED_IP] = IPv4(
         str(list(served_interface.network.hosts())[5])
     )
     context = _context(served_interface)
@@ -90,7 +92,7 @@ def test_a_second_dhcpinform_enumerates_nothing(served_interface, enumerations) 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPINFORM
     context = _context(served_interface)
-    inform = build_request(options=options, ciaddr=net.IPv4(str(served_interface.ip)))
+    inform = build_request(options=options, ciaddr=IPv4(str(served_interface.ip)))
 
     server.handle(inform, context)
     first = len(enumerations)
@@ -105,12 +107,12 @@ def test_binding_forces_a_fresh_enumeration(enumerations) -> None:
     might have: the next lookup must not be answered from before the bind."""
     import netimps
 
-    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
-    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(IPv4("127.0.0.1"), cache=True)
     assert len(enumerations) == 1, "the cache did not hold"
 
     DHCPListener(listen=("127.0.0.1", 0)).__enter__().close()
-    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(IPv4("127.0.0.1"), cache=True)
 
     assert len(enumerations) == 2, "bind() left the old enumeration in place"
 
@@ -120,11 +122,11 @@ def test_an_async_bind_forces_it_too(enumerations) -> None:
     invalidation hung off `DHCPServer.bind` would never have run for it."""
     import netimps
 
-    netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
+    netimps.get_interface(IPv4("127.0.0.1"), cache=True)
     listener = AsyncDHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
-        netimps.get_interface(net.IPv4("127.0.0.1"), cache=True)
+        netimps.get_interface(IPv4("127.0.0.1"), cache=True)
         assert len(enumerations) == 2
     finally:
         listener._close_sockets()
@@ -145,13 +147,13 @@ def test_a_synthetic_interface_is_still_refused() -> None:
     server = DHCPServer(listen=("127.0.0.1", 0))
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
-    options[DHCPOptionCode.REQUESTED_IP] = net.IPv4("203.0.113.20")
+    options[DHCPOptionCode.REQUESTED_IP] = IPv4("203.0.113.20")
 
     transport = Silent()
     context = DHCPRequestContext(
         transport=transport,
         interface=synthetic,
-        client=net.SocketAddress(net.IPv4("0.0.0.0"), 68),
+        client=net.SocketAddress(IPv4("0.0.0.0"), 68),
         client_mac=b"\x00\x11\x22\x33\x44\x55",
     )
 
@@ -159,7 +161,7 @@ def test_a_synthetic_interface_is_still_refused() -> None:
     server.handle(build_request(options=options), context)
 
     assert transport.sent == [], "offered a lease from an address we do not hold"
-    assert server_module._servable_interface(net.IPv4("203.0.113.9")) is None
+    assert server_module._servable_interface(IPv4("203.0.113.9")) is None
 
 
 def test_the_lookup_does_not_apply_the_apipa_filter(monkeypatch) -> None:
@@ -183,6 +185,6 @@ def test_the_lookup_does_not_apply_the_apipa_filter(monkeypatch) -> None:
     monkeypatch.setattr(server_module._net, "host_ip_interfaces", fake)
 
     # The predicate excludes APIPA, so nothing is servable...
-    assert server_module._servable_interface(net.IPv4("169.254.11.89")) is None
+    assert server_module._servable_interface(IPv4("169.254.11.89")) is None
     # ...and the lookup went through netimps' cache.
     assert seen == [True]

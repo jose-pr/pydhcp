@@ -15,7 +15,7 @@ Split by responsibility; every name is importable from here as it always was:
 from __future__ import annotations
 
 from .aio import AsyncDHCPListener
-from .binding import _REQUESTED_ADDRESS, _bind_sockets, _close_socket, _raise_bind_error
+from .binding import _REQUESTED_ADDRESS, _bind_sockets, _close_socket
 from .interfaces import _network_interface, _resolve_interface
 from .receive import (
     Arrival,

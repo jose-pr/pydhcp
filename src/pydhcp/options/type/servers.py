@@ -5,7 +5,7 @@ from __future__ import annotations
 import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ... import nvt as _nvt
-from ...network import IPv4 as _IP
+from ipaddress import IPv4Address as _IP
 from .base import DHCPOptionType
 from .domain import decode_domain_name, encode_domain_name
 from collections.abc import Iterable

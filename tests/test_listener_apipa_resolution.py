@@ -11,6 +11,8 @@ and failing a listener test on a docs-only commit. The test helper was made
 specific first (`d9aeb1d`); this is the library half.
 """
 
+import netimps
+from ipaddress import IPv4Address as IPv4
 import ipaddress
 import socket
 
@@ -37,7 +39,7 @@ def apipa_only(monkeypatch):
 
     def fake(filter=True, family=4, *, cache=False):
         if filter is True:
-            filter = lambda ni: ni.ip not in net.LINK_LOCAL_V4
+            filter = lambda ni: ni.ip not in netimps.LINK_LOCAL_V4
         for ni in interfaces:
             if not filter or filter(ni):
                 yield ni
@@ -65,7 +67,7 @@ def _wildcard_socket() -> socket.socket:
 def test_an_apipa_only_interface_resolves_by_address(apipa_only, monkeypatch) -> None:
     sock = _wildcard_socket()
     try:
-        resolved = _resolve_interface(sock, net.IPv4("169.254.11.89"), None)
+        resolved = _resolve_interface(sock, IPv4("169.254.11.89"), None)
     finally:
         sock.close()
 

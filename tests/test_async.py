@@ -4,7 +4,8 @@ import pytest
 from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPLease, DHCPOptions
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
-from pydhcp.network import SocketAddress, IPv4
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import SocketAddress
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 
 
@@ -66,7 +67,7 @@ def test_async_server_has_the_same_state_as_the_sync_one():
     """AsyncDHCPServer cannot call DHCPServer.__init__, so it re-implemented the
     body and drifted: _declined was added to one and not the other, making every
     DHCPDECLINE an AttributeError on the async server."""
-    from pydhcp.network import IPv4
+    from ipaddress import IPv4Address as IPv4
     from pydhcp.server import AsyncDHCPServer, DHCPServer
 
     sync = DHCPServer(listen=("127.0.0.1", 0))

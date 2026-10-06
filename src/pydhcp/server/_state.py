@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import ipaddress as _ipaddress
 import typing as _ty
 
-from .. import network as _net
+
 from ..lease import LeaseBackend
 from ..listener import DHCPListener as _Base
 from ..packet import enums as _enum
@@ -72,4 +73,6 @@ class _ServerState(_Base):
         from ..lease import InMemoryLeaseBackend
 
         self.lease_backend = lease_backend or InMemoryLeaseBackend()
-        self._declined: _ty.OrderedDict[_net.IPv4, float] = _ty.OrderedDict()
+        self._declined: _ty.OrderedDict[_ipaddress.IPv4Address, float] = (
+            _ty.OrderedDict()
+        )

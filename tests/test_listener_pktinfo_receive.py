@@ -22,7 +22,7 @@ from pydhcp import DHCPServer
 import netimps
 
 from pydhcp.listener import AsyncDHCPListener, DHCPListener, _pktinfo_supported
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessage, DHCPMessageType
 

@@ -18,7 +18,6 @@ import pytest
 from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
 from pydhcp import listener as listener_module
 import ipaddress
-import types
 
 import netimps
 
@@ -28,7 +27,7 @@ from pydhcp.listener import (
     UDPTransport,
     _arrival,
 )
-from pydhcp.network import IPv4
+from ipaddress import IPv4Address as IPv4
 
 
 class RecordingListener(DHCPListener):
@@ -115,9 +114,10 @@ def _datagram(**fields) -> "netimps.Datagram":
     return netimps.Datagram(**fields)
 
 
-def _interface(*addresses: str):
-    """Just the part of a netimps `Interface` that `_arrival` reads."""
-    return types.SimpleNamespace(ips=[ipaddress.ip_interface(a) for a in addresses])
+def _interface(*addresses: str) -> netimps.Interface:
+    return netimps.Interface(
+        "eth-test", 4, ips=[ipaddress.ip_interface(a) for a in addresses]
+    )
 
 
 def test_arrival_reports_the_msg_trunc_flag() -> None:
@@ -204,6 +204,45 @@ def test_arrival_without_an_interface_drops_a_broadcast_destination() -> None:
     )
 
     assert ifindex == 3
+    assert local_ip is None
+
+
+def test_arrival_answers_from_the_routable_address_of_a_loopback_holding_adapter() -> (
+    None
+):
+    """An adapter holding loopback and routable addresses (Linux `lo` with an
+    address added to it): `Interface.primary_ip()` ranks routable above
+    loopback, where the first non-link-local address in the adapter's order
+    was the loopback one."""
+    *_, local_ip = _arrival(
+        _datagram(
+            destination=IPv4("255.255.255.255"),
+            interface_index=1,
+            interface=_interface("127.0.0.1/8", "192.0.2.1/24"),
+        ),
+        576,
+    )
+
+    assert local_ip == IPv4("192.0.2.1")
+
+
+def test_arrival_without_an_interface_drops_a_subnet_broadcast() -> None:
+    """The destination test is `Datagram.is_unicast`, which knows the subnet
+    broadcast of an interface this host holds as well as the limited one."""
+    held = [
+        entry
+        for adapter in netimps.get_interfaces()
+        for entry in adapter.ipv4
+        if entry.network.prefixlen <= 29 and not entry.ip.is_loopback
+    ]
+    if not held:
+        pytest.skip("no interface with a subnet broadcast address on this host")
+    subnet_broadcast = held[0].network.broadcast_address
+
+    *_, local_ip = _arrival(
+        _datagram(destination=subnet_broadcast, interface_index=3), 576
+    )
+
     assert local_ip is None
 
 

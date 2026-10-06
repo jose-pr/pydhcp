@@ -348,7 +348,7 @@ def _warnings(caplog: pytest.LogCaptureFixture) -> "list[str]":
 def _a_routable_host_address() -> str:
     import netimps
 
-    from pydhcp.network import LINK_LOCAL_V4
+    from netimps import LINK_LOCAL_V4
 
     for adapter in netimps.get_interfaces():
         if adapter.is_loopback:
@@ -415,3 +415,23 @@ def test_the_wildcard_and_loopback_are_not_warned_about(
         for listener in listeners:
             listener.close()
     assert _warnings(caplog) == []
+
+
+def test_a_held_port_is_reported_in_netimps_words() -> None:
+    """The error is netimps' own: no port suggestion and no testing hint are
+    added to a message that names the port."""
+    from netimps import AddressInUseError
+
+    holder, port = _held_port()
+    listener = DHCPListener(listen=("127.0.0.1", port))
+    try:
+        with pytest.raises(AddressInUseError) as exc_info:
+            listener.bind()
+    finally:
+        holder.close()
+        listener.close()
+
+    message = str(exc_info.value)
+    assert str(port) in message
+    assert "try port" not in message.lower()
+    assert "6767" not in message

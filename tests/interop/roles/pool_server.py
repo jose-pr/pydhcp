@@ -28,7 +28,8 @@ import time
 import datetime
 
 from pydhcp import AsyncDHCPServer, DHCPLease, DHCPServer
-from pydhcp.network import IPv4, NetworkInterface, host_ip_interfaces
+from ipaddress import IPv4Address as IPv4
+from pydhcp.network import NetworkInterface, host_ip_interfaces
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 
 parser = argparse.ArgumentParser()
