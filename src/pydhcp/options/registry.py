@@ -135,7 +135,7 @@ DHCPOptionCode.SIP_SERVERS.register_type(SIPServers)
 DHCPOptionCode.ARP_TIMEOUT.register_type(U32)
 DHCPOptionCode.IPV4_ADDRESS_MOS.register_type(MoSIPv4AddressList)
 DHCPOptionCode.IPV4_FQDN_MOS.register_type(MoSFQDNList)
-DHCPOptionCode.CCC.register_type(CccOption)
+DHCPOptionCode.CCC.register_type(CCCOption)
 # Opaque by default, like VENDOR_SPECIFIC_INFORMATION (43): iPXE and several
 # PXE ROMs send option 77 unframed rather than in RFC 3004's length-prefixed
 # form, and a strict codec here rejects those packets outright. Ask for the

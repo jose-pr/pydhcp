@@ -142,7 +142,7 @@ Self` / `_dhcp_encode() -> bytes` are the convenience wrappers built on top.
 `__eq__`, so decoded values can go into a `set` or be used as dict keys. The
 **list** codecs (`List[T]`, `RecordList[T]`, `UserClass`, `DomainList` and
 `UncompressedDomainList`,
-`PCPServerList`, `URIList`, `CccOption`, the `Vi*`/`MoS*` containers) are
+`PCPServerList`, `URIList`, `CCCOption`, the `VI*`/`MoS*` containers) are
 mutable `list` subclasses and so are deliberately **not** hashable — build a
 `tuple` from one if you need a key.
 
@@ -156,7 +156,7 @@ mutable `list` subclasses and so are deliberately **not** hashable — build a
   sequence of items, so `EncapsulatedOptions((1, b"ab"))` is a single TLV;
   a `list` argument is several records. `EncapsulatedOptions`,
   `VIVendorSpecificInformation`, `VIVendorClass`, `MoSIPv4AddressList`,
-  `MoSFQDNList` and `CccOption` are all `RecordList` subclasses. Subclass a
+  `MoSFQDNList` and `CCCOption` are all `RecordList` subclasses. Subclass a
   subscripted form — `class MyOption(RecordList[MyRecord])`.
 - **`DHCPOptionCodes[C]`** (`List[C]` subclass) — a list of raw option-code
   ints, used for `PARAMETER_REQUEST_LIST`-style options; falls back to a
@@ -341,32 +341,32 @@ carrying a name can reach it with no import-order constraint.
 
 ### CCC sub-options (`type/ccc.py`, RFC 3495 CableLabs Client Configuration)
 
-- **`CccOption`** — the TLV sub-option container for **option 122**
+- **`CCCOption`** — the TLV sub-option container for **option 122**
   (RFC 3495). It is *not* "option-125-style": option 125 carries
   enterprise-number records, as this header says a few sections up, and the
-  two are different shapes. **`CccSubOption`** — the sub-option TLV record base.
+  two are different shapes. **`CCCSubOption`** — the sub-option TLV record base.
 - Typed sub-option payloads, each a thin wrapper with its own
-  `_dhcp_read`/`_dhcp_write`: **`CccPrimaryDhcpServerAddress`** /
-  **`CccSecondaryDhcpServerAddress`** (`IPv4AddressOption`-backed);
-  **`CccProvisioningServerAddress`**, which is **not** `IPv4AddressOption`-backed but
+  `_dhcp_read`/`_dhcp_write`: **`CCCPrimaryDHCPServerAddress`** /
+  **`CCCSecondaryDHCPServerAddress`** (`IPv4AddressOption`-backed);
+  **`CCCProvisioningServerAddress`**, which is **not** `IPv4AddressOption`-backed but
   a *tagged union* — a leading type octet selects an IPv4 address (1) or an
   FQDN (0), so it carries whichever the sender used;
-  **`CccProvisioningServerFqdn`** / **`CccKerberosRealmName`**
-  (no-DNS-compression domain text); **`CccAsReqAsRepBackoffRetry`** /
-  **`CccApReqApRepBackoffRetry`** / **`CccProvisioningTimer`** (integer
-  backoff/timer values); **`CccTicketGrantingServerUtilization`**, a
-  `Boolean`; **`CccSecurityTicketControl`**, a **16-bit integer mask** and not
+  **`CCCProvisioningServerFQDN`** / **`CCCKerberosRealmName`**
+  (no-DNS-compression domain text); **`CCCASBackoffRetry`** /
+  **`CCCAPBackoffRetry`** / **`CCCProvisioningTimer`** (integer
+  backoff/timer values); **`CCCTicketGrantingServerUtilization`**, a
+  `Boolean`; **`CCCSecurityTicketControl`**, a **16-bit integer mask** and not
   a flag — the two were previously documented together as "`U8`/`Boolean`-backed
-  flags", which was wrong for both; and **`CccKdcServerAddressList`**
+  flags", which was wrong for both; and **`CCCKDCServerAddressList`**
   (`List[IPv4AddressOption]`). Each has a matching `*SubOption` TLV-record wrapper
-  (**`CccPrimaryDhcpServerAddressSubOption`**,
-  **`CccSecondaryDhcpServerAddressSubOption`**,
-  **`CccProvisioningServerAddressSubOption`**,
-  **`CccAsReqAsRepBackoffRetrySubOption`**,
-  **`CccApReqApRepBackoffRetrySubOption`**,
-  **`CccKerberosRealmNameSubOption`**,
-  **`CccTicketGrantingServerUtilizationSubOption`**,
-  **`CccProvisioningTimerSubOption`**,
-  **`CccSecurityTicketControlSubOption`**,
-  **`CccKdcServerAddressSubOption`**) pairing the sub-option code with its
-  typed value inside a `CccOption`.
+  (**`CCCPrimaryDHCPServerAddressSubOption`**,
+  **`CCCSecondaryDHCPServerAddressSubOption`**,
+  **`CCCProvisioningServerAddressSubOption`**,
+  **`CCCASBackoffRetrySubOption`**,
+  **`CCCAPBackoffRetrySubOption`**,
+  **`CCCKerberosRealmNameSubOption`**,
+  **`CCCTicketGrantingServerUtilizationSubOption`**,
+  **`CCCProvisioningTimerSubOption`**,
+  **`CCCSecurityTicketControlSubOption`**,
+  **`CCCKDCServerAddressSubOption`**) pairing the sub-option code with its
+  typed value inside a `CCCOption`.

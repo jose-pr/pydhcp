@@ -16,7 +16,7 @@ from pydhcp.network import SocketAddress
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.options.type import DomainList, OptionOverload
 from pydhcp.options.type.base import DHCPOptionCodes
-from pydhcp.options.type.ccc import CccProvisioningServerAddress
+from pydhcp.options.type.ccc import CCCProvisioningServerAddress
 from pydhcp.options.type.addresses import IPv4AddressOption
 from pydhcp.options.type.scalar import U32
 from pydhcp.packet import DHCPMessageType
@@ -113,8 +113,8 @@ def test_partial_encode_errors_name_the_offending_value(
 
 def test_ccc_address_narrows_its_except_to_valueerror() -> None:
     # A non-address string is still classified as an FQDN...
-    assert CccProvisioningServerAddress("boot.example.com").kind == "fqdn"
-    assert CccProvisioningServerAddress("10.0.0.1").kind == "ipv4"
+    assert CCCProvisioningServerAddress("boot.example.com").kind == "fqdn"
+    assert CCCProvisioningServerAddress("10.0.0.1").kind == "ipv4"
 
     # ...but a non-ValueError raised inside the try must propagate rather than
     # being silently reclassified. A bare `except Exception` swallowed it.
@@ -127,7 +127,7 @@ def test_ccc_address_narrows_its_except_to_valueerror() -> None:
     ccc.IPv4AddressOption = _explode  # type: ignore[assignment]
     try:
         with pytest.raises(RuntimeError, match="codec defect"):
-            CccProvisioningServerAddress("boot.example.com")
+            CCCProvisioningServerAddress("boot.example.com")
     finally:
         ccc.IPv4AddressOption = original  # type: ignore[assignment]
 

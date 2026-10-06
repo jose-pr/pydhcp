@@ -120,6 +120,29 @@ importable. Replace each name in the left column with the one beside it.
 | `MoSIpv4AddressList` | `MoSIPv4AddressList` |
 | `MoSFqdnRecord` | `MoSFQDNRecord` |
 | `MoSFqdnList` | `MoSFQDNList` |
+| `CccOption` | `CCCOption` |
+| `CccSubOption` | `CCCSubOption` |
+| `CccPrimaryDhcpServerAddress` | `CCCPrimaryDHCPServerAddress` |
+| `CccPrimaryDhcpServerAddressSubOption` | `CCCPrimaryDHCPServerAddressSubOption` |
+| `CccSecondaryDhcpServerAddress` | `CCCSecondaryDHCPServerAddress` |
+| `CccSecondaryDhcpServerAddressSubOption` | `CCCSecondaryDHCPServerAddressSubOption` |
+| `CccProvisioningServerAddress` | `CCCProvisioningServerAddress` |
+| `CccProvisioningServerAddressSubOption` | `CCCProvisioningServerAddressSubOption` |
+| `CccProvisioningServerFqdn` | `CCCProvisioningServerFQDN` |
+| `CccKerberosRealmName` | `CCCKerberosRealmName` |
+| `CccKerberosRealmNameSubOption` | `CCCKerberosRealmNameSubOption` |
+| `CccTicketGrantingServerUtilization` | `CCCTicketGrantingServerUtilization` |
+| `CccTicketGrantingServerUtilizationSubOption` | `CCCTicketGrantingServerUtilizationSubOption` |
+| `CccProvisioningTimer` | `CCCProvisioningTimer` |
+| `CccProvisioningTimerSubOption` | `CCCProvisioningTimerSubOption` |
+| `CccSecurityTicketControl` | `CCCSecurityTicketControl` |
+| `CccSecurityTicketControlSubOption` | `CCCSecurityTicketControlSubOption` |
+| `CccKdcServerAddressList` | `CCCKDCServerAddressList` |
+| `CccKdcServerAddressSubOption` | `CCCKDCServerAddressSubOption` |
+| `CccAsReqAsRepBackoffRetry` | `CCCASBackoffRetry` |
+| `CccAsReqAsRepBackoffRetrySubOption` | `CCCASBackoffRetrySubOption` |
+| `CccApReqApRepBackoffRetry` | `CCCAPBackoffRetry` |
+| `CccApReqApRepBackoffRetrySubOption` | `CCCAPBackoffRetrySubOption` |
 
 ### Fixed
 

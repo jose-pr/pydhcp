@@ -27,7 +27,7 @@ pydhcp.options.type.IPv4AddressOption)` is **False**. Import them from
 address type is **`pydhcp.IPv4`**.
 
 The other codecs stay re-exported, including `U8`/`U16`/`U32` and the
-`Ccc*`/`MoS*`/`Vi*` families: nothing in the stdlib or `typing` is called any
+`CCC*`/`MoS*`/`VI*` families: nothing in the stdlib or `typing` is called any
 of those, so the bare name already says it is a pydhcp type. The test applied
 was whether a reader meeting the name at top level could mistake it for
 something else.

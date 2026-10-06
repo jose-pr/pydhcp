@@ -20,21 +20,21 @@ def _decode_no_compression_domain(
     return decode_domain_name(option, start, "CCC domain name")
 
 
-_CccDomainTextT = _ty.TypeVar("_CccDomainTextT", bound="_CccDomainText")
+_CCCDomainTextT = _ty.TypeVar("_CCCDomainTextT", bound="_CCCDomainText")
 
 
-class _CccDomainText(DHCPOptionType, str):
+class _CCCDomainText(DHCPOptionType, str):
     """No-compression RFC 1035 domain text used by CCC sub-options."""
 
-    def __new__(cls: type[_CccDomainTextT], value: _ty.Any) -> _CccDomainTextT:
+    def __new__(cls: type[_CCCDomainTextT], value: _ty.Any) -> _CCCDomainTextT:
         text = str(value)
         _encode_no_compression_domain(text)
         return str.__new__(cls, text)
 
     @classmethod
     def _dhcp_read(
-        cls: type[_CccDomainTextT], option: memoryview
-    ) -> tuple[_CccDomainTextT, int]:
+        cls: type[_CCCDomainTextT], option: memoryview
+    ) -> tuple[_CCCDomainTextT, int]:
         text, read = _decode_no_compression_domain(option)
         return cls(text), read
 
@@ -47,25 +47,25 @@ class _CccDomainText(DHCPOptionType, str):
         return str(self)
 
 
-class CccProvisioningServerFqdn(_CccDomainText):
+class CCCProvisioningServerFQDN(_CCCDomainText):
     """CCC provisioning server FQDN payload without DNS compression."""
 
 
-_CccKerberosRealmNameT = _ty.TypeVar(
-    "_CccKerberosRealmNameT", bound="CccKerberosRealmName"
+_CCCKerberosRealmNameT = _ty.TypeVar(
+    "_CCCKerberosRealmNameT", bound="CCCKerberosRealmName"
 )
 
 
-class CccKerberosRealmName(_CccDomainText):
+class CCCKerberosRealmName(_CCCDomainText):
     """CCC Kerberos realm payload without DNS compression."""
 
     def __new__(
-        cls: type[_CccKerberosRealmNameT], value: _ty.Any
-    ) -> _CccKerberosRealmNameT:
+        cls: type[_CCCKerberosRealmNameT], value: _ty.Any
+    ) -> _CCCKerberosRealmNameT:
         return super().__new__(cls, str(value).upper())
 
 
-class CccProvisioningServerAddress(DHCPOptionType):
+class CCCProvisioningServerAddress(DHCPOptionType):
     """CCC sub-option 3 tagged union for IPv4 address or FQDN."""
 
     def __init__(self, value: _ty.Any) -> None:
@@ -73,7 +73,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
 
     @staticmethod
     def _normalize(value: _ty.Any) -> tuple[str, _ty.Any]:
-        if isinstance(value, CccProvisioningServerAddress):
+        if isinstance(value, CCCProvisioningServerAddress):
             return value.kind, value.value
         if isinstance(value, (list, tuple)) and len(value) == 2:
             kind, payload = value
@@ -81,7 +81,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
             if kind_name in {"ipv4", "address"}:
                 return "ipv4", IPv4AddressOption(payload)
             if kind_name in {"fqdn", "domain"}:
-                return "fqdn", CccProvisioningServerFqdn(payload)
+                return "fqdn", CCCProvisioningServerFQDN(payload)
             raise DHCPValueError(
                 "CCC provisioning server address kind must be ipv4 or fqdn"
             )
@@ -97,13 +97,13 @@ class CccProvisioningServerAddress(DHCPOptionType):
                 # '999.1.1.1'. A bare `except Exception` also swallowed a
                 # genuine defect in the codec and silently reclassified the
                 # value as an FQDN.
-                return "fqdn", CccProvisioningServerFqdn(value)
-        if isinstance(value, CccProvisioningServerFqdn):
+                return "fqdn", CCCProvisioningServerFQDN(value)
+        if isinstance(value, CCCProvisioningServerFQDN):
             return "fqdn", value
         return "ipv4", IPv4AddressOption(value)
 
     @classmethod
-    def _read_payload(cls, payload: memoryview) -> "CccProvisioningServerAddress":
+    def _read_payload(cls, payload: memoryview) -> "CCCProvisioningServerAddress":
         if len(payload) < 1:
             raise DHCPDecodeError("CCC provisioning server address is truncated")
         kind = payload[0]
@@ -119,7 +119,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
                 raise DHCPDecodeError(
                     "CCC provisioning server FQDN payload is truncated"
                 )
-            return cls(("fqdn", CccProvisioningServerFqdn(text)))
+            return cls(("fqdn", CCCProvisioningServerFQDN(text)))
         raise DHCPDecodeError(
             f"CCC provisioning server address kind {kind} is unsupported"
         )
@@ -127,7 +127,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
     @classmethod
     def _dhcp_read(
         cls, option: memoryview
-    ) -> tuple["CccProvisioningServerAddress", int]:
+    ) -> tuple["CCCProvisioningServerAddress", int]:
         return cls._read_payload(option), len(option)
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -136,7 +136,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
             ipv4_payload = _ty.cast(IPv4AddressOption, self.value)
             data.extend(ipv4_payload.packed)
             return 5
-        fqdn_payload = _ty.cast(CccProvisioningServerFqdn, self.value)
+        fqdn_payload = _ty.cast(CCCProvisioningServerFQDN, self.value)
         encoded = fqdn_payload._dhcp_encode()
         data.extend(encoded)
         return len(encoded) + 1
@@ -155,7 +155,7 @@ class CccProvisioningServerAddress(DHCPOptionType):
         ]
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, CccProvisioningServerAddress):
+        if not isinstance(other, CCCProvisioningServerAddress):
             return NotImplemented
         return (self.kind, self.value) == (other.kind, other.value)
 
@@ -163,20 +163,18 @@ class CccProvisioningServerAddress(DHCPOptionType):
         return hash((self.kind, self.value))
 
 
-class CccPrimaryDhcpServerAddress(IPv4AddressOption):
+class CCCPrimaryDHCPServerAddress(IPv4AddressOption):
     """CCC sub-option 1 primary DHCP server address."""
 
 
-class CccSecondaryDhcpServerAddress(IPv4AddressOption):
+class CCCSecondaryDHCPServerAddress(IPv4AddressOption):
     """CCC sub-option 2 secondary DHCP server address."""
 
 
-_CccAsReqAsRepBackoffRetryT = _ty.TypeVar(
-    "_CccAsReqAsRepBackoffRetryT", bound="CccAsReqAsRepBackoffRetry"
-)
+_CCCASBackoffRetryT = _ty.TypeVar("_CCCASBackoffRetryT", bound="CCCASBackoffRetry")
 
 
-class CccAsReqAsRepBackoffRetry(DHCPOptionType):
+class CCCASBackoffRetry(DHCPOptionType):
     """CCC sub-option 4 AS-REQ/AS-REP backoff and retry tuple."""
 
     def __init__(
@@ -191,8 +189,8 @@ class CccAsReqAsRepBackoffRetry(DHCPOptionType):
 
     @classmethod
     def _dhcp_read(
-        cls: type[_CccAsReqAsRepBackoffRetryT], option: memoryview
-    ) -> tuple[_CccAsReqAsRepBackoffRetryT, int]:
+        cls: type[_CCCASBackoffRetryT], option: memoryview
+    ) -> tuple[_CCCASBackoffRetryT, int]:
         if len(option) != 12:
             raise DHCPDecodeError(f"{cls.__name__} option must contain 12 bytes")
         return (
@@ -218,7 +216,7 @@ class CccAsReqAsRepBackoffRetry(DHCPOptionType):
         )
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, CccAsReqAsRepBackoffRetry):
+        if not isinstance(other, CCCASBackoffRetry):
             return NotImplemented
         return (
             self.initial_timeout,
@@ -239,35 +237,35 @@ class CccAsReqAsRepBackoffRetry(DHCPOptionType):
         return [self.initial_timeout, self.maximum_timeout, self.maximum_retry_count]
 
 
-class CccApReqApRepBackoffRetry(CccAsReqAsRepBackoffRetry):
+class CCCAPBackoffRetry(CCCASBackoffRetry):
     """CCC sub-option 5 AP-REQ/AP-REP backoff and retry tuple."""
 
 
-class CccTicketGrantingServerUtilization(Boolean):
+class CCCTicketGrantingServerUtilization(Boolean):
     """CCC sub-option 7 ticket-granting server utilization toggle."""
 
 
-class CccProvisioningTimer(U8):
+class CCCProvisioningTimer(U8):
     """CCC sub-option 8 provisioning timer value."""
 
 
-_CccSecurityTicketControlT = _ty.TypeVar(
-    "_CccSecurityTicketControlT", bound="CccSecurityTicketControl"
+_CCCSecurityTicketControlT = _ty.TypeVar(
+    "_CCCSecurityTicketControlT", bound="CCCSecurityTicketControl"
 )
 
 
-class CccSecurityTicketControl(DHCPOptionType, int):
+class CCCSecurityTicketControl(DHCPOptionType, int):
     """CCC sub-option 9 security ticket control mask."""
 
     def __new__(
-        cls: type[_CccSecurityTicketControlT], value: _ty.Any
-    ) -> _CccSecurityTicketControlT:
+        cls: type[_CCCSecurityTicketControlT], value: _ty.Any
+    ) -> _CCCSecurityTicketControlT:
         return int.__new__(cls, int(value))
 
     @classmethod
     def _dhcp_read(
-        cls: type[_CccSecurityTicketControlT], option: memoryview
-    ) -> tuple[_CccSecurityTicketControlT, int]:
+        cls: type[_CCCSecurityTicketControlT], option: memoryview
+    ) -> tuple[_CCCSecurityTicketControlT, int]:
         if len(option) != 2:
             raise DHCPDecodeError(f"{cls.__name__} option must contain 2 bytes")
         return cls(int.from_bytes(option, "big")), 2
@@ -289,14 +287,14 @@ class CccSecurityTicketControl(DHCPOptionType, int):
         return int(self)
 
 
-class CccKdcServerAddressList(List[IPv4AddressOption]):
+class CCCKDCServerAddressList(List[IPv4AddressOption]):
     """CCC sub-option 10 KDC server address list."""
 
 
-_CccSubOptionT = _ty.TypeVar("_CccSubOptionT", bound="CccSubOption")
+_CCCSubOptionT = _ty.TypeVar("_CCCSubOptionT", bound="CCCSubOption")
 
 
-class CccSubOption(DHCPOptionType):
+class CCCSubOption(DHCPOptionType):
     """Typed CCC sub-option record."""
 
     _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
@@ -325,8 +323,8 @@ class CccSubOption(DHCPOptionType):
 
     @classmethod
     def _from_payload(
-        cls: type[_CccSubOptionT], code: int, payload: memoryview
-    ) -> _CccSubOptionT:
+        cls: type[_CCCSubOptionT], code: int, payload: memoryview
+    ) -> _CCCSubOptionT:
         return cls(code, cls._read_payload(payload))
 
     def _dhcp_write(self, data: bytearray) -> int:
@@ -343,7 +341,7 @@ class CccSubOption(DHCPOptionType):
         return f"{type(self).__name__}(code={self.code!r}, value={self.value!r})"
 
     def __eq__(self, other: object) -> bool:
-        if not isinstance(other, CccSubOption):
+        if not isinstance(other, CCCSubOption):
             return NotImplemented
         return (self.code, self.value) == (other.code, other.value)
 
@@ -359,7 +357,7 @@ class CccSubOption(DHCPOptionType):
         return [self.code, value]
 
 
-class _CccFixedPayloadSubOption(CccSubOption):
+class _CCCFixedPayloadSubOption(CCCSubOption):
     _PAYLOAD_TYPE: type[DHCPOptionType] = Bytes
 
     @classmethod
@@ -378,90 +376,90 @@ class _CccFixedPayloadSubOption(CccSubOption):
         return _ty.cast(DHCPOptionType, self.value)._dhcp_write(data)
 
 
-class CccPrimaryDhcpServerAddressSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccPrimaryDhcpServerAddress
+class CCCPrimaryDHCPServerAddressSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCPrimaryDHCPServerAddress
 
 
-class CccSecondaryDhcpServerAddressSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccSecondaryDhcpServerAddress
+class CCCSecondaryDHCPServerAddressSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCSecondaryDHCPServerAddress
 
 
-class CccProvisioningServerAddressSubOption(CccSubOption):
+class CCCProvisioningServerAddressSubOption(CCCSubOption):
     @classmethod
     def _normalize_value(cls, code: int, value: _ty.Any) -> _ty.Any:
-        if isinstance(value, CccProvisioningServerAddress):
+        if isinstance(value, CCCProvisioningServerAddress):
             return value
-        return CccProvisioningServerAddress(value)
+        return CCCProvisioningServerAddress(value)
 
     @classmethod
     def _read_payload(cls, payload: memoryview) -> _ty.Any:
-        return CccProvisioningServerAddress._dhcp_decode(payload)
+        return CCCProvisioningServerAddress._dhcp_decode(payload)
 
     def _write_payload(self, data: bytearray) -> int:
-        return _ty.cast(CccProvisioningServerAddress, self.value)._dhcp_write(data)
+        return _ty.cast(CCCProvisioningServerAddress, self.value)._dhcp_write(data)
 
 
-class CccAsReqAsRepBackoffRetrySubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccAsReqAsRepBackoffRetry
+class CCCASBackoffRetrySubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCASBackoffRetry
 
 
-class CccApReqApRepBackoffRetrySubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccApReqApRepBackoffRetry
+class CCCAPBackoffRetrySubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCAPBackoffRetry
 
 
-class CccKerberosRealmNameSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccKerberosRealmName
+class CCCKerberosRealmNameSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCKerberosRealmName
 
 
-class CccTicketGrantingServerUtilizationSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccTicketGrantingServerUtilization
+class CCCTicketGrantingServerUtilizationSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCTicketGrantingServerUtilization
 
 
-class CccProvisioningTimerSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccProvisioningTimer
+class CCCProvisioningTimerSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCProvisioningTimer
 
 
-class CccSecurityTicketControlSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccSecurityTicketControl
+class CCCSecurityTicketControlSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCSecurityTicketControl
 
 
-class CccKdcServerAddressSubOption(_CccFixedPayloadSubOption):
-    _PAYLOAD_TYPE = CccKdcServerAddressList
+class CCCKDCServerAddressSubOption(_CCCFixedPayloadSubOption):
+    _PAYLOAD_TYPE = CCCKDCServerAddressList
 
 
-_CCC_SUBOPTION_TYPES: dict[int, type[CccSubOption]] = {
-    1: CccPrimaryDhcpServerAddressSubOption,
-    2: CccSecondaryDhcpServerAddressSubOption,
-    3: CccProvisioningServerAddressSubOption,
-    4: CccAsReqAsRepBackoffRetrySubOption,
-    5: CccApReqApRepBackoffRetrySubOption,
-    6: CccKerberosRealmNameSubOption,
-    7: CccTicketGrantingServerUtilizationSubOption,
-    8: CccProvisioningTimerSubOption,
-    9: CccSecurityTicketControlSubOption,
-    10: CccKdcServerAddressSubOption,
+_CCC_SUBOPTION_TYPES: dict[int, type[CCCSubOption]] = {
+    1: CCCPrimaryDHCPServerAddressSubOption,
+    2: CCCSecondaryDHCPServerAddressSubOption,
+    3: CCCProvisioningServerAddressSubOption,
+    4: CCCASBackoffRetrySubOption,
+    5: CCCAPBackoffRetrySubOption,
+    6: CCCKerberosRealmNameSubOption,
+    7: CCCTicketGrantingServerUtilizationSubOption,
+    8: CCCProvisioningTimerSubOption,
+    9: CCCSecurityTicketControlSubOption,
+    10: CCCKDCServerAddressSubOption,
 }
 
 
-_CccOptionT = _ty.TypeVar("_CccOptionT", bound="CccOption")
+_CCCOptionT = _ty.TypeVar("_CCCOptionT", bound="CCCOption")
 
 
-class CccOption(RecordList[CccSubOption]):
+class CCCOption(RecordList[CCCSubOption]):
     """CCC option container preserving unknown sub-options."""
 
     @classmethod
-    def _normalize(cls, item: _ty.Any) -> CccSubOption:
+    def _normalize(cls, item: _ty.Any) -> CCCSubOption:
         # Its own, because the record class is chosen by the sub-option code
         # rather than fixed for the container: an unknown code must still round
-        # trip, as the plain `CccSubOption` fallback.
-        if isinstance(item, CccSubOption):
+        # trip, as the plain `CCCSubOption` fallback.
+        if isinstance(item, CCCSubOption):
             return item
         code, value = item
-        record_type = _CCC_SUBOPTION_TYPES.get(int(code), CccSubOption)
+        record_type = _CCC_SUBOPTION_TYPES.get(int(code), CCCSubOption)
         return record_type(int(code), value)
 
     @classmethod
-    def _read_record(cls, option: memoryview) -> tuple[CccSubOption, int]:
+    def _read_record(cls, option: memoryview) -> tuple[CCCSubOption, int]:
         if len(option) < 2:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         code = option[0]
@@ -469,13 +467,13 @@ class CccOption(RecordList[CccSubOption]):
         if len(option) < 2 + length:
             raise DHCPDecodeError(f"{cls.__name__} option is truncated")
         payload = option[2 : 2 + length]
-        record_type = _CCC_SUBOPTION_TYPES.get(code, CccSubOption)
+        record_type = _CCC_SUBOPTION_TYPES.get(code, CCCSubOption)
         return record_type._from_payload(code, payload), 2 + length
 
     @classmethod
     def _dhcp_read(
-        cls: type[_CccOptionT], option: memoryview
-    ) -> tuple[_CccOptionT, int]:
+        cls: type[_CCCOptionT], option: memoryview
+    ) -> tuple[_CCCOptionT, int]:
         # Its own, because each record's class comes from `_read_record`'s code
         # lookup, not from the container's item type.
         self = cls()

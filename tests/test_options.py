@@ -28,17 +28,17 @@ from pydhcp.options.type import (
     MoSIPv4AddressRecord,
     MoSFQDNRecord,
     URIList,
-    CccOption,
-    CccPrimaryDhcpServerAddressSubOption,
-    CccSecondaryDhcpServerAddressSubOption,
-    CccProvisioningServerAddressSubOption,
-    CccAsReqAsRepBackoffRetrySubOption,
-    CccApReqApRepBackoffRetrySubOption,
-    CccKerberosRealmNameSubOption,
-    CccTicketGrantingServerUtilizationSubOption,
-    CccProvisioningTimerSubOption,
-    CccSecurityTicketControlSubOption,
-    CccKdcServerAddressSubOption,
+    CCCOption,
+    CCCPrimaryDHCPServerAddressSubOption,
+    CCCSecondaryDHCPServerAddressSubOption,
+    CCCProvisioningServerAddressSubOption,
+    CCCASBackoffRetrySubOption,
+    CCCAPBackoffRetrySubOption,
+    CCCKerberosRealmNameSubOption,
+    CCCTicketGrantingServerUtilizationSubOption,
+    CCCProvisioningTimerSubOption,
+    CCCSecurityTicketControlSubOption,
+    CCCKDCServerAddressSubOption,
 )
 
 
@@ -772,20 +772,20 @@ def test_raw_wire_decoding_for_vi_vendor_class_registration():
 
 
 def test_ccc_option_code_registration_and_round_trip():
-    assert DHCPOptionCode.CCC.get_type() is CccOption
+    assert DHCPOptionCode.CCC.get_type() is CCCOption
 
-    value = CccOption(
+    value = CCCOption(
         [
-            CccPrimaryDhcpServerAddressSubOption(1, "192.0.2.1"),
-            CccSecondaryDhcpServerAddressSubOption(2, "192.0.2.2"),
-            CccProvisioningServerAddressSubOption(3, ("fqdn", "tsp.example")),
-            CccAsReqAsRepBackoffRetrySubOption(4, (1, 2, 3)),
-            CccApReqApRepBackoffRetrySubOption(5, (4, 5, 6)),
-            CccKerberosRealmNameSubOption(6, "EXAMPLE.COM"),
-            CccTicketGrantingServerUtilizationSubOption(7, True),
-            CccProvisioningTimerSubOption(8, 9),
-            CccSecurityTicketControlSubOption(9, 3),
-            CccKdcServerAddressSubOption(10, ["192.0.2.10", "192.0.2.11"]),
+            CCCPrimaryDHCPServerAddressSubOption(1, "192.0.2.1"),
+            CCCSecondaryDHCPServerAddressSubOption(2, "192.0.2.2"),
+            CCCProvisioningServerAddressSubOption(3, ("fqdn", "tsp.example")),
+            CCCASBackoffRetrySubOption(4, (1, 2, 3)),
+            CCCAPBackoffRetrySubOption(5, (4, 5, 6)),
+            CCCKerberosRealmNameSubOption(6, "EXAMPLE.COM"),
+            CCCTicketGrantingServerUtilizationSubOption(7, True),
+            CCCProvisioningTimerSubOption(8, 9),
+            CCCSecurityTicketControlSubOption(9, 3),
+            CCCKDCServerAddressSubOption(10, ["192.0.2.10", "192.0.2.11"]),
             (99, b"\x01\x02\x03"),
         ]
     )

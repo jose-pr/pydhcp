@@ -147,7 +147,7 @@ class RecordList(List[_T]):
     """Typed list of two-field records, normalized from `(first, second)` pairs.
 
     Five containers repeated `List`'s whole shape around a record type that
-    takes two constructor arguments -- the MoS options, the two RFC 3925 `Vi*`
+    takes two constructor arguments -- the MoS options, the two RFC 3925 `VI*`
     options, option 82's encapsulated TLVs and the CCC option. They differ from
     `List` in exactly one place: a record is *itself* a two-element sequence, so
     `List.__init__`'s rule that a tuple argument is a sequence of items would
