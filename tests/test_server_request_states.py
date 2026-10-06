@@ -534,6 +534,49 @@ def test_s4_3_1_a_discover_relayed_from_inside_the_served_network_is_offered(
     assert offer.dest == IPv4("10.0.0.2")
 
 
+def test_s4_3_2_a_selecting_request_relayed_from_inside_the_served_network_is_acked(
+    server,
+) -> None:
+    """A relayed request for an on-subnet address is answered like any other,
+    to the relay at `giaddr` and the relay port (RFC 2131 s4.1)."""
+    _offer(server, A, "10.0.0.61")
+    (reply,) = _send(
+        server,
+        _message(
+            DHCPMessageType.DHCPREQUEST,
+            A,
+            giaddr="10.0.0.2",
+            requested="10.0.0.61",
+            server_id="10.0.0.1",
+        ),
+        source="10.0.0.2",
+    )
+    assert reply.type is DHCPMessageType.DHCPACK
+    assert reply.message.yiaddr == IPv4("10.0.0.61")
+    assert (reply.dest, reply.port) == (IPv4("10.0.0.2"), 67)
+
+
+def test_s4_3_2_a_selecting_request_relayed_for_an_address_off_the_network_is_nakked(
+    server,
+) -> None:
+    """The address is not one this server serves for that client's network:
+    "the server responds with a DHCPNAK" to a SELECTING request it cannot
+    satisfy, through the relay."""
+    (reply,) = _send(
+        server,
+        _message(
+            DHCPMessageType.DHCPREQUEST,
+            A,
+            giaddr="10.5.5.1",
+            requested="10.5.5.61",
+            server_id="10.0.0.1",
+        ),
+        source="10.5.5.1",
+    )
+    assert reply.type is DHCPMessageType.DHCPNAK
+    assert reply.message.giaddr == IPv4("10.5.5.1")
+
+
 # --- RFC 2131 s4.3.5 and s3.4: DHCPINFORM ---------------------------------------
 
 
