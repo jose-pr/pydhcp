@@ -23,7 +23,7 @@ from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPFlags
 from pydhcp.packet import HardwareAddressType
 from pydhcp.packet import DHCPOpcode
-from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet._message import DHCPMessage
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions
 

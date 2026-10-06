@@ -23,7 +23,7 @@ of the installed package).
   - Also re-exported as `pydhcp.packet.HardwareAddressType`, which is where
     the rest of the message-header enums live and the spelling most code
     uses. It is *defined* here because `pydhcp.options.type` needs it to name a
-    client identifier's type octet and `pydhcp.packet.enums` imports
+    client identifier's type octet and `pydhcp.packet._enums` imports
     `pydhcp.options.type` — defining it there made that a cycle.
 - **`SocketAddress(ip, port=None)`** (`NamedTuple[ip: IPv4Address, port: int]`) —
   `ip` may be a `str`, an `ipaddress.IPv4Address`, or a bound `socket.socket`

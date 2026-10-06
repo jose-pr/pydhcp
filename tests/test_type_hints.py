@@ -28,8 +28,8 @@ _WITH_ALL = [
     "pydhcp.listener",
     "pydhcp.options.type",
     "pydhcp.packet",
-    "pydhcp.packet.enums",
-    "pydhcp.packet.message",
+    "pydhcp.packet._enums",
+    "pydhcp.packet._message",
     "pydhcp.server",
 ]
 

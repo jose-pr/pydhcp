@@ -239,8 +239,8 @@ SURFACE = {
     "pydhcp.listener": EXPECTED_LISTENER,
     "pydhcp.options.type": EXPECTED_OPTIONS_TYPE,
     "pydhcp.packet": EXPECTED_PACKET,
-    "pydhcp.packet.enums": EXPECTED_PACKET_ENUMS,
-    "pydhcp.packet.message": EXPECTED_PACKET_MESSAGE,
+    "pydhcp.packet._enums": EXPECTED_PACKET_ENUMS,
+    "pydhcp.packet._message": EXPECTED_PACKET_MESSAGE,
     "pydhcp.server": EXPECTED_SERVER,
 }
 

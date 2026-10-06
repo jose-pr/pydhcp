@@ -7,7 +7,7 @@ import datetime as _dt
 import typing as _ty
 
 from ..exceptions import DHCPDecodeError
-from . import enums as _enum
+from . import _enums as _enum
 
 from ..options import DHCPOptionCode, DHCPOptions
 from ..options import type as _type

@@ -12,7 +12,7 @@ top-level package header.
 `DHCPMessage` is defined in layers, each a private module of `pydhcp.packet`
 subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
 `_encode`, `_mapping` and `_display`. Import `DHCPMessage` from
-`pydhcp.packet.message` (or `pydhcp.packet`) as before;
+`pydhcp.packet._message` (or `pydhcp.packet`) as before;
 `decode`/`from_mapping` are typed to return the class they are called on.
 
 - **`DHCPMessage`** (dataclass) — the full DHCPv4 wire message. Fields:

@@ -8,7 +8,7 @@ import typing as _ty
 
 from ..lease import LeaseBackend
 from ..listener import DHCPListener as _Base
-from ..packet import enums as _enum
+from ..packet import _enums as _enum
 
 
 class _ServerState(_Base):

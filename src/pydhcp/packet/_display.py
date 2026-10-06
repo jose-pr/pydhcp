@@ -15,7 +15,7 @@ from ._mapping import _MessageMapping
 if _ty.TYPE_CHECKING:
     # Annotation only: the callback receives the public class, and importing
     # it at run time would be a cycle (message.py builds on this module).
-    from .message import DHCPMessage
+    from ._message import DHCPMessage
 
 LOGGER = _logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ import logging
 import pytest
 from datetime import timedelta
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
-from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet._message import DHCPMessage
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptions

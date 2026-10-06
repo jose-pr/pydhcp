@@ -9,7 +9,7 @@ import netimps
 
 from pydhcp import DHCPOptions, DHCPServer
 from pydhcp.options import DHCPOptionCode
-from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet._message import DHCPMessage
 from pydhcp.server import DHCPLease
 
 LOGGER = logging.getLogger()

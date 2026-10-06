@@ -20,7 +20,7 @@ from pydhcp.options.type.ccc import CCCProvisioningServerAddress
 from pydhcp.options.type.addresses import IPv4AddressOption
 from pydhcp.options.type.scalar import U32
 from pydhcp.packet import DHCPMessageType
-from pydhcp.packet import message as _message
+from pydhcp.packet import _message as _message
 from pydhcp.packet import structured
 
 

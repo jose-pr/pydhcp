@@ -1088,7 +1088,7 @@ def _capture_event_with_client_id(client_id: bytes):
         HardwareAddressType,
         DHCPOpcode,
     )
-    from pydhcp.packet.message import DHCPMessage
+    from pydhcp.packet._message import DHCPMessage
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER

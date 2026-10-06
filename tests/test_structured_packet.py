@@ -56,7 +56,7 @@ def _message_with_option(code, payload):
 
     from pydhcp.options import DHCPOptionCode, DHCPOptions
     from pydhcp.packet import DHCPMessageType
-    from pydhcp.packet.message import DHCPMessage
+    from pydhcp.packet._message import DHCPMessage
 
     options = DHCPOptions()
     options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER

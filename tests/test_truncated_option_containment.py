@@ -21,7 +21,7 @@ from pydhcp.lease import InMemoryLeaseBackend
 from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options import type as T
-from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet._message import DHCPMessage
 from pydhcp.server import DHCPServer
 
 

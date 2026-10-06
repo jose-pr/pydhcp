@@ -12,8 +12,8 @@ import netimps as _netimps
 
 from .. import _constants as _const, _network as _net
 from .._metrics import DHCPMetrics
-from ..packet import enums as _enum
-from ..packet.message import DHCPMessage
+from ..packet import _enums as _enum
+from ..packet._message import DHCPMessage
 from .binding import _bind_sockets, _close_socket
 from .receive import (
     DHCPRequestContext,

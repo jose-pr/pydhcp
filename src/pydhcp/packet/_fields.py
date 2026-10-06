@@ -9,7 +9,7 @@ import struct as _struct
 import typing as _ty
 
 from ..exceptions import DHCPValueError
-from . import enums as _enum
+from . import _enums as _enum
 from .. import _constants as _const, _nvt as _nvt
 from ..options import DHCPOptions
 

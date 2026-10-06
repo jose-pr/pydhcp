@@ -9,8 +9,8 @@ import netimps as _netimps
 from .. import _network as _net
 from ..lease import DHCPLease, LeaseBackend
 from ..listener import AsyncDHCPListener as _AsyncBase, ListenSpec, DHCPRequestContext
-from ..packet import enums as _enum
-from ..packet.message import DHCPMessage
+from ..packet import _enums as _enum
+from ..packet._message import DHCPMessage
 from .handlers import _Handlers
 from .policy import _NonExtendingBackend, _servable_interface
 from .reply import _is_loopback

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .code import DHCPOptionCode
-from ..packet.enums import DHCPMessageType
+from ..packet._enums import DHCPMessageType
 from .type import *
 
 DHCPOptionCode.TIME_OFFSET.register_type(I32)

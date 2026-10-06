@@ -13,8 +13,8 @@ from ..lease import DHCPLease
 from ..listener import DHCPRequestContext
 from ..options import DHCPOptionCode
 from ..options import type as _type
-from ..packet import enums as _enum
-from ..packet.message import DHCPMessage
+from ..packet import _enums as _enum
+from ..packet._message import DHCPMessage
 from math import inf as _inf
 from .policy import _LeasePolicy
 

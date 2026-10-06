@@ -7,7 +7,7 @@ import duho
 
 from ..listener.spec import _split_host_port
 from ..relay import DEFAULT_MAX_HOPS, DHCPRelay
-from ..packet.enums import DHCPPort
+from ..packet._enums import DHCPPort
 from ._common import _Command
 
 

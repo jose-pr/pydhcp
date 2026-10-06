@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from .enums import (
+from ._enums import (
     DHCPMessageType as DHCPMessageType,
     DHCPOpcode as DHCPOpcode,
     DHCPPort as DHCPPort,
     DHCPFlags as DHCPFlags,
     HardwareAddressType as HardwareAddressType,
 )
-from .message import DHCPMessage as DHCPMessage
+from ._message import DHCPMessage as DHCPMessage
 from .structured import (
     dump_mapping as dump_mapping,
     dump_message as dump_message,

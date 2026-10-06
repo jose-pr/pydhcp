@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timedelta
-from pydhcp.packet.message import DHCPMessage
+from pydhcp.packet._message import DHCPMessage
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4

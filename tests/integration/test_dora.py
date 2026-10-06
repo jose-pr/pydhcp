@@ -123,7 +123,7 @@ def test_routing_rfc2131():
 
 
 def test_relay_agent_information_echoed_in_reply():
-    from pydhcp.packet.message import DHCPMessage as _DHCPMessage
+    from pydhcp.packet._message import DHCPMessage as _DHCPMessage
     from pydhcp.options.type import RelayAgentInformation, TLVOption
 
     server = MockDHCPServer()

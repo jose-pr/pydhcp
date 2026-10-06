@@ -8,7 +8,7 @@ import typing as _ty
 
 from duho import Meta
 
-from ..packet.message import DHCPMessage
+from ..packet._message import DHCPMessage
 from ..packet.structured import dump_message, load_message
 from ._common import PACKET_FORMATS, _Command
 

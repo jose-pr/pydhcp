@@ -13,7 +13,7 @@ from . import _network as _net
 from .listener import AsyncDHCPListener, DHCPListener, ListenSpec, DHCPRequestContext
 from .options import DHCPOptionCode
 from .exceptions import NoClientIdentityError
-from .packet.message import DHCPMessage
+from .packet._message import DHCPMessage
 from .options import DHCPOptionType
 
 #: This module's logger, a child of the package logger `pydhcp` (which

@@ -5,7 +5,7 @@ import logging as _logging
 import time as _time
 import typing as _ty
 
-from .packet.message import DHCPMessage
+from .packet._message import DHCPMessage
 from .listener import (
     AsyncDHCPListener as _AsyncBase,
     DHCPListener as _Base,
@@ -16,7 +16,7 @@ from .listener import (
     UDPTransport as _UDPTransport,
 )
 from . import _constants as _const, _network as _net
-from .packet import enums as _enum
+from .packet import _enums as _enum
 from .options import DHCPOptionCode
 from .options import type as _type
 from .server.reply import _is_loopback

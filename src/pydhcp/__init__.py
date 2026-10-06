@@ -17,7 +17,7 @@ from .listener import (
     PktInfoUDPTransport as PktInfoUDPTransport,
     DHCPRequestContext as DHCPRequestContext,
 )
-from .packet.message import DHCPMessage as DHCPMessage
+from .packet._message import DHCPMessage as DHCPMessage
 from .options import (
     DHCPOptions as DHCPOptions,
     DHCPOption as DHCPOption,

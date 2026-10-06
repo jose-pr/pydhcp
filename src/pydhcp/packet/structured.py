@@ -6,7 +6,7 @@ from io import StringIO as _StringIO
 import typing as _ty
 
 from ..exceptions import DHCPDecodeError
-from .message import DHCPMessage
+from ._message import DHCPMessage
 
 # `..config` imports nothing from `pydhcp`, so the dependency is one-way and
 # adds no cycle; the optional-TOML ladder and its three near-identical error
