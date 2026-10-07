@@ -30,6 +30,12 @@ someone upgrading from 0.7.0.
   followed: a reply goes to port 67 for a relay and 68 for a client. `False` answers the port the
   request came from (`giaddr` at that port, at 67 when it is 68), which lets a sender choose where
   its reply goes.
+- **`DHCPServer.RENEWAL_TIMES`** (class attribute, `True`): an OFFER and an ACK carry the renewal
+  time (option 58, half the lease time) and the rebinding time (option 59, seven eighths of it), in
+  whole seconds rounded down and taken from the lease time the same reply carries, so a renewal
+  follows the time left (RFC 2131 s4.4.5). An option the lease's options already hold is kept, a
+  parameter request list does not remove them, and the ACK to a DHCPINFORM and an infinite lease
+  carry neither. The values have no random fuzz. `False` sends only what the lease holds.
 - **A `Bound: <address>` record (INFO) after each listening socket is bound**, with the port the kernel gave: `Listening on:` is
   logged before the bind and names the port that was asked for, which is `0` for an ephemeral one.
 - **`DHCPMessage.from_hex(text)`**: decode a message written as hexadecimal text (spaces, line
@@ -178,9 +184,8 @@ someone upgrading from 0.7.0.
   dhclient 4.4.3-P1, over 25 recorded exchanges (`tests/conformance/`) that replay on every platform with no
   peer installed. The README section "Differences from dnsmasq and ISC dhclient" states how far the
   comparison goes and lists the ten differences that are on purpose; `docs/conformance.md` has the table of
-  what each role covers and the RFC text behind each difference. Two differences are open and recorded as
-  expected failures: the renewal and rebinding times (options 58 and 59) are not sent, and a DHCPDECLINE
-  from a sender that holds no lease is ignored.
+  what each role covers and the RFC text behind each difference. One difference is open and recorded as
+  an expected failure: a DHCPDECLINE from a sender that holds no lease is ignored.
 
 ### Changed
 

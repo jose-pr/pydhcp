@@ -322,9 +322,10 @@ def test_reply_carries_exactly_the_requested_options_and_the_machinery() -> None
     is the lease's full option set, which is why the seeded lease here carries
     a DNS entry the request never asks for.
 
-    The three machinery options are the documented exceptions (4.3.1: message
-    type, server identifier, lease time), so the expected set is exactly the
-    request list plus those.
+    The machinery options are the documented exceptions (4.3.1: message type,
+    server identifier, lease time; 4.4.5: the renewal and rebinding times that
+    go with the lease time), so the expected set is exactly the request list
+    plus those.
     """
     msg = _message(DHCPMessageType.DHCPDISCOVER)
     msg.options[DHCPOptionCode.PARAMETER_REQUEST_LIST] = bytearray(
@@ -341,6 +342,8 @@ def test_reply_carries_exactly_the_requested_options_and_the_machinery() -> None
         int(DHCPOptionCode.DHCP_MESSAGE_TYPE),
         int(DHCPOptionCode.SERVER_IDENTIFIER),
         int(DHCPOptionCode.IP_ADDRESS_LEASE_TIME),
+        int(DHCPOptionCode.RENEWAL_TIME),
+        int(DHCPOptionCode.REBINDING_TIME),
     }
 
 
@@ -365,6 +368,8 @@ def test_a_client_that_sends_no_request_list_is_told_everything() -> None:
         int(DHCPOptionCode.DHCP_MESSAGE_TYPE),
         int(DHCPOptionCode.SERVER_IDENTIFIER),
         int(DHCPOptionCode.IP_ADDRESS_LEASE_TIME),
+        int(DHCPOptionCode.RENEWAL_TIME),
+        int(DHCPOptionCode.REBINDING_TIME),
     }
 
 

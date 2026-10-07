@@ -118,6 +118,13 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
     a finite 136-year lease. Override the method or the four attributes; this
     is the base allocator's policy only, so an `.acquire_lease()` override
     that builds its own lease is unaffected.
+  - **`RENEWAL_TIMES`** (class attribute, `True`) — a reply that carries a finite lease
+    time (an OFFER or ACK, not the ACK to a DHCPINFORM, not an infinite lease) also
+    carries option 58 as half and option 59 as seven eighths of it, rounded down
+    (RFC 2131 s4.4.5): 150 and 262 for 300 s, 50 and 87 for a renewal with 100 s left.
+    An option the lease's options hold is kept, and a request list does not remove
+    them. They are exact, with none of the RFC's random fuzz: a subclass wanting it
+    puts 58 and 59 in the options `acquire_lease` returns. `False` sends only those.
   - **`.quarantine_address()`** — stops offering `ip` for
     **`DECLINE_QUARANTINE_SECONDS`** (class attribute, `600.0`); `now` is `time.monotonic()` seconds, and when
     omitted (as `handle_decline` calls it, so an override taking only `ip` keeps
@@ -163,20 +170,17 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
   - **`.handle_release()`** releases only when the binding matches: RFC 2131 §4.4.6
     puts the address being given up in `ciaddr`, and a `DHCPRELEASE` naming a
     *different* address than the client holds is ignored and counted in
-    `releases_ignored`. Releasing on client identifier alone let a late or
-    duplicated RELEASE for an old address delete the client's current binding.
+    `releases_ignored`: a late or duplicated RELEASE cannot delete the current binding.
   - **`.get_inform_options()`** — override point for
     DHCPINFORM-only option sets (no address allocated, and no `DHCPLease` built:
     the ACK carries these options, no `yiaddr` and no lease time). Same default set, and
     the same omission of `ROUTER`/`DNS`, as `.acquire_lease()`.
   - **Host-address lookups use netimps' enumeration cache** (`cache=True`, a
-    one-second TTL), and `.bind()` clears it. "Which interface holds
-    `server_id`", "do we hold this address" and the listener's arrival-interface
-    resolution all need it per packet, and an uncached enumeration costs about
-    1 ms (35–42 ms with many adapters) — 1181 µs of a 1539 µs `handle()` on one measured box without the cache. With it the cost is at most one enumeration per second whatever the packet rate, and an address the host gains or loses is
-    noticed within a second without a re-bind.
-  - **`.handle_discover()`**/`.handle_request()`/`.handle_decline()`/`.handle_release()`/`.handle_inform()` — per-message-type handlers called
-    from `.handle()`; each is independently overridable.
+    one-second TTL), and `.bind()` clears it. "Which interface holds `server_id`",
+    "do we hold this address" and the arrival-interface resolution ask it per
+    packet; uncached an enumeration costs about 1 ms (35-42 ms with many adapters),
+    1181 µs of a 1539 µs `handle()` on one measured box. Cached it is at most one a
+    second, and an address the host gains or loses is noticed within a second.
   - **`.handle_request()`** answers each shape of RFC 2131 §4.3.2 from the lease
     `.acquire_lease()` returns for the client**, told apart by Table 4:
     **SELECTING** (option 54 names this server) is ACKed for the address it asks

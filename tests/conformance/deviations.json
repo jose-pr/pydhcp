@@ -61,12 +61,12 @@
   ],
   "ours": {
    "option-order": [
-    "53 1 28 3 51 54",
-    "53 1 28 3 51 54 82",
+    "53 1 28 3 51 58 59 54",
+    "53 1 28 3 51 58 59 54 82",
     "53 1 28 3 54"
    ]
   },
-  "difference": "The server lists its options in another order than dnsmasq 2.92 (this library: message type, subnet mask, broadcast address, router, then lease time and server identifier); the order carries no meaning.",
+  "difference": "The server lists its options in another order than dnsmasq 2.92 (this library: message type, subnet mask, broadcast address, router, then lease time, renewal and rebinding times and server identifier); the order carries no meaning.",
   "authority": "RFC 2131 and RFC 2132 define no order for the options of a reply beyond RFC 2132 s3.3 ('If both the subnet mask and the router option are specified in a DHCP reply, the subnet mask option MUST be first'), which both keep; this library's order is the project's own choice."
  },
  {

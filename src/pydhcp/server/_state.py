@@ -86,6 +86,14 @@ class _ServerState(_Timed):
     #: neighbour entry is installed out of band.
     UNICAST_TO_UNCONFIGURED_CLIENT = False
 
+    #: Whether a reply that carries a finite lease time also carries the
+    #: renewal time (option 58) and the rebinding time (option 59): half and
+    #: seven eighths of that lease time, rounded down (RFC 2131 s4.4.5), so a
+    #: renewal follows the time left. Only an option the reply does not already
+    #: hold is filled. The values are exact: a subclass that wants the "fuzz"
+    #: the RFC suggests adds its own where it builds a reply's options.
+    RENEWAL_TIMES: bool = True
+
     #: Lease length granted when the client asks for none.
     DEFAULT_LEASE_SECONDS: float = 3600
 

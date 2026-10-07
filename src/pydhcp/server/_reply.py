@@ -187,6 +187,8 @@ class _Replies(_LeasePolicy):
             if expires > 0:
                 resp.options[DHCPOptionCode.IP_ADDRESS_LEASE_TIME] = expires
                 resp.yiaddr = lease.ip
+                if self.RENEWAL_TIMES and expires != _const.INFINITE_LEASE_TIME:
+                    self._fill_renewal_times(resp.options, expires)
         resp.options[DHCPOptionCode.SERVER_IDENTIFIER] = actual_server_id
         resp.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = resp_ty
         if text is not None:
@@ -205,6 +207,19 @@ class _Replies(_LeasePolicy):
             # their state on it otherwise cannot match the reply to the request.
             resp.options[DHCPOptionCode.CLIENT_IDENTIFIER] = client_identifier
         return resp
+
+    @staticmethod
+    def _fill_renewal_times(options: DHCPOptions, lease_time: int) -> None:
+        """Add options 58 and 59 for `lease_time`, each only if absent (RFC 2131 s4.4.5).
+
+        T1 is half and T2 seven eighths of the lease time the same reply
+        carries, in whole seconds rounded down, so a renewal follows the time
+        left. No random fuzz: a reply is a function of its input.
+        """
+        if DHCPOptionCode.RENEWAL_TIME not in options:
+            options[DHCPOptionCode.RENEWAL_TIME] = lease_time // 2
+        if DHCPOptionCode.REBINDING_TIME not in options:
+            options[DHCPOptionCode.REBINDING_TIME] = lease_time * 7 // 8
 
     def _filter_and_send(
         self,
@@ -258,6 +273,11 @@ class _Replies(_LeasePolicy):
             DHCPOptionCode.RELAY_AGENT_INFORMATION,
             DHCPOptionCode.CLIENT_IDENTIFIER,
         ]
+        if self.RENEWAL_TIMES:
+            always_send += [
+                DHCPOptionCode.RENEWAL_TIME,
+                DHCPOptionCode.REBINDING_TIME,
+            ]
         requests_params: _ty.List[DHCPOptionCode] = []
         if requests_params_raw:
             requests_params = [*requests_params_raw, *always_send]

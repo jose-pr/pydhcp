@@ -171,9 +171,9 @@
   "role": "server",
   "feature": "Renewal and rebinding times (options 58 and 59) in OFFER and ACK",
   "rfc": "RFC 2131 s4.4.5",
-  "implemented": false,
+  "implemented": true,
   "cases": [],
-  "note": "Not sent; an open difference."
+  "note": "Half and seven eighths of the lease time in the same reply, without fuzz; every server case compares both options."
  },
  {
   "role": "server",
