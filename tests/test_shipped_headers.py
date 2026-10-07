@@ -301,7 +301,7 @@ def test_the_tests_header_names_every_test_file_and_directory():
     if not header.exists():
         pytest.skip("tests/AGENTS.md is not part of this tree")
     text = _text(header)
-    data = {"cases", "expected", "__pycache__", "data"}
+    data = {"cases", "transcripts", "expected", "__pycache__", "data"}
     names = [
         p.relative_to(tests).as_posix()
         for p in tests.rglob("*")

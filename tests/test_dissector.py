@@ -21,13 +21,13 @@ from pydhcp.capture import (
     register_dhcp_dissector,
 )
 
-CASES = pathlib.Path(__file__).parent / "conformance" / "cases"
+TRANSCRIPTS = pathlib.Path(__file__).parent / "conformance" / "transcripts"
 
 
 def _recorded() -> "list[_ty.Tuple[str, str, bytes]]":
     """Every recorded datagram as (source, destination, octets), in order."""
     found = []
-    for path in sorted(CASES.glob("*/case.json")):
+    for path in sorted(TRANSCRIPTS.glob("*/transcript.json")):
         for d in json.loads(path.read_text(encoding="utf-8"))["datagrams"]:
             found.append((d["src"], d["dst"], bytes.fromhex(d["payload"])))
     return found
@@ -179,5 +179,5 @@ def test_a_frame_that_is_not_dhcp_is_malformed_not_fatal(
     assert dissector.stats.malformed == 1
 
 
-def test_the_builder_of_the_fixture_is_the_recorded_cases() -> None:
+def test_the_builder_of_the_fixture_is_the_recorded_transcripts() -> None:
     assert build.recorded() == SAMPLES

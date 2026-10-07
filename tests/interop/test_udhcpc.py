@@ -17,7 +17,7 @@ from ._topo import (
     relayed,
     single,
 )
-from .conftest import _cannot, need, peer_version, record_case
+from .conftest import _cannot, need, peer_version, record_transcript
 
 
 def _need_udhcpc() -> None:
@@ -56,7 +56,7 @@ def test_udhcpc_completes_dora_from_the_server(lab):
     assert [f.type_name() for f in replies][:2] == ["DHCPOFFER", "DHCPACK"]
     assert {f.src_ip for f in replies} == {net.server_ip}
 
-    record_case(
+    record_transcript(
         "udhcpc_server_dora",
         "udhcpc with no address obtains a lease from a wildcard-bound pydhcp "
         "server on one segment",
@@ -90,7 +90,7 @@ def test_udhcpc_completes_dora_through_the_relay(lab):
     for frame in delivered:
         assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in frame.message().options
 
-    record_case(
+    record_transcript(
         "udhcpc_relay_dora",
         "udhcpc obtains a lease through a pydhcp relay from a pydhcp server on "
         "another segment",

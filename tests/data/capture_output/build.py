@@ -1,7 +1,7 @@
 """What `pydhcp capture` writes for a fixed input, as a process, octet for octet.
 
-`INPUT` is the 50 datagrams recorded under `tests/conformance/cases/` (case
-directories sorted by name, then index), the two messages in `tests/data/`, and
+`INPUT` is the 50 datagrams recorded under `tests/conformance/transcripts/`
+(transcript directories sorted by name, then index), the two messages in `tests/data/`, and
 one DISCOVER carrying a 255-octet client identifier. Each scenario starts
 `pydhcp capture` on a loopback port, sends the input from one socket in order
 and keeps what the command wrote: its standard output, the files and their
@@ -11,7 +11,7 @@ names, its status.
 every platform. `python build.py write` rewrites it from the code in the tree.
 
 Every input holds only private addresses and locally administered hardware
-addresses: a recorded case already does, and the two messages in `tests/data/`
+addresses: a recorded transcript already does, and the two messages in `tests/data/`
 carry a placeholder address whose first octet is made locally administered here.
 """
 
@@ -29,7 +29,7 @@ import typing as _ty
 
 HERE = pathlib.Path(__file__).resolve().parent
 TESTS = HERE.parent.parent
-CASES = TESTS / "conformance" / "cases"
+TRANSCRIPTS = TESTS / "conformance" / "transcripts"
 EXPECTED = HERE / "expected"
 
 if str(TESTS) not in sys.path:
@@ -45,9 +45,9 @@ RUN_SECONDS = 120.0
 
 
 def recorded() -> "list[bytes]":
-    """Every datagram of every recorded case: cases by name, then index."""
+    """Every datagram of every recorded transcript: transcripts by name, then index."""
     found = []
-    for path in sorted(CASES.glob("*/case.json")):
+    for path in sorted(TRANSCRIPTS.glob("*/transcript.json")):
         case = json.loads(path.read_text(encoding="utf-8"))
         found.extend(bytes.fromhex(d["payload"]) for d in case["datagrams"])
     return found

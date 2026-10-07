@@ -13,7 +13,7 @@ import pytest
 
 from ._peers import dhclient
 from ._topo import ROLES_SINGLE, single
-from .conftest import need, peer_version, record_case
+from .conftest import need, peer_version, record_transcript
 
 
 @pytest.mark.parametrize("kind", ["sync", "async"])
@@ -48,7 +48,7 @@ def test_dhclient_completes_dora_from_a_wildcard_server(lab, kind):
         assert frame.dst_mac == "ff:ff:ff:ff:ff:ff"
         assert frame.dport == 68
 
-    record_case(
+    record_transcript(
         f"dhclient_{kind}_server_dora",
         "dhclient with no address obtains a lease from a wildcard-bound "
         f"{kind} pydhcp server on one segment",

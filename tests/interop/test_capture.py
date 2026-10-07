@@ -13,7 +13,7 @@ import json
 
 from ._peers import dhclient
 from ._topo import ROLES_SINGLE, single
-from .conftest import need, peer_version, record_case
+from .conftest import need, peer_version, record_transcript
 
 
 def _records(path):
@@ -48,7 +48,7 @@ def test_capture_alone_hears_every_discover_of_an_unanswered_client(lab):
     assert len(discovers) >= 2, records
     assert len({r["xid"] for r in discovers}) == 1
 
-    record_case(
+    record_transcript(
         "dhclient_unanswered_discover",
         "dhclient with no address and no server on the segment retransmits "
         "DISCOVER; a capture on the wildcard hears each one",

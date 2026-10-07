@@ -18,7 +18,9 @@ import pytest
 
 from . import _lab
 
-CASES = pathlib.Path(__file__).resolve().parents[1] / "conformance" / "cases"
+TRANSCRIPTS = (
+    pathlib.Path(__file__).resolve().parents[1] / "conformance" / "transcripts"
+)
 
 _REASON = _lab.unavailable()
 
@@ -81,7 +83,7 @@ def peer_version(program: str, *flags: str) -> str:
 
 
 def _private_strings() -> _ty.List[bytes]:
-    """What must never appear in a recorded case: this machine's names."""
+    """What must never appear in a recorded transcript: this machine's names."""
     names = {platform.node(), platform.node().split(".")[0]}
     for variable in ("USER", "LOGNAME", "SUDO_USER", "USERNAME"):
         value = os.environ.get(variable)
@@ -90,21 +92,21 @@ def _private_strings() -> _ty.List[bytes]:
     return [name.encode() for name in names if len(name) >= 3]
 
 
-def record_case(
+def record_transcript(
     name: str,
     description: str,
     peer: str,
     taps: _ty.Mapping[str, _lab.Tap],
     roles: _ty.Mapping[str, str],
 ) -> None:
-    """Save the datagrams a scenario exchanged as a replayable case.
+    """Save the datagrams a scenario exchanged as a replayable transcript.
 
-    Does nothing unless `PYDHCP_RECORD_CASES` is set, so a test run never edits
+    Does nothing unless `PYDHCP_RECORD_TRANSCRIPTS` is set, so a test run never edits
     the checkout. `roles` maps a hardware address on the wire to who sent it
     (`client`, `server`, `relay`); a role named `pydhcp-...` marks a datagram
     this library produced, which the replay test re-encodes byte for byte.
     """
-    if not os.environ.get("PYDHCP_RECORD_CASES"):
+    if not os.environ.get("PYDHCP_RECORD_TRANSCRIPTS"):
         return
     datagrams = []
     for segment, tap in taps.items():
@@ -124,11 +126,13 @@ def record_case(
             )
     blob = json.dumps(datagrams).encode()
     for private in _private_strings():
-        assert private not in blob, "a recorded case holds a name from this machine"
-    target = CASES / name
+        assert (
+            private not in blob
+        ), "a recorded transcript holds a name from this machine"
+    target = TRANSCRIPTS / name
     target.mkdir(parents=True, exist_ok=True)
     document = {"description": description, "peer": peer, "datagrams": datagrams}
-    (target / "case.json").write_bytes(
+    (target / "transcript.json").write_bytes(
         (json.dumps(document, indent=1) + "\n").encode("utf-8")
     )
 

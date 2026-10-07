@@ -84,7 +84,7 @@ Unit modules by area:
 
 `integration/`: `test_async.py`, `test_async_backlog.py`, `test_async_client.py`, `test_async_concurrency.py`, `test_async_relay_capture.py`, `test_benchmarks_suites.py`, `test_capture_command_hook.py`, `test_capture_drivers.py`, `test_capture_file.py`, `test_capture_file_output.py`, `test_capture_output.py`, `test_cli.py`, `test_cli_capture_bounds.py`, `test_cli_commands.py`, `test_cli_interrupt.py`, `test_cli_logging.py`, `test_cli_settings.py`, `test_cli_tools.py`, `test_client.py`, `test_documented_commands.py`, `test_dora.py`, `test_examples_run.py`, `test_listen_command.py`, `test_listen_interface.py`, `test_listener_binding.py`, `test_listener_lifecycle.py`, `test_listener_pktinfo_receive.py`, `test_listener_transport.py`, `test_relay_dora.py`, `test_relay_drivers.py`, `test_roles_run_clean.py`, `test_server_drivers.py`, `test_server_reply_ports.py` (as `integration/<name>`).
 
-`conformance/`: `rfc_vectors.py`, `test_decoders_fuzz.py`, `test_decoders_property.py`, `test_liberal_receive.py`, `test_recorded_cases.py`, `test_reserved_values.py`, `test_rfc_vectors.py`, `test_rfc3397_names.py`, `test_rfc4702_client_fqdn.py` (as `conformance/<name>`; `cases/` holds the recorded exchanges).
+`conformance/`: `rfc_vectors.py`, `test_decoders_fuzz.py`, `test_decoders_property.py`, `test_liberal_receive.py`, `test_reserved_values.py`, `test_rfc_vectors.py`, `test_rfc3397_names.py`, `test_rfc4702_client_fqdn.py`, `test_transcripts.py` (as `conformance/<name>`). `transcripts/<name>/transcript.json` is one exchange a stock peer and this library had on a real wire, recorded by the real-peer tests: its octets are what `data/capture_output/` and the dissector tests stand on, so a transcript is never edited and never re-recorded for tidiness (`PYDHCP_RECORD_TRANSCRIPTS=1` draws new transaction ids and invalidates the 188 expected capture files).
 
 `interop/`: `conftest.py`, `_lab.py`, `_peers.py`, `_topo.py`, the scenarios `test_addrbound.py`, `test_capture.py`, `test_dhclient_relay.py`, `test_dhclient_server.py`, `test_dnsmasq.py`, `test_full_buffer.py`, `test_listen_interface.py`, `test_reboot_and_nak.py`, `test_two_segments.py`, `test_udhcpc.py`, and the programs they start under `interop/roles/` (`addrbound_listen.py`, `capture.py`, `client_dora.py`, `emit.py`, `full_buffer.py`, `pool_server.py`, `relay.py`, `tap.py`).
 
@@ -151,7 +151,7 @@ sudo python -m pytest -q -rs tests/interop
 ```
 
 `PYDHCP_INTEROP_LOGS=<dir>` keeps each test's process logs and the frames on each segment;
-`PYDHCP_RECORD_CASES=1` rewrites `conformance/cases/` (compare the old and new case option by
+`PYDHCP_RECORD_TRANSCRIPTS=1` rewrites `conformance/transcripts/` (compare the old and new one option by
 option, and zero the transaction id before comparing bytes: udhcpc draws a new one each run);
 `PYDHCP_INTEROP_REQUIRE=1` (CI) turns a skip into a failure. The baseline is 32 passed with no
 expected failure. Traps of the peers: dhclient sends no client identifier by default;

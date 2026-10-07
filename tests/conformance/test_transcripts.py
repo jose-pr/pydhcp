@@ -1,10 +1,10 @@
 """Replay of what stock DHCP software and pydhcp sent each other on a real wire.
 
-Each directory under `cases/` is one exchange recorded by the tests in
+Each directory under `transcripts/` is one exchange recorded by the tests in
 `tests/interop` (ISC dhclient, BusyBox udhcpc and dnsmasq against pydhcp's
 server, relay and client, over veth pairs in network namespaces). Replaying
 needs no peer and no privilege, so it runs everywhere: the RFC stays the
-authority, and a case is evidence of what a stock peer sends and accepts.
+authority, and a transcript is evidence of what a stock peer sends and accepts.
 
 Every datagram must decode. A datagram that pydhcp sent must encode again to
 the same octets: what the library puts on the wire is what it reads back.
@@ -21,7 +21,9 @@ import pytest
 
 from pydhcp import DHCPMessage
 
-CASE_FILES = sorted((pathlib.Path(__file__).parent / "cases").glob("*/case.json"))
+TRANSCRIPT_FILES = sorted(
+    (pathlib.Path(__file__).parent / "transcripts").glob("*/transcript.json")
+)
 #: The IP datagram size `DHCPMessage.encode` is given: the RFC 2131 s2 minimum
 #: unless the recorded message was larger.
 MIN_DATAGRAM = 576
@@ -36,21 +38,21 @@ def _load(path: pathlib.Path) -> _ty.Dict[str, _ty.Any]:
 
 def _datagrams() -> _ty.List[_ty.Tuple[str, int, _ty.Dict[str, _ty.Any]]]:
     found = []
-    for path in CASE_FILES:
+    for path in TRANSCRIPT_FILES:
         for index, datagram in enumerate(_load(path)["datagrams"]):
             found.append((path.parent.name, index, datagram))
     return found
 
 
-def test_there_are_recorded_cases():
-    assert len(CASE_FILES) >= 3
+def test_there_are_transcripts():
+    assert len(TRANSCRIPT_FILES) >= 3
 
 
-@pytest.mark.parametrize("path", CASE_FILES, ids=lambda p: p.parent.name)
-def test_a_case_says_what_it_records(path):
-    case = _load(path)
-    assert case["description"] and case["peer"] and case["datagrams"]
-    for datagram in case["datagrams"]:
+@pytest.mark.parametrize("path", TRANSCRIPT_FILES, ids=lambda p: p.parent.name)
+def test_a_transcript_says_what_it_records(path):
+    transcript = _load(path)
+    assert transcript["description"] and transcript["peer"] and transcript["datagrams"]
+    for datagram in transcript["datagrams"]:
         assert set(datagram) == {"segment", "sender", "src", "dst", "payload"}
 
 
@@ -82,7 +84,9 @@ def test_what_pydhcp_sent_encodes_to_the_same_octets(name, index, datagram):
     _datagrams(),
     ids=lambda v: v if isinstance(v, str) else None,
 )
-def test_a_case_holds_nothing_from_the_machine_that_recorded_it(name, index, datagram):
+def test_a_transcript_holds_nothing_from_the_machine_that_recorded_it(
+    name, index, datagram
+):
     """Private addresses and locally administered hardware addresses only."""
     for end in (datagram["src"], datagram["dst"]):
         address = ipaddress.ip_address(end.rsplit(":", 1)[0])

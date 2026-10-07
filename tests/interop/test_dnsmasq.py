@@ -13,7 +13,7 @@ from pydhcp.options import DHCPOptionCode
 
 from ._peers import dhclient, dnsmasq
 from ._topo import RELAY_CLIENT_SIDE_MAC, ROLES_RELAYED, ROLES_SINGLE, relayed, single
-from .conftest import need, peer_version, record_case
+from .conftest import need, peer_version, record_transcript
 
 RANGE = "10.99.0.100,10.99.0.150,255.255.255.0,5m"
 
@@ -38,7 +38,7 @@ def test_dhclient_completes_dora_through_the_relay_from_dnsmasq(lab):
     forwarded = [f for f in server_tap.frames() if f.src_ip == "10.98.0.1"]
     assert {str(f.message().giaddr) for f in forwarded} == {net.relay_client_ip}
 
-    record_case(
+    record_transcript(
         "dnsmasq_behind_relay_dora",
         "dhclient obtains a lease through a pydhcp relay from dnsmasq on "
         "another segment",
@@ -72,7 +72,7 @@ def test_pydhcp_client_completes_dora_against_dnsmasq(lab):
     assert DHCPOptionCode.SUBNET_MASK.name in result["options"]
     assert result["options"]["SUBNET_MASK"] == "255.255.255.0"
 
-    record_case(
+    record_transcript(
         "dnsmasq_pydhcp_client_dora",
         "pydhcp's DHCPClient completes DISCOVER, OFFER, REQUEST, ACK against dnsmasq",
         peer_version("dnsmasq", "--version"),

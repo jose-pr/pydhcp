@@ -15,7 +15,7 @@ from pydhcp.options import DHCPOptionCode
 
 from ._peers import dhclient
 from ._topo import RELAY_CLIENT_SIDE_MAC, ROLES_RELAYED, relayed
-from .conftest import need, peer_version, record_case
+from .conftest import need, peer_version, record_transcript
 
 
 @pytest.mark.parametrize("kind", ["sync", "async"])
@@ -62,7 +62,7 @@ def test_dhclient_completes_dora_through_the_relay(lab, kind):
         assert frame.src_ip == net.relay_client_ip
         assert DHCPOptionCode.RELAY_AGENT_INFORMATION not in frame.message().options
 
-    record_case(
+    record_transcript(
         f"dhclient_{kind}_relay_dora",
         f"dhclient obtains a lease through a {kind} pydhcp relay from a "
         "pydhcp server on another segment",
