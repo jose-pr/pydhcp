@@ -5,7 +5,7 @@ Each directory under ``cases/`` holds ``case.json``, what is sent and the questi
 role cores with the same input (no socket) and compares, per step, the datagrams sent, their
 header fields, each option's octets and order, the padding and the destination. A difference
 is one of two things: a deviation (``deviations.json``: deliberate, asserted present in
-exactly its cases) or a divergence (``divergences.json``: a strict expected failure, so the
+exactly its cases, with the value of this library it states) or a divergence (``divergences.json``: a strict expected failure, so the
 fix that closes it forces the marker out). An aspect a case leaves out is named, with its
 reason, in the case's ``not_compared``.
 
@@ -32,6 +32,7 @@ DIVERGENCES = {
 CASES = exchange.cases()
 SERVING = [d for d in CASES if exchange.load(d)["role"] in ("server", "relay")]
 REFERENCES = {"server": "2.92", "relay": "2.92", "client": "4.4.3-P1"}
+_DIRECTORIES = {d.name: d for d in CASES}
 _PLAYED: dict = {}
 
 
@@ -167,17 +168,37 @@ def test_every_deviation_is_one_difference_with_its_authority():
 
     assert len({d["id"] for d in DEVIATIONS}) == len(DEVIATIONS)
     for entry in DEVIATIONS:
-        assert set(entry) == {"id", "aspects", "cases", "difference", "authority"}
+        assert set(entry) == {
+            "id",
+            "aspects",
+            "cases",
+            "ours",
+            "difference",
+            "authority",
+        }
         assert entry["difference"].endswith(".") and entry["authority"]
         assert entry["cases"] and set(entry["cases"]) <= names
 
 
-def test_a_deviation_shows_in_exactly_its_cases():
-    shown = {}
-    for directory in CASES:
-        found = {_key(step, d) for step, d in replay.compare(directory)}
-        for entry in DEVIATIONS:
-            if found & set(entry["aspects"]):
-                shown.setdefault(entry["id"], set()).add(directory.name)
+def test_a_deviation_shows_in_every_case_it_lists():
+    """A case is covered only by the deviations that list it, so the listed cases are the whole of it."""
+    for entry in DEVIATIONS:
+        for name in entry["cases"]:
+            found = {_key(step, d) for step, d in replay.compare(_DIRECTORIES[name])}
 
-    assert shown == {entry["id"]: set(entry["cases"]) for entry in DEVIATIONS}
+            assert found & set(entry["aspects"]), (entry["id"], name)
+
+
+def test_a_deviation_differs_in_exactly_the_way_it_states():
+    """The aspects that differ, and this library's value of each, are what the entry lists."""
+    for entry in DEVIATIONS:
+        keys = set()
+        ours = {}
+        for name in entry["cases"]:
+            for step, d in replay.compare(_DIRECTORIES[name]):
+                if _key(step, d) in entry["aspects"]:
+                    keys.add(_key(step, d))
+                    ours.setdefault(d.aspect, set()).add(str(d.ours))
+
+        assert keys == set(entry["aspects"]), entry["id"]
+        assert {a: sorted(v) for a, v in ours.items()} == entry["ours"], entry["id"]
