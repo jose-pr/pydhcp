@@ -476,10 +476,12 @@ def _refused_an_unassigned_pin(caplog) -> bool:
 def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
     caplog,
 ) -> None:
-    """On real sockets: the client addressed 127.0.0.2, which `lo` does not
-    list, and the reply must come from there (the adapter's first address,
-    127.0.0.1, is a source the client never addressed). Windows Server refuses
-    a pin to an address it does not assign, and only that refusal skips."""
+    """On real sockets: the client addressed 127.0.0.2, which the loopback
+    answers for without listing it (Linux, Windows), and the reply must come
+    from there: the adapter's first address, 127.0.0.1, is a source the client
+    never addressed. A host whose loopback does list 127.0.0.2, an alias,
+    answers from it all the same. Windows Server refuses a pin to an address
+    it does not assign, and only that refusal skips."""
     listener = _wildcard_listener()
     port = listener.bound_addresses[0].port
     # private: the packet-info probe's result: no public view
@@ -499,11 +501,13 @@ def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
     assert context is not None
     assert (context.destination, context.is_unicast) == (IPv4("127.0.0.2"), True)
     assert context.local_ip == IPv4("127.0.0.2")
-    # Not the address the client used, but one the adapter holds.
     loopback = netimps.get_interface("127.0.0.1")
     assert loopback is not None
-    assert context.interface.ip != IPv4("127.0.0.2")
-    assert context.interface.ip in [entry.ip for entry in loopback.ipv4]
+    listed = [entry.ip for entry in loopback.ipv4]
+    if IPv4("127.0.0.2") not in listed:
+        # Not the address the client used, but one the adapter holds.
+        assert context.interface.ip != IPv4("127.0.0.2")
+    assert context.interface.ip in listed
     if _refused_an_unassigned_pin(caplog):
         pytest.skip("this Windows build refuses a pin to an unassigned 127.0.0.2")
     assert source == "127.0.0.2"
