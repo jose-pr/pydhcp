@@ -805,11 +805,13 @@ def _every_variable() -> "set[str]":
 
 
 @pytest.mark.parametrize(
-    "document", ["src/pydhcp/AGENTS.md", "README.md"], ids=["header", "readme"]
+    "documents",
+    [["src/pydhcp/AGENTS.md", "src/pydhcp/cli/AGENTS.md"], ["README.md"]],
+    ids=["headers", "readme"],
 )
-def test_every_variable_the_command_reads_is_documented(document: str) -> None:
+def test_every_variable_the_command_reads_is_documented(documents: "list[str]") -> None:
     root = pathlib.Path(__file__).resolve().parents[2]
-    text = (root / document).read_text(encoding="utf-8")
+    text = "\n".join((root / d).read_text(encoding="utf-8") for d in documents)
 
     assert [name for name in sorted(_every_variable()) if name not in text] == []
 

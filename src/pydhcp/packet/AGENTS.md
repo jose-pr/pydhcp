@@ -1,15 +1,29 @@
 # `pydhcp.packet` — public API header
 
-Header-file-style reference for `pydhcp.packet`: the DHCP wire message
-format plus JSON/YAML/TOML/INI structured text (`DHCPMessage.from_text` /
-`.to_text`, and `pydhcp.packet.structured`). `DHCPMessage` and
-the enums `DHCPMessageType`, `DHCPOpcode`, `DHCPFlags` and `DHCPPort` are also
-re-exported from the top-level `pydhcp` package. The top-level package
-header ships beside this one as `pydhcp/AGENTS.md`; for the project overview
-see <https://github.com/jose-pr/pydhcp>. That file is the
-top-level package header.
+Header-file-style reference for `pydhcp.packet`: the DHCP wire message, its enums and the structured text forms. Every public export with its signature,
+arguments, contract and gotchas, so the package can be used without reading its
+source. It ships inside the package and is self-contained; the top header is
+`pydhcp/AGENTS.md`. Development documentation lives with the source at
+<https://github.com/jose-pr/pydhcp>.
 
-## Message (`_message.py`)
+## Message (`pydhcp.packet`)
+
+```python
+DHCPMessage(op, *, htype=HardwareAddressType.ETHERNET, hlen=None, hops=0, xid=0,
+    secs=timedelta(0), flags=DHCPFlags.UNICAST, ciaddr=IPv4Address("0.0.0.0"),
+    yiaddr=IPv4Address("0.0.0.0"), siaddr=IPv4Address("0.0.0.0"), giaddr=IPv4Address("0.0.0.0"),
+    chaddr=b"", sname="", file="", options=None)
+DHCPMessage.decode(data: bytes | bytearray | memoryview) -> DHCPMessage
+DHCPMessage.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) -> bytes
+DHCPMessage.to_mapping() -> dict[str, Any]
+DHCPMessage.from_mapping(data: Mapping[str, Any], *, codemap=None) -> DHCPMessage
+DHCPMessage.get_client_id(func=None) -> str
+DHCPMessage.summary(codemap=None) -> str
+DHCPMessage.to_text(format: str) -> str
+DHCPMessage.from_text(text: str, format: str, *, codemap=None) -> DHCPMessage
+DHCPMessage.from_hex(text: str) -> DHCPMessage
+DHCPMessage.log(src, dst, level: int) -> None
+```
 
 `DHCPMessage` is defined in layers, each a private module of `pydhcp.packet`
 subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
@@ -17,10 +31,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
 `pydhcp.packet`;
 `decode`/`from_mapping` are typed to return the class they are called on.
 
-- **`DHCPMessage(op, *, htype=HardwareAddressType.ETHERNET, hlen=None, hops=0,
-  xid=0, secs=timedelta(0), flags=DHCPFlags.UNICAST, ciaddr=0.0.0.0,
-  yiaddr=0.0.0.0, siaddr=0.0.0.0, giaddr=0.0.0.0, chaddr=b"", sname="", file="",
-  options=None)`** (dataclass) — the full DHCPv4 wire message; only `op` is
+- **`DHCPMessage`** (dataclass) — the full DHCPv4 wire message; only `op` is
   required and everything after it is a keyword. `DHCPMessage(DHCPOpcode.BOOTREQUEST)`
   encodes to a legal 300-octet message. **`hlen`** is the length of `chaddr`
   when left out, and must equal it when given: `DHCPValueError` otherwise, at
@@ -40,8 +51,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   `548 − 236 (fixed header) = 312` is the options field clients "MUST be
   prepared to receive". It is a floor on *capability*, not on any packet, so
   nothing enforces it — see `.decode()` below.
-  - **`DHCPMessage.decode(data: bytes | bytearray | memoryview) ->
-    DHCPMessage`** — parses a wire packet. Raises `DHCPDecodeError` for a
+  - **`DHCPMessage.decode()`** — parses a wire packet. Raises `DHCPDecodeError` for a
     too-short fixed header/magic cookie, a bad magic cookie, `hlen > 16`, or
     an `op` that is neither request nor reply (`op` 1 and 2 are the only
     values RFC 2131 defines, and nothing else is forwarded). A **missing END
@@ -60,8 +70,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     short datagrams, and `.encode()` pads only what pydhcp sends. Honors
     RFC 2132 §9.3 `OPTION_OVERLOAD` (decodes overflow options packed into the
     `file`/`sname` fields).
-  - **`.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) ->
-    bytes`** — serializes to wire bytes; `bytes(message)` is the same call
+  - **`.encode()`** — serializes to wire bytes; `bytes(message)` is the same call
     with the default size. The result is immutable: write `bytearray(...)`
     to patch an octet. `max_packetsize` budgets the
     whole **IP datagram**, not the message: the options field gets
@@ -76,9 +85,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       options 53 and 52).
     - **`DHCPValueError`** naming the field if `hops` (0–255), `hlen` (0–**16**,
       matching `.decode()`, since `chaddr` is a 16-octet field) or `xid`
-      (0–2³²−1) is out of range — previously a bare `struct.error`, which
-      names the format character rather than the field and is neither
-      `ValueError` nor `TypeError`. `secs` is **clamped** to 0–65535 rather
+      (0–2³²−1) is out of range, not a bare `struct.error` (it names the format character rather than the field, and is neither `ValueError` nor `TypeError`). `secs` is **clamped** to 0–65535 rather
       than rejected: it is elapsed time the client reports.
     - **`DHCPValueError`** naming the field if `chaddr` (>16 octets) does not
       fit; a value is never truncated.
@@ -118,8 +125,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     octets (after END) to `BOOTP_MIN_PACKET_SIZE` (300), which RFC 1542 §2.1 lets
     a relay agent require — never past `max_packetsize` less the 28 octets of
     IPv4 and UDP header.
-  - **`.to_mapping() -> dict[str, Any]`** / **`DHCPMessage.from_mapping(data:
-    Mapping[str, Any], *, codemap=None) -> DHCPMessage`** — structured
+  - **`.to_mapping()`** / **`DHCPMessage.from_mapping()`** — structured
     round-trip to/from a plain dict. Option keys are the option's label when it
     has one, else its **numeric code** as a string (every unnamed code shares
     the label `"UNKNOWN"`, so it is not used as a key). `to_mapping` names the
@@ -152,7 +158,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     what it received. `DHCPServer`, `DHCPClient` and `CaptureEvent` read it here.
   - **`.broadcast -> bool`** (read-only property) — whether the broadcast bit of
     `flags` is set. `flags` holds all sixteen bits as they were received.
-  - **`.get_client_id(func=None) -> str`** — `CLIENT_IDENTIFIER` option if
+  - **`.get_client_id()`** — `CLIENT_IDENTIFIER` option if
     present, else `func(self)` if given and non-empty, else
     `htype.value + chaddr`; returned as uppercase colon-hex. Raises
     **`NoClientIdentityError`** (`pydhcp.exceptions`; a `ValueError`) when the message has
@@ -160,22 +166,21 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     than returning the hardware-type octet alone, which every such client
     would share. `DHCPServer` drops such a message; `CaptureEvent.client_id`
     reports `"UNKNOWN"`.
-  - **`.summary(codemap=None) -> str`** — human-readable multi-line summary
+  - **`.summary()`** — human-readable multi-line summary
     (used by `.log_str()`/`.log()` and the CLI's `--format summary`); nothing
     reads it back.
-  - **`.to_text(format: str) -> str`** / **`DHCPMessage.from_text(text: str,
-    format: str, *, codemap=None) -> DHCPMessage`** — the message as a document and back;
+  - **`.to_text()`** / **`DHCPMessage.from_text()`** — the message as a document and back;
     `format` is `"json"`, `"yaml"`, `"toml"` or `"ini"` (case-insensitive),
     anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
     out by `pydhcp.packet.structured` (below). `"yaml"` needs `pydhcp[yaml]`,
     `"toml"` `pydhcp[toml]` (reading it needs only Python 3.11+); a missing one is
     an `ImportError` giving the `pip install "pydhcp[...]"` line. A file the capture command wrote loads with `from_text`.
-  - **`DHCPMessage.from_hex(text: str) -> DHCPMessage`** — decode a message
+  - **`DHCPMessage.from_hex()`** — decode a message
     written as hexadecimal text, the form `pydhcp packet --decode` reads: spaces,
     tabs, line ends and colons between the digits are ignored. `ValueError` for any
     other character or an odd number of digits, `DHCPDecodeError` when the octets
     are not a message.
-  - **`.log(src, dst, level: int) -> None`** — logs `.summary()` framed with a
+  - **`.log()`** — logs `.summary()` framed with a
     header, at `pydhcp`'s `LOGGER`, at the given `logging` level.
 
 **Hand-authoring a message for `from_text`** — two traps, both refused with
@@ -190,7 +195,7 @@ an error:
 **`DHCPMessage.decode()` and `from_mapping()` honour `cls`**, so a subclass
 decodes to itself, and both are annotated to return the class they are called on.
 
-## Enums (`_enums.py`)
+## Enums (`pydhcp.packet`)
 
 - **`DHCPMessageType`** (`IntEnum` + `DHCPOptionType` codec) —
   `DHCPDISCOVER`..`DHCPTLS` (1–18); registered as the codec for
@@ -203,16 +208,33 @@ decodes to itself, and both are annotated to return the class they are called on
   fifteen bits are reserved and a decoded value keeps them. `.label()` is
   `"UNICAST"` or `"BROADCAST"`, then `|0x....` for reserved bits that are set.
   Test the bit with `DHCPMessage.broadcast`, not by comparing the value.
-- **`HardwareAddressType`** (`IntEnum`) — **defined in `pydhcp._network`** and
-  re-exported here; `pydhcp.packet.HardwareAddressType` is unchanged and remains
-  the spelling to use for the `htype` header field. It lives one layer down
-  because the option codecs need it too and this module imports them. See
-  `pydhcp/_network/AGENTS.md` for the full entry.
 
-## Structured text (`structured.py`, public as `pydhcp.packet.structured`)
+```python
+HardwareAddressType.label() -> str
+HardwareAddressType.format_address(address: bytes) -> str
+```
 
-- **`loads(text: str, format: str) -> dict[str, Any]`** /
-  **`dumps(data: dict[str, Any], format: str) -> str`** — a mapping in a
+- **`HardwareAddressType`** (`IntEnum`) — the IANA ARP hardware types used by
+  DHCP (the BOOTP `htype` field), `NONE` (0) through `HFI` (37), including
+  `INFINIBAND` (32) for RFC 4390 IPoIB. Any other octet 0–255 becomes a cached
+  **unnamed** pseudo-member, so a value a client sent is never rewritten.
+  - **`.label()`** — the member name, or `HTYPE_<n>` for an unnamed one.
+    Use this, not `.name`, which is `None` for unnamed members;
+    `to_mapping()` emits it and `HardwareAddressType("HTYPE_<n>")` reads it
+    back.
+  - **`.format_address()`** renders colon-hex for `ETHERNET`,
+    else `repr(address)`.
+  - Defined in the private `pydhcp._network` (the option codecs need it to name a client identifier's type octet and `pydhcp.packet` imports the codecs, so defining it here would make a cycle) and exported by `pydhcp.packet`, which is where the rest of the message-header enums live and the spelling to use for the `htype` header field.
+
+## Structured text (`pydhcp.packet.structured`)
+
+```python
+loads(text: str, format: str) -> dict[str, Any]
+dumps(data: dict[str, Any], format: str) -> str
+```
+
+- **`loads`** /
+  **`dumps`** — a mapping in a
   structured text format, with `json`'s meanings: `loads` takes content (never
   a file name), `dumps` returns text. `format` is one of `"json"`, `"yaml"`,
   `"toml"`, `"ini"` (case-insensitive); anything else raises `ValueError`.

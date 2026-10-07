@@ -220,6 +220,6 @@ def test_the_command_is_found_before_anything_runs(tmp_path: pathlib.Path) -> No
 
 
 def test_the_timeout_constant_is_in_the_shipped_header() -> None:
-    header = pathlib.Path(__file__).resolve().parents[2] / "src" / "pydhcp"
+    header = pathlib.Path(__file__).resolve().parents[2] / "src" / "pydhcp" / "capture"
     text = (header / "AGENTS.md").read_text(encoding="utf-8")
     assert "HOOK_TIMEOUT_SECONDS" in text and "command_hook" in text
