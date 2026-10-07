@@ -1,0 +1,48 @@
+{
+ "description": "A DECLINE of the static address from the client it is configured for, which holds no lease, then its DISCOVER.",
+ "role": "server",
+ "topology": "single",
+ "config": {
+  "server": "10.99.0.1",
+  "prefix": 24,
+  "mask": "255.255.255.0",
+  "router": "10.99.0.1",
+  "lease_seconds": 300,
+  "hosts": {
+   "02:00:00:99:00:02": "10.99.0.100"
+  },
+  "range": null,
+  "authoritative": false
+ },
+ "steps": [
+  {
+   "name": "decline",
+   "message": {
+    "type": "DECLINE",
+    "xid": "1001a101",
+    "chaddr": "02:00:00:99:00:02",
+    "requested": "10.99.0.100",
+    "server_id": "10.99.0.1"
+   },
+   "src": "0.0.0.0",
+   "sport": 68,
+   "dst": "255.255.255.255",
+   "dport": 67
+  },
+  {
+   "name": "discover",
+   "message": {
+    "type": "DISCOVER",
+    "xid": "1001a102",
+    "chaddr": "02:00:00:99:00:02",
+    "flags": 32768,
+    "prl": [1, 3, 6, 12, 15, 28, 51, 58, 59]
+   },
+   "src": "0.0.0.0",
+   "sport": 68,
+   "dst": "255.255.255.255",
+   "dport": 67
+  }
+ ],
+ "not_compared": []
+}

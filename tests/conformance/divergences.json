@@ -1,0 +1,232 @@
+[
+ {
+  "case": "client-decline",
+  "aspects": [
+   "decline field:flags",
+   "decline option-order",
+   "discover field:flags",
+   "request-selecting field:flags",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "client-discover",
+  "aspects": [
+   "discover field:flags"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "client-request-init-reboot",
+  "aspects": [
+   "request-init-reboot destination",
+   "request-init-reboot field:flags"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "client-request-selecting",
+  "aspects": [
+   "discover field:flags",
+   "request-selecting field:flags",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "relay-discover-over-hop-limit",
+  "aspects": [
+   "discover count"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-decline",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-decline-without-a-lease",
+  "aspects": [
+   "discover count"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-discover",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-discover-no-broadcast-flag",
+  "aspects": [
+   "discover destination",
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-discover-relayed",
+  "aspects": [
+   "discover-from-relay field:hops",
+   "discover-from-relay field:siaddr",
+   "discover-from-relay option-absent:58",
+   "discover-from-relay option-absent:59",
+   "discover-from-relay option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-inform",
+  "aspects": [
+   "inform field:siaddr",
+   "inform option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-offer-hold",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "discover-2 count",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-release",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "discover-2 field:siaddr",
+   "discover-2 option-absent:58",
+   "discover-2 option-absent:59",
+   "discover-2 option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-request-init-reboot",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "request-init-reboot field:siaddr",
+   "request-init-reboot option-absent:58",
+   "request-init-reboot option-absent:59",
+   "request-init-reboot option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-request-renewing",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "request-renewing field:siaddr",
+   "request-renewing option-absent:58",
+   "request-renewing option-absent:59",
+   "request-renewing option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-request-renewing-from-another-port",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "request-renewing destination",
+   "request-renewing field:siaddr",
+   "request-renewing option-absent:58",
+   "request-renewing option-absent:59",
+   "request-renewing option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-request-selecting",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-request-selecting-host-name",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order",
+   "request-selecting field:siaddr",
+   "request-selecting option-absent:12",
+   "request-selecting option-absent:58",
+   "request-selecting option-absent:59",
+   "request-selecting option-order"
+  ],
+  "reason": "unclassified"
+ },
+ {
+  "case": "server-request-selecting-other-address",
+  "aspects": [
+   "discover field:siaddr",
+   "discover option-absent:58",
+   "discover option-absent:59",
+   "discover option-order"
+  ],
+  "reason": "unclassified"
+ }
+]
