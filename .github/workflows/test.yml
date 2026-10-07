@@ -463,14 +463,16 @@ jobs:
       # are another distribution's than the recording's, so a difference from a
       # golden is printed as a line of the report and passes; only a recorder that
       # cannot run the lab or play a case (status 2) fails the job.
+      # The directory is root's by then (the tests before this ran as root), so the
+      # report is written as root too.
       - name: Check the recorder against the runner's peers
         env:
           PYDHCP_INTEROP_REQUIRE: "1"
           PYDHCP_INTEROP_LOGS: ${{ runner.temp }}/interop-logs
         run: |
           set -o pipefail
-          mkdir -p "$PYDHCP_INTEROP_LOGS"
-          sudo --preserve-env "$(command -v python)" tests/conformance/record.py --check | tee "$PYDHCP_INTEROP_LOGS/conformance-check.txt"
+          sudo mkdir -p "$PYDHCP_INTEROP_LOGS"
+          sudo --preserve-env "$(command -v python)" tests/conformance/record.py --check | sudo tee "$PYDHCP_INTEROP_LOGS/conformance-check.txt"
 
       - name: No namespace left behind
         if: always()
