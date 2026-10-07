@@ -222,6 +222,17 @@ class _Replies(_LeasePolicy):
         )
         self.metrics.packets_sent += 1
 
+    def _reply_port(self, context: DHCPRequestContext, to_relay: bool) -> int:
+        """The UDP destination port of a reply (`STRICT_REPLY_PORTS`)."""
+        if self.STRICT_REPLY_PORTS:
+            # RFC 1542 s5.4: set by the kind of destination, never taken from
+            # the request's source port, which the sender chooses.
+            return self.REPLY_TO_RELAY_PORT if to_relay else self.REPLY_TO_CLIENT_PORT
+        source = context.client.port
+        if to_relay and source == int(_enum.DHCPPort.CLIENT):
+            return int(_enum.DHCPPort.SERVER)
+        return source
+
     def _reply_datagram(
         self,
         msg: DHCPMessage,
@@ -338,9 +349,7 @@ class _Replies(_LeasePolicy):
             )
 
         dest: _ipaddress.IPv4Address
-        # RFC 1542 s5.4: the destination port is set by the kind of destination,
-        # never taken from the request's source port, which the sender chooses.
-        dest_port: int = self.REPLY_TO_CLIENT_PORT
+        to_relay = False
 
         if resp_ty is _enum.DHCPMessageType.DHCPNAK:
             # RFC 2131 4.3.2: with giaddr 0 the server MUST broadcast the NAK to
@@ -351,12 +360,12 @@ class _Replies(_LeasePolicy):
             # the client never saw it and retried until its timers expired.
             if msg.giaddr != _const.WILDCARD_V4:
                 dest = msg.giaddr
-                dest_port = self.REPLY_TO_RELAY_PORT
+                to_relay = True
             else:
                 dest = _ipaddress.IPv4Address("255.255.255.255")
         elif msg.giaddr != _const.WILDCARD_V4:
             dest = msg.giaddr
-            dest_port = self.REPLY_TO_RELAY_PORT
+            to_relay = True
         elif msg.ciaddr != _const.WILDCARD_V4:
             dest = msg.ciaddr
         elif msg.broadcast:
@@ -373,6 +382,8 @@ class _Replies(_LeasePolicy):
                 dest = resp.yiaddr
             else:
                 dest = _ipaddress.IPv4Address("255.255.255.255")
+
+        dest_port = self._reply_port(context, to_relay)
 
         resp.log(
             context.interface.ip, _net.SocketAddress(dest, dest_port), _logging.INFO

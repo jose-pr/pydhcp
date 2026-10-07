@@ -363,3 +363,44 @@ def test_a_hook_called_without_a_stamp_gets_the_drivers_reading() -> None:
     instant = server._instant(_context(None, None))
     assert instant.utc.tzinfo is not None
     assert abs(instant.monotonic - time.monotonic()) < 5
+
+
+class _Lenient:
+    STRICT_REPLY_PORTS = False
+
+    def acquire_lease(
+        self, client_id: str, server_id: IPv4, msg: DHCPMessage, *, commit: bool = True
+    ) -> DHCPLease:
+        return DHCPLease(LOOPBACK)
+
+
+class _LenientSync(_Lenient, DHCPServer):
+    pass
+
+
+class _LenientAsync(_Lenient, AsyncDHCPServer):
+    pass
+
+
+@pytest.mark.parametrize(
+    "server_class, loop_type", driver_params(_LenientSync, _LenientAsync)
+)
+def test_a_lenient_server_answers_the_port_the_request_came_from_on_each_driver(
+    server_class: type, loop_type: _ty.Optional[type]
+) -> None:
+    server = server_class(listen=("127.0.0.1", 0))
+
+    def exercise(port: int) -> "list[DHCPMessage]":
+        client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        client.bind(("127.0.0.1", 0))
+        client.settimeout(WAIT_SECONDS)
+        try:
+            client.sendto(_datagram(DHCPMessageType.DHCPDISCOVER), ("127.0.0.1", port))
+            return [DHCPMessage.decode(client.recvfrom(2048)[0])]
+        finally:
+            client.close()
+
+    (reply,) = serve(server, exercise, loop_type)
+    assert reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == (
+        DHCPMessageType.DHCPOFFER
+    )

@@ -138,3 +138,93 @@ def test_one_datagram_cannot_steer_a_reply_to_a_port_of_its_choosing() -> None:
     finally:
         for sock in (sender, bystander, relay):
             sock.close()
+
+
+class _Lenient(FixedLeaseServer):
+    STRICT_REPLY_PORTS = False
+
+
+def test_strict_is_the_default() -> None:
+    assert FixedLeaseServer.STRICT_REPLY_PORTS is True
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [{"ciaddr": IPv4("192.0.2.50")}, {"flags": DHCPFlags.BROADCAST}, {}],
+    ids=["ciaddr", "broadcast flag", "yiaddr or broadcast"],
+)
+@pytest.mark.parametrize("source_port", [67, 68, 1024, 4444])
+def test_a_lenient_reply_to_a_client_goes_to_the_port_it_came_from(
+    fields: "dict[str, _ty.Any]", source_port: int
+) -> None:
+    assert _sent_to(build_request(**fields), source_port, _Lenient())[1] == source_port
+
+
+@pytest.mark.parametrize(
+    ("source_port", "expected"), [(1024, 1024), (4444, 4444), (67, 67), (68, 67)]
+)
+def test_a_lenient_reply_to_a_relay_goes_to_giaddr_at_the_source_port_but_67_for_68(
+    source_port: int, expected: int
+) -> None:
+    destination, port = _sent_to(build_request(giaddr=RELAY), source_port, _Lenient())
+    assert (destination, port) == (str(RELAY), expected)
+
+
+@pytest.mark.parametrize("source_port", [1024, 68])
+def test_a_lenient_nak_follows_the_same_rule(source_port: int) -> None:
+    from pydhcp.options import DHCPOptionCode
+
+    request = build_request(DHCPMessageType.DHCPREQUEST, giaddr=RELAY)
+    request.options[DHCPOptionCode.SERVER_IDENTIFIER] = IPv4("192.0.2.1")
+    request.options[DHCPOptionCode.REQUESTED_IP] = IPv4("192.0.2.99")
+    server = _Lenient()
+    server.acquire_lease = lambda *a, **k: None  # type: ignore[method-assign]
+    expected = 67 if source_port == 68 else source_port
+    assert _sent_to(request, source_port, server) == (str(RELAY), expected)
+
+
+def test_the_mode_is_read_from_the_instance() -> None:
+    server = FixedLeaseServer()
+    server.STRICT_REPLY_PORTS = False
+    assert _sent_to(build_request(), 4444, server)[1] == 4444
+
+
+def _reply_arrives_on(source_port_sock: socket.socket, server: FixedLeaseServer) -> int:
+    with running(server):
+        port = server.bound_addresses[0].port
+        source_port_sock.sendto(build_request().encode(), ("127.0.0.1", port))
+        data, _ = source_port_sock.recvfrom(4096)
+        assert DHCPMessage.decode(data).options is not None
+        return source_port_sock.getsockname()[1]
+
+
+def test_a_lenient_server_answers_a_real_client_on_the_port_it_sent_from() -> None:
+    server = _Lenient(listen=[("127.0.0.1", 0)])
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        client.bind(("127.0.0.1", 0))
+        client.settimeout(2)
+        assert _reply_arrives_on(client, server) == client.getsockname()[1]
+    finally:
+        client.close()
+
+
+def test_a_strict_server_does_not_answer_the_source_port_of_a_real_client() -> None:
+    server = FixedLeaseServer(listen=[("127.0.0.1", 0)])
+    sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sender.bind(("127.0.0.1", 0))
+        client.bind(("127.0.0.1", 0))
+        sender.settimeout(0.3)
+        client.settimeout(2)
+        server.REPLY_TO_CLIENT_PORT = client.getsockname()[1]
+        with running(server):
+            port = server.bound_addresses[0].port
+            sender.sendto(build_request().encode(), ("127.0.0.1", port))
+            client.recvfrom(4096)
+            with pytest.raises(socket.timeout):
+                sender.recvfrom(4096)
+    finally:
+        sender.close()
+        client.close()

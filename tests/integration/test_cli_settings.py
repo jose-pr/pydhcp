@@ -42,6 +42,7 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "listen": None,
             "per_interface": False,
             "lease_file": None,
+            "lenient_reply_ports": False,
             "config": None,
             "config_format": None,
         },
@@ -49,11 +50,13 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "listen": "127.0.0.1:2001",
             "per_interface": True,
             "lease_file": "from-file.json",
+            "lenient_reply_ports": True,
         },
         "env": {
             "PYDHCP_SERVER_LISTEN": "127.0.0.1:2002",
             "PYDHCP_SERVER_PER_INTERFACE": "0",
             "PYDHCP_SERVER_LEASE_FILE": "from-env.json",
+            "PYDHCP_SERVER_LENIENT_REPLY_PORTS": "no",
         },
         "arg": [
             "--listen",
@@ -61,22 +64,26 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "--per-interface",
             "--lease-file",
             "from-arg.json",
+            "--lenient-reply-ports",
         ],
         "after": {
             "file": {
                 "listen": "127.0.0.1:2001",
                 "per_interface": True,
                 "lease_file": "from-file.json",
+                "lenient_reply_ports": True,
             },
             "env": {
                 "listen": "127.0.0.1:2002",
                 "per_interface": False,
                 "lease_file": "from-env.json",
+                "lenient_reply_ports": False,
             },
             "arg": {
                 "listen": "127.0.0.1:2003",
                 "per_interface": True,
                 "lease_file": "from-arg.json",
+                "lenient_reply_ports": True,
             },
         },
     },

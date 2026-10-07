@@ -16,6 +16,11 @@ someone upgrading from 0.7.0.
 
 ### Added
 
+- **`DHCPServer.STRICT_REPLY_PORTS` and `pydhcp server --lenient-reply-ports`** (`PYDHCP_SERVER_LENIENT_REPLY_PORTS`,
+  the `lenient_reply_ports` key). The default, `True`, is the RFC 1542 rule the server already
+  followed: a reply goes to port 67 for a relay and 68 for a client. `False` answers the port the
+  request came from (`giaddr` at that port, at 67 when it is 68), which lets a sender choose where
+  its reply goes.
 - **A `Bound: <address>` record (INFO) after each listening socket is bound**, with the port the kernel gave: `Listening on:` is
   logged before the bind and names the port that was asked for, which is `0` for an ephemeral one.
 - **`DHCPMessage.from_hex(text)`**: decode a message written as hexadecimal text (spaces, line

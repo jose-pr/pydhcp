@@ -220,15 +220,18 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
     over loopback, where there is no ARP and POSIX refuses the broadcast, or
     when **`UNICAST_TO_UNCONFIGURED_CLIENT`** (class attribute, `False`) is
     set for a transport that can address the client's hardware address. A
-    DHCPNAK with `giaddr` 0 is always broadcast. **The UDP
-    destination port comes from where the reply goes, never from the request's
-    source port** (RFC 1542 §5.4, three MUSTs): **`REPLY_TO_RELAY_PORT`** (class
-    attribute, `67`) for a reply sent to `giaddr`, a DHCPNAK through a relay
-    included, and **`REPLY_TO_CLIENT_PORT`** (`68`) for every other reply. The
-    source port is the sender's to choose, so honouring it let one unauthenticated
-    datagram send a reply to any port on any host. A harness that runs a relay or
-    a client on another port sets the attribute (on the class, the instance, or
-    per request from `handle`); a real deployment never does.
+    DHCPNAK with `giaddr` 0 is always broadcast. **The UDP destination port
+    comes from where the reply goes** (RFC 1542 §5.4, three MUSTs):
+    **`REPLY_TO_RELAY_PORT`** (class attribute, `67`) for a reply sent to
+    `giaddr`, a DHCPNAK through a relay included, and **`REPLY_TO_CLIENT_PORT`**
+    (`68`) for every other reply. A harness that runs a relay or a client on
+    another port sets them (on the class, the instance, or per request from
+    `handle`); a real deployment never does. **`STRICT_REPLY_PORTS`** (class
+    attribute, `True`) holds that rule; `False` answers the port the request
+    came from (`giaddr` at that port, at 67 when it is 68), and **gives up the
+    protection**: the source port is the sender's to choose, so one
+    unauthenticated datagram can send a reply to any port on any host.
+    `pydhcp server --lenient-reply-ports` sets it.
     `RELAY_AGENT_INFORMATION` (option 82) on the request is echoed back
     unmodified on the reply, per RFC 3046 §2.2.
   - The reply is built from `lease.options.copy()`, never the lease's own

@@ -65,6 +65,13 @@ class _ServerState(_Timed):
     REPLY_TO_RELAY_PORT: int = int(_enum.DHCPPort.SERVER)
     REPLY_TO_CLIENT_PORT: int = int(_enum.DHCPPort.CLIENT)
 
+    #: Whether replies go to the RFC's ports (`REPLY_TO_RELAY_PORT`,
+    #: `REPLY_TO_CLIENT_PORT`) or, when `False`, to the port the request came
+    #: from: `giaddr` at that port (67 when it is 68) for a relayed request,
+    #: the source port otherwise. Lenient lets a sender choose the port a reply
+    #: is sent to, so one forged datagram can aim a reply at any port of a host.
+    STRICT_REPLY_PORTS: bool = True
+
     #: Whether to unicast a reply to a client that has no address yet.
     #:
     #: RFC 2131 4.1 says the server unicasts OFFER/ACK "to the client's hardware

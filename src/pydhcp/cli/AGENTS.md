@@ -56,7 +56,7 @@ main(argv: Sequence[str] | None = None) -> int
   `interfaces` (`--format text|json`: text is one tab-separated line per
   address, name, address, MAC or `-`, network; json is one array of objects
   `name`, `ip`, `mac`, `network`), `server` (`--config`, `--listen`,
-  `--per-interface`, `--lease-file`), `relay` (`--listen`,
+  `--per-interface`, `--lease-file`, `--lenient-reply-ports`), `relay` (`--listen`,
   `--server` repeatable or comma-separated and **required**, `--max-hops`,
   `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`), `packet`
   (`--decode`/`--encode` mutually exclusive+required, `--input`/`--output`
@@ -195,7 +195,7 @@ that follow no such rule (`PYDHCP_CONFIG`, `PYDHCP_CONFIG_FORMAT`, `PYDHCP_TRACE
 
 | Variable | Sets |
 | --- | --- |
-| `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE` | `server --listen`, `--per-interface`, `--lease-file` |
+| `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE`, `PYDHCP_SERVER_LENIENT_REPLY_PORTS` | `server --listen`, `--per-interface`, `--lease-file`, `--lenient-reply-ports` |
 | `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
 | `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_CAPTURE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE`, `PYDHCP_CAPTURE_READ` | `capture --listen`, `--filter`, `--format`, `--output`, `--per-capture`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface`, `--read` |
 | `PYDHCP_REPLAY_INPUT`, `PYDHCP_REPLAY_SERVER`, `PYDHCP_REPLAY_SPEED`, `PYDHCP_REPLAY_NO_DELAY`, `PYDHCP_REPLAY_MAX_DELAY`, `PYDHCP_REPLAY_LIMIT` | `replay --input`, `--server`, `--speed`, `--no-delay`, `--max-delay`, `--limit` |

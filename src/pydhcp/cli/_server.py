@@ -23,6 +23,12 @@ class Server(_Listening):
     "Persist leases to this JSON file instead of keeping them in memory. Default: in memory"
     ("--lease-file",)
 
+    lenient_reply_ports: _ty.Annotated[
+        bool, Meta(env="PYDHCP_SERVER_LENIENT_REPLY_PORTS")
+    ] = False
+    "Answer to the port a request came from instead of the RFC 1542 ports (67 for a relay, 68 for a client), so a sender chooses where its reply goes. Default: the RFC's ports"
+    ("--lenient-reply-ports",)
+
     def __call__(self) -> None:
         # An empty `--listen` names no address and the listener says so, rather
         # than serving the wildcard: `is None`, not falsiness.
@@ -44,6 +50,7 @@ class Server(_Listening):
                     per_interface=self.per_interface,
                     lease_backend=backend,
                 )
+            server.STRICT_REPLY_PORTS = not self.lenient_reply_ports
             if backend is not None:
                 self._logger_.info("Persisting leases to %s", self.lease_file)
             self._logger_.info("Starting DHCP server, listening on: %s...", listen)

@@ -17,7 +17,7 @@ import pytest
 
 from command_run import run_command
 from cli_process import free_port
-from helpers import build_request, wait_until
+from helpers import FixedLeaseServer, build_request, wait_until
 from pydhcp import DHCPMessage
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options import RelayAgentInformation
@@ -353,3 +353,52 @@ def test_count_writes_that_many_records_and_then_stops(
         "DHCPDISCOVER",
         "DHCPDISCOVER",
     ]
+
+
+def _asks_from_own_port(
+    answered: "list[int]",
+) -> "_ty.Callable[[list[str]], None]":
+    """A DISCOVER from an ephemeral port, then the port a reply arrives on."""
+
+    def send(bound: "list[str]") -> None:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client:
+            client.bind(("127.0.0.1", 0))
+            client.settimeout(5)
+            client.sendto(
+                bytes(build_request().encode()), ("127.0.0.1", _port(bound[0]))
+            )
+            DHCPMessage.decode(client.recvfrom(2048)[0])
+            answered.append(client.getsockname()[1])
+
+    return send
+
+
+def test_lenient_reply_ports_answers_a_client_on_the_port_it_sent_from(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # private: the command builds the server where it reads the name; a loopback
+    # interface is not servable, so the stand-in grants the one loopback lease.
+    monkeypatch.setattr("pydhcp.cli._server.DHCPServer", FixedLeaseServer)
+    answered: "list[int]" = []
+    ran = run_command(
+        ["server", "-v", "--listen", "127.0.0.1:0", "--lenient-reply-ports"],
+        during=_asks_from_own_port(answered),
+    )
+
+    assert ran.status == 0, ran.result
+    assert len(answered) == 1, ran.result
+
+
+def test_the_server_answers_the_dhcp_client_port_without_the_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # private: as above.
+    monkeypatch.setattr("pydhcp.cli._server.DHCPServer", FixedLeaseServer)
+    answered: "list[int]" = []
+    ran = run_command(
+        ["server", "-v", "--listen", "127.0.0.1:0"],
+        during=_asks_from_own_port(answered),
+    )
+
+    assert answered == []
+    assert isinstance(ran.result, socket.timeout)
