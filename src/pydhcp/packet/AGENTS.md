@@ -167,8 +167,9 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     format: str, *, codemap=None) -> DHCPMessage`** — the message as a document and back;
     `format` is `"json"`, `"yaml"`, `"toml"` or `"ini"` (case-insensitive),
     anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
-    out by `pydhcp.packet.structured` (below). `"toml"` needs Python 3.11+ or
-    `pydhcp[toml]`. A file the capture command wrote loads with `from_text`.
+    out by `pydhcp.packet.structured` (below). `"yaml"` needs `pydhcp[yaml]`,
+    `"toml"` `pydhcp[toml]` (reading it needs only Python 3.11+); a missing one is
+    an `ImportError` giving the `pip install "pydhcp[...]"` line. A file the capture command wrote loads with `from_text`.
   - **`DHCPMessage.from_hex(text: str) -> DHCPMessage`** — decode a message
     written as hexadecimal text, the form `pydhcp packet --decode` reads: spaces,
     tabs, line ends and colons between the digits are ignored. `ValueError` for any
@@ -217,9 +218,10 @@ is a separate typing decision.
   structured text format, with `json`'s meanings: `loads` takes content (never
   a file name), `dumps` returns text. `format` is one of `"json"`, `"yaml"`,
   `"toml"`, `"ini"` (case-insensitive); anything else raises `ValueError`.
-  `"toml"` requires Python 3.11+ (`tomllib`) or the optional `tomli`/`tomli-w`
-  packages (`pydhcp[toml]`) and raises `NotImplementedError` with an
-  actionable message otherwise. `DHCPMessage.from_text` / `.to_text` are these
+  `"yaml"` requires PyYAML (`pydhcp[yaml]`); `"toml"` requires `tomli-w` to write
+  and Python 3.11+ (`tomllib`) or `tomli` to read (`pydhcp[toml]`). Without one the
+  call raises `ImportError` whose message is `pip install "pydhcp[<extra>]"`; the
+  format stays a valid name. `DHCPMessage.from_text` / `.to_text` are these
   two around `from_mapping` / `to_mapping`.
 
 **Gotcha**: the INI loader/dumper sets `ConfigParser.optionxform = str`

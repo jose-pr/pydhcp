@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
+import sys
+
 import pytest
 
 from pydhcp import DHCPConfigError
-
-# the loader behind the command line is not public
-from pydhcp import _config as config
 
 # the loader behind the command line is not public
 from pydhcp._config import load_config
@@ -31,22 +30,11 @@ def test_load_config_yml_extension(tmp_path) -> None:
 
 
 def test_load_config_toml(tmp_path) -> None:
-    # private: the optional TOML reader, switched off to test its absence
-    if config._tomllib is None:
-        pytest.skip("TOML config loading requires optional TOML dependencies")
+    if sys.version_info < (3, 11):
+        pytest.importorskip("tomli")
     path = tmp_path / "config.toml"
     path.write_text('[server]\nlisten = "*"\n', encoding="utf-8")
     assert load_config(str(path)) == {"server": {"listen": "*"}}
-
-
-def test_load_config_toml_without_reader_reports_not_implemented(
-    monkeypatch, tmp_path
-) -> None:
-    monkeypatch.setattr(config, "_tomllib", None)
-    path = tmp_path / "config.toml"
-    path.write_text('[server]\nlisten = "*"\n', encoding="utf-8")
-    with pytest.raises(NotImplementedError, match="INI or JSON as a stdlib fallback"):
-        load_config(str(path))
 
 
 def test_load_config_ini(tmp_path) -> None:

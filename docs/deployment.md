@@ -35,7 +35,7 @@ Group=pydhcp
 WantedBy=multi-user.target
 ```
 
-The CLI accepts JSON, YAML, TOML and INI configuration files through `--config` or `PYDHCP_CONFIG` (TOML needs Python 3.11+ or the `pydhcp[toml]` extra). The file is always named: there is no default location, so a daemon never starts from a file nobody chose. A setting comes from the option, else its `PYDHCP_<COMMAND>_<OPTION>` environment variable, else the file, else the default, so an explicit `--listen` overrides whatever the file says. A file with a misspelled or foreign section, an unknown key or a syntax error stops the service with status 2 and one line naming the file and the position, instead of starting on the defaults.
+The CLI accepts JSON, YAML, TOML and INI configuration files through `--config` or `PYDHCP_CONFIG` (YAML needs the `pydhcp[yaml]` extra, TOML Python 3.11+ or the `pydhcp[toml]` extra). The file is always named: there is no default location, so a daemon never starts from a file nobody chose. A setting comes from the option, else its `PYDHCP_<COMMAND>_<OPTION>` environment variable, else the file, else the default, so an explicit `--listen` overrides whatever the file says. A file with a misspelled or foreign section, an unknown key or a syntax error stops the service with status 2 and one line naming the file and the position, instead of starting on the defaults.
 
 Port 67 is privileged: run the unit as root, or grant the interpreter the capability once with
 `sudo setcap 'cap_net_bind_service=+ep' /opt/pydhcp/.venv/bin/python3` and keep `User=pydhcp`. Without one of the two the service fails to bind, which pydhcp reports as a `PermissionError` naming the port.

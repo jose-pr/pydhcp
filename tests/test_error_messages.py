@@ -11,8 +11,6 @@ from __future__ import annotations
 
 import pytest
 
-# the loader behind the command line is not public
-from pydhcp import _config as config
 from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode, DHCPOptions
 from pydhcp.options import DomainList, OptionOverload
@@ -148,33 +146,3 @@ def test_ccc_address_narrows_its_except_to_valueerror() -> None:
 def test_dead_helpers_are_gone() -> None:
     assert not hasattr(_message, "_decode_option_value")
     assert not hasattr(structured, "_StructuredFormat")
-
-
-def test_toml_guard_lives_in_one_place() -> None:
-    """`structured` sources its TOML probes from `config`, not its own ladder."""
-    # private: the optional TOML reader, switched off to test its absence
-    assert structured._tomllib is config._tomllib or (
-        structured._tomllib is None and config._tomllib is None
-    )
-    assert config._import_toml_reader() is structured._tomllib
-    # private: the optional TOML writer, switched off to test its absence
-    assert config._import_toml_writer() is structured._tomli_w
-
-
-@pytest.mark.parametrize(
-    "factory_name, needle",
-    [
-        ("_toml_reader_unavailable", "tomli"),
-        ("_toml_writer_unavailable", "tomli-w"),
-    ],
-)
-def test_toml_unavailable_messages_are_built_from_one_template(
-    factory_name: str, needle: str
-) -> None:
-    factory = getattr(config, factory_name)
-    error = factory("TOML thing", "INI")
-    assert isinstance(error, NotImplementedError)
-    text = str(error)
-    assert text.startswith("TOML thing requires")
-    assert needle in text
-    assert "use INI as a stdlib fallback" in text

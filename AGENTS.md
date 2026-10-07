@@ -35,13 +35,13 @@ Python **3.9** is the floor and is part of the contract — CI runs the suite on
 3.9 through 3.14.
 
 ```bash
-python -m pip install -e ".[dev,docs,toml]"
+python -m pip install -e ".[dev,docs]"
 python -m pytest -q
 ```
 
-The `toml` extra is not optional for a full run: without `tomli-w` the TOML and
-INI cases skip rather than fail, so a run that looks green may not have
-exercised them.
+`dev` includes the `cli`, `yaml` and `toml` extras, so a development install runs
+every test that depends on one; a test of a missing extra hides the module inside
+the test and never uninstalls it.
 
 ## Checks
 

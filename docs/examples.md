@@ -21,7 +21,7 @@ wildcard; an empty value, a boolean or a bare number is an error. Text that is n
 IPv4 address names an interface (see [Listening on one
 interface](#listening-on-one-interface)).
 
-TOML support requires Python 3.11+ (stdlib `tomllib`) or the optional `tomli` package on older versions.
+YAML files need the `yaml` extra (`pip install "pydhcp[yaml]"`). TOML files need Python 3.11+ (stdlib `tomllib`) or the `toml` extra on older versions.
 
 ## Custom lease backend
 
@@ -379,4 +379,4 @@ can be omitted when piping. Structured packet text can also be encoded back to p
 pydhcp packet --encode --input packet.json --format json --output packet.hex
 ```
 
-TOML packet workflows require the optional TOML extra: `pip install pydhcp[toml]`.
+YAML packet workflows require the `yaml` extra and TOML ones the `toml` extra: `pip install "pydhcp[yaml,toml]"`.

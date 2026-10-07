@@ -7,22 +7,9 @@ import typing as _ty
 
 from ..exceptions import DHCPDecodeError
 
-# `.._config` imports nothing from `pydhcp`, so the dependency is one-way and
-# adds no cycle; the optional-TOML ladder and its three near-identical error
-# messages used to be duplicated verbatim between the two modules.
-from .._config import (
-    _import_toml_reader,
-    _import_toml_writer,
-    _toml_reader_unavailable,
-    _toml_writer_unavailable,
-)
-
-import yaml as _yaml  # type: ignore[import-untyped]
+from .._extras import toml_reader, toml_writer, yaml_module
 
 __all__ = ["dumps", "loads"]
-
-_tomllib = _import_toml_reader()
-_tomli_w = _import_toml_writer()
 
 
 def _normalize_format(format: str) -> str:
@@ -50,11 +37,9 @@ def loads(text: str, format: str) -> dict[str, _ty.Any]:
     if normalized == "json":
         return _ensure_mapping(_json.loads(text))
     if normalized == "yaml":
-        return _ensure_mapping(_yaml.safe_load(text))
+        return _ensure_mapping(yaml_module().safe_load(text))
     if normalized == "toml":
-        if _tomllib is None:
-            raise _toml_reader_unavailable("TOML packet decoding", "INI format")
-        return _ensure_mapping(_tomllib.loads(text))
+        return _ensure_mapping(toml_reader().loads(text))
 
     parser = _configparser.ConfigParser(interpolation=None)
     parser.optionxform = str  # type: ignore[method-assign,assignment]
@@ -77,13 +62,10 @@ def dumps(data: dict[str, _ty.Any], format: str) -> str:
     if normalized == "json":
         return _json.dumps(data, indent=2) + "\n"
     if normalized == "yaml":
-        return _ty.cast(str, _yaml.safe_dump(data, sort_keys=False))
+        return _ty.cast(str, yaml_module().safe_dump(data, sort_keys=False))
     if normalized == "toml":
-        if _tomli_w is None:
-            raise _toml_writer_unavailable("TOML packet encoding", "INI format")
-        # The module arrives through a runtime probe, so it is `Any` here --
-        # same cast the untyped `yaml` import needs two lines above.
-        return _ty.cast(str, _tomli_w.dumps(data))
+        # The module arrives through a runtime import, so it is `Any` here.
+        return _ty.cast(str, toml_writer().dumps(data))
 
     parser = _configparser.ConfigParser(interpolation=None)
     parser.optionxform = str  # type: ignore[method-assign,assignment]

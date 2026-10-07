@@ -7,8 +7,8 @@ import pathlib as _pathlib
 import re as _re
 import sys as _sys
 import typing as _ty
-import yaml as _yaml  # type: ignore[import-untyped]
 
+from . import _extras
 from .exceptions import DHCPConfigError
 
 #: The configuration formats, by name.
@@ -25,61 +25,6 @@ _SUFFIXES = {
 #: What `load_config` calls standard input in an error.
 STDIN_NAME = "<stdin>"
 
-
-def _import_toml_reader() -> _ty.Any:
-    """The stdlib/optional TOML *reader*, or None when neither is installed.
-
-    `tomllib` is stdlib from 3.11; `tomli` is the backport this package lists
-    as the optional `toml` extra. Shared with `pydhcp.packet.structured`,
-    which needs exactly this guard -- the ladder was written out twice and the
-    two copies had already grown three differently worded errors for one
-    condition. Each caller keeps its own module-level binding so a test can
-    monkeypatch absence per module.
-    """
-    try:
-        import tomllib  # type: ignore[import-not-found]
-
-        return tomllib
-    except ImportError:  # pragma: no cover - Python < 3.11
-        try:
-            import tomli
-
-            return tomli
-        except ImportError:  # pragma: no cover - optional dependency absent
-            return None
-
-
-def _import_toml_writer() -> _ty.Any:
-    """The optional TOML *writer* (`tomli-w`), or None when not installed.
-
-    There is no stdlib TOML writer at any version, which is why this is a
-    separate probe from `_import_toml_reader`.
-    """
-    try:
-        import tomli_w
-
-        return tomli_w
-    except ImportError:  # pragma: no cover - optional dependency absent
-        return None
-
-
-def _toml_reader_unavailable(operation: str, fallback: str) -> NotImplementedError:
-    """The single phrasing for "this TOML read cannot run here"."""
-    return NotImplementedError(
-        f"{operation} requires Python 3.11+ or the 'tomli' package; "
-        f"use {fallback} as a stdlib fallback"
-    )
-
-
-def _toml_writer_unavailable(operation: str, fallback: str) -> NotImplementedError:
-    """The single phrasing for "this TOML write cannot run here"."""
-    return NotImplementedError(
-        f"{operation} requires the 'tomli-w' package; "
-        f"use {fallback} as a stdlib fallback"
-    )
-
-
-_tomllib = _import_toml_reader()
 
 #: A bound on the problem text taken from a parser, in characters.
 _PROBLEM_LIMIT = 80
@@ -128,8 +73,12 @@ def _parse_json(text: str, path: str) -> _ty.Any:
 
 def _parse_yaml(text: str, path: str) -> _ty.Any:
     try:
-        return _yaml.safe_load(text)
-    except _yaml.YAMLError as error:
+        yaml = _extras.yaml_module()
+    except ImportError as error:
+        raise DHCPConfigError(str(error), path) from None
+    try:
+        return yaml.safe_load(text)
+    except yaml.YAMLError as error:
         mark = getattr(error, "problem_mark", None)
         problem = getattr(error, "problem", None)
         raise DHCPConfigError(
@@ -145,11 +94,13 @@ def _parse_yaml(text: str, path: str) -> _ty.Any:
 
 
 def _parse_toml(text: str, path: str) -> _ty.Any:
-    if _tomllib is None:
-        raise _toml_reader_unavailable("TOML config loading", "INI or JSON")
     try:
-        return _tomllib.loads(text)
-    except _tomllib.TOMLDecodeError as error:
+        reader = _extras.toml_reader()
+    except ImportError as error:
+        raise DHCPConfigError(str(error), path) from None
+    try:
+        return reader.loads(text)
+    except reader.TOMLDecodeError as error:
         message = str(error)
         found = _TOML_POSITION.search(message)
         line = getattr(error, "lineno", None)
@@ -213,8 +164,8 @@ def load_config(
     A file that cannot be read raises the `OSError`. A document that does not
     parse, whose top level is not a mapping, or whose format cannot be told
     raises `DHCPConfigError` with the path and position and no text from the
-    document. A TOML file needs Python 3.11+ or the `toml` extra
-    (`NotImplementedError` otherwise).
+    document. A YAML file needs the `yaml` extra, and a TOML file Python 3.11+
+    or the `toml` extra: without it the `DHCPConfigError` names the extra.
     """
     if _os.fspath(source) == "-":
         path = STDIN_NAME

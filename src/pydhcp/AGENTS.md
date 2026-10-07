@@ -3,7 +3,7 @@
 Header-file-style reference for the top-level `pydhcp` package: every
 `pydhcp/__init__.py` export with its signature, arguments, contract, and
 gotchas, so this module can be consumed without reading its source. For the
-project overview, install, and CLI, see <https://github.com/jose-pr/pydhcp>. The
+project overview, install, extras (`cli`, `yaml`, `toml`), and CLI, see <https://github.com/jose-pr/pydhcp>. The
 private `_network` package and the `options` and `packet` subpackages have
 their own headers (they ship as `pydhcp/{_network,options,packet}/AGENTS.md`).
 
@@ -891,8 +891,8 @@ exchange has an entry in the pending table.
     `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`, `.toml`,
     `.ini`, any letter case) and raises `pktcap.UnsupportedFormatError` (a
     `ValueError`) when the ending names none. `toml` and `ini` hold one record
-    per file and so need `per_capture`; `toml` needs the `toml` extra
-    (`ImportError` naming it). With `per_capture` a capture format is one file
+    per file and so need `per_capture`; `yaml` and `toml` need their extras
+    (`ImportError` naming `pip install "pydhcp[yaml]"` or `"pydhcp[toml]"`). With `per_capture` a capture format is one file
     for each datagram.
   - `per_capture=True`: `target` is a filename pattern in `str.format` syntax
     (`out/{client_id}/{timestamp}_{msg_type}.{format}`), one file per record,
@@ -1309,8 +1309,9 @@ fails at write time. Anything rendering one must call `display()` first —
   content is never sniffed. The text is UTF-8, with or without a byte-order
   mark. An empty YAML file is `{}`. INI values are read without interpolation
   (a `%` is text) and a duplicate section or key is an error; YAML is
-  `safe_load`. `.toml` needs Python 3.11+ or `tomli`
-  (`NotImplementedError` otherwise).
+  `safe_load`. `.yaml` needs the `yaml` extra and `.toml` Python 3.11+ or the
+  `toml` extra; without it the `DHCPConfigError` says `pip install "pydhcp[yaml]"`
+  (or `[toml]`), and the format stays a listed one.
 - A file that cannot be read raises the `OSError`. A document that does not parse,
   whose top level is not a mapping, or whose format cannot be told raises
   **`DHCPConfigError`** with `path`, `lineno` and `colno` (1-based, `None` when the
@@ -1352,8 +1353,15 @@ resolves the logger on the *parsed* instance, so setting it only on `App` left
 `-v` raising the level of a logger named after the subcommand while `pydhcp`
 stayed at the root level and the library's output never appeared.
 
+- **The `cli` extra.** The command line is built on `duho`, which the `cli` extra
+  installs: `pip install "pydhcp[cli]"`. `import pydhcp.cli` and `main` need nothing;
+  `App` and the six command classes load on first use, and without `duho` that use
+  is an `ImportError` naming the extra. Neither `import pydhcp` nor `import
+  pydhcp.cli` imports `duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`.
 - **`main(argv: Sequence[str] | None = None) -> int`** — the `pydhcp`
-  console-script entry point (`[project.scripts]` in `pyproject.toml`);
+  console-script entry point (`[project.scripts]` in `pyproject.toml`); without
+  `duho` it prints `pydhcp: error: the command line needs the 'cli' extra: pip
+  install "pydhcp[cli]"` and returns 1 (`python -m pydhcp` the same);
   `argv` is the arguments after the program name (default `sys.argv[1:]`).
   It never exits by itself and returns the **exit status**: **0** success
   (including `--help`, `--version` and a run ended with Ctrl-C), **1** a run

@@ -24,9 +24,17 @@ socket permissions and platform-specific UDP behavior.
 pip install pydhcp
 ```
 
-TOML packet encode/decode support is optional. Install `pydhcp[toml]` if you want
-`pydhcp packet --format toml`; JSON, YAML, and INI support remain available with the
-base package.
+The library (packets, options, server, client, relay, capture) needs nothing else. What
+else you ask of it is an extra, one for each capability:
+
+| Extra | Gives you |
+| --- | --- |
+| `pydhcp[cli]` | the `pydhcp` command (`python -m pydhcp`) |
+| `pydhcp[yaml]` | YAML packets (`--format yaml`, `DHCPMessage.to_text("yaml")`) and `.yaml` configuration files |
+| `pydhcp[toml]` | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
+
+For example `pip install "pydhcp[cli,yaml]"`. Without the `cli` extra the `pydhcp`
+command prints that it needs it and exits with status 1. JSON and INI need no extra.
 
 ## Quick start
 

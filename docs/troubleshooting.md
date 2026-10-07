@@ -39,8 +39,9 @@ Use summary output when you want a compact terminal view while troubleshooting c
 pydhcp packet --decode --input - --format summary
 ```
 
-If TOML packet encoding or decoding reports that TOML support is unavailable, install the
-optional TOML extra for the environment running the CLI: `pip install pydhcp[toml]`.
+If a command reports that YAML or TOML needs an extra, or that the command line needs the
+`cli` extra, install it in the environment running the CLI: `pip install "pydhcp[yaml]"`,
+`pip install "pydhcp[toml]"` or `pip install "pydhcp[cli]"`.
 
 ## Capturing live DHCP traffic
 

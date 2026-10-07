@@ -9,19 +9,26 @@ through `main` with every format and every mistake.
 
 from __future__ import annotations
 
+import importlib.util
 import io
 import json
 import pathlib
+import sys
 import typing as _ty
 
 import pytest
 
 from cli_process import SHOW_SETTINGS, run_cli
 
-# private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
-from pydhcp._config import _tomllib
 from pydhcp.cli import main
+
+# the unit under test is not exported from a public module
 from pydhcp.cli._settings import traceback_requested
+
+#: Python 3.11 reads TOML itself; before it the `toml` extra's `tomli` does.
+HAS_TOML_READER = (
+    sys.version_info >= (3, 11) or importlib.util.find_spec("tomli") is not None
+)
 
 # -- the four levels, for every command ---------------------------------------------
 
@@ -582,7 +589,7 @@ MALFORMED = [
         "bad.toml",
         "[server\ntoken = '" + SECRET + "'\n",
         id="toml",
-        marks=pytest.mark.skipif(_tomllib is None, reason="no TOML reader"),
+        marks=pytest.mark.skipif(not HAS_TOML_READER, reason="no TOML reader"),
     ),
 ]
 

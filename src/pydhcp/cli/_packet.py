@@ -81,7 +81,7 @@ class Packet(_Command):
             else:
                 packet = DHCPMessage.from_text(payload_text, self.packet_format)
                 output = packet.encode().hex()
-        except (ValueError, OSError) as error:
+        except (ValueError, OSError, ImportError) as error:
             raise _Failed(f"cannot process the packet: {error}") from None
 
         if str(self.output) == "-":

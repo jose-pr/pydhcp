@@ -63,11 +63,11 @@ def _open(
         # Building opens nothing. A record file is appended to; a capture file
         # cannot be, and a second run replaces it.
         return build(per_capture, True) if _is_record(writer) else writer
-    except ImportError:
-        if not _pktcap.has_output_format("toml"):
-            raise ImportError(
-                "TOML output needs the 'toml' extra: pip install \"pydhcp[toml]\""
-            ) from None
+    except ImportError as error:
+        # pktcap names its own extra; a pydhcp user installs it through pydhcp's.
+        said = str(error)
+        if 'pip install "pktcap[' in said:
+            raise ImportError(said.replace('"pktcap[', '"pydhcp[')) from None
         raise
     except ValueError:
         if not per_capture:

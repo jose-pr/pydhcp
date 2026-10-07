@@ -149,6 +149,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **`duho` and PyYAML are extras, `cli` and `yaml`, and no longer installed with the package**:
+  `pip install pydhcp` gives the library, and `pip install "pydhcp[cli]"` the `pydhcp` command,
+  `pip install "pydhcp[yaml]"` YAML packets and `.yaml` configuration files. `import pydhcp`
+  and `import pydhcp.cli` import neither, nor `tomllib`, `tomli` or `tomli_w`. **Breaking** for an
+  install that relied on `pip install pydhcp` for the command or for YAML. The `dev` extra
+  includes `cli`, `yaml` and `toml`.
+- **Without the `cli` extra the `pydhcp` command (and `python -m pydhcp`) prints one line,
+  `pydhcp: error: the command line needs the 'cli' extra: pip install "pydhcp[cli]"`, and exits
+  with status 1**; `pydhcp.cli.main` returns 1 the same way. `pydhcp.cli.App` and the six command
+  classes load on first use and are an `ImportError` naming the extra without `duho`.
+- **A missing YAML or TOML dependency is an error that names the extra, not
+  `NotImplementedError`**: `DHCPMessage.to_text`/`from_text` and `pydhcp.packet.structured.dumps`/
+  `loads` raise `ImportError` with `pip install "pydhcp[yaml]"` or `"pydhcp[toml]"`; a `.yaml` or
+  `.toml` configuration file raises `DHCPConfigError` with the same line; `pydhcp capture --format
+  yaml` names `pydhcp[yaml]` where it named `pktcap[yaml]`. The format stays a listed one. **Breaking**
+  for code that caught `NotImplementedError` there. No default needs an extra: `packet --format`,
+  the `capture` format without an ending and the configuration format are JSON or come from the
+  file's name.
+
 - **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
   `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
   `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is

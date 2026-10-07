@@ -18,6 +18,8 @@ Install using pip:
 pip install pydhcp
 ```
 
+The command line, YAML and TOML are extras: `pip install "pydhcp[cli,yaml,toml]"`.
+
 ## Quick Start
 
 ### Synchronous DHCP Server

@@ -24,7 +24,6 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "PyYAML>=6.0",
     # 0.4.0: pydhcp uses the names netimps 0.4 settled on -- UDPEndpoint,
     # has_pktinfo, has_src_pinning, get_interface(index=), split_host,
     # Datagram.destination and truncated, LINK_LOCAL_V4, MACAddress.format --
@@ -33,16 +32,19 @@ dependencies = [
     # The capture filter grammar and the record writer (one growing file, or one
     # file per record under a name pattern, with a file budget).
     "pktcap>=0.1.0,<0.2",
-    "duho>=0.6.0,<0.7",
 ]
 
 [project.scripts]
 pydhcp = "pydhcp.cli:main"
 
 [project.optional-dependencies]
-dev = ['black', 'build', 'twine', 'hatchling', 'mypy', 'pip-audit', 'pytest', 'pytest-cov', 'hypothesis>=6.100']
-docs = ['mkdocs', 'mkdocs-material', 'mkdocstrings[python]']
+# One extra per capability. `dev` refers to them by name, so a development
+# install exercises all of them and no range is written twice.
+cli = ['duho>=0.6.0,<0.7']
+yaml = ['PyYAML>=6.0']
 toml = ['tomli-w>=1.2.0', 'tomli>=2.4.0; python_version < "3.11"']
+dev = ['pydhcp[cli,yaml,toml]', 'black', 'build', 'twine', 'hatchling', 'mypy', 'pip-audit', 'pytest', 'pytest-cov', 'hypothesis>=6.100']
+docs = ['mkdocs', 'mkdocs-material', 'mkdocstrings[python]']
 
 [project.urls]
 Homepage = "https://github.com/jose-pr/pydhcp/"

@@ -1,58 +1,73 @@
 """The `pydhcp` command line.
 
-`App` and `main` live here; each subcommand has its own module (`_interfaces`,
-`_server`, `_relay`, `_packet`, `_capture`), with what they share in `_common`
-and where the settings come from in `_settings`.
+`main` is here and imports nothing the command needs until it is called. `App`
+and the six command classes are in the modules beside it (`_app`, `_interfaces`,
+`_server`, `_relay`, `_packet`, `_capture`, `_replay`), which import `duho`:
+the names load on first use, and without the `cli` extra that use is an
+`ImportError` naming the extra. What the commands share is in `_common` and where
+the settings come from in `_settings`.
 """
 
 from __future__ import annotations
 
+import importlib as _importlib
 import logging as _logging
-import os
 import sys
 import typing as _ty
 
-import duho
-from duho import AUTO, Cli, DefaultsFormatter
+from .._extras import missing as _missing
 
-from . import _settings
-from ._common import _Configured, _Failed
-from ._interfaces import Interfaces
-from ._server import Server
-from ._relay import Relay
-from ._packet import Packet
-from ._capture import Capture
-from ._replay import Replay
+if _ty.TYPE_CHECKING:
+    from ._app import App as App
+    from ._capture import Capture as Capture
+    from ._interfaces import Interfaces as Interfaces
+    from ._packet import Packet as Packet
+    from ._relay import Relay as Relay
+    from ._replay import Replay as Replay
+    from ._server import Server as Server
 
 #: The command line's logger, a child of the package logger `pydhcp`: the
 #: `-v` and `--loglevel pydhcp:DEBUG` options configure the parent.
 LOGGER = _logging.getLogger(__name__)
 
-
-class App(Cli):
-    """pydhcp CLI Interface"""
-
-    # duho names the program after the class, so every usage line and every
-    # error read "App" -- a name that appears nowhere the user installed,
-    # typed, or could look up.
-    _parsername_ = "pydhcp"
-    _version_ = AUTO
-    _logger_name_ = "pydhcp"
-    # No command is a tool a program calls: serve, relay and capture never
-    # return, and `packet` and `interfaces` have a shell to run in. A switch per
-    # command does not exist, so PYDHCP_MCP is not read.
-    _mcp_ = False
-    _config_loader_ = staticmethod(_settings.load_layer)
-    _help_formatter_ = DefaultsFormatter
-    _subcommands_ = [Interfaces, Server, Relay, Packet, Capture, Replay]
+#: Which module holds each name that needs `duho`.
+_MODULES = {
+    "App": "_app",
+    "Interfaces": "_interfaces",
+    "Server": "_server",
+    "Relay": "_relay",
+    "Packet": "_packet",
+    "Capture": "_capture",
+    "Replay": "_replay",
+}
 
 
-def _quiet_stdout() -> None:
-    """Point stdout at the null device, so the flush at exit cannot fail again."""
+_NEEDS_CLI = _missing("the command line", "cli")
+
+
+def _has_duho() -> bool:
+    """Whether `duho`, which the `cli` extra installs, can be imported.
+
+    A failure inside `duho` or one of its own dependencies is not "absent".
+    """
     try:
-        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
-    except (OSError, ValueError):
-        pass
+        import duho  # noqa: F401
+    except ModuleNotFoundError as error:
+        if error.name != "duho":
+            raise
+        return False
+    return True
+
+
+def __getattr__(name: str) -> _ty.Any:
+    module = _MODULES.get(name)
+    if module is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if not _has_duho():
+        raise ImportError(_NEEDS_CLI)
+    value = getattr(_importlib.import_module(f".{module}", __name__), name)
+    globals()[name] = value
+    return value
 
 
 def main(argv: "_ty.Optional[_ty.Sequence[str]]" = None) -> int:
@@ -64,44 +79,16 @@ def main(argv: "_ty.Optional[_ty.Sequence[str]]" = None) -> int:
     option, a malformed `--listen`, a configuration file that cannot be used).
     The parser's own exits (`--help`, `--version`, a usage error) are returned
     as their status. An error is one line on stderr, `pydhcp: error: ...`;
-    `PYDHCP_TRACEBACK=1` raises it with its traceback instead.
+    `PYDHCP_TRACEBACK=1` raises it with its traceback instead. Without the `cli`
+    extra the one line names it and the status is 1.
     """
     args = list(sys.argv[1:] if argv is None else argv)
-    show_traceback = False
-    try:
-        show_traceback = _settings.traceback_requested()
-        sections = _settings.sections_of(
-            command
-            for command in App._subcommands_ or ()
-            if issubclass(command, _Configured)
-        )
-        _, token = _settings.begin(args, sections)
-        try:
-            status = duho.main(App, args, config=_settings.config_path())
-        finally:
-            _settings.end(token)
-    except SystemExit as stop:
-        code = stop.code
-        if code is None:
-            return 0
-        if isinstance(code, int):
-            return code
-        print(code, file=sys.stderr)
+    if not _has_duho():
+        print(f"pydhcp: error: {_NEEDS_CLI}", file=sys.stderr)
         return 1
-    except BrokenPipeError:
-        _quiet_stdout()
-        return 1
-    except ValueError as error:
-        if show_traceback:
-            raise
-        print(f"pydhcp: error: {error}", file=sys.stderr)
-        return 2
-    except (OSError, NotImplementedError, _Failed) as error:
-        if show_traceback:
-            raise
-        print(f"pydhcp: error: {error}", file=sys.stderr)
-        return 1
-    return 0 if status is None else int(status)
+    from ._app import run
+
+    return run(args)
 
 
 __all__ = [

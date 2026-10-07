@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import sys
+
 import pytest
 
 from pydhcp import DHCPMessage, DHCPOptions
@@ -15,11 +17,10 @@ def _sample_packet() -> DHCPMessage:
 
 @pytest.mark.parametrize("format_name", ["json", "yaml", "toml", "ini"])
 def test_packet_structured_round_trip_for_each_format(format_name: str) -> None:
-    # private: the optional TOML reader, switched off to test its absence; the optional TOML writer, switched off to test its absence
-    if format_name == "toml" and (
-        structured._tomllib is None or structured._tomli_w is None
-    ):
-        pytest.skip("TOML packet round trip requires optional TOML dependencies")
+    if format_name == "toml":
+        pytest.importorskip("tomli_w")
+        if sys.version_info < (3, 11):
+            pytest.importorskip("tomli")
 
     packet = _sample_packet()
 
@@ -32,21 +33,6 @@ def test_packet_structured_round_trip_for_each_format(format_name: str) -> None:
     if format_name == "ini":
         assert "[message]" in text
         assert "[options]" in text
-
-
-def test_toml_decode_without_reader_reports_not_implemented(monkeypatch) -> None:
-    monkeypatch.setattr(structured, "_tomllib", None)
-
-    with pytest.raises(NotImplementedError, match="INI format as a stdlib fallback"):
-        structured.loads("[message]\nop = 'BOOTREQUEST'\n", "toml")
-
-
-def test_toml_encode_without_writer_reports_not_implemented(monkeypatch) -> None:
-    packet = _sample_packet()
-    monkeypatch.setattr(structured, "_tomli_w", None)
-
-    with pytest.raises(NotImplementedError, match="INI format as a stdlib fallback"):
-        packet.to_text("toml")
 
 
 # --- the structured round trip must not change the packet ---
