@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import datetime as _dt
+import struct as _struct
+import typing as _ty
+
 from ..exceptions import DHCPValueError
 from .. import _constants as _const, _nvt as _nvt
 from . import _layout
@@ -18,6 +22,55 @@ from ._fields import (
     _check_header_int,
     _check_bootp_field,
 )
+
+#: The header fields packed as numbers that nothing has checked by the time
+#: they are packed, with the largest value each field's width holds.
+_PACKED_NUMBERS = (
+    ("op", 0xFF),
+    ("htype", 0xFF),
+    ("flags", 0xFFFF),
+    ("ciaddr", 0xFFFFFFFF),
+    ("yiaddr", 0xFFFFFFFF),
+    ("siaddr", 0xFFFFFFFF),
+    ("giaddr", 0xFFFFFFFF),
+)
+
+
+def _unsendable(message: _ty.Any, error: Exception) -> DHCPValueError:
+    """Why the header of `message` could not be packed, naming the field.
+
+    Called only after packing failed: a message keeps whatever it was given, so
+    this is where a value with no wire form is found. The value is shown cut to
+    60 characters.
+    """
+    if not isinstance(message.secs, _dt.timedelta):
+        return DHCPValueError(
+            f"secs={message.secs!r:.60} cannot be sent: it is a datetime.timedelta"
+        )
+    for field, maximum in _PACKED_NUMBERS:
+        value = getattr(message, field)
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            number = -1
+        if not 0 <= number <= maximum:
+            return DHCPValueError(
+                f"{field}={value!r:.60} cannot be sent: it must be "
+                f"{_EXPECTED[field]}, or an integer in 0..{maximum}"
+            )
+    return DHCPValueError(f"the header cannot be sent: {error}")
+
+
+#: What each of those fields holds, for the refusal's text.
+_EXPECTED = {
+    "op": "a DHCPOpcode",
+    "htype": "a HardwareAddressType",
+    "flags": "a DHCPFlags",
+    "ciaddr": "an ipaddress.IPv4Address",
+    "yiaddr": "an ipaddress.IPv4Address",
+    "siaddr": "an ipaddress.IPv4Address",
+    "giaddr": "an ipaddress.IPv4Address",
+}
 
 
 class _MessageEncode(_MessageDecode):
@@ -95,28 +148,33 @@ class _MessageEncode(_MessageDecode):
             )
 
         data = bytearray(28)
-        _HEADER_STRUCT.pack_into(
-            data,
-            0,
-            self.op.value,
-            int(self.htype),
-            # 16, not 255: `chaddr` is a 16-octet field, so a larger `hlen` is a
-            # lie the receiver acts on -- it reads past chaddr into `sname`.
-            # `decode` already rejects it with the same bound, and the two
-            # disagreed: hlen=17 encoded happily and would not decode back.
-            _check_header_int("hlen", self.hlen, _CHADDR_FIELD_SIZE),
-            _check_header_int("hops", self.hops, 0xFF),
-            _check_header_int("xid", self.xid, 0xFFFFFFFF),
-            # `secs` is clamped rather than rejected: it is an elapsed time the
-            # client reports, an overlong one is not a caller error, and RFC
-            # 2131 s4.4.1 only requires it to be monotonic within an exchange.
-            min(0xFFFF, max(0, int(self.secs.total_seconds()))),
-            int(self.flags),
-            int(self.ciaddr),
-            int(self.yiaddr),
-            int(self.siaddr),
-            int(self.giaddr),
-        )
+        try:
+            _HEADER_STRUCT.pack_into(
+                data,
+                0,
+                int(self.op),
+                int(self.htype),
+                # 16, not 255: `chaddr` is a 16-octet field, so a larger `hlen` is a
+                # lie the receiver acts on -- it reads past chaddr into `sname`.
+                # `decode` already rejects it with the same bound, and the two
+                # disagreed: hlen=17 encoded happily and would not decode back.
+                _check_header_int("hlen", self.hlen, _CHADDR_FIELD_SIZE),
+                _check_header_int("hops", self.hops, 0xFF),
+                _check_header_int("xid", self.xid, 0xFFFFFFFF),
+                # `secs` is clamped rather than rejected: it is an elapsed time the
+                # client reports, an overlong one is not a caller error, and RFC
+                # 2131 s4.4.1 only requires it to be monotonic within an exchange.
+                min(0xFFFF, max(0, int(self.secs.total_seconds()))),
+                int(self.flags),
+                int(self.ciaddr),
+                int(self.yiaddr),
+                int(self.siaddr),
+                int(self.giaddr),
+            )
+        except DHCPValueError:
+            raise  # `hlen`, `hops` or `xid`, refused by name inside the call
+        except (AttributeError, TypeError, ValueError, _struct.error) as error:
+            raise _unsendable(self, error) from None
         # No trailing `[:width]` slice: it was the silent truncation, and
         # `_check_bootp_field` above has already refused anything longer.
         data.extend(self.chaddr.ljust(_CHADDR_FIELD_SIZE, b"\x00"))

@@ -1005,6 +1005,12 @@ Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **`encode()` names the header field it cannot send.** A message built with a value that has no
+  wire form in `op`, `htype`, `flags`, `secs` or one of the four addresses (`DHCPMessage("BOOTREQUEST")`,
+  `ciaddr="192.0.2.1"`, `secs=5`) raised `AttributeError`, `ValueError` or `struct.error` from the line
+  that packs the header; it raises `DHCPValueError` naming the field and what it holds. An opcode given
+  as its number is sent as that number, as `htype` and `flags` already were: `DHCPMessage(1)` is a
+  BOOTREQUEST, where it raised `AttributeError`.
 - **A deadline no longer lets one more datagram out after the last wait.** The clients cut the wait the
   deadline falls in to what it leaves, but then read the clock again and sent once more when it still showed time left,
   which a timer firing a clock tick early (15.6 ms on Windows) made happen. The wait the deadline cuts is the last one,

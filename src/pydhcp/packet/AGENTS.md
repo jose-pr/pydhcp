@@ -87,6 +87,12 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       matching `.decode()`, since `chaddr` is a 16-octet field) or `xid`
       (0–2³²−1) is out of range, not a bare `struct.error` (it names the format character rather than the field, and is neither `ValueError` nor `TypeError`). `secs` is **clamped** to 0–65535 rather
       than rejected: it is elapsed time the client reports.
+    - **`DHCPValueError`** naming the field if `op`, `htype`, `flags`, `secs` or one
+      of the four addresses holds a value with no wire form (a `str`, `None`, a
+      number outside the field's width; `secs` anything but a `timedelta`). A
+      message keeps whatever it is given, so this is where such a value is
+      refused. An integer in range is sent as that number: `DHCPMessage(1)` is a
+      BOOTREQUEST.
     - **`DHCPValueError`** naming the field if `chaddr` (>16 octets) does not
       fit; a value is never truncated.
     - **`OverflowError`** if the options do not fit even with `sname` and `file`

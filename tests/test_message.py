@@ -3,6 +3,7 @@ import logging
 import pytest
 from datetime import timedelta
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
+from pydhcp.exceptions import DHCPValueError
 from pydhcp.packet import DHCPMessage
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
@@ -725,4 +726,68 @@ def test_out_of_range_header_fields_name_the_field():
     message.secs = timedelta(seconds=100_000)
     assert DHCPMessage.decode(bytearray(message.encode())).secs == timedelta(
         seconds=0xFFFF
+    )
+
+
+def test_an_opcode_given_as_its_number_is_sent_as_that_number():
+    """The number is the wire value, as it already is for `htype` and `flags`."""
+    by_number = DHCPMessage(1, xid=7, chaddr=b"\x02" * 6)
+    by_member = DHCPMessage(DHCPOpcode.BOOTREQUEST, xid=7, chaddr=b"\x02" * 6)
+    wire = by_number.encode()
+    assert wire == by_member.encode() and wire[0] == 1
+    assert DHCPMessage.decode(wire).op is DHCPOpcode.BOOTREQUEST
+
+
+@pytest.mark.parametrize(
+    "field, value",
+    [
+        ("op", "BOOTREQUEST"),
+        ("op", None),
+        ("op", 256),
+        ("op", -1),
+        ("htype", "ethernet"),
+        ("htype", 256),
+        ("flags", "broadcast"),
+        ("flags", 0x10000),
+        ("secs", 5),
+        ("secs", "5"),
+        ("ciaddr", "192.0.2.1"),
+        ("yiaddr", None),
+        ("siaddr", 2**32),
+        ("giaddr", -1),
+    ],
+)
+def test_a_header_field_that_cannot_be_sent_is_refused_by_name(field, value):
+    """A message is built from whatever it is given; `encode()` is where a value
+    that has no wire form is refused, with the package's error and the field's
+    name, not an `AttributeError` or a `struct.error` from the line that packs it."""
+    message = DHCPMessage(DHCPOpcode.BOOTREQUEST, xid=7, chaddr=b"\x02" * 6)
+    setattr(message, field, value)
+    with pytest.raises(DHCPValueError, match=r"\b%s=" % field) as refused:
+        message.encode()
+    assert isinstance(refused.value, ValueError)
+    with pytest.raises(DHCPValueError, match=r"\b%s=" % field):
+        bytes(message)
+
+
+def test_a_refusal_shows_a_long_value_cut_short():
+    message = DHCPMessage(DHCPOpcode.BOOTREQUEST, chaddr=b"\x02" * 6)
+    message.ciaddr = "9" * 5000
+    with pytest.raises(DHCPValueError) as refused:
+        message.encode()
+    assert len(str(refused.value)) < 300
+
+
+def test_what_a_header_field_already_took_is_still_sent():
+    """An integer where an enum member or an address is expected is its wire
+    value: that held before, and a refusal must not take it away."""
+    message = DHCPMessage(DHCPOpcode.BOOTREPLY, xid=7, chaddr=b"\x02" * 6)
+    message.htype = 6
+    message.flags = 0x8000
+    message.yiaddr = int(IPv4("192.0.2.9"))
+    again = DHCPMessage.decode(message.encode())
+    assert (int(again.htype), int(again.flags), again.yiaddr) == (
+        6,
+        0x8000,
+        IPv4("192.0.2.9"),
     )
