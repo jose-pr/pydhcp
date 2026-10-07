@@ -36,6 +36,11 @@
  ],
  "not_compared": [
   {
+   "aspect": "field:xid",
+   "step": "release",
+   "why": "chance: the client draws its transaction id; the replay gives this library the one the golden recorded"
+  },
+  {
    "aspect": "destination",
    "step": "release",
    "why": "a builder builds a message and the caller names where it goes"

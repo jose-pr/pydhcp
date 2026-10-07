@@ -23,6 +23,7 @@ OUT='{out}'
 case "$reason" in
   BOUND|RENEW|REBIND|REBOOT)
     {{ echo "reason=$reason"; env | grep '^new_' | sort; echo '--'; }} >> "$OUT/events"
+    [ {status} -eq 0 ] || exit {status}
     '{ip}' addr flush dev "$interface" 2>/dev/null
     '{ip}' addr add "$new_ip_address/$new_subnet_mask" dev "$interface"
     ;;
@@ -123,22 +124,31 @@ def dhclient(
     lease_file: _ty.Optional[str] = None,
     reboot_seconds: int = 10,
     timeout_seconds: int = 20,
+    send_host_name: bool = True,
+    script_status: int = 0,
+    release: bool = False,
 ) -> Client:
-    """ISC dhclient, one attempt, in the foreground, confined to `ns`."""
+    """ISC dhclient, one attempt, in the foreground, confined to `ns`.
+
+    `send_host_name=False` leaves the host name out of what it sends,
+    `script_status` is the exit status of its script on a lease (non-zero makes
+    it send a DHCPDECLINE) and `release=True` runs `dhclient -r`, which
+    releases the lease its lease file holds and exits.
+    """
     binary = which("dhclient")
     assert binary is not None
     out = lab.work / f"{name}-out"
     out.mkdir(parents=True, exist_ok=True)
     script = out / "script.sh"
-    _write(script, _DHCLIENT_SCRIPT.format(out=out, ip=lab.ip))
+    _write(script, _DHCLIENT_SCRIPT.format(out=out, ip=lab.ip, status=script_status))
     script.chmod(0o755)
     conf = out / "dhclient.conf"
     # The option list is stated: a distribution's built-in default differs
     # (Debian's dhclient does not ask for the interface MTU, Fedora's does).
     _write(
         conf,
-        f'send host-name "{HOSTNAME}";\n'
-        "request subnet-mask, broadcast-address, routers, domain-name,\n"
+        (f'send host-name "{HOSTNAME}";\n' if send_host_name else "")
+        + "request subnet-mask, broadcast-address, routers, domain-name,\n"
         "    domain-name-servers, host-name, interface-mtu;\n"
         f"timeout {timeout_seconds};\nreboot {reboot_seconds};\n"
         "retry 5;\nselect-timeout 0;\n" + extra_conf,
@@ -151,7 +161,7 @@ def dhclient(
         [
             binary,
             "-d",
-            "-1",
+            "-r" if release else "-1",
             "-v",
             "-cf",
             str(conf),
@@ -216,10 +226,17 @@ def dnsmasq(
     lab: Lab,
     ns: str,
     iface: str,
-    dhcp_range: str,
+    dhcp_range: _ty.Optional[str],
     name: str = "dnsmasq",
+    *,
+    extra: _ty.Sequence[str] = (),
 ) -> Proc:
-    """dnsmasq as a DHCP-only server on `iface`, confined to `ns`."""
+    """dnsmasq as a DHCP-only server on `iface`, confined to `ns`.
+
+    `dhcp_range=None` gives no range (a relay has none) and `extra` is appended
+    to the command line. It is ready once port 67 is bound in `ns` and, with a
+    range, the range is logged.
+    """
     binary = which("dnsmasq")
     assert binary is not None
     out = lab.work / f"{name}-out"
@@ -238,18 +255,25 @@ def dnsmasq(
             "--group=root",
             "--bind-interfaces",
             f"--interface={iface}",
-            f"--dhcp-range={dhcp_range}",
+            *([f"--dhcp-range={dhcp_range}"] if dhcp_range else []),
             f"--dhcp-leasefile={out / 'leases'}",
             f"--pid-file={out / 'pid'}",
             f"--log-facility={out / 'log'}",
             "--log-dhcp",
+            *extra,
         ],
         name,
     )
     end = time.monotonic() + 5
     log = out / "log"
     while time.monotonic() < end:
-        if log.exists() and "DHCP, IP range" in log.read_text(errors="replace"):
+        logged = log.exists() and (
+            not dhcp_range or "DHCP, IP range" in log.read_text(errors="replace")
+        )
+        if (
+            logged
+            and lab.run(ns, ["ss", "-Hlun", "sport = :67"], check=False).stdout.strip()
+        ):
             break
         if not proc.alive():
             raise RuntimeError(f"dnsmasq exited: {proc.text()}")

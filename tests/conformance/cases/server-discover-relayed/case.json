@@ -33,5 +33,11 @@
    }
   }
  ],
- "not_compared": []
+ "not_compared": [
+  {
+   "aspect": "field:yiaddr",
+   "step": "discover-from-relay",
+   "why": "which free address a pool gives is the operator's choice: the range is the same, the pick is not specified"
+  }
+ ]
 }

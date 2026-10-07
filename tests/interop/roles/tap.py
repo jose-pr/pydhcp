@@ -4,7 +4,9 @@ Run: python tap.py <interface> <output.jsonl> <ready-file>
 
 Sees what the namespace sends as well as what it receives (an `ETH_P_IP` socket
 would see only the latter). Uses only the standard library, so what it reports
-is the kernel's account and not the library's. One JSON object per line, written as the frame arrives.
+is the kernel's account and not the library's. One JSON object per line, written as the frame arrives, with the
+`time.monotonic()` reading of that moment (one clock for every process of the host,
+so frames of two segments order).
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import signal
 import socket
 import struct
 import sys
+import time
 
 iface, out_path, ready_path = sys.argv[1], sys.argv[2], sys.argv[3]
 ETH_P_ALL = 0x0003
@@ -66,6 +69,7 @@ while not stop:
         json.dumps(
             {
                 "seq": seq,
+                "t": time.monotonic(),
                 "kind": KINDS.get(info[2], str(info[2])),
                 "src_mac": mac(data[6:12]),
                 "dst_mac": mac(data[0:6]),

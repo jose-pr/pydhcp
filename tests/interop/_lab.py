@@ -129,6 +129,7 @@ class Frame(_ty.NamedTuple):
     sport: int
     dport: int
     payload: bytes
+    t: float = 0.0  # time.monotonic() when the tap saw it
 
     def message(self) -> _ty.Any:
         from pydhcp import DHCPMessage

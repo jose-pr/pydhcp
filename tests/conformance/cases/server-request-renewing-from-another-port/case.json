@@ -61,5 +61,16 @@
    "holds": "10.99.0.100"
   }
  ],
- "not_compared": []
+ "not_compared": [
+  {
+   "aspect": "option-value:58",
+   "step": "request-renewing",
+   "why": "chance: dnsmasq answers a renewal with the time left to the renewal and rebinding points, which depends on how long after the ACK the client asked"
+  },
+  {
+   "aspect": "option-value:59",
+   "step": "request-renewing",
+   "why": "chance: dnsmasq answers a renewal with the time left to the renewal and rebinding points, which depends on how long after the ACK the client asked"
+  }
+ ]
 }

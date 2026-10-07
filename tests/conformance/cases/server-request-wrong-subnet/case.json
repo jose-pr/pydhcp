@@ -1,5 +1,5 @@
 {
- "description": "INIT-REBOOT for an address on another network: the NAK of RFC 2131 section 4.3.2.",
+ "description": "INIT-REBOOT for an address on another network than the one the server serves.",
  "role": "server",
  "topology": "single",
  "config": {

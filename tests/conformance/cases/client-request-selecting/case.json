@@ -45,5 +45,16 @@
    "args": {}
   }
  ],
- "not_compared": []
+ "not_compared": [
+  {
+   "aspect": "field:xid",
+   "step": "discover",
+   "why": "chance: the client draws its transaction id; the replay gives this library the one the golden recorded"
+  },
+  {
+   "aspect": "field:xid",
+   "step": "request-selecting",
+   "why": "chance: the client draws its transaction id; the replay gives this library the one the golden recorded"
+  }
+ ]
 }
