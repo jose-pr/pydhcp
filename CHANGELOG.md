@@ -168,6 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the `capture` format without an ending and the configuration format are JSON or come from the
   file's name.
 
+- **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
+  `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
 - **Dependency ranges are scoped to a series and their floors install**: `PyYAML>=6.0,<7` (the floor
   is 6.0.1 on Windows on ARM64 and from Python 3.12, where 6.0 has no wheel and does not build),
   `tomli>=2.0,<3` (below Python 3.11), `tomli-w>=1.0,<2`; they were open-ended, with floors of
