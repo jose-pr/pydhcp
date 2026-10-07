@@ -12,6 +12,10 @@ on:
         required: false
         type: boolean
         default: false
+      result_name:
+        description: Stem of the benchmark result file (default is named for the version and interpreter)
+        required: false
+        type: string
   push:
     # Only the default branch and throwaway ci-* tags. '**' ran the full
     # 8-job matrix on every push to every topic branch, duplicating the
@@ -486,8 +490,11 @@ jobs:
       # --save writes benchmarks/results/<name>.json in the schema
       # tools/compare_bench.py consumes. CI is the only place perf numbers are
       # decision-grade, so this is what a committed baseline should come from.
+      # The name reaches the shell as data, never spliced into its source.
       - name: Run benchmarks
-        run: python benchmarks/run.py --save
+        env:
+          RESULT_NAME: ${{ inputs.result_name }}
+        run: python benchmarks/run.py --save ${RESULT_NAME:+--name "$RESULT_NAME"}
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v7

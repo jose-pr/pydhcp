@@ -158,6 +158,10 @@ reads. Use `run.py --save` for anything that will be compared.
   `benchmarks/results/*.json` as an artifact, and the artifact is what is
   committed here, unedited. Its `python`, `platform` and `processor` fields name
   the runner it was measured on.
+  The job names the file for the version in `pyproject.toml` and the interpreter;
+  the `result_name` input of the manual run names it otherwise, which a result of
+  a tree that has not been versioned yet needs so that it does not take another
+  tree's name.
 
 A local run measures the machine it ran on: two back-to-back runs of the same
 commit on the same developer machine came out **10.1%** apart, which is why a
