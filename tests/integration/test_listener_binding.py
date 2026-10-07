@@ -28,6 +28,28 @@ class ReusingListener(DHCPListener):
     REUSE_ADDRESS = True
 
 
+# --- the record that follows the bind ---
+
+
+def test_a_bound_record_names_the_port_the_kernel_gave(caplog) -> None:
+    """ "Listening on" says the port that was asked for (0 here); the record logged
+    after the bind says the one bound, which is what a supervisor reads."""
+    listener = DHCPListener(listen=("127.0.0.1", 0))
+    with caplog.at_level(logging.INFO, logger="pydhcp"):
+        listener.bind()
+    try:
+        (address,) = listener.bound_addresses
+        assert address.port != 0
+        records = [r.getMessage() for r in caplog.records]
+        assert "Listening on: 127.0.0.1:0" in records
+        assert f"Bound: {address}" in records
+        assert records.index(f"Bound: {address}") > records.index(
+            "Listening on: 127.0.0.1:0"
+        )
+    finally:
+        listener.close()
+
+
 # --- transport-12: bind() is idempotent, port 0 included ---
 
 

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **A `Bound: <address>` record (INFO) after each listening socket is bound**, with the port the kernel gave: `Listening on:` is
+  logged before the bind and names the port that was asked for, which is `0` for an ephemeral one.
 - **`DHCPMessage.from_hex(text)`**: decode a message written as hexadecimal text (spaces, line
   ends and colons between the digits are ignored), the reader `pydhcp packet --decode` used to
   keep to itself.

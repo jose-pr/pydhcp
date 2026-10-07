@@ -13,7 +13,6 @@ import socket
 import subprocess
 import sys
 import threading
-import time
 import typing as _ty
 
 import pydhcp
@@ -96,16 +95,15 @@ def free_port() -> int:
         return int(probe.getsockname()[1])
 
 
-#: How long after the listener's announcement a command is given to have bound.
-BIND_SECONDS = 1.0
+#: The record the listener logs once a socket is bound.
+BOUND = "Bound"
 
 
 class Running:
     """`pydhcp argv...` started and left running.
 
     Start it with `-v` and `--listen 127.0.0.1:<free_port()>`: the listener
-    announces that it is binding, and `listening()` waits for that line and for
-    the bind that follows it. `finish()` waits for the command to
+    logs the address it bound, and `listening()` waits for that line. `finish()` waits for the command to
     end by itself and returns its status, killing it, and failing the caller's
     check, when it does not.
     """
@@ -145,20 +143,18 @@ class Running:
     def _read(self, stream: "_ty.IO[str]", into: "list[str]") -> None:
         for line in stream:
             into.append(line.rstrip("\r\n"))
-            if "Listening on" in line:
+            if BOUND in line:
                 self._listening.set()
 
     def listening(self, timeout: float = 30.0) -> None:
-        """Wait until the command has announced that it binds, and for the bind.
+        """Wait until the command has logged that it is bound.
 
-        The line is logged just before the bind. A test cannot probe the port
-        instead: a bind of its own would hold the port for the moment the command
-        wants it.
+        The line follows the bind. A test cannot probe the port instead: a bind
+        of its own would hold the port for the moment the command wants it.
         """
         if not self._listening.wait(timeout):
             self.kill()
             raise AssertionError("the command did not bind:\n" + "\n".join(self.stderr))
-        time.sleep(BIND_SECONDS)
 
     def finish(self, timeout: float = 30.0) -> int:
         try:

@@ -213,11 +213,26 @@ def _bind_sockets(
             _release(opened, sockets, endpoints)
             raise
         _REQUESTED_ADDRESS[sock] = address
+        # After the bind, with the port the kernel gave: the line a supervisor or a
+        # test waits for, since "Listening on" is logged before it.
+        LOGGER.info(
+            f"Bound{' (' + label + ')' if label else ''}: {_bound_address(sock, address)}"
+        )
         _warn_if_address_bound_hears_no_broadcast(address)
     for address, sock in active.items():
         if address not in wanted:
             sockets.remove(sock)
             _close_socket(sock, endpoints)
+
+
+def _bound_address(
+    sock: _socket.socket, asked: "_net.SocketAddress"
+) -> "_net.SocketAddress":
+    """The address `sock` is bound to, or the one asked for when it cannot say."""
+    try:
+        return _net.SocketAddress.from_socket(sock)
+    except OSError:  # pragma: no cover - a socket that closed under us
+        return asked
 
 
 def _release(

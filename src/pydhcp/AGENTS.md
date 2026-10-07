@@ -243,7 +243,8 @@ everything below from `pydhcp.listener` itself.
     actually bound to, read from the sockets rather than from the requested
     spec. Empty before `.bind()` and after `.close()`; a listener that was only
     shut down keeps its sockets. This is how a caller that passed port 0 learns
-    the ephemeral port it was given.
+    the ephemeral port it was given. Each socket logs `Listening on: <asked>` before
+    its bind and `Bound: <bound>` (INFO, the bound address) after it.
   - **`metrics.packets_dropped_truncated`** / **`metrics.packets_dropped_error`**
     — datagrams that did not fit `max_packet_size`, and datagrams lost to an
     error anywhere in receive/decode/handle. They are `DHCPMetrics` fields, so

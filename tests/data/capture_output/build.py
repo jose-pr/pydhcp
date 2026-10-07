@@ -25,7 +25,6 @@ import subprocess
 import sys
 import tempfile
 import threading
-import time
 import typing as _ty
 
 HERE = pathlib.Path(__file__).resolve().parent
@@ -36,7 +35,7 @@ EXPECTED = HERE / "expected"
 if str(TESTS) not in sys.path:
     sys.path.insert(0, str(TESTS))
 
-from cli_process import BIND_SECONDS, environment, free_port  # noqa: E402
+from cli_process import environment, free_port  # noqa: E402
 
 #: How `pydhcp capture` is told to write one file for each record.
 PER_CAPTURE: "tuple[str, ...]" = ("--per-capture",)
@@ -138,7 +137,7 @@ def run(argv: "_ty.Sequence[str]", sent: "_ty.Sequence[bytes]") -> Done:
         for line in process.stderr:  # type: ignore[union-attr]
             text = line.decode("utf-8", "replace").rstrip("\r\n")
             stderr.append(text)
-            if "Listening on" in text:
+            if "Bound" in text:
                 listening.set()
 
     threads = [threading.Thread(target=read_out), threading.Thread(target=read_err)]
@@ -148,7 +147,6 @@ def run(argv: "_ty.Sequence[str]", sent: "_ty.Sequence[bytes]") -> Done:
     try:
         if not listening.wait(60):
             raise AssertionError("the command did not bind:\n" + "\n".join(stderr))
-        time.sleep(BIND_SECONDS)
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as out:
             for data in sent:
                 out.sendto(data, ("127.0.0.1", port))
