@@ -30,7 +30,7 @@ and a read of this list.
   `pydhcp.packet.structured`; every other module is private, so `pydhcp.listener.sync`,
   `pydhcp.server.handlers`, `pydhcp.options.type` and their like are gone. `pydhcp.network` is
   private and holds only pydhcp's own types: import the address aliases from `ipaddress` and
-  `LINK_LOCAL_V4`, `MACAddress` and `SocketOption` from `netimps`.
+  `LINK_LOCAL_V4` and `SocketOption` from `netimps`; `pydhcp.MACAddress` is `netimps.MACAddress`.
 - **Lifecycle.** Every listener and role has one vocabulary: `bind()`, `start()` (returns `None`,
   raises what the bind raised), `serve_forever()`, `shutdown()`, `wait_closed(timeout=None)`,
   `close()` and `with` (`await aclose()` and `async with` on the asyncio classes). `listen()`,

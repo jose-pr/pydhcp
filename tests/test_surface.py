@@ -50,6 +50,7 @@ EXPECTED_ROOT = [
     "IPv4AddressLike",
     "InMemoryLeaseBackend",
     "LeaseBackend",
+    "MACAddress",
     "NetworkInterface",
     "NoClientIdentityError",
     "OptionOverload",
@@ -343,3 +344,12 @@ def test_a_name_exported_twice_is_one_object() -> None:
         for name in module.__all__:
             homes.setdefault(name, {})[id(getattr(module, name))] = module_name
     assert {n: sorted(h.values()) for n, h in homes.items() if len(h) > 1} == {}
+
+
+def test_the_root_mac_address_is_the_netimps_type() -> None:
+    """`NetworkInterface.mac` hands one to a caller; the root names it, the same object."""
+    import netimps
+    import pydhcp
+
+    assert pydhcp.MACAddress is netimps.MACAddress
+    assert "MACAddress" in pydhcp.__all__

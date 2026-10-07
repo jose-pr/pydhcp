@@ -53,6 +53,8 @@ from .options._codecs import (
     U16 as U16,
     U32 as U32,
 )
+from netimps import MACAddress as MACAddress
+
 from ._network import (
     SocketAddress as SocketAddress,
     NetworkInterface as NetworkInterface,
@@ -136,6 +138,7 @@ __all__ = [
     "U16",
     "U32",
     "IPv4AddressLike",
+    "MACAddress",
     "SocketAddress",
     "NetworkInterface",
     "DHCPServer",

@@ -12,9 +12,11 @@ name has one home, its role module or one of `pydhcp.options`, `pydhcp.packet`,
 (`from pydhcp.options import ClientFQDN`): "Where names live" lists every public
 module's exports. A name outside a module's `__all__` is not API. Modules and packages
 starting with `_` are private (`pydhcp._network`, `_config`, `_constants`, `_nvt`, `_log`,
-`_metrics` and the underscored modules of each package). The address and MAC types are
-not re-exported: `IPv4Address`, `IPv4Network` and `IPv4Interface` come from `ipaddress`,
-`MACAddress` from `netimps`. `load_config` and the size constants are in private modules
+`_metrics` and the underscored modules of each package). The root re-exports one type
+of another package, `MACAddress`, the object `netimps.MACAddress`, because
+`NetworkInterface.mac` hands one to a caller; `IPv4Address`, `IPv4Network` and
+`IPv4Interface` come from `ipaddress`, and nothing else of `netimps` is re-exported
+(import it from there). `load_config` and the size constants are in private modules
 and are not importable from a public one.
 
 Install with `pip install pydhcp`; its required dependencies are `netimps` and `pktcap`.
@@ -57,7 +59,7 @@ Every public module's `__all__`.
 
 | Module | Exports |
 | --- | --- |
-| `pydhcp` | `AsyncDHCPCapture`, `AsyncDHCPClient`, `AsyncDHCPListener`, `AsyncDHCPRelay`, `AsyncDHCPServer`, `CaptureEvent`, `ClasslessRoute`, `ClientIdentifier`, `DHCPCapture`, `DHCPClient`, `DHCPConfigError`, `DHCPDecodeError`, `DHCPError`, `DHCPFlags`, `DHCPHookError`, `DHCPLease`, `DHCPListener`, `DHCPMessage`, `DHCPMessageType`, `DHCPOpcode`, `DHCPOption`, `DHCPOptionCode`, `DHCPOptionCodes`, `DHCPOptionType`, `DHCPOptions`, `DHCPPort`, `DHCPRefusedError`, `DHCPRelay`, `DHCPRequestContext`, `DHCPServer`, `DHCPTimeoutError`, `DHCPTransport`, `DHCPValueError`, `DomainList`, `FileLeaseBackend`, `IPv4AddressLike`, `InMemoryLeaseBackend`, `LeaseBackend`, `NetworkInterface`, `NoClientIdentityError`, `OptionOverload`, `PktInfoUDPTransport`, `PolicyFilter`, `RDNSSSelection`, `RelayAgentInformation`, `SocketAddress`, `StaticRoute`, `TLVOption`, `U16`, `U32`, `U8`, `UDPTransport`, `URIList`, `UncompressedDomainList`, `UserClass`, `VendorSpecificInformation`, `__version__`, `compile_capture_filter` |
+| `pydhcp` | `AsyncDHCPCapture`, `AsyncDHCPClient`, `AsyncDHCPListener`, `AsyncDHCPRelay`, `AsyncDHCPServer`, `CaptureEvent`, `ClasslessRoute`, `ClientIdentifier`, `DHCPCapture`, `DHCPClient`, `DHCPConfigError`, `DHCPDecodeError`, `DHCPError`, `DHCPFlags`, `DHCPHookError`, `DHCPLease`, `DHCPListener`, `DHCPMessage`, `DHCPMessageType`, `DHCPOpcode`, `DHCPOption`, `DHCPOptionCode`, `DHCPOptionCodes`, `DHCPOptionType`, `DHCPOptions`, `DHCPPort`, `DHCPRefusedError`, `DHCPRelay`, `DHCPRequestContext`, `DHCPServer`, `DHCPTimeoutError`, `DHCPTransport`, `DHCPValueError`, `DomainList`, `FileLeaseBackend`, `IPv4AddressLike`, `InMemoryLeaseBackend`, `LeaseBackend`, `MACAddress`, `NetworkInterface`, `NoClientIdentityError`, `OptionOverload`, `PktInfoUDPTransport`, `PolicyFilter`, `RDNSSSelection`, `RelayAgentInformation`, `SocketAddress`, `StaticRoute`, `TLVOption`, `U16`, `U32`, `U8`, `UDPTransport`, `URIList`, `UncompressedDomainList`, `UserClass`, `VendorSpecificInformation`, `__version__`, `compile_capture_filter` |
 | `pydhcp.capture` | `AsyncDHCPCapture`, `CaptureEvent`, `CaptureHook`, `CapturePredicate`, `CaptureSink`, `DHCPCapture`, `DHCPCaptureWriter`, `DHCPLayer`, `FILENAME_FIELDS`, `HOOK_TIMEOUT_SECONDS`, `MAX_CAPTURE_FILES`, `PacketFilterLike`, `UNIQUE_FILENAME_FIELDS`, `capture_dissector`, `command_hook`, `compile_capture_filter`, `dissect_dhcp`, `read_capture`, `register_dhcp_dissector`, `replay_capture` |
 | `pydhcp.cli` | `App`, `Capture`, `Interfaces`, `Packet`, `Relay`, `Replay`, `Server`, `main` |
 | `pydhcp.client` | `AsyncDHCPClient`, `ClientIdentifierLike`, `DHCPClient` |
@@ -144,7 +146,7 @@ DHCPRequestContext(transport, interface, client, client_mac, ifindex=None, local
 - `DHCPTransport` — the protocol a reply is sent through; `UDPTransport` and
   `PktInfoUDPTransport` send on a socket, and `DHCPRequestContext` is what a handler is
   given with each message (`pydhcp/listener/AGENTS.md`).
-- `SocketAddress`, `NetworkInterface` and `IPv4AddressLike` — the network types, below.
+- `SocketAddress`, `NetworkInterface` and `IPv4AddressLike` — the network types, below; `MACAddress` — `netimps.MACAddress`, the type of `NetworkInterface.mac`.
 - The exceptions `DHCPError`, `DHCPDecodeError`, `DHCPValueError`, `DHCPConfigError`,
   `NoClientIdentityError`, `DHCPTimeoutError`, `DHCPHookError` and `DHCPRefusedError` — below.
 - `__version__` — `pydhcp.__version__`, the installed distribution's version.

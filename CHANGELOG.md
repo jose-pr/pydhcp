@@ -16,6 +16,8 @@ someone upgrading from 0.7.0.
 
 ### Added
 
+- **`pydhcp.MACAddress`** is `netimps.MACAddress`, the same object, exported from the root because
+  `NetworkInterface.mac` hands one to a caller. No other name of `netimps` is re-exported.
 - **`DHCPLease.replace(*, ip, expires, options, offered)`**: a new lease with the named fields
   changed and the others carried over; the lease itself stays a frozen value. A given field is
   checked as the constructor checks it, and `expires=None` is a lease that never ends.
@@ -496,7 +498,7 @@ someone upgrading from 0.7.0.
   `import pydhcp` raises `ValueError` at import; use `NETIMPS_SOCKET_PATCH=0`
   to disable the `socket` patch.
 - **Breaking: `NetworkInterface.mac` is a `netimps.MACAddress`, and `pydhcp.MACAddress` is
-  gone** (import it from `netimps`). `str(mac)` is now `aa:bb:cc:dd:ee:ff` where it was `AA-BB-CC-DD-EE-FF`; `pydhcp
+  that type, not a subclass of it.** `str(mac)` is now `aa:bb:cc:dd:ee:ff` where it was `AA-BB-CC-DD-EE-FF`; `pydhcp
   interfaces` still prints the hyphenated upper-case form, through `mac.format("-",
   upper=True)`. The netimps type has no `as_str()`: use `.format(sep=":", *, upper=False)`;
   instances are read-only, `copy` and `pickle` keep the subclass, a bad value raises
@@ -547,7 +549,6 @@ someone upgrading from 0.7.0.
 | `pydhcp.IPv4` | `ipaddress.IPv4Address` |
 | `pydhcp.IPv4Interface` | `ipaddress.IPv4Interface` |
 | `pydhcp.IPv4Network` | `ipaddress.IPv4Network` |
-| `pydhcp.MACAddress` | `netimps.MACAddress` |
 | `pydhcp.CCCOption` | `pydhcp.options.CCCOption` |
 | `pydhcp.CCCSubOption` | `pydhcp.options.CCCSubOption` |
 | `pydhcp.CCCPrimaryDHCPServerAddress` | `pydhcp.options.CCCPrimaryDHCPServerAddress` |
