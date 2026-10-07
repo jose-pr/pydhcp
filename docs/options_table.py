@@ -21,6 +21,8 @@ PAGE = Path(__file__).resolve().parent / "options.md"
 
 #: The document that defines each option (IANA's BOOTP and DHCP parameters).
 #: Codes 1 to 61 and 64 to 76 are all RFC 2132 and are not repeated here.
+#: Compared with IANA's options.csv on 2026-10-07: every code that names an
+#: RFC here names one the registry gives for it. Nothing re-checks it.
 _RFC = {
     62: "RFC 2242",
     63: "RFC 2242",
@@ -48,7 +50,7 @@ _RFC = {
     100: "RFC 4833",
     101: "RFC 4833",
     108: "RFC 8925",
-    109: "RFC 7341",
+    109: "RFC 8539",
     112: "RFC 3679",
     113: "RFC 3679",
     114: "RFC 8910",

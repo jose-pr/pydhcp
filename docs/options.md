@@ -228,7 +228,7 @@ fails when the page and the registry disagree.
 | 100 | `PCODE` | `String` | RFC 4833 |  |
 | 101 | `TCODE` | `String` | RFC 4833 |  |
 | 108 | `IPV6_ONLY` | `U32` | RFC 8925 |  |
-| 109 | `DHCP4_OVER_DHCP6_SOURCE_ADDRESS` | `Bytes` (opaque) | RFC 7341 |  |
+| 109 | `DHCP4_OVER_DHCP6_SOURCE_ADDRESS` | `Bytes` (opaque) | RFC 8539 |  |
 | 112 | `NETINFO_ADDRESS` | `IPv4AddressOption` | RFC 3679 |  |
 | 113 | `NETINFO_TAG` | `String` | RFC 3679 |  |
 | 114 | `DHCP_CAPTIVE_PORTAL` | `String` | RFC 8910 |  |
