@@ -10,6 +10,7 @@ A refused form fails before anything is bound.
 
 from __future__ import annotations
 
+import re
 import json
 import typing as ty
 
@@ -28,7 +29,11 @@ EXAMPLE_PORTS = (6767, 6768, 6769)
 
 
 def _ports() -> "dict[int, int]":
-    return {example: free_port() for example in EXAMPLE_PORTS}
+    """A free port for each example one, no two the same."""
+    while True:
+        found = {example: free_port() for example in EXAMPLE_PORTS}
+        if len(set(found.values())) == len(found):
+            return found
 
 
 def _usable(addresses: "list[SocketAddress]") -> bool:
@@ -44,10 +49,13 @@ def _usable(addresses: "list[SocketAddress]") -> bool:
     return True
 
 
+_EXAMPLE = re.compile("|".join(str(port) for port in EXAMPLE_PORTS))
+
+
 def _rewrite(text: str, ports: "dict[int, int]") -> str:
-    for example, free in ports.items():
-        text = text.replace(str(example), str(free))
-    return text
+    """`text` with each example port replaced by its free one, in one pass: a
+    free number may hold the digits of another example."""
+    return _EXAMPLE.sub(lambda found: str(ports[int(found.group())]), text)
 
 
 def _matches(
