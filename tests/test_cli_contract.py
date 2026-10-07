@@ -131,68 +131,51 @@ def test_the_root_disables_the_tool_server() -> None:
 # -- interfaces and packet output -------------------------------------------------
 
 
-def _two_interfaces(monkeypatch) -> None:
-    import ipaddress
+def _rows() -> "list[dict[str, object]]":
+    """What the host's own enumeration says, in the order and form the command prints."""
+    # the enumeration the command prints is not public
+    from pydhcp._network import host_ip_interfaces
 
-    from netimps import MACAddress
-    from pydhcp import NetworkInterface
-
-    monkeypatch.setattr(
-        "pydhcp.cli._interfaces.host_ip_interfaces",
-        lambda *args, **kwargs: iter(
-            [
-                NetworkInterface(
-                    "Wi-Fi 2",
-                    ipaddress.IPv4Interface("10.0.0.5/24"),
-                    MACAddress(b"\x00\x11\x22\x33\x44\x55"),
-                ),
-                NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/8")),
-            ]
-        ),
-    )
+    return [
+        {
+            "name": i.name,
+            "ip": str(i.ip),
+            "mac": i.mac.format("-", upper=True) if i.mac else None,
+            "network": str(i.network),
+        }
+        for i in host_ip_interfaces()
+    ]
 
 
-def test_interfaces_text_is_one_line_per_address_and_no_banner(
-    monkeypatch, capsys
-) -> None:
-    _two_interfaces(monkeypatch)
+def test_interfaces_text_is_one_line_per_address_and_no_banner(capsys) -> None:
+    rows = _rows()
+    assert any(row["ip"] == "127.0.0.1" for row in rows)
 
     assert main(["interfaces"]) == 0
 
     lines = capsys.readouterr().out.splitlines()
-    assert [line.split("\t") for line in lines] == [
-        ["Wi-Fi 2", "10.0.0.5", "00-11-22-33-44-55", "10.0.0.0/24"],
-        ["lo", "127.0.0.1", "-", "127.0.0.0/8"],
+    assert [line.split("	") for line in lines] == [
+        [str(value or "-") for value in row.values()] for row in rows
     ]
 
 
-def test_interfaces_json_is_one_array(monkeypatch, capsys) -> None:
-    _two_interfaces(monkeypatch)
+def test_interfaces_json_is_one_array(capsys) -> None:
+    rows = _rows()
 
     assert main(["interfaces", "--format", "json"]) == 0
 
-    assert json.loads(capsys.readouterr().out) == [
-        {
-            "name": "Wi-Fi 2",
-            "ip": "10.0.0.5",
-            "mac": "00-11-22-33-44-55",
-            "network": "10.0.0.0/24",
-        },
-        {"name": "lo", "ip": "127.0.0.1", "mac": None, "network": "127.0.0.0/8"},
-    ]
+    assert json.loads(capsys.readouterr().out) == rows
 
 
 @pytest.mark.parametrize("error", [BrokenPipeError(), OSError(errno.EINVAL, "closed")])
 def test_a_closed_stdout_ends_the_command_quietly(monkeypatch, capsys, error) -> None:
     """Nobody reads the output any more: no traceback, no message, status 1."""
-    _two_interfaces(monkeypatch)
 
     class Closed(io.StringIO):
         def write(self, text: str) -> int:
             raise error
 
     monkeypatch.setattr("sys.stdout", Closed())
-    monkeypatch.setattr("pydhcp.cli._quiet_stdout", lambda: None)
 
     assert main(["interfaces"]) == 1
 

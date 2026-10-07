@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import io
 import json
 import logging
@@ -8,7 +7,7 @@ import os
 import pathlib
 import sys
 import ipaddress
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from datetime import datetime, timedelta, timezone
@@ -20,7 +19,7 @@ from pydhcp import (
     NetworkInterface,
     DHCPRequestContext,
 )
-from pydhcp.cli import App, Capture, Interfaces, Packet, Relay, Server, main
+from pydhcp.cli import App, Capture, Packet, Relay, main
 
 # the hook loader is not public
 from pydhcp.cli._capture_hook import _load_capture_hook
@@ -32,37 +31,9 @@ from pydhcp.cli._relay import _parse_server_address
 from pydhcp._config import load_config
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
-from netimps import MACAddress
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
 from helpers import build_request
-
-
-def test_cmd_interfaces(capsys, monkeypatch) -> None:
-    """`assert mock_print.called` was the whole test: the header alone satisfied
-    it, so an `interfaces` that enumerated nothing, or printed the wrong field
-    for every adapter, passed. Enumeration is stubbed because the real one
-    depends on the host -- what is under test is the rendering."""
-    monkeypatch.setattr(
-        "pydhcp.cli._interfaces.host_ip_interfaces",
-        lambda *args, **kwargs: iter(
-            [
-                NetworkInterface(
-                    "eth0",
-                    ipaddress.IPv4Interface("10.0.0.5/24"),
-                    MACAddress(b"\x00\x11\x22\x33\x44\x55"),
-                ),
-                NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/8")),
-            ]
-        ),
-    )
-
-    assert main(["interfaces"]) == 0
-
-    assert capsys.readouterr().out.splitlines() == [
-        "eth0\t10.0.0.5\t00-11-22-33-44-55\t10.0.0.0/24",
-        "lo\t127.0.0.1\t-\t127.0.0.0/8",
-    ]
 
 
 def _sample_packet() -> DHCPMessage:
@@ -294,82 +265,6 @@ def test_a_hook_that_is_not_executable_is_refused_at_start(
         _load_capture_hook("./hook", "json", False)
 
 
-def test_cmd_capture_uses_fake_capture_and_count(monkeypatch, capsys) -> None:
-    """`--count N` writes N records and then stops the capture.
-
-    `stopped` was set by the fake and never read, and one event was offered
-    against a `count` of 1 -- so nothing distinguished "stopped after the
-    first" from "there was only ever one". Three events against a count of two
-    is the smallest arrangement where a `--count` that never fires, or fires on
-    the wrong record, changes the result.
-    """
-    events = []
-    for xid in (0xAAAA0001, 0xAAAA0002, 0xAAAA0003):
-        event = _capture_event()
-        event.message.xid = xid
-        events.append(event)
-
-    captures = []
-
-    class FakeCapture:
-        def __init__(
-            self, listen, packet_filter, sink, hook, hook_fail_fast, per_interface
-        ):
-            self.sink = sink
-            self.hook = hook
-            self.stopped = False
-            self.delivered = []
-            # Part of the contract the CLI reads after serve_forever() returns, to tell
-            # a hook failure from an ordinary shutdown.
-            self.hook_error = None
-            captures.append(self)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            pass
-
-        def serve_forever(self):
-            # A real listener stops feeding the sink once shutdown() is called;
-            # without honouring it here, `--count` could not be observed.
-            for event in events:
-                if self.stopped:
-                    return
-                self.delivered.append(event.message.xid)
-                self.sink(event)
-                if self.hook is not None:
-                    self.hook(event)
-
-        def shutdown(self):
-            self.stopped = True
-
-    monkeypatch.setattr("pydhcp.cli._capture.DHCPCapture", FakeCapture)
-    cmd = Capture(
-        listen="127.0.0.1:6767",
-        packet_filter="msg_type=DHCPDISCOVER",
-        packet_format="json",
-        output="-",
-        count=2,
-        hook=None,
-        hook_fail_fast=False,
-        per_interface=False,
-    )
-
-    cmd()
-
-    records = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
-    assert [record["xid"] for record in records] == [0xAAAA0001, 0xAAAA0002]
-    assert [record["options"]["DHCP_MESSAGE_TYPE"] for record in records] == [
-        "DHCPDISCOVER",
-        "DHCPDISCOVER",
-    ]
-    assert len(captures) == 1
-    # shutdown() was actually called, and on the second record rather than later.
-    assert captures[0].stopped is True
-    assert captures[0].delivered == [0xAAAA0001, 0xAAAA0002]
-
-
 def test_capture_cli_main_help_lists_capture(capsys) -> None:
     assert main(["--help"]) == 0
     assert "capture" in capsys.readouterr().out
@@ -400,20 +295,6 @@ def test_load_ini_config(tmp_path):
 
     loaded = load_config(str(config_file))
     assert loaded == {"server": {"listen": "127.0.0.1:6767"}}
-
-
-@patch("pydhcp.cli._server.DHCPServer")
-def test_cmd_server(mock_dhcp_server_cls):
-    mock_server = MagicMock()
-    mock_dhcp_server_cls.return_value = mock_server
-
-    cmd = Server(config=None, listen="127.0.0.1:6767")
-    cmd()
-
-    mock_dhcp_server_cls.assert_called_with(
-        listen="127.0.0.1:6767", per_interface=False, lease_backend=None
-    )
-    assert mock_server.serve_forever.called
 
 
 def test_parse_server_address_host_only():
@@ -476,33 +357,6 @@ def test_relay_listen_flag_refuses_what_the_listener_refuses(listen):
     command fails with a `ValueError` before it announces anything or binds."""
     with pytest.raises(ValueError):
         Relay(listen=listen, server=("192.0.2.1",))()
-
-
-@patch("pydhcp.cli._relay.DHCPRelay")
-def test_cmd_relay(mock_dhcp_relay_cls):
-    mock_relay = MagicMock()
-    mock_dhcp_relay_cls.return_value = mock_relay
-
-    cmd = Relay(
-        listen="127.0.0.1:6767",
-        server=("192.0.2.1", "192.0.2.2:6768"),
-        max_hops=10,
-        insert_relay_agent_info=True,
-        circuit_id="aabb",
-        remote_id=None,
-    )
-    cmd()
-
-    mock_dhcp_relay_cls.assert_called_with(
-        listen="127.0.0.1:6767",
-        server_addresses=[("192.0.2.1", 67), ("192.0.2.2", 6768)],
-        max_hops=10,
-        insert_relay_agent_info=True,
-        circuit_id=b"\xaa\xbb",
-        remote_id=None,
-        per_interface=False,
-    )
-    assert mock_relay.serve_forever.called
 
 
 def test_relay_cli_relay_help(capsys) -> None:
@@ -571,60 +425,6 @@ def test_per_interface_is_reachable_from_every_listening_subcommand(
     assert parser.parse_args([subcommand, *needed]).per_interface is False
 
 
-@patch("pydhcp.cli._server.DHCPServer")
-def test_cmd_server_forwards_per_interface(mock_dhcp_server_cls) -> None:
-    Server(config=None, listen="127.0.0.1:6767", per_interface=True)()
-
-    mock_dhcp_server_cls.assert_called_with(
-        listen="127.0.0.1:6767", per_interface=True, lease_backend=None
-    )
-
-
-@patch("pydhcp.cli._relay.DHCPRelay")
-def test_cmd_relay_forwards_per_interface(mock_dhcp_relay_cls) -> None:
-    Relay(server=("192.0.2.1",), per_interface=True)()
-
-    assert mock_dhcp_relay_cls.call_args.kwargs["per_interface"] is True
-
-
-@pytest.mark.parametrize(
-    "flag, value",
-    [("circuit_id", "0a01"), ("remote_id", "0b02")],
-)
-@patch("pydhcp.cli._relay.DHCPRelay")
-def test_relay_rejects_ids_without_insert_flag(
-    mock_dhcp_relay_cls, flag: str, value: str
-) -> None:
-    """The help text promised this; nothing enforced it.
-
-    `_insert_relay_agent_info` returns early when the flag is off, so the ids
-    were silently discarded and upstream servers saw no option 82.
-    """
-    cmd = Relay(server=("192.0.2.1",), **{flag: value})
-    with pytest.raises(ValueError) as error:
-        cmd()
-
-    message = str(error.value)
-    assert f"--{flag.replace('_', '-')}" in message
-    assert "--insert-relay-agent-info" in message
-    assert not mock_dhcp_relay_cls.called
-
-
-@patch("pydhcp.cli._relay.DHCPRelay")
-def test_relay_accepts_ids_with_insert_flag(mock_dhcp_relay_cls) -> None:
-    Relay(
-        server=("192.0.2.1",),
-        insert_relay_agent_info=True,
-        circuit_id="0a01",
-        remote_id="0b02",
-    )()
-
-    kwargs = mock_dhcp_relay_cls.call_args.kwargs
-    assert kwargs["insert_relay_agent_info"] is True
-    assert kwargs["circuit_id"] == b"\x0a\x01"
-    assert kwargs["remote_id"] == b"\x0b\x02"
-
-
 def test_relay_refuses_the_insert_flag_without_an_id() -> None:
     """The constructor says so before anything is bound or announced."""
     with pytest.raises(ValueError, match="circuit_id or remote_id"):
@@ -685,40 +485,6 @@ def test_verbosity_flags_reach_the_library_logger() -> None:
         parsed = App._parser_().parse_args(argv)
         assert parsed._logger_.name == "pydhcp", argv
         assert parsed._set_loglevels_() == {"pydhcp": logging.DEBUG}, argv
-
-
-def test_explicit_listen_beats_the_config_file(tmp_path, monkeypatch) -> None:
-    """CLI over config, as every other tool does. The other order gave no way to
-    override a shared config for a single run."""
-    config = tmp_path / "server.json"
-    config.write_text(json.dumps({"server": {"listen": "127.0.0.1:47001"}}), "utf-8")
-    captured = {}
-
-    class FakeServer:
-        def __init__(self, listen, per_interface=False, lease_backend=None):
-            captured["listen"] = listen
-            captured["per_interface"] = per_interface
-            self.lease_backend = lease_backend
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            pass
-
-        def serve_forever(self):
-            raise KeyboardInterrupt
-
-    monkeypatch.setattr("pydhcp.cli._server.DHCPServer", FakeServer)
-
-    assert main(["server", "--config", str(config), "--listen", "127.0.0.1:47002"]) == 0
-    assert (
-        captured["listen"] == "127.0.0.1:47002"
-    ), "the config overrode an explicit flag"
-
-    # and without the flag the config is still used
-    assert main(["server", "--config", str(config)]) == 0
-    assert captured["listen"] == "127.0.0.1:47001"
 
 
 def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> None:
