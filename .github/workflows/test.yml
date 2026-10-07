@@ -377,6 +377,12 @@ jobs:
           root = files("pydhcp")
           for name in ("py.typed", "AGENTS.md", "README.md"):
               assert (root / name).is_file(), "the wheel does not ship %s" % name
+          # Every header the top one lists is in the wheel too.
+          import re
+          listed = re.findall(r"^\| `pydhcp/([\w/]*AGENTS\.md)` \|", (root / "AGENTS.md").read_text(encoding="utf-8"), re.M)
+          assert len(listed) >= 9, listed
+          for name in listed:
+              assert root.joinpath(*name.split("/")).is_file(), "the wheel does not ship %s" % name
           assert "site-packages" in pydhcp.__file__, pydhcp.__file__
           print("ok:", pydhcp.__file__)
           PY
