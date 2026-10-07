@@ -1,9 +1,10 @@
 # pydhcp benchmarks
 
-Micro-benchmarks for the pure-CPU hot paths: DHCP message encode/decode, option
-block encode/decode, and in-memory lease allocation. **No sockets are involved**
-— these measure per-call CPU cost, not the network behaviour that dominates a
-real server.
+Micro-benchmarks for the hot paths: DHCP message encode/decode, option block
+encode/decode, in-memory lease allocation, the server's `handle()` and the
+listener's receive path. Only the `listener` suite touches a socket (loopback,
+one datagram sent at a time in batches): the others measure per-call CPU cost,
+not the network behaviour that dominates a real server.
 
 ## Running
 
@@ -17,14 +18,19 @@ python benchmarks/run.py --repeat 9       # more samples per metric
 python benchmarks/run.py --name wip       # custom result-file stem
 ```
 
-`--save` writes `benchmarks/results/pydhcp-<version>-py<major><minor>.json`.
+`--save` writes `benchmarks/results/pydhcp-<version>-py<major><minor>.json`,
+with `<version>` read from `pyproject.toml` of the tree being measured (the
+installed metadata of an editable install is the version it was installed at,
+not the version of the checkout).
 Results are **tracked in git on purpose** so a before/after pair is recoverable
 from history rather than from a CI artifact that expires.
 
 `--iterations` overrides the inner loop count for every selected suite. The
-defaults differ per suite (`parse` 10 000, `options` 1 000) because the
-lease-allocation metric costs roughly 500x a packet decode; a shared count would
-either run for minutes or leave the decode timings too short to mean anything.
+defaults differ per suite (`parse` 10 000, `options` 1 000, `listener` 1 000,
+`server` 2 000) because the lease-allocation metric costs roughly 500x a packet
+decode and a datagram sent over loopback costs far more than either; a shared
+count would either run for minutes or leave the decode timings too short to mean
+anything.
 
 ## Suites and metrics
 
@@ -53,6 +59,27 @@ The option block on its own, plus the lease backend.
 - `options.lease_allocations_1000_clients` — 1 000 `InMemoryLeaseBackend`
   allocations per call. Reported per call like everything else, so it reads as
   milliseconds per 1 000 allocations, not per allocation.
+
+### `listener` — `bench_listener.py`
+
+A `DHCPListener` on `127.0.0.1` port 0 whose handler only counts, fed a recorded
+DISCOVER from a UDP socket in batches of 50.
+
+- `listener.receive_datagram` — from sending a batch until the handler has seen
+  every datagram of it, per datagram: the socket receive, the decode and the
+  dispatch, none of the server's own work. The suite fails if a datagram is
+  lost instead of reporting a fast time.
+
+### `server` — `bench_server.py`
+
+`DHCPServer.handle()` with a policy that grants one fixed lease and a transport
+that records what it is asked to send, so no socket and no lease store are in
+the measurement. The suite fails if the server does not answer a message.
+
+- `server.handle_discover` — one DISCOVER: input checks, lease decision, the
+  OFFER built and encoded, and handed to the transport.
+- `server.handle_request` — the same for a REQUEST naming this server, answered
+  with an ACK.
 
 ## Result schema
 
@@ -116,11 +143,22 @@ iterations}` report for one run. That is a debugging aid for a single
 measurement — it carries no median and is **not** what `compare_bench.py`
 reads. Use `run.py --save` for anything that will be compared.
 
-## The baseline in `results/` comes from CI
+## Where each result file comes from
 
-This directory is tracked, but it is deliberately empty in the repository until
-a CI benchmark run populates it. A local run measures the machine it ran on:
-two back-to-back runs of the same commit on the same developer machine came out
-**10.1%** apart, which is why the old single-run baseline table was removed
-rather than refreshed. Use a local run to sanity-check a change; compare
-against a CI report before claiming a number.
+`results/` is tracked, and a file in it says where it came from:
+
+- `pydhcp-0.5.2-py314.json` — **a local run**, on one developer machine
+  (Windows on ARM64, CPython 3.14), labelled by the installed metadata of an
+  editable install made at 0.5.2, from a tree well past that tag. It predates
+  the `listener` and `server` suites and the rule above that labels a result by
+  the tree measured, so it is not a measurement of 0.5.2. It stays until CI
+  results for the releases exist, and is then replaced by them.
+- A file written by the `benchmark` job of `test.yml` (`workflow_dispatch` with
+  `run_benchmarks`, or a `ci-bench-*` tag) is a CI result: the job uploads
+  `benchmarks/results/*.json` as an artifact, and the artifact is what is
+  committed here, unedited. Its `python`, `platform` and `processor` fields name
+  the runner it was measured on.
+
+A local run measures the machine it ran on: two back-to-back runs of the same
+commit on the same developer machine came out **10.1%** apart, which is why a
+number quoted anywhere comes from a CI result and not from a local run.

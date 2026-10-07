@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Structured benchmark runner for pydhcp.
 
-Drives the per-suite measurement scripts (`bench_parse.py`, `bench_options.py`)
-and emits one comparable JSON result per (version, interpreter):
+Drives the per-suite measurement scripts (`bench_parse.py`, `bench_options.py`,
+`bench_listener.py`, `bench_server.py`) and emits one comparable JSON result per (version, interpreter):
 
     python benchmarks/run.py                  # print a summary only
     python benchmarks/run.py --save           # also write benchmarks/results/<name>.json
@@ -21,6 +21,7 @@ pair can be diffed mechanically rather than by eyeballing JSON.
 """
 
 import argparse
+import importlib
 import json
 import pathlib
 import platform
@@ -39,23 +40,34 @@ RESULTS_DIR = pathlib.Path(__file__).resolve().parent / "results"
 # includes a lease-allocation metric that is ~500x the cost of a packet decode,
 # so a shared count would either make it take minutes or make the decode
 # timings too short to be meaningful.
-SUITE_ITERATIONS = {"parse": 10000, "options": 1000}
+# The listener suite sends real datagrams over loopback, which costs far more
+# than a decode; the server suite is a whole `handle()` per message.
+SUITE_ITERATIONS = {"parse": 10000, "options": 1000, "listener": 1000, "server": 2000}
 SUITES = tuple(SUITE_ITERATIONS)
 REPEAT = 5
 
 
 def _project_version() -> str:
-    """Version of the package under test, for the result name."""
+    """Version of the tree under test, for the result name.
+
+    The manifest first: an editable install keeps the version metadata it was
+    installed with, so after a bump the installed metadata is the older one and
+    would label the result with a version this tree is not. The installed
+    metadata answers only when there is no manifest to read (a run from an
+    installed package).
+    """
+    manifest = REPO_ROOT / "pyproject.toml"
+    if manifest.is_file():
+        text = manifest.read_text(encoding="utf-8")
+        match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+        if match:
+            return match.group(1)
     try:
         from importlib.metadata import version
 
         return version("pydhcp")
     except Exception:
-        # Not installed (a bare checkout run). Fall back to the manifest so the
-        # result file is still named after something meaningful.
-        text = (REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        match = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
-        return match.group(1) if match else "unknown"
+        return "unknown"
 
 
 def _measure_suite(suite: str, iterations: int) -> Dict[str, Dict[str, Any]]:
@@ -65,12 +77,8 @@ def _measure_suite(suite: str, iterations: int) -> Dict[str, Dict[str, Any]]:
     `run_benchmarks` because the latter prints a console summary per call, and
     this runner calls it once per sample.
     """
-    if suite == "options":
-        from benchmarks.bench_options import _measure_benchmarks
-    else:
-        from benchmarks.bench_parse import _measure_benchmarks
-
-    return _measure_benchmarks(iterations)
+    module = importlib.import_module(f"benchmarks.bench_{suite}")
+    return module._measure_benchmarks(iterations)  # type: ignore[no-any-return]
 
 
 def sample_suite(
