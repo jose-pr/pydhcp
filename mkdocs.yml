@@ -1,8 +1,14 @@
 site_name: pydhcp
 site_description: A Python DHCP library and server implementation
 site_author: jose-pr
+site_url: https://jose-pr.github.io/pydhcp/
 repo_url: https://github.com/jose-pr/pydhcp/
 repo_name: jose-pr/pydhcp
+edit_uri: edit/main/docs/
+
+# Constrain the scan to docs/ so pymdownx.snippets + strict nav don't trip on
+# repo-level markdown.
+docs_dir: docs
 
 theme:
   name: material
@@ -36,6 +42,13 @@ plugins:
             show_source: true
             show_root_heading: true
 
+markdown_extensions:
+  - admonition
+  - tables
+  - pymdownx.snippets:
+      base_path: ["."]
+  - pymdownx.superfences
+
 nav:
   - Home: index.md
   - API Reference: api.md
@@ -44,3 +57,4 @@ nav:
   - Deployment: deployment.md
   - Troubleshooting: troubleshooting.md
   - FAQ: faq.md
+  - Changelog: changelog.md

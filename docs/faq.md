@@ -1,16 +1,12 @@
 # FAQ
 
-## Why does the server use a synthetic interface on loopback?
+## Why does the log say it is using a synthetic interface?
 
-In sandboxed or minimal environments, interface enumeration may not return a matching `NetworkInterface` record for `127.0.0.1`. The server falls back to a synthetic interface so tests and local demos still work.
+When no host adapter holds the address a datagram arrived on, the listener hands the handler a placeholder interface (`unknown[<address>]`, a /32 with no MAC) and logs one WARNING for each address. A server cannot derive an address pool from a /32, so it answers nothing from it. The usual cause is a listener bound to an address that the host's adapters do not list; name an address or an adapter that the host has (`pydhcp interfaces` lists them).
 
 ## Why are some clients sent broadcast replies?
 
-If the server cannot send a direct unicast packet to the requested address, it falls back to broadcast delivery. That keeps local development usable even when the requested lease address is not reachable from the host network.
-
-## Why are the docs split into several short pages?
-
-The project has a few different operational concerns now: API reference, examples, deployment, and troubleshooting. Keeping them separate makes it easier to find the right piece without scrolling through a giant wall of text.
+A client with no address yet cannot answer ARP for the one it was offered, so a reply unicast to it on a plain UDP socket is lost without an error. The server therefore answers such a client by broadcast, whether or not its `BROADCAST` flag is set, and a DHCPNAK with no relay is always broadcast. The exceptions are an exchange over loopback, where there is no ARP and POSIX refuses the broadcast, and a server with `UNICAST_TO_UNCONFIGURED_CLIENT` set. A send that fails is never retried as a broadcast: it raises `OSError`.
 
 ## How do I run a DORA handshake from Python?
 

@@ -48,6 +48,7 @@ class CaptureEvent:
 
     @property
     def source(self) -> _net.SocketAddress:
+        """The client's address and port: where the datagram came from."""
         if self.context is None:
             return self._from_datagram(0)
         return self.context.client
@@ -60,6 +61,7 @@ class CaptureEvent:
 
     @property
     def destination(self) -> _net.SocketAddress:
+        """Where the datagram was sent: the port it arrived on, at a broadcast address for a client with no address."""
         if self.context is None:
             return self._from_datagram(1)
         # Where the datagram was sent: a broadcast for a client with no
@@ -93,14 +95,17 @@ class CaptureEvent:
 
     @property
     def message_type(self) -> str:
+        """The message type's name (`DHCPDISCOVER`), `UNKNOWN` when there is no option 53."""
         return message_type_text(self.message)
 
     @property
     def client_id(self) -> str:
+        """The client identifier as colon-separated upper-case hex, `UNKNOWN` when there is none."""
         return client_id_text(self.message)
 
     @property
     def xid(self) -> str:
+        """The transaction id as eight upper-case hexadecimal digits."""
         return f"{self.message.xid:08X}"
 
 

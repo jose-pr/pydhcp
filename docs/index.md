@@ -1,34 +1,47 @@
 # pydhcp
 
-A Python DHCP library and server implementation.
+A **pure-Python DHCPv4 library with a server, a client, a relay agent and a
+capture tool**, each in a blocking and an asyncio form over typed messages and
+options. It targets Python 3.9 and newer: packet parsing and the structured
+formats are portable, while actually serving DHCP still depends on OS socket
+permissions and platform-specific UDP behavior.
 
-## Features
-
-- **DHCP Packet Parsing & Construction**: Full control and type safety over DHCP message structures.
-- **Synchronous & Asynchronous Sockets**: Standard threaded listening loops (`DHCPListener`/`DHCPServer`/`DHCPRelay`/`DHCPCapture`) and an asyncio counterpart for each (`AsyncDHCPListener`/`AsyncDHCPServer`/`AsyncDHCPRelay`/`AsyncDHCPCapture`). Each async half is a sibling of its synchronous twin over the same private core, not a subclass or a parallel implementation, so a fix reaches both.
-- **Client & Capture Helpers**: Packet-level client builders and structured DHCP capture output for troubleshooting.
-- **Relay Agent**: `DHCPRelay` forwards client traffic to upstream DHCP servers per RFC 1542 / RFC 2131 §4.1, with hop-limit loop protection and optional RFC 3046 option-82 tagging.
-- **Flexible Options System**: Easy options manipulation using type-safe custom dictionaries.
+- **Packet parsing and construction**: every DHCPv4 message, a `DHCPOptionCode` member and
+  a typed codec for each IANA option, and a JSON, YAML, TOML or INI form of every message.
+  Liberal on receive, strict on send.
+- **Server base**: lease and option policy hooks, an in-memory and a file lease backend, and
+  a threaded and an asyncio driver (`DHCPServer`, `AsyncDHCPServer`) over one core, so a fix
+  to the rules reaches both.
+- **Relay agent**: `DHCPRelay` forwards client traffic to upstream servers per RFC 1542 /
+  RFC 2131 §4.1, with hop-limit loop protection and optional RFC 3046 option-82 tagging.
+- **Packet client and capture**: `DHCPClient` builds and sends the client messages and runs a
+  DORA exchange; `DHCPCapture` and the `pydhcp capture` command record, filter, replay and
+  hand each packet to a hook.
 
 ## Installation
-
-Install using pip:
 
 ```bash
 pip install pydhcp
 ```
 
-The command line, YAML and TOML are extras: `pip install "pydhcp[cli,yaml,toml]"`.
+The library (packets, options, server, client, relay, capture) needs nothing else. What
+else you ask of it is an extra, one for each capability:
 
-## Quick Start
+| Extra | Adds | Needed for |
+| --- | --- | --- |
+| `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
+| `yaml` | `PyYAML` | YAML packets and `.yaml` configuration files |
+| `toml` | `tomli-w`, and `tomli` before Python 3.11 | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
 
-### Synchronous DHCP Server
+For example `pip install "pydhcp[cli,yaml]"`. JSON and INI need no extra.
+
+## 30-second tour
+
 ```python
 from pydhcp.server import DHCPServer
 
-# Binds the default DHCP server ports; Ctrl-C raises KeyboardInterrupt
-with DHCPServer() as server:
-    server.serve_forever()
+with DHCPServer(listen="*") as server:    # binds; does not serve yet
+    server.serve_forever()                # until shutdown(); Ctrl-C raises KeyboardInterrupt
 ```
 
 `start()` receives on a daemon thread instead and returns. `shutdown()` ends
@@ -36,31 +49,6 @@ either and never blocks, so a handler may call it; `wait_closed()` blocks until
 receiving has stopped; `close()` (which leaving the `with` block calls) does both
 and then releases the sockets. Closed is final, and the library installs no
 signal handler.
-
-### Asynchronous DHCP Server
-```python
-import asyncio
-from pydhcp.server import AsyncDHCPServer
-
-async def main():
-    async with AsyncDHCPServer() as server:   # binds; does not serve yet
-        await server.serve_forever()          # until shutdown() or cancelled
-
-asyncio.run(main())
-```
-
-`serve_forever()` receives in the calling task; `await server.start()` receives in
-background tasks and returns once the sockets are bound, for an application with its
-own work to await. `shutdown()` ends either, `await wait_closed()` returns once
-receiving has stopped, and `await aclose()` (which leaving `async with` awaits)
-releases the sockets.
-Handlers run on a single worker thread rather than on the event loop, so a blocking
-`handle()` will not stall the rest of your application; they still run one at a time and
-in arrival order.
-At most `max_queued` datagrams (default 1024) wait for the handler; one that arrives
-when the backlog is full is dropped and counted in `metrics.packets_dropped_backlog`.
-
-### Basic Packet Client
 
 ```python
 from pydhcp.client import DHCPClient
@@ -72,3 +60,18 @@ client.send(discover, dst="127.0.0.1", port=6767)
 
 `DHCPClient` is intentionally packet-level tooling; it does not configure the operating
 system network stack.
+
+```bash
+pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
+pydhcp server --config server.yaml
+```
+
+## Learn more
+
+- [API reference](api.md): the message, the options, the roles and the capture tools,
+  from their docstrings.
+- [Examples](examples.md): a custom lease backend, a custom server policy, a config file,
+  the packet client and a full DORA exchange.
+- [Common DHCP options](options.md): typed examples for the options most sites set.
+- [Deployment](deployment.md) and [Troubleshooting](troubleshooting.md).
+- [FAQ](faq.md) and the [changelog](changelog.md).

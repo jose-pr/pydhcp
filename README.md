@@ -1,22 +1,34 @@
 # pydhcp
 
-[![Tests](https://github.com/jose-pr/pydhcp/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/jose-pr/pydhcp/actions/workflows/test.yml)
 [![Version](https://img.shields.io/pypi/v/pydhcp.svg)](https://pypi.org/project/pydhcp/)
 [![Python versions](https://img.shields.io/pypi/pyversions/pydhcp.svg)](https://pypi.org/project/pydhcp/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/jose-pr/pydhcp/blob/main/LICENSE)
 [![Docs](https://img.shields.io/badge/docs-latest-blue.svg)](https://jose-pr.github.io/pydhcp/)
+[![CI](https://img.shields.io/github/actions/workflow/status/jose-pr/pydhcp/test.yml)](https://github.com/jose-pr/pydhcp/actions/workflows/test.yml)
 
-A Python DHCP library and server implementation.
-
-`pydhcp` is pure Python and targets Python 3.9 and newer. Packet parsing and
-structured packet tooling are portable; actual DHCP serving still depends on OS
-socket permissions and platform-specific UDP behavior.
+A **pure-Python DHCPv4 library with a server, a client, a relay agent and a
+capture tool**, each in a blocking and an asyncio form over typed messages and
+options. It targets Python 3.9 and newer: packet parsing and the structured
+formats are portable, while actually serving DHCP still depends on OS socket
+permissions and platform-specific UDP behavior. The documentation is at
+<https://jose-pr.github.io/pydhcp/>.
 
 ## Features
 
-- **DHCP Packet Parsing** — Full support for parsing and constructing DHCP packets.
-- **DHCP Server Base** — A simple, async-friendly server foundation with overrideable lease and option policy hooks.
-- **DHCP Client & Capture Tools** — Basic packet-client builders and a tshark-like capture command for troubleshooting.
+- **Packet parsing and construction** — every DHCPv4 message, a `DHCPOptionCode` member and
+  a typed codec for each IANA option, and a JSON, YAML, TOML or INI form of every message.
+  Liberal on receive, strict on send.
+- **Server base** — an overridable foundation with lease and option policy hooks, an
+  in-memory and a file lease backend, and a threaded and an asyncio driver over one core.
+- **Relay agent** — RFC 1542 / RFC 2131 §4.1 forwarding with hop-limit loop protection and
+  optional RFC 3046 option-82 tagging, in both drivers.
+- **Packet client** — builders for the five client messages, a DORA exchange with the
+  RFC 2131 retransmission schedule, in both drivers. It does not configure interfaces.
+- **Capture** — a tshark-like `capture` command and `DHCPCapture`, with a filter
+  expression, command hooks, JSON, YAML, TOML, INI, pcap and pcapng output, reading a
+  capture file back, and `replay`.
+- **Command line** — `pydhcp` (`interfaces`, `server`, `relay`, `packet`, `capture`,
+  `replay`), configurable by option, environment variable or file.
 
 ## Installation
 
@@ -27,18 +39,40 @@ pip install pydhcp
 The library (packets, options, server, client, relay, capture) needs nothing else. What
 else you ask of it is an extra, one for each capability:
 
-| Extra | Gives you |
-| --- | --- |
-| `pydhcp[cli]` | the `pydhcp` command (`python -m pydhcp`) |
-| `pydhcp[yaml]` | YAML packets (`--format yaml`, `DHCPMessage.to_text("yaml")`) and `.yaml` configuration files |
-| `pydhcp[toml]` | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
+| Extra | Adds | Needed for |
+| --- | --- | --- |
+| `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
+| `yaml` | `PyYAML` | YAML packets (`--format yaml`, `DHCPMessage.to_text("yaml")`) and `.yaml` configuration files |
+| `toml` | `tomli-w`, and `tomli` before Python 3.11 | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
 
 For example `pip install "pydhcp[cli,yaml]"`. Without the `cli` extra the `pydhcp`
 command prints that it needs it and exits with status 1. JSON and INI need no extra.
+The required dependencies are [`netimps`](https://github.com/jose-pr/netimps), which has
+none of its own, and [`pktcap`](https://github.com/jose-pr/pktcap), which needs only
+`netimps`. Requires Python 3.9+.
 
 ## Quick start
 
-### Synchronous Server
+### Parsing and building a message
+
+```python
+from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessage, DHCPMessageType, DHCPOpcode
+
+message = DHCPMessage(
+    DHCPOpcode.BOOTREQUEST, xid=0x1234ABCD, chaddr=b"\x00\x11\x22\x33\x44\x55"
+)
+message.options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+message.options[DHCPOptionCode.HOSTNAME] = "laptop"
+
+wire = message.encode()  # 300 octets, END-terminated
+again = DHCPMessage.decode(wire)
+assert again.options.get(DHCPOptionCode.HOSTNAME) == "laptop"
+print(again.to_text("json"))  # "yaml", "toml" and "ini" too
+```
+
+### Synchronous server
+
 ```python
 from pydhcp.server import DHCPServer
 
@@ -64,11 +98,13 @@ A socket bound to an address hears no broadcast on Linux, so this serves unicast
 tests, not clients that have no address yet:
 
 ```python
+from pydhcp.server import DHCPServer
+
 server = DHCPServer(listen=[("127.0.0.1", [6767, 6768])], per_interface=True)
 server.serve_forever()
 ```
 
-### Asynchronous Server
+### Asynchronous server
 
 Every listener has an asyncio counterpart -- `AsyncDHCPListener`,
 `AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`. Each pair is two
@@ -95,7 +131,30 @@ either one, `await wait_closed()` returns once receiving has stopped, and
 run on a worker thread, so a blocking `handle()` will not stall the rest of your
 application.
 
-### Basic Packet Client
+### Relay agent
+
+```python
+from pydhcp.relay import DHCPRelay
+
+with DHCPRelay(listen="*", server_addresses=["192.0.2.1"]) as relay:
+    relay.serve_forever()                     # forwards to 192.0.2.1:67 and back
+```
+
+### Capture
+
+```python
+from pydhcp.capture import DHCPCapture
+
+
+def show(event):
+    print(event.message_type, event.client_id, event.source)
+
+
+with DHCPCapture(listen="*", packet_filter="msg_type=DHCPDISCOVER", sink=show) as capture:
+    capture.serve_forever()
+```
+
+### Basic packet client
 
 `DHCPClient` is a packet-level helper for tests and troubleshooting. It sends DHCP
 messages and queues matching replies, but it does not configure host network interfaces.
@@ -129,9 +188,11 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-## Command Line Interface (CLI)
+## Command line
 
-`pydhcp` includes a command line interface for listing network adapters, decoding packets, and starting servers.
+`pip install "pydhcp[cli]"` installs the `pydhcp` command; `python -m pydhcp` is the same.
+It lists network adapters, decodes and encodes packets, serves, relays, captures and
+replays.
 
 ```bash
 # List all network interfaces
@@ -164,11 +225,17 @@ pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_
 # (on Windows the hook is a program with an extension: ./on-dhcp-capture.cmd)
 pydhcp capture --listen 127.0.0.1:6767 --hook ./on-dhcp-capture
 
-# Start the DHCP server from JSON or INI config
+# Start the DHCP server from a JSON, YAML, TOML or INI configuration file
 pydhcp server --config config.json
 
 # Listen on multiple explicit endpoints while debugging
 pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768
+
+# Keep the leases in a file, so they survive a restart
+pydhcp server --listen 127.0.0.1:6767 --lease-file leases.json
+
+# Relay requests to an upstream server, tagging them with option 82 (circuit id in hex)
+pydhcp relay --listen 127.0.0.1:6767 --server 127.0.0.1:6768 --insert-relay-agent-info --circuit-id 65746830
 
 # Increase logging while debugging (-v is repeatable; --loglevel targets one logger)
 pydhcp server --listen 127.0.0.1:6767 -v
@@ -219,34 +286,55 @@ A boolean accepts `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`. `PYDHC
 read: no command is served as a tool. A command hook is given `PYDHCP_CAPTURE_CLIENT_ID`,
 `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and `PYDHCP_CAPTURE_FORMAT`.
 
+## API overview
+
+| Module | Purpose |
+| --- | --- |
+| `pydhcp.server` | `DHCPServer`, `AsyncDHCPServer`: the rules, the hooks you override, the lease policy |
+| `pydhcp.lease` | `DHCPLease`, the `LeaseBackend` protocol, `InMemoryLeaseBackend`, `FileLeaseBackend` |
+| `pydhcp.client` | `DHCPClient`, `AsyncDHCPClient`: the message builders, `discover_offer`, `dora` |
+| `pydhcp.relay` | `DHCPRelay`, `AsyncDHCPRelay` |
+| `pydhcp.capture` | `DHCPCapture`, `AsyncDHCPCapture`, `CaptureEvent`, the filter expression, `DHCPCaptureWriter`, `command_hook`, `read_capture`, `replay_capture`, DHCP as a pktcap layer |
+| `pydhcp.listener` | `DHCPListener`, `AsyncDHCPListener`, the `listen` forms, the transports, `DHCPRequestContext`, `DHCPMetrics` |
+| `pydhcp.packet` | `DHCPMessage` and its enums; `pydhcp.packet.structured` holds `loads` and `dumps` for the four formats |
+| `pydhcp.options` | `DHCPOptions`, `DHCPOptionCode`, every payload codec, the contract for writing one |
+| `pydhcp.exceptions` | `DHCPError` and its subclasses |
+| `pydhcp.cli` | `main(argv)` and the command classes (`cli` extra) |
+
+`pydhcp` itself exports what the common task needs (the roles and their asyncio twins,
+the message and its enums, the option container and its generic codecs, the lease
+backends, the exceptions); every other name is imported from the module above that owns
+it. The complete reference, with every signature and gotcha and the module each name
+lives in, is [`src/pydhcp/AGENTS.md`](https://github.com/jose-pr/pydhcp/blob/main/src/pydhcp/AGENTS.md)
+and the headers beside the code it lists; they ship inside the package.
+
 ## Development
 
-See [`AGENTS.md`](https://github.com/jose-pr/pydhcp/blob/main/AGENTS.md) for environment setup, dependency install, and test commands.
-
-For comprehensive validation in GitHub Actions, the test workflow also supports
-manual `workflow_dispatch` runs and safe `ci-*` tags. Benchmarks stay repo-local and opt-in:
-use the workflow's `run_benchmarks` input or a `ci-bench-*` tag when you want
-the benchmark harness included.
-
 ```bash
-python benchmarks/run.py                 # print a summary
-python benchmarks/run.py --save          # write benchmarks/results/<name>.json
-python benchmarks/run.py --suite parse   # one suite instead of all
+py -3.14 -m venv .venv/3.14-nt-amd64          # or python3.14 -m venv .venv/3.14-posix-x86_64
+.venv/3.14-nt-amd64/Scripts/pip install -e ".[dev,docs]"
+.venv/3.14-nt-amd64/Scripts/python -m pytest -q
+.venv/3.14-nt-amd64/Scripts/python -m black --check src tests benchmarks examples
+.venv/3.14-nt-amd64/Scripts/python -m mkdocs build --strict
+python benchmarks/run.py                 # print a summary; --save writes benchmarks/results/<name>.json
 ```
 
-Results are min/median/max ms per call over repeated samples; see
+The suite, the skips each platform expects and the traps of running it are in
+[tests/AGENTS.md](https://github.com/jose-pr/pydhcp/blob/main/tests/AGENTS.md); the layout
+and the conventions are in [AGENTS.md](https://github.com/jose-pr/pydhcp/blob/main/AGENTS.md).
+Benchmarks are run on demand, never per push: see
 [`benchmarks/README.md`](https://github.com/jose-pr/pydhcp/blob/main/benchmarks/README.md)
-for the schema and for why local timings are not a performance claim.
+for the schema and for why local timings are not a performance claim. The test workflow
+also takes a manual `workflow_dispatch` run and safe `ci-*` tags; its `run_benchmarks`
+input or a `ci-bench-*` tag adds the benchmark job.
 
 ### Releasing
 
 This project follows [Semantic Versioning](https://semver.org/) and keeps a
 [`CHANGELOG.md`](https://github.com/jose-pr/pydhcp/blob/main/CHANGELOG.md). Pushing a tag matching `v*` triggers the release
-workflow.
-
-### Documentation site
-
-MkDocs builds the API reference from `docs/`. The site is rebuilt and published when a release completes and when a documentation change reaches `main`, and can be rebuilt on demand from any ref (`docs.yml`, run manually). The docs also include a "Common DHCP Options" page with typed examples.
+workflow. The docs site is rebuilt and published when a release completes and when a
+documentation change reaches `main`, and can be rebuilt on demand from any ref (`docs.yml`,
+run manually).
 
 ## License
 

@@ -52,8 +52,28 @@ _MAX_CLIENT_ID_OCTETS = 255
 def compile_capture_filter(text: _ty.Optional[str]) -> CapturePredicate:
     """The predicate for a filter expression; `None` or blank accepts every event.
 
-    `pktcap.CaptureFilterError` (a `ValueError`) for a malformed expression, an
-    unknown key, or a value no packet could match.
+    An expression is `key=value` or `key!=value` clauses joined by `and` (any
+    letter case, a space on both sides; there is no `or`, and it may not end in
+    `and`); `!=` selects what the clause does not. The keys are `op`, `msg_type`,
+    `xid`, `client_id`, `chaddr`, `src`, `src_port`, `dst`, `dst_port`,
+    `interface` and `option.NAME_OR_CODE`, which compares the option's decoded
+    value (an enum's name, else its text) as one text, so a comma in it is part
+    of it. For every other key a comma means any of:
+    `msg_type=DHCPDISCOVER,DHCPREQUEST`.
+
+    `op` and `msg_type` take a member's name in any letter case or a number from
+    0 to 255, named or not; `msg_type` also takes `UNKNOWN` (a message with no
+    option 53) and `TYPE_<n>` (an unnamed type). `xid` is an integer in any base up
+    to 32 bits, the ports are 0 to 65535, `src` and `dst` are IPv4 addresses and
+    `interface` is an adapter name, compared as written. `client_id` and `chaddr`
+    are whole octets in hexadecimal with `:`, `-` or `.` between groups, compared
+    without them, so `00:11:22:33:44:55` and `001122334455` are one filter.
+
+    Raises `pktcap.CaptureFilterError` (a `ValueError`) naming the clause for a
+    malformed expression, an unknown key or name, a number out of range, hex that
+    is not octets, an `option.` code outside 1 to 254, or any other value no
+    packet could match: a typo is one start-up error, not a capture that reports
+    nothing.
     """
     return _pktcap.compile_capture_filter(text, _build)
 

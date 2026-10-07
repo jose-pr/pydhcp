@@ -33,6 +33,14 @@ def _json_or_text(value: str) -> _ty.Any:
 
 
 def loads(text: str, format: str) -> dict[str, _ty.Any]:
+    """The mapping a structured document holds, with `json.loads`'s meaning.
+
+    `text` is the content, never a file name. `format` is `json`, `yaml`, `toml` or
+    `ini` in any letter case (`ValueError` otherwise); `yaml` needs the `yaml` extra
+    and `toml` Python 3.11 or the `toml` extra, and a missing one is an `ImportError`
+    naming the `pip install "pydhcp[...]"` line. A document that is not a mapping is
+    a `DHCPDecodeError`.
+    """
     normalized = _normalize_format(format)
     if normalized == "json":
         return _ensure_mapping(_json.loads(text))
@@ -58,6 +66,13 @@ def loads(text: str, format: str) -> dict[str, _ty.Any]:
 
 
 def dumps(data: dict[str, _ty.Any], format: str) -> str:
+    """The text of a mapping in a structured format, with `json.dumps`'s meaning.
+
+    `format` is `json`, `yaml`, `toml` or `ini` in any letter case (`ValueError`
+    otherwise); `yaml` needs the `yaml` extra and `toml` the `toml` extra
+    (`ImportError` naming the `pip install "pydhcp[...]"` line). The INI form
+    keeps the case of every name.
+    """
     normalized = _normalize_format(format)
     if normalized == "json":
         return _json.dumps(data, indent=2) + "\n"

@@ -128,11 +128,33 @@ instance — counters are per-instance, not global, so running multiple listener
 
 ## pydhcp.capture
 
+`compile_capture_filter` below holds the grammar of the filter expression that
+`DHCPCapture(packet_filter=...)`, `read_capture` and `pydhcp capture --filter` take.
+
 ::: pydhcp.capture
 
 ## pydhcp.packet
 
 ::: pydhcp.packet
+
+## pydhcp.packet.structured
+
+A message as a mapping in one of four text formats; `DHCPMessage.to_text` and
+`from_text` are these two around `to_mapping` and `from_mapping`.
+
+::: pydhcp.packet.structured
+
+## Configuration files
+
+The `server`, `relay` and `capture` commands read a named configuration file with
+`load_config`, which is not importable from a public module; its failures are
+`DHCPConfigError`.
+
+::: pydhcp._config.load_config
+
+## pydhcp.exceptions
+
+::: pydhcp.exceptions
 
 ## SocketAddress
 

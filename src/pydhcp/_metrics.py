@@ -134,8 +134,10 @@ class DHCPMetrics:
         self.reset()
 
     def reset(self) -> None:
+        """Set every counter to zero."""
         for field in self.FIELDS:
             setattr(self, field, 0)
 
     def snapshot(self) -> _ty.Dict[str, int]:
+        """A plain dict of every counter's name and value, in `FIELDS` order."""
         return {field: int(getattr(self, field)) for field in self.FIELDS}

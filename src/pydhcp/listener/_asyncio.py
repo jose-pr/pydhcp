@@ -20,6 +20,14 @@ LOGGER = _logging.getLogger(__name__)
 
 
 class AsyncDHCPListener(_ListenerCore):
+    """The listener on an event loop: the receive path of `DHCPListener`, one task per socket.
+
+    `handle()` runs on a single worker thread, in arrival order, so it may block;
+    at most `max_queued` datagrams wait for it and the next is dropped and counted.
+    Drive it with `await serve_forever()` or `await start()`, then `shutdown()`,
+    `await wait_closed()` and `await aclose()`; `async with` binds on entry.
+    """
+
     _BIND_LABEL = "async"
 
     #: Datagrams that may wait for, or be in, the handler at once when
