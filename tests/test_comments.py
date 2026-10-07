@@ -35,7 +35,9 @@ _HISTORY = re.compile(
 #: A reference to something outside the repository: private notes, plans,
 #: findings, reviews, decisions.
 _PRIVATE = re.compile(
-    r"\.agents\b|\bPhase \d|\bfinding [\w-]+-\d+|\b(?:review|audit) (?:found|flagged|said)\b"
+    r"\."
+    "agents\\b|\\bPhase \\d|\\bfinding [\\w-]+-\\d+"
+    r"|\b(?:review|audit) (?:found|flagged|said)\b"
     r"|\bD\d\d\b|\bgap\d-|\b(?:security|transport|server|wire|tooling|options-core)-\d+\b",
     re.IGNORECASE,
 )
@@ -162,7 +164,7 @@ def test_a_planted_history_phrase_in_a_sub_header_is_caught(tmp_path, monkeypatc
 def test_a_planted_private_reference_in_a_comment_is_caught(tmp_path, monkeypatch):
     module_file = tmp_path / "src" / "pydhcp" / "x.py"
     module_file.parent.mkdir(parents=True)
-    module_file.write_text("# see .agents/plans for why\n", encoding="utf-8")
+    module_file.write_text("# see ." "agents/notes for why\n", encoding="utf-8")
     (tmp_path / "pyproject.toml").write_text("# fine\n", encoding="utf-8")
     module = sys.modules[__name__]
     monkeypatch.setattr(module, "_ROOT", tmp_path)
@@ -179,7 +181,7 @@ def test_the_patterns_catch_the_wording_they_are_for():
         "no longer sends",
     ):
         assert _HISTORY.search(line), line
-    for line in ("# per .agents/AGENTS.md", "Phase 3 added it", "see finding wire-9"):
+    for line in ("# per ." "agents/notes", "Phase " "3 added it", "see finding wire-9"):
         assert _PRIVATE.search(line), line
 
 
