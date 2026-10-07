@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import _thread
 import logging
+import select
 import threading
 import typing as _ty
 
@@ -49,7 +50,6 @@ def run_command(
     *,
     bound: int = 1,
     during: "_ty.Optional[_ty.Callable[[list[str]], _ty.Any]]" = None,
-    settle: float = 0.3,
     ends: bool = False,
     timeout: float = 30.0,
 ) -> Ran:
@@ -63,27 +63,32 @@ def run_command(
     returns without ever being interrupted. `argv` carries `-v`, so the
     records are logged at all.
 
-    The `Bound` record is the last thing the command logs before it receives, and
-    nothing observable lies between the two: `settle` seconds pass before the
-    interrupt so that it lands in the receive loop and not in the few
-    instructions of start-up. A test that needs the command serving sends it a
-    datagram in `during` and waits for what that causes.
+    The `Bound` record is the last thing the command logs before it receives.
+    The interrupt waits for the receive loop's first `select.select()` as well,
+    so it lands in a command that is receiving and not in the instructions of
+    start-up, where a Ctrl-C is handled too but is not what these tests are
+    about. A test that needs the command serving sends it a datagram in
+    `during` and waits for what that causes.
     """
     ready = threading.Event()
+    waiting = threading.Event()
     finished = threading.Event()
+    real_select = select.select
+
+    def announcing_select(*args: _ty.Any, **kwargs: _ty.Any) -> _ty.Any:
+        waiting.set()
+        return real_select(*args, **kwargs)
+
     collector = _Collector(bound, ready)
     outcome: "dict[str, _ty.Any]" = {}
 
     def interrupter() -> None:
         waited = 0.0
-        while not (ready.wait(0.05) or finished.is_set()):
+        while not ((ready.wait(0.05) and waiting.wait(0.05)) or finished.is_set()):
             waited += 0.05
             if waited >= timeout:  # never bound as many as asked: end it, and fail
                 _thread.interrupt_main()
                 return
-        if finished.is_set():
-            return
-        finished.wait(settle)
         if finished.is_set():
             return
         try:
@@ -99,11 +104,13 @@ def run_command(
     watcher = threading.Thread(target=interrupter, daemon=True)
     logger = logging.getLogger("pydhcp")
     logger.addHandler(collector)
+    select.select = announcing_select
     watcher.start()
     status = None
     try:
         status = main(list(argv))
     finally:
+        select.select = real_select
         finished.set()
         # An interrupt already on its way lands here, not in the test.
         while True:
