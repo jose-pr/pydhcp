@@ -79,12 +79,12 @@ Unit modules by area:
 | the roles | `test_server_apipa_not_servable.py`, `test_server_customization.py`, `test_server_extension_contract.py`, `test_server_extension_point.py`, `test_server_malformed_input.py`, `test_server_non_committing_paths.py`, `test_server_offered_state.py`, `test_server_release_and_decline.py`, `test_server_reply_header.py`, `test_server_request_states.py`, `test_server_size_and_expiry.py`, `test_relay.py`, `test_role_cores.py`, `test_constructors.py` |
 | capture | `test_capture.py`, `test_capture_payload.py`, `test_capture_writer.py`, `test_dissector.py` |
 | the command line and configuration | `test_cli_contract.py`, `test_cli_lease_file.py`, `test_config.py`, `test_extras.py` |
-| the package itself | `test_surface.py`, `test_import_structure.py`, `test_import_asyncio.py` (fresh interpreters: a blocking import and exchange load no `asyncio`), `test_type_hints.py`, `test_exceptions.py`, `test_error_messages.py`, `test_permissions.py`, `test_manifest.py`, `test_examples.py`, `test_readme.py`, `test_comments.py`, `test_shipped_headers.py`, `test_private_reach.py`, `test_network_guard.py` |
+| the package itself | `test_surface.py`, `test_import_structure.py`, `test_import_asyncio.py` (fresh interpreters: a blocking import and exchange load no `asyncio`), `test_type_hints.py`, `test_exceptions.py`, `test_error_messages.py`, `test_permissions.py`, `test_manifest.py`, `test_examples.py`, `test_readme.py`, `test_conformance_page.py`, `test_comments.py`, `test_shipped_headers.py`, `test_private_reach.py`, `test_network_guard.py` |
 | benchmarks | `test_benchmarks_options.py`, `test_benchmarks_parse.py`, `test_benchmarks_run.py` |
 
 `integration/`: `test_async.py`, `test_async_backlog.py`, `test_async_client.py`, `test_async_concurrency.py`, `test_async_relay_capture.py`, `test_benchmarks_suites.py`, `test_capture_command_hook.py`, `test_capture_drivers.py`, `test_capture_file.py`, `test_capture_file_output.py`, `test_capture_output.py`, `test_cli.py`, `test_cli_capture_bounds.py`, `test_cli_commands.py`, `test_cli_interrupt.py`, `test_cli_logging.py`, `test_cli_settings.py`, `test_cli_tools.py`, `test_client.py`, `test_documented_commands.py`, `test_dora.py`, `test_examples_run.py`, `test_listen_command.py`, `test_listen_interface.py`, `test_listener_binding.py`, `test_listener_lifecycle.py`, `test_listener_pktinfo_receive.py`, `test_listener_transport.py`, `test_relay_dora.py`, `test_relay_drivers.py`, `test_roles_run_clean.py`, `test_server_drivers.py`, `test_server_reply_ports.py` (as `integration/<name>`).
 
-`conformance/`: `exchange.py` (the wire read and written with `struct` alone, never importing `pydhcp`: `build`, `read`, `answer`, `differences`, `summary`), `test_exchange.py` (that module against the octets of the transcripts), `record.py` (not collected: plays every case against dnsmasq or ISC dhclient in the real-peer lab, as root on Linux, and writes `cases/<name>/golden.json`; `--check` re-records in memory and reports drift; names after it record only those), `player.py` (not collected: the scripted client and server the recorder runs inside a namespace), `replay.py` (drives this library's role cores with a case's input, no socket, and compares with the golden; run as a script it prints one JSON line per difference), `test_conformance.py` (the comparison as tests: a divergence is a strict expected failure, on the thread class and on its asyncio twin), `divergences.json` (per case, the `"<step> <aspect>"` that still differ, with a reason) and `deviations.json` (the deliberate ones: per difference its aspects, its cases, this library's value of each aspect and the authority, asserted present in exactly those cases with exactly those values), `rfc_vectors.py`, `test_decoders_fuzz.py`, `test_decoders_property.py`, `test_liberal_receive.py`, `test_reserved_values.py`, `test_rfc_vectors.py`, `test_rfc3397_names.py`, `test_rfc4702_client_fqdn.py`, `test_transcripts.py` (as `conformance/<name>`). `cases/<role>-<topic>/case.json` is a hand-written case: what a reference and this library are both given (`config`), what is sent (`steps`), and any aspect left out of the comparison with its reason (`not_compared`); `exchange.py` documents the shape; its `golden.json` is what the reference answered, generated and never edited. `transcripts/<name>/transcript.json` is one exchange a stock peer and this library had on a real wire, recorded by the real-peer tests: its octets are what `data/capture_output/` and the dissector tests stand on, so a transcript is never edited and never re-recorded for tidiness (`PYDHCP_RECORD_TRANSCRIPTS=1` draws new transaction ids and invalidates the 188 expected capture files).
+`conformance/`: `exchange.py` (the wire read and written with `struct` alone, never importing `pydhcp`: `build`, `read`, `answer`, `differences`, `summary`), `test_exchange.py` (that module against the octets of the transcripts), `record.py` (not collected: plays every case against dnsmasq or ISC dhclient in the real-peer lab, as root on Linux, and writes `cases/<name>/golden.json`; `--check` re-records in memory and reports drift; names after it record only those), `player.py` (not collected: the scripted client and server the recorder runs inside a namespace), `replay.py` (drives this library's role cores with a case's input, no socket, and compares with the golden; run as a script it prints one JSON line per difference), `test_conformance.py` (the comparison as tests: a divergence is a strict expected failure, on the thread class and on its asyncio twin), `features.json` (the rows of the coverage table of `docs/conformance.md`: per role a feature, its RFC, whether it is implemented and the cases that ask it; every case is in exactly one row), `divergences.json` (per case, the `"<step> <aspect>"` that still differ, with a reason) and `deviations.json` (the deliberate ones: per difference its aspects, its cases, this library's value of each aspect and the authority, asserted present in exactly those cases with exactly those values), `rfc_vectors.py`, `test_decoders_fuzz.py`, `test_decoders_property.py`, `test_liberal_receive.py`, `test_reserved_values.py`, `test_rfc_vectors.py`, `test_rfc3397_names.py`, `test_rfc4702_client_fqdn.py`, `test_transcripts.py` (as `conformance/<name>`). `cases/<role>-<topic>/case.json` is a hand-written case: what a reference and this library are both given (`config`), what is sent (`steps`), and any aspect left out of the comparison with its reason (`not_compared`); `exchange.py` documents the shape; its `golden.json` is what the reference answered, generated and never edited. `transcripts/<name>/transcript.json` is one exchange a stock peer and this library had on a real wire, recorded by the real-peer tests: its octets are what `data/capture_output/` and the dissector tests stand on, so a transcript is never edited and never re-recorded for tidiness (`PYDHCP_RECORD_TRANSCRIPTS=1` draws new transaction ids and invalidates the 188 expected capture files).
 
 `interop/`: `conftest.py`, `_lab.py`, `_peers.py`, `_topo.py`, the scenarios `test_addrbound.py`, `test_capture.py`, `test_dhclient_relay.py`, `test_dhclient_server.py`, `test_dnsmasq.py`, `test_full_buffer.py`, `test_listen_interface.py`, `test_reboot_and_nak.py`, `test_two_segments.py`, `test_udhcpc.py`, and the programs they start under `interop/roles/` (`addrbound_listen.py`, `capture.py`, `client_dora.py`, `emit.py`, `full_buffer.py`, `pool_server.py`, `relay.py`, `tap.py`).
 
@@ -161,6 +161,39 @@ expected failure. Traps of the peers: dhclient sends no client identifier by def
 an address and no route cannot broadcast from a plain UDP socket, so scripted senders bind to
 the device. A capture and a server cannot both bind `*:67` on one host. Run them after any
 change to a decode, send, receive, server, relay or client path.
+
+## The conformance suite
+
+`conformance/` holds this library's answers against two references: dnsmasq 2.92 (server and
+relay) and ISC dhclient 4.4.3-P1 (client).
+
+- **A case is written by hand and its golden is recorded, never edited.** `cases/<role>-<topic>/case.json`
+  says what is sent and what both sides are configured with; `golden.json` is what the reference
+  answered, with its version and the system it ran on. `exchange.py` documents the shape. A case
+  asks one question.
+- **Recording** needs Linux, root and the peers of the real-peer lab:
+  `sudo python tests/conformance/record.py` writes every golden (or the cases named after it),
+  and `--check` re-records in memory and prints one line per case, `no drift` or what differs.
+  Exit status 0 for no drift or drift on another version or distribution, 1 for drift on the
+  recording system, 2 when a case cannot be played. The `interop` job of CI runs the check.
+  What differs between two runs on one system is chance (the xid a client draws, a pool's free
+  address): it goes in the case's `not_compared`, with its reason.
+- **Replay** (`replay.py`, `test_conformance.py`) needs no peer and no socket and runs everywhere:
+  the case's input goes through the role cores, on the thread class and its asyncio twin, and
+  each reply is compared by count, header fields, option presence, octets and order, padding and
+  destination.
+- **Every difference is one of three things.** A *deviation* (`deviations.json`) is deliberate:
+  it lists its aspects, its cases, this library's value of each and the authority (the RFC section
+  that backs it, or that the RFC decides nothing); the replay asserts exactly those, so a change in
+  either direction fails, and the README's "Differences from dnsmasq and ISC dhclient" lists
+  exactly these, one row each. A *divergence* (`divergences.json`) is a defect still to settle:
+  its case is a strict expected failure, and the fix that closes it forces the marker out. A
+  difference the RFC text backs the reference on is a divergence, whatever was agreed before it
+  was read. Never edit a golden, a case or a source module to make a difference go away.
+- **Transcripts** (`transcripts/`) are exchanges recorded by the real-peer tests, kept octet for
+  octet; they are not cases.
+- `docs/conformance_table.py --write` regenerates the tables of `docs/conformance.md` from
+  `features.json` and `deviations.json`; `test_conformance_page.py` runs its check.
 
 ## Writing a test
 

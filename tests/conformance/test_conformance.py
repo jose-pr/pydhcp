@@ -202,3 +202,42 @@ def test_a_deviation_differs_in_exactly_the_way_it_states():
 
         assert keys == set(entry["aspects"]), entry["id"]
         assert {a: sorted(v) for a, v in ours.items()} == entry["ours"], entry["id"]
+
+
+README = HERE.parents[1] / "README.md"
+_SECTION = "## Differences from dnsmasq and ISC dhclient"
+
+
+def _readme_section(text):
+    return text.split(_SECTION, 1)[1].split("\n## ", 1)[0]
+
+
+def _readme_rows(text):
+    return dict(
+        re.findall(r"^\| `([a-z0-9-]+)` \| (.+) \|$", _readme_section(text), re.M)
+    )
+
+
+def test_the_readme_lists_exactly_the_deviations_with_their_sentences():
+    text = README.read_text(encoding="utf-8")
+
+    assert _readme_rows(text) == {d["id"]: d["difference"] for d in DEVIATIONS}
+
+
+def test_a_row_missing_from_the_readme_is_found():
+    text = README.read_text(encoding="utf-8")
+    gone = DEVIATIONS[0]["id"]
+    dropped = "\n".join(
+        line for line in text.splitlines() if not line.startswith("| `%s` |" % gone)
+    )
+
+    assert gone in _readme_rows(text)
+    assert _readme_rows(dropped) != {d["id"]: d["difference"] for d in DEVIATIONS}
+
+
+def test_the_readme_names_the_references_and_counts_the_goldens():
+    section = _readme_section(README.read_text(encoding="utf-8"))
+    goldens = len(list(HERE.glob("cases/*/golden.json")))
+
+    assert "**dnsmasq 2.92**" in section and "**ISC dhclient 4.4.3-P1**" in section
+    assert re.search(r"in %d\s+recorded cases" % goldens, section)
