@@ -46,6 +46,11 @@
    "aspect": "field:xid",
    "step": "request-init-reboot",
    "why": "chance: the client draws its transaction id; the replay gives this library the one the golden recorded"
+  },
+  {
+   "aspect": "destination",
+   "step": "request-init-reboot",
+   "why": "a builder builds a message and the caller names where it goes"
   }
  ]
 }

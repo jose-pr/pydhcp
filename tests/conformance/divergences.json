@@ -20,7 +20,6 @@
  {
   "case": "client-request-init-reboot",
   "aspects": [
-   "request-init-reboot destination",
    "request-init-reboot field:flags"
   ],
   "reason": "unclassified"
