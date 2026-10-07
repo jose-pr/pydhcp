@@ -2,17 +2,13 @@
 
 Options 81 (RFC 4702 §3.1), 120 (RFC 3361 §3.1), 122 (RFC 3495) and 139/140
 (RFC 5678) all carry names that MUST NOT use compression: there is no enclosing
-message for a pointer to resolve against. Each of those codecs used to carry its
-own copy of this pair, and the copies had drifted -- only one rejected a
-compression pointer, only one enforced the 255-octet name limit -- so the same
-malformed input was accepted, rejected or silently misread depending on which
-option it arrived in.
+message for a pointer to resolve against. One copy of this pair means the same
+malformed input is rejected the same way whichever option it arrives in: a
+compression pointer is refused and the 255-octet name limit is enforced.
 
 This module deliberately imports nothing from the package, so every codec that
-carries a name can reach it with no ordering constraint. It was written that way
-because `options.type` and `options.ccc` imported each other and worked only by
-statement order; that cycle is gone -- `ccc` is now `options/_codecs/_ccc.py` and
-imports its siblings directly -- and keeping this a leaf keeps it from coming back.
+carries a name can reach it with no ordering constraint, and no import cycle can
+form through it.
 """
 
 from __future__ import annotations
@@ -43,7 +39,7 @@ def split_domain_name(
     `allow_root` permits the empty name, which is a bare root label -- RFC 4702
     lets a client send option 81 with no name at all, and a search list may
     legitimately contain the root. It is off by default because for most options
-    an empty name is a caller mistake, and these codecs rejected it before.
+    an empty name is a caller mistake.
     """
     parts = name.rstrip(".").split(".") if name else []
     labels = [label for label in parts if label != ""]

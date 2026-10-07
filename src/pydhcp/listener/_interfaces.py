@@ -96,11 +96,9 @@ def _adapter_interface(
 def _warn_synthetic(local_ip: str) -> None:
     """Log the synthetic-interface fallback once per address.
 
-    The lookup used to be cached per bind, which incidentally also made this
-    warning fire once. Without that cache it would fire for every datagram from
-    an unresolvable address, and a warning on a path any sender can drive needs
-    a bound or the log becomes the second target. Bounded, so a flood of
-    distinct addresses cannot grow it.
+    A warning on a path any sender can drive needs a bound, or the log becomes
+    the second target: it fires once per address, and the cache is bounded so a
+    flood of distinct addresses cannot grow it.
     """
     LOGGER.warning(
         f"Could not resolve interface for IP {local_ip}; using synthetic interface"
@@ -129,19 +127,18 @@ def _resolve_interface(
     TTL), which `bind()` also clears. An uncached enumeration lists every
     adapter of the host, and its cost grows with their number; paid per
     datagram, a flood alone denied service. The TTL bounds it at one
-    enumeration per second whatever the arrival rate, and -- unlike the
-    per-bind cache this replaced -- notices an address the host gains or loses
-    within a second, without a re-bind.
+    enumeration per second whatever the arrival rate, and notices an address
+    the host gains or loses within a second, without a re-bind.
 
     ``adapter`` is the interface netimps resolved with the datagram: when it is
     given, nothing is looked up. The lookups below serve a datagram that came
     with no adapter and a socket bound to one address.
 
     A local address of 0.0.0.0 is no address at all and is treated as absent.
-    It is what a zero-filled `ipi_spec_dst` decodes to, and taking it literally
-    skipped the index lookup, so the datagram resolved to a synthetic
-    `unknown[0.0.0.0]/32` -- a network with nothing in it to lease. Measured:
-    the server received the DISCOVER and allocated and sent nothing.
+    It is what a zero-filled `ipi_spec_dst` decodes to, and taken literally it
+    would skip the index lookup, so the datagram would resolve to a synthetic
+    `unknown[0.0.0.0]/32` -- a network with nothing in it to lease: the server
+    receives the DISCOVER and allocates and sends nothing (measured).
     """
     if pkt_local_ip is not None and pkt_local_ip.is_unspecified:
         pkt_local_ip = None
@@ -160,9 +157,9 @@ def _resolve_interface(
     # The adapter holding exactly this address, from netimps -- link-local
     # included. That matters: "which interface did this arrive on" is not "which
     # addresses are worth serving from", and an APIPA-only NIC (the normal state
-    # of an isolated DHCP-only segment) used to be filtered out of the list
-    # searched here, degrading to the synthetic `unknown[...]` below with a /32
-    # and no MAC -- losing the prefix the server derives its pool from.
+    # of an isolated DHCP-only segment) must not be filtered out of the list
+    # searched here: it would degrade to the synthetic `unknown[...]` below with
+    # a /32 and no MAC, losing the prefix the server derives its pool from.
     address = _ipaddress.ip_address(local_ip)
     if isinstance(address, _ipaddress.IPv4Address) and not address.is_unspecified:
         held = _netimps.get_interface(address, cache=True)

@@ -99,8 +99,8 @@ class AsyncDHCPListener(_ListenerCore):
         Only the read happens here; the handler runs on the worker. netimps'
         `arecv` keeps packet info on every loop type, Windows' default proactor
         included -- which `add_reader` (absent there) and a `DatagramTransport`
-        (no slot for control messages) could not, so that loop used to run
-        without knowing which interface a broadcast arrived on.
+        (no slot for control messages) cannot, so every loop type learns which
+        interface a broadcast arrived on.
 
         An `arecv` loop rather than `datagrams()`: an async iterator ends at its
         first exception, and a server has to survive a datagram it cannot read.

@@ -79,7 +79,7 @@ Unit modules by area:
 | the roles | `test_server_apipa_not_servable.py`, `test_server_customization.py`, `test_server_extension_contract.py`, `test_server_extension_point.py`, `test_server_malformed_input.py`, `test_server_non_committing_paths.py`, `test_server_offered_state.py`, `test_server_release_and_decline.py`, `test_server_reply_header.py`, `test_server_request_states.py`, `test_server_size_and_expiry.py`, `test_relay.py`, `test_role_cores.py`, `test_constructors.py` |
 | capture | `test_capture.py`, `test_capture_payload.py`, `test_capture_writer.py`, `test_dissector.py` |
 | the command line and configuration | `test_cli_contract.py`, `test_cli_lease_file.py`, `test_config.py`, `test_extras.py` |
-| the package itself | `test_surface.py`, `test_import_structure.py`, `test_type_hints.py`, `test_exceptions.py`, `test_error_messages.py`, `test_permissions.py`, `test_manifest.py`, `test_examples.py`, `test_readme.py`, `test_shipped_headers.py`, `test_private_reach.py`, `test_network_guard.py` |
+| the package itself | `test_surface.py`, `test_import_structure.py`, `test_type_hints.py`, `test_exceptions.py`, `test_error_messages.py`, `test_permissions.py`, `test_manifest.py`, `test_examples.py`, `test_readme.py`, `test_comments.py`, `test_shipped_headers.py`, `test_private_reach.py`, `test_network_guard.py` |
 | benchmarks | `test_benchmarks_options.py`, `test_benchmarks_parse.py`, `test_benchmarks_run.py` |
 
 `integration/`: `test_async.py`, `test_async_backlog.py`, `test_async_client.py`, `test_async_concurrency.py`, `test_async_relay_capture.py`, `test_benchmarks_suites.py`, `test_capture_command_hook.py`, `test_capture_drivers.py`, `test_capture_file.py`, `test_capture_file_output.py`, `test_capture_output.py`, `test_cli.py`, `test_cli_capture_bounds.py`, `test_cli_commands.py`, `test_cli_interrupt.py`, `test_cli_logging.py`, `test_cli_settings.py`, `test_client.py`, `test_documented_commands.py`, `test_dora.py`, `test_examples_run.py`, `test_listen_command.py`, `test_listen_interface.py`, `test_listener_binding.py`, `test_listener_lifecycle.py`, `test_listener_pktinfo_receive.py`, `test_listener_transport.py`, `test_relay_dora.py`, `test_relay_drivers.py`, `test_roles_run_clean.py`, `test_server_drivers.py`, `test_server_reply_ports.py` (as `integration/<name>`).
@@ -176,3 +176,7 @@ change to a decode, send, receive, server, relay or client path.
 - A public name added or removed changes its list in `test_surface.py` in the same commit, and
   its header (`test_shipped_headers.py` names every `__all__` entry, every printed signature and
   every public class constant).
+- A comment, docstring or header line states the code as it is: `test_comments.py` fails
+  on history wording ("used to", "previously", "no longer", "now") and on a reference to
+  anything outside the repository, over `src/`, every shipped header and `pyproject.toml`.
+  A phrase that is a fact and not history goes in its `_ALLOWED` list with the reason.

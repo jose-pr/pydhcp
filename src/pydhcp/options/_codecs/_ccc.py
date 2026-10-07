@@ -132,8 +132,8 @@ class CCCProvisioningServerAddress(_Record):
                 # `ValueError` only: `ipaddress.AddressValueError` (its
                 # subclass) is what a non-address string raises -- measured
                 # across 'not-an-ip', '', 'www.example.com', '1.2.3.4.5' and
-                # '999.1.1.1'. A bare `except Exception` also swallowed a
-                # genuine defect in the codec and silently reclassified the
+                # '999.1.1.1'. A bare `except Exception` would also swallow a
+                # genuine defect in the codec and silently reclassify the
                 # value as an FQDN.
                 return "fqdn", CCCProvisioningServerFQDN(value)
         if isinstance(value, CCCProvisioningServerFQDN):

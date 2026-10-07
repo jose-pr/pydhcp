@@ -238,12 +238,11 @@ class DomainList(_NormalizedList[str]):
             for comp in unique:
                 # RFC 1035 3.1: a label's length octet counts OCTETS. This
                 # counted characters, so `bücher.example` declared 6 for a
-                # 7-octet label: the wire bytes were corrupt, and this encoder's
-                # own decoder either raised a bare ValueError or read the
-                # remainder as different labels entirely -- measured,
+                # 7-octet label: the wire bytes would be corrupt and the decoder
+                # would read the remainder as different labels entirely (measured:
                 # ['éé.x.com', 'y.x.com'] came back as ['<0xef><0xbf><0xbd>',
-                # 'x.com', 'y']. `split_domain_name` validates in octets, so the
-                # length check and the length written now agree.
+                # 'x.com', 'y']). `split_domain_name` validates in octets, so the
+                # length check and the length written agree.
                 encoded = comp.encode()
                 data.append(len(encoded))
                 data.extend(encoded)
@@ -270,7 +269,7 @@ class UncompressedDomainList(DomainList):
       domain name, or list of domain names, in DHCP MUST NOT be stored in
       compressed form, as described in section 4.1.4 of RFC 1035."
 
-    Measured before the split, `["a.example.com", "b.example.com"]` encoded as
+    Compressed, `["a.example.com", "b.example.com"]` would encode as
     `01 61 07 example 03 com 00 01 62 c0 02` for option 88 -- the second name
     ending in a pointer a conforming receiver is not required to follow.
 
@@ -278,7 +277,7 @@ class UncompressedDomainList(DomainList):
     resolves unambiguously inside the option, and the receive path in this
     package is deliberately liberal, so refusing one would turn a readable
     packet from a non-conforming peer into a decode failure. The RFCs
-    constrain what is sent, and that is what changes here.
+    constrain what is sent, and that is what this encoder constrains.
     """
 
     def pack_into(self, data: bytearray) -> int:

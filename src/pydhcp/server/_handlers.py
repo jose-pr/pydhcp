@@ -252,7 +252,7 @@ class _Handlers(_Replies):
             # being handed an ACK with no address in it.
             self._nak(msg, context, "the lease has expired")
             return
-        # Only now is anything agreed, so this is where the lease time the ACK
+        # Only at this point is anything agreed, so this is where the lease time the ACK
         # advertises is actually committed.
         committed = self.acquire_lease(client_id, actual_server_id, msg, commit=True)
         if committed is not None:
@@ -360,10 +360,10 @@ class _Handlers(_Replies):
             f"[XID={msg.xid:08x}] DHCPRELEASE from {context.client}|{client_id}"
         )
         # RFC 2131 4.4.6: the client puts the address being given up in ciaddr.
-        # Releasing on client identifier alone meant a late or duplicated
-        # RELEASE naming an *old* address deleted whatever binding that client
-        # holds now -- and the address then went to someone else while the
-        # client was still using it.
+        # Releasing on client identifier alone would let a late or duplicated
+        # RELEASE naming an *old* address delete whatever binding that client
+        # holds at that moment, and the address would go to someone else while
+        # the client was still using it.
         existing = self.lookup_lease(client_id)
         if existing is not None and msg.ciaddr != _const.WILDCARD_V4:
             if existing.ip != msg.ciaddr:

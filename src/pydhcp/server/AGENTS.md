@@ -378,7 +378,7 @@ FileLeaseBackend.close()
     written at once, and one that comes sooner is written by **a daemon timer
     thread** (`pydhcp-lease-save`) at the end of the interval, so **a change is on
     disk within `SAVE_INTERVAL_SECONDS` of being made**, with no further change or
-    call needed. **`.flush()`** writes a pending change now and cancels the timer;
+    call needed. **`.flush()`** writes a pending change at once and cancels the timer;
     **`.close()`** flushes (the backend is also a context manager). A server does
     not close a backend it was given: call `.close()` yourself on the way out. Measured
     over 4,000 allocations: 115.76 s at the default, 0.02 s at a one-second

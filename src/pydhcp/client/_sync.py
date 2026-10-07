@@ -350,9 +350,8 @@ class DHCPClient(_ClientCore, DHCPListener):
         """Enqueue, discarding the oldest rather than growing without bound.
 
         Oldest rather than newest: a caller waiting on an exchange wants the
-        recent ones. Measured before the cap existed: 50000 unsolicited
-        BOOTREPLYs put 50000 entries in the queue of a client nobody was
-        draining.
+        recent ones. Without the cap, 50000 unsolicited BOOTREPLYs put 50000
+        entries in the queue of a client nobody is draining.
         """
         while True:
             try:

@@ -56,9 +56,9 @@ def _coerce_chaddr(value: _ty.Any) -> bytes:
         return bytes(value)
     if isinstance(value, int) and not isinstance(value, bool):
         # YAML 1.1 reads an unquoted `10:20:30:40:50:55` as a sexagesimal
-        # integer (measured: 8041827055), so hand-authored YAML lost the MAC
-        # before `from_mapping` ever saw it. The generic "must be text or
-        # bytes-like" named the symptom and not the cause.
+        # integer (measured: 8041827055), so hand-authored YAML loses the MAC
+        # before `from_mapping` ever sees it. A generic "must be text or
+        # bytes-like" would name the symptom and not the cause.
         raise TypeError(
             f"chaddr arrived as the integer {value}, which is how YAML reads an "
             "unquoted colon-separated MAC address -- quote it "

@@ -16,10 +16,10 @@ from ._common import _arguments, _Listening
 def _parse_server_address(value: str) -> "tuple[str, int]":
     """Split one `--server` argument into `(host, port)`, port 67 by default.
 
-    Shares the listener's parser rather than repeating it. The hand-rolled one
-    here split on a lone ':', which made `--server "[::1]:6767"` -- three colons
-    -- fall through as a single opaque host string; the listener reads the same
-    text as `("::1", 6767)`. Two parsers, two answers for the same syntax.
+    Shares the listener's parser rather than repeating it: splitting on a lone
+    ':' would read `--server "[::1]:6767"` -- three colons -- as a single opaque
+    host string, where the listener reads `("::1", 6767)`. One parser gives one
+    answer for the same syntax.
 
     An empty host is rejected here even though `_split_host_port` defaults it to
     `0.0.0.0`: the wildcard means "every local address" and is a reasonable
@@ -44,7 +44,7 @@ class Relay(_Listening):
     # A tuple, not a list: a mutable class-level default is shared by every
     # instance -- `a.server is b.server is Relay.server` -- so one command
     # appending to it would change the default every parser built afterwards
-    # sees. duho copies at parser-build time, which hid it on the shipped path.
+    # sees.
     server: _ty.Annotated[
         _ty.Tuple[str, ...],
         Extend(","),
@@ -98,9 +98,9 @@ class Relay(_Listening):
         listen = "*" if self.listen is None else self.listen
 
         # Construct first, announce second. The constructor is what validates
-        # the upstream addresses and `max_hops`, so announcing first meant a bad
-        # argument was reported *after* "Starting DHCP relay..." and read as a
-        # runtime failure rather than as the argument error it is.
+        # the upstream addresses and `max_hops`, so announcing first would report
+        # a bad argument *after* "Starting DHCP relay..." and read as a runtime
+        # failure rather than as the argument error it is.
         with _arguments():
             relay = DHCPRelay(
                 listen=listen,

@@ -8,11 +8,9 @@ from ._base import (
     DHCPOptionCodes as DHCPOptionCodes,
 )
 
-# The submodule order below is alphabetical and carries no meaning. It used to
-# carry one: `ccc` lived outside this package and imported `.type` back, so it
-# worked only while it was imported last, and hoisting this block produced an
-# ImportError from a partially initialised module. It is now a sibling that
-# imports `.base`/`.addresses`/`.scalar` directly, so any order works.
+# The submodule order below is alphabetical and carries no meaning: each module
+# imports the siblings it needs directly (`_ccc` takes `_base`, `_addresses` and
+# `_scalar`), so any order works.
 from ._ccc import (
     CCCOption as CCCOption,
     CCCSubOption as CCCSubOption,

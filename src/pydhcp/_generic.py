@@ -27,13 +27,11 @@ else:
             if not isinstance(key_t, tuple):
                 key_t = (key_t,)
 
-            # Per-class, not per-metaclass. `_subscriptions` used to live on the
-            # metaclass, so every generic class shared one namespace keyed only
-            # by the type arguments: once the lookup worked, `Other[U8]` would
-            # have been served `List[U8]`. That bug was invisible while the
-            # cache never hit, and fixing the lookup alone would have exposed
-            # it. `cls.__dict__` rather than `getattr` so a subscripted class
-            # does not inherit and then write into its base's cache.
+            # Per-class, not per-metaclass: a cache on the metaclass would be one
+            # namespace keyed only by the type arguments, and `Other[U8]` would be
+            # served `List[U8]`. `cls.__dict__` rather than `getattr` so a
+            # subscripted class does not inherit and then write into its base's
+            # cache.
             cache = cls.__dict__.get("_subscriptions")
             if cache is None:
                 cache = {}

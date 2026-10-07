@@ -112,7 +112,7 @@ _EncapsulatedOptionsT = _ty.TypeVar(
 
 
 class EncapsulatedOptions(RecordList[TLVOption]):
-    """TLV container used to build vendor-specific sub-option payloads."""
+    """TLV container for building vendor-specific sub-option payloads."""
 
     # Only the *read* framing is its own: unlike a plain record list this one
     # honours the PAD (0) and END (255) markers that appear inside an

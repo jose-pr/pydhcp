@@ -32,10 +32,9 @@ class _MessageDisplay(_MessageMapping):
         Option 61 when present, else the hardware type and address. Raises
         `NoClientIdentityError` when the message carries neither: `hlen` may legally
         be 0 (RFC 4390 requires exactly that for IPoIB, which supplies option 61
-        instead), and the old fallback then produced the hardware-type octet
-        alone -- one identifier, `"01"`, shared by every such client. Two of them
-        would take over each other's lease, and a RELEASE from either would free
-        both.
+        instead): falling back to the hardware-type octet alone would give one
+        identifier, `"01"`, to every such client, so two of them would take over
+        each other's lease and a RELEASE from either would free both.
         """
         cid = self.options.get(DHCPOptionCode.CLIENT_IDENTIFIER, decode=False)
         if not cid:

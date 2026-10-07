@@ -16,7 +16,7 @@ __all__: list[str] = []
 class _ServerCore(_Handlers):
     """Everything a `DHCPServer` or an `AsyncDHCPServer` does that is not I/O.
 
-    Override any method or constant on the public class as before: the hooks
+    Override any method or constant on the public class: the hooks
     (`handle_discover`, `handle_request`, `handle_decline`, `handle_release`,
     `handle_inform`, `acquire_lease`, `release_lease`, `get_inform_options`,
     `get_lease_seconds`, `quarantine_address`) run synchronously on the one handler

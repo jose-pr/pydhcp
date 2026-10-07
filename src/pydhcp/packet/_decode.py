@@ -131,16 +131,12 @@ class _MessageDecode(_MessageFields):
 
         # Option 52 is *framing*, like PAD and END, and `decode` has just
         # consumed it: the options it pointed at have been moved out of
-        # sname/file, and those fields now hold their literal values. Keeping
-        # it left the decoded message asserting something untrue about itself
-        # -- "my sname/file hold options" -- and broke round-tripping, which is
-        # how a property test caught it: a message encoded at a size that
-        # overloads came back carrying an option its original never had.
-        #
-        # `encode()` already deletes it for exactly this reason, so that a
-        # relay forwarding a decoded reply does not tell the receiver to parse
-        # sname/file as options. Dropping it here means that compensation is
-        # no longer load-bearing.
+        # sname/file, and those fields hold their literal values. Keeping it
+        # would leave the decoded message asserting "my sname/file hold
+        # options" and break round-tripping: a message encoded at a size that
+        # overloads would come back carrying an option its original never had.
+        # `encode()` deletes it too, so a relay forwarding a decoded reply never
+        # tells the receiver to parse sname/file as options.
         if int(DHCPOptionCode.OPTION_OVERLOAD) in options:
             del options[int(DHCPOptionCode.OPTION_OVERLOAD)]
 
@@ -180,9 +176,8 @@ class _MessageDecode(_MessageFields):
 
         # opts -> file -> sname
 
-        # `cls`, not `DHCPMessage`: this is a classmethod, and hardcoding the
-        # base made every subclass decode to a plain `DHCPMessage` while
-        # `from_mapping` (which already used `cls`) returned the subclass.
+        # `cls`, not `DHCPMessage`: a subclass decodes to itself, as
+        # `from_mapping` does.
         return cls(
             op,
             htype=htype,

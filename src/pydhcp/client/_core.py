@@ -189,13 +189,12 @@ class _ClientCore:
     def _pending_key(msg: DHCPMessage) -> tuple[int, bytes]:
         """Identify an exchange by transaction *and* client, as the relay does.
 
-        Matching on the xid alone is wrong in both directions, and both were
-        measured on this client. Outward: a reply carrying a seen xid but a
-        foreign `chaddr` was accepted, and the xid travels in cleartext in a
-        broadcast DISCOVER, so any host on the segment can read one and answer
-        it. Inward: two exchanges from one client share the reply stream, so the
-        one that happened to be waiting consumed and discarded the other's
-        reply, and the other timed out.
+        Matching on the xid alone is wrong in both directions. Outward: a reply
+        carrying a seen xid but a foreign `chaddr` would be accepted, and the
+        xid travels in cleartext in a broadcast DISCOVER, so any host on the
+        segment can read one and answer it. Inward: two exchanges from one client
+        share the reply stream, so the one that happened to be waiting would
+        consume and discard the other's reply, and the other would time out.
 
         Same shape as `DHCPRelay._pending_key`, including the `hlen` slice: a
         decoded message already trims `chaddr` to `hlen`, an in-memory one need
@@ -399,9 +398,9 @@ class _ClientCore:
             broadcast=broadcast,
             # RFC 2131 s4.2 and s4.4.1 both say MUST: the same client
             # identifier in every subsequent message, and the same parameter
-            # list in any subsequent REQUEST. Omitting the identifier keyed the
-            # REQUEST under htype+chaddr while the OFFER was allocated under the
-            # supplied one, so the server saw two different clients.
+            # list in any subsequent REQUEST. Omitting the identifier would key
+            # the REQUEST under htype+chaddr while the OFFER was allocated under
+            # the supplied one, so the server would see two different clients.
             client_identifier=client_identifier,
             parameter_request_list=parameter_request_list,
         )

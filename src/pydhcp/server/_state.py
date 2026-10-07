@@ -38,7 +38,7 @@ class _ServerState(_Timed):
     The server's rules are composed of layers, each subclassing the last --
     `_ServerState`, `_LeasePolicy`, `_Replies`, `_Handlers` -- so each is
     type-checked against exactly what it uses. A subclass overriding a
-    constant or a method does so on `DHCPServer` as before. None of them owns
+    constant or a method does so on `DHCPServer`. None of them owns
     a socket, a thread or a clock: the listener driver the server is composed
     with supplies `metrics`, the contexts and the time.
     """
@@ -72,8 +72,8 @@ class _ServerState(_Timed):
     #: That is an L2 send: the client cannot answer ARP for an address it has not
     #: been given, so on a plain UDP socket the kernel drops the reply with no
     #: error at all. Measured against ISC dhclient 4.4.3 on a veth pair: every
-    #: OFFER was logged as sent to yiaddr:68 and the client saw none of them,
-    #: retransmitting DISCOVER until it gave up. Broadcasting is how the reply
+    #: OFFER is logged as sent to yiaddr:68 and the client sees none of them,
+    #: retransmitting DISCOVER until it gives up. Broadcasting is how the reply
     #: actually arrives. Set this True only with a transport that can address the
     #: client's hardware address directly (a raw/AF_PACKET socket), or where the
     #: neighbour entry is installed out of band.

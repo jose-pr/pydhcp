@@ -41,9 +41,9 @@ def _load_capture_hook(
         return None
     # A module reference is `package.module:function` -- never contains a path
     # separator. Deciding on the separator rather than on ':' alone keeps
-    # "C:\hooks\export.exe" a path on every platform: it has exactly one ':', so
-    # it used to be read as module "C" and reported as "No module named 'C'",
-    # and splitdrive alone would only have fixed that on Windows.
+    # "C:\hooks\export.exe" a path on every platform: it has exactly one ':', and
+    # would be read as module "C" ("No module named 'C'"); splitdrive alone
+    # would settle that on Windows only.
     has_separator = "/" in hook or "\\" in hook
     if not has_separator and hook.count(":") == 1:
         module_name, function_name = hook.split(":", 1)

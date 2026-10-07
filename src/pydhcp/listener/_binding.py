@@ -17,9 +17,9 @@ LOGGER = _logging.getLogger(__name__)
 #: The address each socket was *asked* to bind, which is not what it ended up
 #: bound to whenever that request named port 0. `_bind_sockets` matches already
 #: open sockets against the requested list, and keying them by `getsockname()`
-#: meant a port-0 request never matched the socket it had produced: measured, a
-#: second `bind()` closed the socket on port 52908 and opened a new one on
-#: 52909, so every caller holding the first port was talking to a closed socket.
+#: would make a port-0 request never match the socket it produced: a second
+#: `bind()` would close the socket and open a new one on another port, so every
+#: caller holding the first port would be talking to a closed socket.
 #: Weak keys, so an entry disappears with the socket it describes rather than
 #: pinning a closed one alive for the process's lifetime.
 _REQUESTED_ADDRESS: "_ty.MutableMapping[_socket.socket, _net.SocketAddress]" = (
@@ -119,8 +119,8 @@ def _bind_sockets(
     """Bind one socket per listen address, reusing any already bound.
 
     Shared by both listeners. Held apart, the async copy silently lacked the
-    packet-info option and the bind-error hints, so the same mistake produced a
-    helpful message from one listener and a bare errno from the other.
+    packet-info option and the bind-error hints, so the same mistake gives the
+    same helpful message from either listener.
 
     Every socket gets a `netimps.UDPEndpoint` in `endpoints`, which is what both
     listeners receive through; a wildcard one asks it for packet info, which it
@@ -168,15 +168,15 @@ def _bind_sockets(
             continue
         LOGGER.info(f"Listening on{' (' + label + ')' if label else ''}: {address}")
         try:
-            # Exclusive unless REUSE_ADDRESS: a second listener binding a port
-            # the first held used to *succeed silently* and receive nothing --
-            # a misconfiguration, or another process quietly taking over a DHCP
-            # port, that looked exactly like a working start-up. netimps makes
+            # Exclusive unless REUSE_ADDRESS: a second bind of a port the first
+            # holds would otherwise *succeed silently* and receive nothing -- a
+            # misconfiguration, or another process quietly taking over a DHCP
+            # port, that looks exactly like a working start-up. netimps makes
             # the exclusive bind the default on both platforms.
             #
             # connreset=False: on Windows an ICMP port-unreachable provoked by
             # an earlier reply otherwise surfaces as ConnectionResetError on a
-            # *later, unrelated* receive -- measured, one client that had gone
+            # *later, unrelated* receive -- measured: one client that had gone
             # away logged a full ERROR traceback on the server.
             device = devices.get(address) if devices else None
             options: "dict[str, _ty.Any]" = dict(

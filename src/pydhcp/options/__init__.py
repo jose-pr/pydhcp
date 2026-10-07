@@ -452,9 +452,9 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
 
     # Deliberate ABC deviation -- see the class docstring. The decoded forms
     # return a `list[DHCPOption]`, not an `ItemsView`: decoding builds new pairs,
-    # so there is no live view to hand back, and the old `ItemsView` annotation
-    # promised `.mapping` and set operations that the list has never had. Only
-    # `decoded=False` is the mapping's own view.
+    # so there is no live view to hand back, and an `ItemsView` annotation
+    # would promise `.mapping` and set operations that a list does not have.
+    # Only `decoded=False` is the mapping's own view.
     @_ty.overload  # type: ignore[override]
     def items(self) -> list[DHCPOption]: ...
 

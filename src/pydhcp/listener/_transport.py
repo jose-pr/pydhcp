@@ -102,17 +102,14 @@ class UDPTransport(DHCPTransport):
         port: int,
         client_mac: bytes,
     ) -> int:
-        # No broadcast retry on failure. It was written for the case where a
-        # unicast cannot reach a client that has no address yet -- "standard UDP
-        # sockets can't target an L2 MAC if there is no ARP entry" -- but that
-        # case does not raise: the kernel ARPs for an address nobody answers for
-        # and drops the datagram silently, which is precisely how the original
-        # POSIX no-reply defect went unnoticed. So the retry never fired for
-        # what it was written for, and only ever fired for real socket errors --
-        # EACCES, ENETUNREACH, a closed socket -- where a broadcast is both
-        # useless and a disclosure: it puts a reply the caller deliberately
-        # unicast onto the whole segment, carrying yiaddr, chaddr, the lease
-        # options and any echoed option 82.
+        # No broadcast retry on failure. A unicast to a client that has no
+        # address yet -- standard UDP sockets cannot target an L2 MAC without an
+        # ARP entry -- does not raise: the kernel ARPs for an address nobody
+        # answers for and drops the datagram silently. A retry would therefore
+        # fire only for real socket errors -- EACCES, ENETUNREACH, a closed
+        # socket -- where a broadcast is both useless and a disclosure: it puts
+        # a reply the caller deliberately unicast onto the whole segment,
+        # carrying yiaddr, chaddr, the lease options and any echoed option 82.
         #
         # Deciding *whether* a reply should be broadcast belongs to the caller
         # and is already made there: the server picks 255.255.255.255 for a

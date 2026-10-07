@@ -79,7 +79,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
             self._load()
 
     def flush(self) -> None:
-        """Write now if anything is pending. Safe to call when nothing is."""
+        """Write if anything is pending. Safe to call when nothing is."""
         with self._lock:
             if self._dirty:
                 self._write_now()
@@ -198,7 +198,7 @@ class FileLeaseBackend(InMemoryLeaseBackend):
         )
 
     def _save(self) -> None:
-        """Record that the store changed, and write now or arm the timer."""
+        """Record that the store changed, and write at once or arm the timer."""
         with self._lock:
             self._dirty = True
             if self.SAVE_INTERVAL_SECONDS <= 0:
@@ -294,8 +294,8 @@ class FileLeaseBackend(InMemoryLeaseBackend):
             temp_path = None
         except Exception as e:
             # Not raised: a lease store that cannot be written must not take the
-            # server down mid-exchange. But it is no longer silent -- the old
-            # code returned a lease the caller believed was persisted.
+            # server down mid-exchange. It is logged, because the caller was
+            # handed a lease it believes is persisted.
             LOGGER.error(
                 f"Could not persist leases to {self.filepath}: "
                 f"{e.__class__.__name__} | {e}"

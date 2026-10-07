@@ -58,10 +58,10 @@ class BaseDHCPOptionCode:
         """The option code as a byte value.
 
         A subclass that carries neither a `value` (the enum case) nor an
-        integer identity of its own has no option code, and this used to
-        answer `0` for it. Zero is not a neutral answer: it is PAD, the wire
-        padding marker, so such a code silently addressed option 0 -- it
-        stored, encoded and emitted as a PAD TLV. Raising says what is true.
+        integer identity of its own has no option code, and raises. Zero is
+        not a neutral answer: it is PAD, the wire padding marker, so such a
+        code would silently address option 0 and be stored, encoded and
+        emitted as a PAD TLV.
         """
         if hasattr(self, "value"):
             return int(self.value)

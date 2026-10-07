@@ -238,7 +238,7 @@ TLVOption(code, value)
   arrangement option 43 uses.
 - **`TLVOption`** — one generic `(code: int, value: Bytes)`
   TLV record.
-- **`EncapsulatedOptions`** — TLV container used to build vendor-specific
+- **`EncapsulatedOptions`** — TLV container for building vendor-specific
   sub-option payloads.
 - **`VendorSpecificInformation`** — option 43 payload (opaque `Bytes` by
   default; wrap with `TLVOption`/`EncapsulatedOptions` for structured TLV

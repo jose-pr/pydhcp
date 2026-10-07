@@ -78,8 +78,8 @@ def _pktinfo_supported(listen: ListenLike, per_interface: "_ty.Optional[bool]") 
 
     `netimps.has_pktinfo` decides by asking a socket, never by testing a
     constant's name: `getattr(socket, "IP_PKTINFO", None)` is None on CPython
-    3.9-3.11 on every platform while the kernel supports it throughout, which
-    is how this path used to be silently off across half the supported range.
+    3.9-3.11 on every platform while the kernel supports it throughout, so a
+    name test would leave this path off across half the supported range.
     """
     return (
         per_interface is not True
@@ -123,9 +123,8 @@ def _arrival(
     multicast group or the wildcard (255.255.255.255 or a subnet broadcast)
     the destination names no interface and the interface's `primary_ip()`
     stands in: a routable address, else a loopback one, else a link-local one.
-    The old Linux-only receive path read `ipi_spec_dst` instead, the kernel's
-    choice of local address, which macOS zero-fills and Windows does not report
-    at all.
+    `ipi_spec_dst`, the kernel's choice of local address, is not used: macOS
+    zero-fills it and Windows does not report it at all.
     """
     data = datagram.data
     sender = datagram.sender

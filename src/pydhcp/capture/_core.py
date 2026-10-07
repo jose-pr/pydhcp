@@ -88,9 +88,9 @@ class _CaptureCore(_Timed):
                     exc_info=True,
                 )
                 if self.hook_fail_fast:
-                    # Re-raising alone achieved nothing: handle() runs inside the
+                    # Re-raising alone achieves nothing: handle() runs inside the
                     # listener's per-packet try, which logs and carries on, so
-                    # capture kept running and still exited 0. Record the failure
+                    # capture would keep running and exit 0. Record the failure
                     # and stop the loop, so a caller can tell that it ended
                     # because of the hook rather than because it was asked to.
                     self.hook_error = exc

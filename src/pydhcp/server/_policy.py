@@ -33,8 +33,8 @@ def _servable_interface(
     The APIPA exclusion is spelled out here rather than left to
     `host_ip_interfaces`' default, because passing a predicate **replaces** that
     default rather than composing with it. That is documented behaviour of the
-    enumerator and it silently un-filtered this path: measured, looking up a
-    link-local address returned the adapter holding it. A server whose interface
+    enumerator, and relying on the default would silently un-filter this path:
+    a lookup of a link-local address would return the adapter holding it. A server whose interface
     holds only a 169.254/16 address would then have allocated leases from that
     network, which RFC 3927 s1.5 excludes from DHCP assignment -- an address in
     that range is self-assigned by definition, so a lease for one collides with
@@ -45,8 +45,8 @@ def _servable_interface(
     selection.
     """
     # Asked of every allocating and every DHCPINFORM packet, so through
-    # netimps' enumeration cache: measured before any cache, the enumeration
-    # was 1181 us of a 1539 us `handle()` on a DHCPDISCOVER. Deliberately not
+    # netimps' enumeration cache: uncached, the enumeration is 1181 us of a
+    # 1539 us `handle()` on a DHCPDISCOVER (one measured host). Deliberately not
     # answered from `context.interface`: `_resolve_interface` never returns
     # None -- it invents an `unknown[<ip>]` /32 -- and the allocator reads
     # SUBNET_MASK and BROADCAST_ADDRESS off this interface, so substituting it
@@ -96,12 +96,12 @@ class _LeasePolicy(_InputGuard):
     ) -> bool:
         """Whether option 54 names *this* server, on any of its addresses.
 
-        It used to be compared against the receiving interface alone, so on a
+        It is not compared against the receiving interface alone: on a
         host with two addresses on one broadcast domain -- a secondary IP, or
         two NICs on one VLAN, which is the Windows default binding and what
-        `per_interface=True` produces -- both sockets saw the client's broadcast
-        REQUEST. Socket A ACKed; socket B then read the same option 54 as a
-        *foreign* server and deleted the binding the client had just accepted,
+        `per_interface=True` produces -- both sockets see the client's broadcast
+        REQUEST. Socket A ACKs; socket B would then read the same option 54 as a
+        *foreign* server and delete the binding the client just accepted,
         freeing the address for someone else. Measured on a three-address host:
         the binding was present after A and gone after B.
 
@@ -246,8 +246,8 @@ class _LeasePolicy(_InputGuard):
         options = DHCPOptions()
         options[DHCPOptionCode.SUBNET_MASK] = _server.network.netmask
         options[DHCPOptionCode.BROADCAST_ADDRESS] = _server.network.broadcast_address
-        # No ROUTER and no DNS. They used to be set to this host's own address,
-        # which is a guess and usually a wrong one: running the server on an
+        # No ROUTER and no DNS. This host's own address would be a guess and
+        # usually a wrong one: running the server on an
         # ordinary machine then told every client to send all off-link traffic
         # and every name lookup to a host that routes and resolves nothing.
         # Omitting them leaves the client with whatever it already has -- a

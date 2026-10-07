@@ -73,10 +73,9 @@ class CaptureEvent:
             or self.context.local_ip
             or _ty.cast(_ipaddress.IPv4Address, self.context.interface.ip)
         )
-        # The port the packet was received on. Hardcoding 0 here made the
-        # documented `dst_port=` filter key unable to match anything, while
-        # still passing validation -- so a filter using it silently dropped
-        # every packet.
+        # The port the packet was received on: the `dst_port=` filter key
+        # compares against it, so a constant would pass validation and match
+        # nothing.
         port = 0
         socket = getattr(self.context.transport, "socket", None)
         if socket is not None:

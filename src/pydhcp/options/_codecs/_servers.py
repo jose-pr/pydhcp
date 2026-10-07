@@ -110,9 +110,9 @@ class SIPServers(_Record):
     """RFC 3361 SIP servers: an encoding octet, then names or addresses.
 
     Encoding 0 is a list of RFC 1035 names, encoding 1 a list of IPv4 addresses.
-    Registering this as a bare address list meant a conformant option could not
-    be decoded at all, and an emitted one had no encoding octet -- so a SIP phone
-    read the first address octet as the encoding and rejected the option.
+    Registered as a bare address list, a conformant option could not be decoded
+    at all, and an emitted one would have no encoding octet -- so a SIP phone
+    would read the first address octet as the encoding and reject the option.
     """
 
     __slots__ = ("values", "encoding")
