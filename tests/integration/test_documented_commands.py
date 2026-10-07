@@ -150,6 +150,32 @@ def _arguments(line: str, ports: "dict[str, int]") -> "list[str]":
     return arguments
 
 
+def _clear_output(directory: pathlib.Path, arguments: "list[str]") -> None:
+    """Remove the file a line writes when `_prepare` already made one by that name.
+
+    A line that names a prepared file as its output (and does not read it) would
+    otherwise pass on the file the test wrote, whatever the command did.
+    """
+    if "--output" not in arguments:
+        return
+    name = arguments[arguments.index("--output") + 1]
+    reads_it = any(
+        a == name and arguments[i - 1] in ("--read", "--input")
+        for i, a in enumerate(arguments)
+    )
+    target = directory / name
+    if not reads_it and name != "-" and target.is_file():
+        target.unlink()
+
+
+def _payloads(target: pathlib.Path) -> "list[bytes]":
+    """The datagrams `target` reads back as; empty while it is absent or not yet whole."""
+    try:
+        return [d.payload for d in pktcap.read_datagrams(target)]
+    except (OSError, ValueError):
+        return []
+
+
 def _wait_for(check: "_ty.Callable[[], bool]", seconds: float = 15.0) -> bool:
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -169,6 +195,7 @@ def test_a_readme_command_line_runs_as_written(
     if "--help" in arguments:
         pytest.skip("--help is not a run")
     verb = arguments[0]
+    _clear_output(tmp_path, arguments)
 
     if verb not in SERVING or "--read" in arguments:
         stdin = _packet_hex() if "--decode" in arguments else ""
@@ -197,12 +224,9 @@ def test_a_readme_command_line_runs_as_written(
                 )
             elif arguments[arguments.index("--output") + 1].endswith(".pcap"):
                 target = tmp_path / arguments[arguments.index("--output") + 1]
-                assert _wait_for(
-                    lambda: target.exists() and len(list(pktcap.read_datagrams(target)))
+                assert _wait_for(lambda: _payloads(target) == [_discover()]), _payloads(
+                    target
                 )
-                assert [d.payload for d in pktcap.read_datagrams(target)] == [
-                    _discover()
-                ]
             else:
                 assert _wait_for(lambda: any(l.startswith("{") for l in command.stdout))
                 assert json.loads(command.stdout[0])["xid"] == 0x1234ABCD
