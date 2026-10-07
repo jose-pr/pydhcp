@@ -145,23 +145,29 @@ reads. Use `run.py --save` for anything that will be compared.
 
 ## Where each result file comes from
 
-`results/` is tracked, and a file in it says where it came from:
+`results/` is tracked, and every file in it is a CI result: the artifact the
+`benchmark` job of `test.yml` uploaded (`workflow_dispatch` with
+`run_benchmarks`, or a `ci-bench-*` tag), committed unedited. Its `python`,
+`platform` and `processor` fields name the runner it was measured on.
 
-- `pydhcp-0.5.2-py314.json` — **a local run**, on one developer machine
-  (Windows on ARM64, CPython 3.14), labelled by the installed metadata of an
-  editable install made at 0.5.2, from a tree well past that tag. It predates
-  the `listener` and `server` suites and the rule above that labels a result by
-  the tree measured, so it is not a measurement of 0.5.2. It stays until CI
-  results for the releases exist, and is then replaced by them.
-- A file written by the `benchmark` job of `test.yml` (`workflow_dispatch` with
-  `run_benchmarks`, or a `ci-bench-*` tag) is a CI result: the job uploads
-  `benchmarks/results/*.json` as an artifact, and the artifact is what is
-  committed here, unedited. Its `python`, `platform` and `processor` fields name
-  the runner it was measured on.
-  The job names the file for the version in `pyproject.toml` and the interpreter;
-  the `result_name` input of the manual run names it otherwise, which a result of
-  a tree that has not been versioned yet needs so that it does not take another
-  tree's name.
+| File | Tree measured | Script that measured it |
+| --- | --- | --- |
+| `pydhcp-0.6.1-ci.json` | the `v0.6.1` tag | that tag's own `benchmarks/run.py` |
+| `pydhcp-0.7.0-ci.json` | the `v0.7.0` tag | that tag's own `benchmarks/run.py` |
+| `pydhcp-0.8.0-candidate-ci.json` | the tree in development as 0.8.0 | this directory's |
+
+The record starts at 0.6.1, the first release whose `run.py` writes sampled
+results. A release is measured by its own script, because the scripts here use
+names the older releases do not have; the three files share the seven `parse.*`
+and `options.*` metrics those scripts have in common, and `parse.encode_reply`,
+`listener.*` and `server.*` exist from the candidate on. The runners differ in
+their patch release of Python (the `python` field), which `compare-bench`
+reports.
+
+The job names a file for the version in `pyproject.toml` and the interpreter;
+the `result_name` input of the manual run names it otherwise, which a result of
+a tree that has not been released yet needs so that it does not take another
+tree's name.
 
 A local run measures the machine it ran on: two back-to-back runs of the same
 commit on the same developer machine came out **10.1%** apart, which is why a

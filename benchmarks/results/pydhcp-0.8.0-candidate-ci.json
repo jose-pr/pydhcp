@@ -1,0 +1,72 @@
+{
+  "iterations": {
+    "listener": 1000,
+    "options": 1000,
+    "parse": 10000,
+    "repeat": 5,
+    "server": 2000
+  },
+  "metrics": {
+    "listener.receive_datagram": {
+      "max_ms": 0.144047,
+      "median_ms": 0.1271,
+      "min_ms": 0.117388
+    },
+    "options.decode_0_options": {
+      "max_ms": 0.001062,
+      "median_ms": 0.00103,
+      "min_ms": 0.001013
+    },
+    "options.decode_20_options": {
+      "max_ms": 0.013924,
+      "median_ms": 0.013783,
+      "min_ms": 0.013744
+    },
+    "options.decode_5_options": {
+      "max_ms": 0.00437,
+      "median_ms": 0.004311,
+      "min_ms": 0.004285
+    },
+    "options.lease_allocations_1000_clients": {
+      "max_ms": 5.228742,
+      "median_ms": 5.125192,
+      "min_ms": 5.019108
+    },
+    "options.round_trip_encode_decode": {
+      "max_ms": 0.004818,
+      "median_ms": 0.004687,
+      "min_ms": 0.004656
+    },
+    "parse.decode_packet": {
+      "max_ms": 0.011253,
+      "median_ms": 0.011243,
+      "min_ms": 0.011189
+    },
+    "parse.encode_packet": {
+      "max_ms": 0.006586,
+      "median_ms": 0.006574,
+      "min_ms": 0.006539
+    },
+    "parse.encode_reply": {
+      "max_ms": 0.008729,
+      "median_ms": 0.008685,
+      "min_ms": 0.008667
+    },
+    "server.handle_discover": {
+      "max_ms": 0.235213,
+      "median_ms": 0.23464,
+      "min_ms": 0.232515
+    },
+    "server.handle_request": {
+      "max_ms": 0.313411,
+      "median_ms": 0.308606,
+      "min_ms": 0.307642
+    }
+  },
+  "name": "pydhcp-0.8.0-candidate-ci",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "processor": "x86_64",
+  "pydhcp_version": "0.8.0",
+  "python": "3.12.14",
+  "timestamp": "2026-10-07T05:41:35+00:00"
+}

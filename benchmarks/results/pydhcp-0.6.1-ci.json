@@ -1,0 +1,50 @@
+{
+  "iterations": {
+    "options": 1000,
+    "parse": 10000,
+    "repeat": 5
+  },
+  "metrics": {
+    "options.decode_0_options": {
+      "max_ms": 0.000872,
+      "median_ms": 0.000771,
+      "min_ms": 0.000753
+    },
+    "options.decode_20_options": {
+      "max_ms": 0.013188,
+      "median_ms": 0.013149,
+      "min_ms": 0.013078
+    },
+    "options.decode_5_options": {
+      "max_ms": 0.004189,
+      "median_ms": 0.00403,
+      "min_ms": 0.004028
+    },
+    "options.lease_allocations_1000_clients": {
+      "max_ms": 5.963571,
+      "median_ms": 5.895373,
+      "min_ms": 5.8664
+    },
+    "options.round_trip_encode_decode": {
+      "max_ms": 0.004064,
+      "median_ms": 0.004028,
+      "min_ms": 0.00401
+    },
+    "parse.decode_packet": {
+      "max_ms": 0.010227,
+      "median_ms": 0.010208,
+      "min_ms": 0.010181
+    },
+    "parse.encode_packet": {
+      "max_ms": 0.016855,
+      "median_ms": 0.016796,
+      "min_ms": 0.016753
+    }
+  },
+  "name": "pydhcp-0.6.1-ci",
+  "platform": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+  "processor": "x86_64",
+  "pydhcp_version": "0.6.1",
+  "python": "3.12.14",
+  "timestamp": "2026-10-07T03:54:23+00:00"
+}
