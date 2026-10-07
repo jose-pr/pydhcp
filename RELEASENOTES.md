@@ -49,7 +49,10 @@ and a read of this list.
   client with no address is answered by broadcast (over loopback by unicast); a DHCPDISCOVER no
   longer reserves an address for the lease time; a DHCPREQUEST is answered from what the server
   holds, shape by shape (RFC 2131 section 4.3.2); the stock allocator refuses a `giaddr` outside
-  the served network. A backend needs the six `LeaseBackend` methods, or the server refuses it.
+  the served network; an OFFER and an ACK carry the renewal and rebinding times (options 58 and
+  59, `RENEWAL_TIMES`); a DHCPDECLINE of an address of the served network is believed whoever
+  sent it (`DECLINE_REQUIRES_LEASE = True` marks only an address the sender holds). A backend
+  needs the six `LeaseBackend` methods, or the server refuses it.
 - **Command line.** `pydhcp.cli.main(argv=None)` returns the status instead of exiting: 0 on
   success, 1 for a failed run, 2 for a wrong invocation (a configuration error included).
   `pydhcp capture --output-mode` is `--per-capture`, `pydhcp relay --server` is required,
