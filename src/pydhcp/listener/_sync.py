@@ -79,10 +79,11 @@ class DHCPListener(_ListenerCore):
             if self._serving:
                 raise RuntimeError(f"{type(self).__name__} is already serving")
             self._claim_token = token
-            wake_read, wake_write = _socket.socketpair()
-            wake_read.setblocking(False)
-            wake_write.setblocking(False)
-            self._wake_read, self._wake_write = wake_read, wake_write
+            # Held by the listener from the statement that makes them, so a
+            # release after an interrupt anywhere below closes them.
+            self._wake_read, self._wake_write = _socket.socketpair()
+            self._wake_read.setblocking(False)
+            self._wake_write.setblocking(False)
             self._serving = True
             self._stopping = False
             self._idle.clear()

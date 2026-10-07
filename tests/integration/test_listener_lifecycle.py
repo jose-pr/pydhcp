@@ -645,6 +645,39 @@ def test_an_interrupt_after_the_claim_and_before_the_loop_leaves_nothing_to_wait
     assert listener.bound_addresses == ()
 
 
+def test_an_interrupt_inside_the_claim_leaves_no_socket_open(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The claim makes a pair of sockets to wake the loop with. An interrupt
+    right after they exist, here from the first call made on one of them, must
+    not leave them open with nobody holding them."""
+    made: "list[socket.socket]" = []
+    real = socket.socketpair
+
+    class Interrupting(socket.socket):
+        def setblocking(self, flag: bool) -> None:
+            raise KeyboardInterrupt
+
+    def pair() -> "tuple[socket.socket, socket.socket]":
+        first, second = real()
+        wrapped = Interrupting(first.family, first.type, fileno=first.detach())
+        made.extend([wrapped, second])
+        return wrapped, second
+
+    listener = DHCPListener(listen=LOCAL)
+    try:
+        with monkeypatch.context() as patched:
+            patched.setattr(socket, "socketpair", pair)
+            with pytest.raises(KeyboardInterrupt):
+                listener.serve_forever()
+        assert [sock.fileno() for sock in made] == [-1, -1]
+    finally:
+        for sock in made:
+            sock.close()
+        listener.close()
+    assert listener.bound_addresses == ()
+
+
 def test_an_interrupt_while_the_receive_thread_is_made_leaves_nothing_to_wait_for(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

@@ -960,6 +960,8 @@ importable. Replace each name in the left column with the one beside it.
   `serve_forever()` and `start()` marked the listener as serving and only then entered the `try` that releases the claim, so a
   `KeyboardInterrupt` (or any exception) in between left it looking busy: `close()` waited its full five seconds and logged
   "did not end within". The claim and the loop now run under one `try`/`finally` that releases exactly the claim this call made.
+  The pair of sockets the claim makes to wake the loop is the listener's from the statement that makes it, so an interrupt
+  inside the claim no longer leaves the pair open and unowned.
 - **A capture filter whose value no packet could match is refused when it is compiled**, with
   `pktcap.CaptureFilterError` naming the clause, instead of compiling and reporting nothing (which
   looks like a quiet segment): `msg_type=DISCOVER` (the names are `DHCPDISCOVER` and the rest; the
