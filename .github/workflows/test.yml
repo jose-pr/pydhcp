@@ -200,32 +200,12 @@ jobs:
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
+      # The script reads the floors from pyproject.toml, evaluating each marker
+      # for this runner, so a floor that differs by platform or Python is the one
+      # that applies here. The two skipped names have no published version to pin;
+      # drop --skip once both are on PyPI.
       - name: Pin every declared dependency to its floor
-        shell: python
-        run: |
-          import re
-          import subprocess
-          import sys
-
-          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "tomli"], check=True)
-          import tomli
-
-          # Temporary: the two dependencies above have no published version to
-          # pin. Empty this set once both are on PyPI.
-          UNPUBLISHED = {"netimps", "pktcap"}
-
-          project = tomli.load(open("pyproject.toml", "rb"))["project"]
-          specs = list(project.get("dependencies", []))
-          for extra, deps in project.get("optional-dependencies", {}).items():
-              if extra not in ("dev", "docs"):
-                  specs += deps
-          pins = []
-          for spec in specs:
-              m = re.match(r"^\s*([A-Za-z0-9._-]+)(\[[^\]]*\])?\s*[^;]*?>=\s*([^,;\s]+)", spec)
-              if m and m.group(1).lower() not in UNPUBLISHED:
-                  pins.append("%s==%s" % (m.group(1), m.group(3)))
-          open("floors.txt", "w").write("\n".join(pins) + "\n")
-          print("\n".join(pins) or "(no floors declared)")
+        run: python .github/pin_floors.py --skip netimps pktcap
 
       - name: Install at the floors
         run: python -m pip install -c floors.txt -e ".[dev]"
