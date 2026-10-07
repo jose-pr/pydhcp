@@ -305,3 +305,70 @@ def test_an_inform_is_answered_from_options_and_builds_no_lease(
     assert DHCPOptionCode.IP_ADDRESS_LEASE_TIME not in reply.options
     assert reply.options.get(DHCPOptionCode.DNS) == [IPv4("9.9.9.9")]
     assert DHCPOptionCode.SERVER_IDENTIFIER in reply.options
+
+
+# -- replace -------------------------------------------------------------------------
+
+
+def _held() -> DHCPLease:
+    options = DHCPOptions()
+    options[DHCPOptionCode.ROUTER] = ["192.0.2.1"]
+    return DHCPLease(
+        IPv4("192.0.2.10"),
+        dt.datetime(2030, 1, 1, tzinfo=dt.timezone.utc),
+        options,
+        offered=True,
+    )
+
+
+def test_replace_with_nothing_is_an_equal_lease() -> None:
+    lease = _held()
+    assert lease.replace() == lease
+
+
+def test_replace_changes_the_named_field_and_carries_the_rest() -> None:
+    lease = _held()
+    later = dt.datetime(2031, 1, 1, tzinfo=dt.timezone.utc)
+    changed = lease.replace(expires=later)
+    assert changed is not lease
+    assert changed == DHCPLease(lease.ip, later, lease.options, offered=True)
+    assert changed.options is lease.options
+    assert lease.expires == dt.datetime(2030, 1, 1, tzinfo=dt.timezone.utc)
+
+
+def test_replace_changes_each_field_alone() -> None:
+    lease = _held()
+    assert lease.replace(ip="192.0.2.99").ip == IPv4("192.0.2.99")
+    assert lease.replace(offered=False).offered is False
+    options = DHCPOptions()
+    options[DHCPOptionCode.ROUTER] = ["192.0.2.2"]
+    assert lease.replace(options=options).options == options
+
+
+def test_replace_expires_none_means_it_never_expires() -> None:
+    assert _held().replace(expires=None).expires is None
+
+
+def test_replace_checks_what_the_constructor_checks() -> None:
+    lease = _held()
+    with pytest.raises(DHCPValueError):
+        lease.replace(expires=dt.datetime(2031, 1, 1))
+    with pytest.raises(DHCPValueError):
+        lease.replace(ip="0.0.0.0")
+    with pytest.raises(TypeError):
+        lease.replace(expires=3600)  # type: ignore[arg-type]
+
+
+def test_replace_takes_keywords_only_and_no_other_name() -> None:
+    with pytest.raises(TypeError):
+        _held().replace("192.0.2.99")  # type: ignore[misc]
+    with pytest.raises(TypeError):
+        _held().replace(ttl=5)  # type: ignore[call-arg]
+
+
+def test_a_replaced_lease_is_still_a_value() -> None:
+    changed = _held().replace(ip="192.0.2.11")
+    with pytest.raises(AttributeError):
+        changed.ip = IPv4("192.0.2.12")  # type: ignore[misc]
+    assert pickle.loads(pickle.dumps(changed)) == changed
+    assert copy.deepcopy(changed) == changed

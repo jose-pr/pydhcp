@@ -16,6 +16,9 @@ someone upgrading from 0.7.0.
 
 ### Added
 
+- **`DHCPLease.replace(*, ip, expires, options, offered)`**: a new lease with the named fields
+  changed and the others carried over; the lease itself stays a frozen value. A given field is
+  checked as the constructor checks it, and `expires=None` is a lease that never ends.
 - **`DHCPServer.STRICT_REPLY_PORTS` and `pydhcp server --lenient-reply-ports`** (`PYDHCP_SERVER_LENIENT_REPLY_PORTS`,
   the `lenient_reply_ports` key). The default, `True`, is the RFC 1542 rule the server already
   followed: a reply goes to port 67 for a relay and 68 for a client. `False` answers the port the

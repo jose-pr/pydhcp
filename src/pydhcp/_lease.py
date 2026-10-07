@@ -6,6 +6,7 @@ import datetime as _dt
 import ipaddress as _ipaddress
 import typing as _ty
 
+from ._missing import MISSING as _MISSING, Missing as _Missing
 from .exceptions import DHCPValueError
 from .options import DHCPOptions
 from .options._frozen import FrozenDHCPOptions
@@ -81,6 +82,27 @@ class DHCPLease:
         _set(self, "expires", expires)
         _set(self, "options", options)
         _set(self, "offered", bool(offered))
+
+    def replace(
+        self,
+        *,
+        ip: _ty.Union[str, int, bytes, _ipaddress.IPv4Address, _Missing] = _MISSING,
+        expires: _ty.Union[_dt.datetime, None, _Missing] = _MISSING,
+        options: _ty.Union[DHCPOptions, None, _Missing] = _MISSING,
+        offered: _ty.Union[bool, _Missing] = _MISSING,
+    ) -> "DHCPLease":
+        """A new lease with the given fields changed and the others carried over.
+
+        An omitted field keeps this lease's value, `options` as the same
+        read-only object; a given one is checked as `DHCPLease(...)` checks it,
+        so `expires=None` is a lease that never ends. This lease is not changed.
+        """
+        return DHCPLease(
+            self.ip if isinstance(ip, _Missing) else ip,
+            self.expires if isinstance(expires, _Missing) else expires,
+            self.options if isinstance(options, _Missing) else options,
+            offered=self.offered if isinstance(offered, _Missing) else offered,
+        )
 
     def __setattr__(self, name: str, value: _ty.Any) -> _ty.NoReturn:
         raise AttributeError("DHCPLease is read-only")

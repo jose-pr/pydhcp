@@ -200,9 +200,7 @@ class InMemoryLeaseBackend:
             lease = self.lookup(client_id)
             if lease is None or not lease.offered:
                 return None
-            bound = DHCPLease(
-                ip=lease.ip, expires=self._expiry(ttl), options=lease.options
-            )
+            bound = lease.replace(expires=self._expiry(ttl), offered=False)
             self._put(client_id, bound)
             return bound
 
@@ -291,8 +289,6 @@ class InMemoryLeaseBackend:
             lease = self.lookup(client_id)
             if lease is None or lease.offered:
                 return None
-            renewed = DHCPLease(
-                ip=lease.ip, expires=self._expiry(ttl), options=lease.options
-            )
+            renewed = lease.replace(expires=self._expiry(ttl))
             self._put(client_id, renewed)
             return renewed

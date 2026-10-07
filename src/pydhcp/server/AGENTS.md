@@ -249,6 +249,7 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
 
 ```python
 DHCPLease(ip, expires=None, options=None, *, offered=False)
+DHCPLease.replace(*, ip=..., expires=..., options=..., offered=...) -> DHCPLease
 LeaseBackend.offer(client_id, ip, hold_seconds, options=None) -> DHCPLease | None
 LeaseBackend.commit(client_id, ttl) -> DHCPLease | None
 LeaseBackend.lookup(client_id) -> DHCPLease | None
@@ -279,6 +280,10 @@ FileLeaseBackend.close()
   - `offered: bool` is the lease's state: `True` for an address held for a
     client that was offered it and has not accepted (`expires` is then the end
     of the hold), `False` for a binding. It takes part in equality and hash.
+  - **`.replace(*, ip, expires, options, offered)`** returns a new lease with
+    the named fields changed and the rest carried over (`options` as the same
+    object); a given field is checked as the constructor checks it, and
+    `expires=None` is a lease that never ends. The original is unchanged.
   - Copies, deep-copies and pickles to an equal lease, across a process
     boundary too, so a `LeaseBackend` kept in another process can return one.
 
