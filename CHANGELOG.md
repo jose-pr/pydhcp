@@ -163,6 +163,10 @@ someone upgrading from 0.7.0.
 
 ### Changed
 
+- **Importing the package does not import `asyncio`.** `AsyncDHCPListener`,
+  `AsyncDHCPServer`, `AsyncDHCPClient`, `AsyncDHCPRelay` and `AsyncDHCPCapture` are bound
+  when first accessed, from `pydhcp` and from their own packages; their names and import
+  paths are unchanged, and a program that uses only the blocking classes never loads it.
 - **`duho` and PyYAML are extras, `cli` and `yaml`, and no longer installed with the package**:
   `pip install pydhcp` gives the library, and `pip install "pydhcp[cli]"` the `pydhcp` command,
   `pip install "pydhcp[yaml]"` YAML packets and `.yaml` configuration files. `import pydhcp`

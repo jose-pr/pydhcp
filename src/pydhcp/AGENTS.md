@@ -23,7 +23,10 @@ needs; the `yaml` extra adds PyYAML (YAML packets and configuration files) and t
 extra `tomli-w`, and `tomli` before Python 3.11 (TOML packets, capture files and
 configuration files). A missing one is named where it is used, with its
 `pip install "pydhcp[<extra>]"` line. Importing `pydhcp` or `pydhcp.cli` never imports
-`duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`. Python 3.9 or newer.
+`duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`. Nor does importing `pydhcp` or one of
+its packages import `asyncio`: `AsyncDHCPListener`, `AsyncDHCPServer`, `AsyncDHCPClient`,
+`AsyncDHCPRelay` and `AsyncDHCPCapture` are bound when first accessed, under the same
+names and import paths. Python 3.9 or newer.
 
 `netimps` supplies the packet-info receive and reply sockets (`UDPEndpoint`), socket
 binding, host:port parsing, interface enumeration (`get_interface`, `iter_interfaces`,

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from ._asyncio import AsyncDHCPCapture
+import typing as _ty
+
+from .._lazy import bind as _bind
 from ._events import (
     CaptureEvent,
     CaptureHook,
@@ -21,6 +23,12 @@ from ._writer import (
     UNIQUE_FILENAME_FIELDS,
     DHCPCaptureWriter,
 )
+
+if _ty.TYPE_CHECKING:
+    from ._asyncio import AsyncDHCPCapture
+
+#: Bound on first use: the module that defines it imports asyncio.
+_ASYNCIO = {"AsyncDHCPCapture": "._asyncio"}
 
 __all__ = [
     "AsyncDHCPCapture",
@@ -44,3 +52,12 @@ __all__ = [
     "register_dhcp_dissector",
     "replay_capture",
 ]
+
+
+def __getattr__(name: str) -> _ty.Any:
+    """Bind an asyncio class on first use, so importing this package does not import asyncio."""
+    return _bind(__name__, globals(), _ASYNCIO, name)
+
+
+def __dir__() -> "list[str]":
+    return sorted(set(globals()) | set(__all__))

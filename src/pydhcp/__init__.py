@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import typing as _ty
 from importlib.metadata import version as _version
 
 from . import _log  # noqa: F401 -- attaches the package logger's NullHandler
@@ -15,7 +16,6 @@ from .exceptions import (
 )
 from .listener import (
     DHCPListener as DHCPListener,
-    AsyncDHCPListener as AsyncDHCPListener,
     DHCPTransport as DHCPTransport,
     UDPTransport as UDPTransport,
     PktInfoUDPTransport as PktInfoUDPTransport,
@@ -58,13 +58,12 @@ from ._network import (
     NetworkInterface as NetworkInterface,
     IPv4AddressLike as IPv4AddressLike,
 )
-from .server import DHCPServer as DHCPServer, AsyncDHCPServer as AsyncDHCPServer
-from .client import AsyncDHCPClient as AsyncDHCPClient, DHCPClient as DHCPClient
-from .relay import DHCPRelay as DHCPRelay, AsyncDHCPRelay as AsyncDHCPRelay
+from .server import DHCPServer as DHCPServer
+from .client import DHCPClient as DHCPClient
+from .relay import DHCPRelay as DHCPRelay
 from .capture import (
     CaptureEvent as CaptureEvent,
     DHCPCapture as DHCPCapture,
-    AsyncDHCPCapture as AsyncDHCPCapture,
     compile_capture_filter as compile_capture_filter,
 )
 from .lease import (
@@ -75,6 +74,24 @@ from .lease import (
 )
 
 __version__ = _version("pydhcp")
+
+from ._lazy import bind as _bind
+
+if _ty.TYPE_CHECKING:
+    from .capture import AsyncDHCPCapture as AsyncDHCPCapture
+    from .client import AsyncDHCPClient as AsyncDHCPClient
+    from .listener import AsyncDHCPListener as AsyncDHCPListener
+    from .relay import AsyncDHCPRelay as AsyncDHCPRelay
+    from .server import AsyncDHCPServer as AsyncDHCPServer
+
+#: Bound on first use, each from its role package: their modules import asyncio.
+_ASYNCIO = {
+    "AsyncDHCPCapture": ".capture",
+    "AsyncDHCPClient": ".client",
+    "AsyncDHCPListener": ".listener",
+    "AsyncDHCPRelay": ".relay",
+    "AsyncDHCPServer": ".server",
+}
 
 __all__ = [
     "__version__",
@@ -136,3 +153,12 @@ __all__ = [
     "InMemoryLeaseBackend",
     "FileLeaseBackend",
 ]
+
+
+def __getattr__(name: str) -> _ty.Any:
+    """Bind an asyncio class on first use, so importing this package does not import asyncio."""
+    return _bind(__name__, globals(), _ASYNCIO, name)
+
+
+def __dir__() -> "list[str]":
+    return sorted(set(globals()) | set(__all__))
