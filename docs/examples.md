@@ -330,6 +330,15 @@ for frame in pktcap.read_dissected("heard.pcap", dissector=dissector):
         print(layer.message_type, layer.client_id, hex(layer.xid))
 ```
 
+pktcap's commands load the same registration, and the filter keys of `pydhcp capture --filter`
+(`op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`), when told to: name
+`pydhcp.capture` as a plugin. Nothing registers until pktcap loads it, and `pydhcp capture
+--filter` is unaffected.
+
+```bash
+PKTCAP_PLUGINS=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"
+```
+
 Hooks can be trusted Python callables or commands. Command hooks receive the serialized
 packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables
 (`PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and

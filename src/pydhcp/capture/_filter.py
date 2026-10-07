@@ -124,13 +124,27 @@ def _names(enumeration: "_ty.Type[_enum.IntEnum]") -> "dict[str, int]":
     return {name: int(member) for name, member in enumeration.__members__.items()}
 
 
-def _op(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+# Each `*_matcher` converts a clause's values, raising `ValueError` for one no message
+# could match, and returns a test of the value the clause reads. This module's filter
+# and the pktcap plugin both build on them, so the two cannot read a value differently.
+
+
+def op_matcher(key: str, values: "_ty.Tuple[str, ...]") -> "_ty.Callable[[int], bool]":
+    """A test of an opcode's number."""
     names = _names(DHCPOpcode)
     wanted = tuple(_named_number(key, value, names) for value in values)
-    return lambda event: int(event.message.op) in wanted
+    return lambda number: number in wanted
 
 
-def _msg_type(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+def _op(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+    matches = op_matcher(key, values)
+    return lambda event: matches(int(event.message.op))
+
+
+def msg_type_matcher(
+    key: str, values: "_ty.Tuple[str, ...]"
+) -> "_ty.Callable[[_ty.Optional[int]], bool]":
+    """A test of option 53's number, `None` for a message with no such option."""
     names = _names(DHCPMessageType)
     wanted: "list[int]" = []
     untyped = False
@@ -143,16 +157,31 @@ def _msg_type(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
         else:
             wanted.append(_named_number(key, value, names))
 
-    def matches(event: CaptureEvent) -> bool:
-        kind = event.message.message_type
-        return untyped if kind is None else int(kind) in wanted
+    def matches(kind: _ty.Optional[int]) -> bool:
+        return untyped if kind is None else kind in wanted
 
     return matches
 
 
-def _xid(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+def _msg_type(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+    matches = msg_type_matcher(key, values)
+
+    def of_event(event: CaptureEvent) -> bool:
+        kind = event.message.message_type
+        return matches(None if kind is None else int(kind))
+
+    return of_event
+
+
+def xid_matcher(key: str, values: "_ty.Tuple[str, ...]") -> "_ty.Callable[[int], bool]":
+    """A test of a transaction id."""
     wanted = tuple(_number(key, value, 0, 0xFFFFFFFF) for value in values)
-    return lambda event: event.message.xid in wanted
+    return lambda xid: xid in wanted
+
+
+def _xid(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+    matches = xid_matcher(key, values)
+    return lambda event: matches(event.message.xid)
 
 
 def _hex(key: str, values: "_ty.Tuple[str, ...]", most: int) -> "_ty.Tuple[str, ...]":
@@ -173,18 +202,34 @@ def _hex(key: str, values: "_ty.Tuple[str, ...]", most: int) -> "_ty.Tuple[str, 
     return tuple(digits)
 
 
-def _client_id(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+def client_id_matcher(
+    key: str, values: "_ty.Tuple[str, ...]"
+) -> "_ty.Callable[[str], bool]":
+    """A test of a client identifier's text: hex digits with any separators, or `UNKNOWN`."""
     # `get_client_id()` always gives colon-separated hex, and `pydhcp interfaces`
     # prints hardware addresses upper-case with hyphens: both spellings select.
     wanted = _hex(key, values, _MAX_CLIENT_ID_OCTETS)
-    return lambda event: _HEX_SEPARATOR_RE.sub("", event.client_id).lower() in wanted
+    return lambda text: _HEX_SEPARATOR_RE.sub("", text).lower() in wanted
 
 
-def _chaddr(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+def _client_id(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+    matches = client_id_matcher(key, values)
+    return lambda event: matches(event.client_id)
+
+
+def chaddr_matcher(
+    key: str, values: "_ty.Tuple[str, ...]"
+) -> "_ty.Callable[[str], bool]":
+    """A test of a hardware address's text: hex digits with any separators."""
     # `chaddr` is raw octets with `hlen` up to 16, so it is compared as digits
     # and not parsed as a six-octet address.
     wanted = _hex(key, values, _MAX_CHADDR_OCTETS)
-    return lambda event: event.message.chaddr.hex() in wanted
+    return lambda text: _HEX_SEPARATOR_RE.sub("", text).lower() in wanted
+
+
+def _chaddr(key: str, values: "_ty.Tuple[str, ...]") -> CapturePredicate:
+    matches = chaddr_matcher(key, values)
+    return lambda event: matches(event.message.chaddr.hex())
 
 
 def _addresses(
@@ -246,8 +291,10 @@ _CLAUSES: (
 }
 
 
-def _option(key: str, value: str) -> CapturePredicate:
-    """`option.NAME=text` or `option.NUMBER=text`: the option's text, whole.
+def option_selector(
+    key: str, value: str
+) -> "_ty.Tuple[_ty.Union[int, DHCPOptionCode], str]":
+    """The option `option.NAME` or `option.NUMBER` names and the text it must have, whole.
 
     A value of an option can hold a comma (a list), so it is never split.
     """
@@ -264,13 +311,22 @@ def _option(key: str, value: str) -> CapturePredicate:
             code = DHCPOptionCode[option]
         except KeyError:
             raise ValueError(f"Unsupported DHCP option filter key: {key!r}") from None
-    return lambda event: _option_text(event.message, code) == value
+    return code, value
+
+
+def _option(key: str, value: str) -> CapturePredicate:
+    code, wanted = option_selector(key, value)
+    return lambda event: _option_text(event.message, code) == wanted
 
 
 def _option_text(
     message: DHCPMessage, code: "_ty.Union[int, DHCPOptionCode]"
 ) -> _ty.Optional[str]:
-    value = message.options.get(code)
+    return option_value_text(message.options.get(code))
+
+
+def option_value_text(value: _ty.Any) -> _ty.Optional[str]:
+    """A decoded option value as the text a clause compares: an enum's name, else its JSON form."""
     if value is None:
         return None
     if isinstance(value, _enum.Enum):

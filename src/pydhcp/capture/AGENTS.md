@@ -128,6 +128,25 @@ register_dhcp_dissector(registry=None) -> None
   frames that carry a message.
 
 ```python
+pktcap_plugin(registry) -> None
+```
+
+- **`pktcap_plugin`** — the hook pktcap loads by name: `PKTCAP_PLUGINS=pydhcp.capture pktcap
+  convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` (or `--plugins pydhcp.capture`, or a `plugins`
+  key in pktcap's configuration file). `registry` is a `pktcap.DissectorRegistry`. It declares
+  `DHCPLayer` in `registry` with the filter keys below, then calls `register_dhcp_dissector(registry)`;
+  when that raises, the layer is taken out again and the error goes on, so a failed call registers
+  nothing (`ValueError` for a layer name or a port that is taken). The
+  call imports nothing, and `import pydhcp.capture` registers nothing. `pydhcp capture --filter` keeps its own filter
+  over `CaptureEvent`, unchanged. Keys, each also as `dhcp.KEY`, over `DHCPLayer`:
+  `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE` take the values
+  `compile_capture_filter` takes, read by the same code, so a value one refuses the other refuses
+  when the filter is compiled (`msg_type=DISCOVER`, `xid=0x100000000`, `option.hostname=x`).
+  `src`, `dst`, `sport` and `dport` are pktcap's own (`dst` also takes a network and IPv6); `src_port`,
+  `dst_port` and `interface` are not keys of a frame. A bare `option` is refused: it needs a name or a
+  number. A second plugin that also registers `op` makes the bare `op` ambiguous: write `dhcp.op`.
+
+```python
 read_capture(source, *, packet_filter=None, ports=(67, 68), dissector=None) ->
     Iterator[CaptureEvent]
 capture_dissector(ports=(67, 68)) -> pktcap.FrameDissector

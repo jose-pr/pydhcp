@@ -154,6 +154,13 @@ with DHCPCapture(listen="*", packet_filter="msg_type=DHCPDISCOVER", sink=show) a
     capture.serve_forever()
 ```
 
+pktcap's own commands filter DHCP with the same short keys when they are told to load the
+plugin (`pktcap_plugin`; it registers nothing until pktcap names it):
+
+```bash
+PKTCAP_PLUGINS=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER and chaddr=00:11:22:33:44:55"
+```
+
 ### Basic packet client
 
 `DHCPClient` is a packet-level helper for tests and troubleshooting. It sends DHCP
@@ -294,7 +301,7 @@ serves `packet` and `interfaces` as tools over standard input and output; the ot
 | `pydhcp.lease` | `DHCPLease`, the `LeaseBackend` protocol, `InMemoryLeaseBackend`, `FileLeaseBackend` |
 | `pydhcp.client` | `DHCPClient`, `AsyncDHCPClient`: the message builders, `discover_offer`, `dora` |
 | `pydhcp.relay` | `DHCPRelay`, `AsyncDHCPRelay` |
-| `pydhcp.capture` | `DHCPCapture`, `AsyncDHCPCapture`, `CaptureEvent`, the filter expression, `DHCPCaptureWriter`, `command_hook`, `read_capture`, `replay_capture`, DHCP as a pktcap layer |
+| `pydhcp.capture` | `DHCPCapture`, `AsyncDHCPCapture`, `CaptureEvent`, the filter expression, `DHCPCaptureWriter`, `command_hook`, `read_capture`, `replay_capture`, DHCP as a pktcap layer (`DHCPLayer`, `register_dhcp_dissector`, `pktcap_plugin`) |
 | `pydhcp.listener` | `DHCPListener`, `AsyncDHCPListener`, the `listen` forms, the transports, `DHCPRequestContext`, `DHCPMetrics` |
 | `pydhcp.packet` | `DHCPMessage` and its enums; `pydhcp.packet.structured` holds `loads` and `dumps` for the four formats |
 | `pydhcp.options` | `DHCPOptions`, `DHCPOptionCode`, every payload codec, the contract for writing one |

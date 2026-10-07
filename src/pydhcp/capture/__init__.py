@@ -16,6 +16,7 @@ from ._filter import compile_capture_filter
 from ._command import HOOK_TIMEOUT_SECONDS, command_hook
 from ._dissector import DHCPLayer, dissect_dhcp, register_dhcp_dissector
 from ._offline import capture_dissector, read_capture, replay_capture
+from ._plugin import pktcap_plugin
 from ._sync import DHCPCapture
 from ._writer import (
     FILENAME_FIELDS,
@@ -48,6 +49,7 @@ __all__ = [
     "command_hook",
     "compile_capture_filter",
     "dissect_dhcp",
+    "pktcap_plugin",
     "read_capture",
     "register_dhcp_dissector",
     "replay_capture",

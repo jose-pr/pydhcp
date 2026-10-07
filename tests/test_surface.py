@@ -244,6 +244,7 @@ EXPECTED_CAPTURE = [
     "command_hook",
     "compile_capture_filter",
     "dissect_dhcp",
+    "pktcap_plugin",
     "read_capture",
     "register_dhcp_dissector",
     "replay_capture",
