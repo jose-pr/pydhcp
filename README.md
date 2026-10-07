@@ -238,7 +238,7 @@ workflow.
 
 ### Documentation site
 
-MkDocs builds the API reference from `docs/`, published on every release. The docs also include a "Common DHCP Options" page with typed examples.
+MkDocs builds the API reference from `docs/`. The site is rebuilt and published when a release completes and when a documentation change reaches `main`, and can be rebuilt on demand from any ref (`docs.yml`, run manually). The docs also include a "Common DHCP Options" page with typed examples.
 
 ## License
 

@@ -1,69 +1,97 @@
 name: Docs
 
-# Owns ALL GitHub Pages deploys. Kept separate from release.yml so the site can
-# be rebuilt without cutting a release, and so a release is never the first time
-# the docs build runs: release.yml builds the docs strictly as a *gate* and
-# creates the release object, and publishing that release fires
-# `release: published`, which triggers this workflow to deploy.
+# This workflow owns EVERY Pages deploy, so there is exactly one path to the
+# published site. Deploying is deliberately not part of release.yml, so the site
+# can change without cutting a PyPI release -- a wrong sentence on the landing
+# page can be corrected on its own.
 #
-# Triggers:
-#   - release published (a v* release ships its matching docs)
-#   - push to main touching docs sources (keeps the site current between releases)
-#   - workflow_dispatch (manual redeploy of any ref)
+# Three ways in:
+#   - the Release workflow finishing successfully, so a v* release ships its
+#     matching docs. NOT `release: published`, which looks like the obvious
+#     trigger and never fires: the release is created by the release workflow
+#     using GITHUB_TOKEN, and GitHub deliberately does not start new workflow
+#     runs from token-created events (it would recurse). `workflow_run` keys off
+#     the workflow completing rather than off the event it emitted, so it is not
+#     subject to that rule.
+#   - a docs-affecting push to main (CHANGELOG.md counts: the docs embed it), so
+#     a correction ships on its own and the site stays current between releases;
+#   - workflow_dispatch, for a manual rebuild of any ref.
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   push:
-    branches: ["main"]
+    branches:
+      - main
     paths:
       - "docs/**"
       - "mkdocs.yml"
       - "src/**"
+      - "CHANGELOG.md"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build the docs from
+        required: false
+        type: string
 
 permissions:
   contents: read
 
-# Serialize deploys; never cancel an in-flight Pages deploy mid-publish.
 concurrency:
+  # Pages allows one deploy at a time; queue rather than cancel so a release-time
+  # build is never dropped halfway.
   group: pages
   cancel-in-progress: false
 
 jobs:
-  docs-build:
+  build:
     name: Build documentation site
     runs-on: ubuntu-latest
+    # `workflow_run: [completed]` fires on failure too -- there is no
+    # `types: [success]`. Without this guard a release that failed its test gate
+    # would still publish its docs, which is the one case where stale is better
+    # than wrong. A pre-release tag (a `-` in it) leaves the published docs
+    # alone. Pushes and manual dispatches are unconditional.
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      !contains(github.event.workflow_run.head_branch, '-'))
     permissions:
+      contents: read
       pages: write
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+        with:
+          # Under `workflow_run` the default checkout is the default branch's
+          # head, not the release: the release's own commit is what its docs gate
+          # built. A dispatch names its ref. Empty for a push, which keeps the
+          # default.
+          ref: ${{ github.event.workflow_run.head_sha || inputs.ref }}
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.x"
-
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         with:
-          # Turn Pages on for a fresh repo or fork where it was never enabled.
-          # Every workflow that builds the docs needs this identically, or the
-          # site publishes fine from here and only the release run fails.
+          # Self-enabling: a fresh fork should not need the Pages switch
+          # flipped by hand before its first docs run.
           enablement: true
-
-      - name: Install package with docs tooling
-        run: python -m pip install -e ".[dev,docs,toml]"
-
+      # The tooling alone: mkdocstrings reads the package's source from `src/`
+      # without importing it, so the project and its dependencies are not
+      # installed, and an unpublished dependency cannot stop the site building.
+      - name: Install the docs tooling
+        run: python -m pip install mkdocs mkdocs-material "mkdocstrings[python]"
       - name: Build docs
         run: mkdocs build --strict
-
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: site/
 
-  docs-deploy:
+  deploy:
     name: Deploy documentation to GitHub Pages
-    needs: docs-build
+    needs: build
     runs-on: ubuntu-latest
     permissions:
       pages: write
@@ -74,4 +102,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

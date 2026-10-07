@@ -36,6 +36,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Formatting, and an audit of the dependencies the project installs. Type
+  # checking is in the matrix below, on every platform it runs on.
+  lint:
+    name: Format and audit
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed first, from its branch, so the project install below finds
+      # the requirement already met. Remove this step once 0.4.0 is published.
+      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
+      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed after netimps because its own requirement is that
+      # unpublished netimps. Remove this step once 0.1.0 is published.
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+
+      - name: Install package and test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e .[dev,toml]
+
+      - name: Check formatting (black)
+        run: python -m black --check src tests benchmarks examples
+
+      # What this environment holds, the project's dependencies and the tooling
+      # beside them. The project itself is not on PyPI under this checkout, and
+      # the two dependencies installed from branches above are audited only once
+      # they are published.
+      - name: Audit the installed dependencies for known vulnerabilities
+        run: python -m pip_audit --skip-editable
+
   test:
     # Windows is not a nicety here. Every platform-divergent defect this repo has
     # hit -- a broadcast POSIX refuses from a loopback-bound socket, the
@@ -68,12 +111,12 @@ jobs:
             python-version: "3.14"
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -94,12 +137,20 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[dev,docs,toml]
 
+      # A hosted macOS runner is disposable, so it can be given the loopback
+      # addresses the tests that reply from, or to, an address other than
+      # 127.0.0.1 look for (a BSD aliases only 127.0.0.1 onto lo0): without them
+      # those tests skip and no BSD network stack ever runs them.
+      - name: Alias the loopback addresses the tests use
+        if: runner.os == 'macOS'
+        run: |
+          for address in 127.0.0.2 127.0.0.3 127.0.0.50; do
+            sudo ifconfig lo0 alias "$address" up
+          done
+          ifconfig lo0
+
       - name: Run tests
         run: python -m pytest tests -q -rs
-
-      - name: Check formatting (black)
-        if: matrix.python-version == '3.14' && matrix.os == 'ubuntu-latest'
-        run: python -m black --check src tests benchmarks examples
 
       # Deliberately on BOTH platforms: typeshed marks POSIX-only socket calls
       # unavailable on Windows, so `sock.recvmsg(...)` is an attr-defined error
@@ -115,6 +166,200 @@ jobs:
         if: matrix.python-version == '3.14' && matrix.os == 'ubuntu-latest'
         run: python -m mkdocs build --strict
 
+  # The declared floors, exercised: every runtime dependency and feature extra
+  # installed AT the lower bound pyproject.toml declares (`>=X.Y.0` -> `==X.Y.0`),
+  # on the oldest supported Python. The matrix above only ever gets the newest
+  # releases, so a floor that no longer works would otherwise go unnoticed.
+  floors:
+    name: Test at the declared dependency floors
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.9"
+
+      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # yet, so it has no version to pin and comes from its branch. Remove this
+      # step once 0.4.0 is published (the pin below then covers it).
+      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
+      # Temporary: pktcap 0.1.0, likewise. Installed after netimps because its
+      # own requirement is that unpublished netimps. Remove this step once 0.1.0
+      # is published.
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+
+      - name: Pin every declared dependency to its floor
+        shell: python
+        run: |
+          import re
+          import subprocess
+          import sys
+
+          subprocess.run([sys.executable, "-m", "pip", "install", "-q", "tomli"], check=True)
+          import tomli
+
+          # Temporary: the two dependencies above have no published version to
+          # pin. Empty this set once both are on PyPI.
+          UNPUBLISHED = {"netimps", "pktcap"}
+
+          project = tomli.load(open("pyproject.toml", "rb"))["project"]
+          specs = list(project.get("dependencies", []))
+          for extra, deps in project.get("optional-dependencies", {}).items():
+              if extra not in ("dev", "docs"):
+                  specs += deps
+          pins = []
+          for spec in specs:
+              m = re.match(r"^\s*([A-Za-z0-9._-]+)(\[[^\]]*\])?\s*[^;]*?>=\s*([^,;\s]+)", spec)
+              if m and m.group(1).lower() not in UNPUBLISHED:
+                  pins.append("%s==%s" % (m.group(1), m.group(3)))
+          open("floors.txt", "w").write("\n".join(pins) + "\n")
+          print("\n".join(pins) or "(no floors declared)")
+
+      - name: Install at the floors
+        run: python -m pip install -c floors.txt -e ".[dev,toml]"
+
+      - name: Run tests
+        run: python -m pytest tests -q -rs
+
+  # What a user gets from `pip install pydhcp` with no extra: the library
+  # imports, the console script runs, and a feature that needs the toml extra
+  # names the package it needs instead of raising an ImportError. The test jobs
+  # above always have every extra.
+  bare:
+    name: Bare install (py${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.14"] # oldest + newest supported
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed first, from its branch, so the project install below finds
+      # the requirement already met. Remove this step once 0.4.0 is published.
+      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+
+      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
+      # yet. Installed after netimps because its own requirement is that
+      # unpublished netimps. Remove this step once 0.1.0 is published.
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+
+      - name: Install with no extra
+        run: python -m pip install .
+
+      - name: The library imports, the command runs, and a missing extra is named
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -c "import pydhcp; print('imported', pydhcp.__version__)"
+          pydhcp --version
+          pydhcp interfaces > /dev/null
+          if echo 00 | pydhcp packet --decode > /dev/null 2> err.txt; then
+            echo "a malformed packet decoded"; exit 1
+          fi
+          cat err.txt
+          grep -q "cannot process the packet" err.txt
+          python -c "import tomli_w" 2> /dev/null && { echo "tomli_w is installed in a bare environment"; exit 1; }
+          python - <<'PY'
+          import pydhcp
+
+          message = pydhcp.DHCPMessage.from_mapping(
+              {
+                  "op": "BOOTREQUEST", "htype": "ETHERNET", "hlen": 6, "hops": 0,
+                  "xid": 1, "secs": 0, "flags": "BROADCAST", "ciaddr": "0.0.0.0",
+                  "yiaddr": "0.0.0.0", "siaddr": "0.0.0.0", "giaddr": "0.0.0.0",
+                  "chaddr": "00:11:22:33:44:55", "sname": "", "file": "", "options": {},
+              }
+          )
+          try:
+              message.to_text("toml")
+          except NotImplementedError as error:
+              assert "tomli-w" in str(error), error
+              print("toml without the extra says:", error)
+          else:
+              raise SystemExit("toml was written without the extra")
+          PY
+
+  # What a user installs is the built wheel, not the checkout: build it, install
+  # it into a clean environment away from the source tree, run the console
+  # script, and check it ships the files it must, on each OS.
+  wheel:
+    name: Built wheel and console script (py${{ matrix.python-version }}, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.9", "3.14"] # oldest + newest supported
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build the wheel
+        run: |
+          python -m pip install build
+          python -m build --wheel --outdir "${{ runner.temp }}/dist"
+
+      # Temporary: netimps 0.4.0 and pktcap 0.1.0, which the wheel requires, are
+      # not on PyPI yet. Installed into the fresh environment first, from their
+      # branches, so the wheel install finds the requirements already met. Remove
+      # this step once both are published.
+      - name: Install netimps and pktcap from their branches (until they are on PyPI)
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          python -m venv wheel-env
+          if [ -d wheel-env/Scripts ]; then BIN=wheel-env/Scripts; else BIN=wheel-env/bin; fi
+          "$BIN/python" -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
+          "$BIN/python" -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+
+      - name: Install the wheel, away from the checkout, and run the command
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          if [ -d wheel-env/Scripts ]; then BIN=wheel-env/Scripts; else BIN=wheel-env/bin; fi
+          "$BIN/python" -m pip install "$(ls dist/*.whl)"
+          "$BIN/pydhcp" --version
+          "$BIN/pydhcp" interfaces > /dev/null
+          "$BIN/python" - <<'PY'
+          from importlib.resources import files
+
+          import pydhcp
+
+          root = files("pydhcp")
+          for name in ("py.typed", "AGENTS.md", "README.md"):
+              assert (root / name).is_file(), "the wheel does not ship %s" % name
+          assert "site-packages" in pydhcp.__file__, pydhcp.__file__
+          print("ok:", pydhcp.__file__)
+          PY
+
   # The delivery path -- which interface a reply leaves by, what a stock client
   # does with it -- can only be judged against real peers on real links, so this
   # job runs ISC dhclient, BusyBox udhcpc and dnsmasq against the server, relay
@@ -127,12 +372,12 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -199,7 +444,7 @@ jobs:
 
       - name: Upload what each scenario saw
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: interop-logs
           path: ${{ runner.temp }}/interop-logs
@@ -212,12 +457,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -245,7 +490,7 @@ jobs:
         run: python benchmarks/run.py --save
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: benchmarks/results/*.json
