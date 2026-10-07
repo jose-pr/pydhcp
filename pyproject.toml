@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]  # PEP 639 license fields need 1.27
 build-backend = "hatchling.build"
 
 [project]
@@ -70,18 +70,16 @@ Issues = "https://github.com/jose-pr/pydhcp/issues"
 "README.md" = "pydhcp/README.md"
 
 [tool.hatch.build.targets.sdist]
-# "*.local.*" is not covered by "/.*": the name does not start with a dot, so a
-# personal override such as src/pydhcp/settings.local.json shipped to PyPI --
-# where it cannot be recalled -- carrying one machine's paths or hostnames.
-#
-# benchmarks/results/ is tracked in git (that is what makes a before/after
-# comparison recoverable from history) but has no business in a release: the
-# files are machine-identifying by design -- each records the host CPU string
-# and OS build it was measured on -- and mean nothing to a consumer.
-exclude = ["/.*", "*.local.*", "/benchmarks/results"]
+# Personal overrides (`*.local.*`) and agent config (`CLAUDE*`) never ship, even
+# from a tree without its `.gitignore` (a copy, or a checkout under a directory
+# whose name that file lists, where the backend drops every rule it holds). Neither
+# does the repository root's `AGENTS.md`, which orients a contributor in a checkout:
+# the header a consumer reads is `src/pydhcp/AGENTS.md`, which does ship. Benchmarks
+# are run on demand from a checkout; their results record the machine they ran on.
+exclude = ["/.*", "/AGENTS.md", "/benchmarks", "*.local.*", "CLAUDE*"]
 
 [tool.hatch.build.targets.wheel]
-exclude = ["*.local.*"]
+exclude = ["*.local.*", "CLAUDE*"]
 
 [tool.pytest.ini_options]
 # "tests" so the helpers in tests/conftest.py can be imported by name from

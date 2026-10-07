@@ -6,10 +6,16 @@ The network guard is here too: it is autouse, so no test opts in.
 from __future__ import annotations
 
 import ipaddress
+import pathlib
 import socket
 import typing as _ty
 
 import pytest
+
+#: The benchmarks are run from a checkout and are not in the sdist, so the tests
+#: that load them are not collected where they are absent.
+if not (pathlib.Path(__file__).resolve().parents[1] / "benchmarks").is_dir():
+    collect_ignore_glob = ["test_benchmarks_*.py", "integration/test_benchmarks_*.py"]
 
 # -- the network guard ------------------------------------------------------
 
