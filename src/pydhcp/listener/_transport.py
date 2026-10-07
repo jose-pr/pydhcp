@@ -172,10 +172,9 @@ class PktInfoUDPTransport(UDPTransport):
         """The pin by address and index, as a netimps `Interface`.
 
         Holds exactly ``local_ip``: not the bare address, which netimps resolves
-        to its interface by enumerating every adapter (1.29 ms per send against
-        0.04 ms for an `Interface`), and not the receiving adapter's own
-        `Interface`, which may hold several IPv4 addresses, of which the reply
-        must come from the one the client addressed.
+        to its interface by enumerating every adapter on each send, and not the
+        receiving adapter's own `Interface`, which may hold several IPv4
+        addresses, of which the reply must come from the one the client addressed.
         """
         assert self.local_ip is not None
         return _netimps.Interface(

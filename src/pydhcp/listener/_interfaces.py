@@ -126,8 +126,8 @@ def _resolve_interface(
     callers from having to special-case it.
 
     The lookups use netimps' enumeration cache (`cache=True`, a one-second
-    TTL), which `bind()` also clears. An uncached enumeration costs about a
-    millisecond with a handful of adapters and 35-42 ms with many; paid per
+    TTL), which `bind()` also clears. An uncached enumeration lists every
+    adapter of the host, and its cost grows with their number; paid per
     datagram, a flood alone denied service. The TTL bounds it at one
     enumeration per second whatever the arrival rate, and -- unlike the
     per-bind cache this replaced -- notices an address the host gains or loses

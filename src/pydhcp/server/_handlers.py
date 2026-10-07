@@ -83,10 +83,8 @@ class _Handlers(_Replies):
         msg_ty_name = msg_ty.label() if msg_ty is not None else str(msg_ty)
         # Lazy %-style rather than an f-string because this one runs for every
         # request, and an f-string is built whether or not DEBUG is enabled.
-        # Measured with DEBUG off: 0.373 us eager against 0.157 us lazy, so
-        # 0.216 us a packet. That is 0.19% of `handle()` -- which is why the
-        # other eager call sites are left alone rather than churned; they fire
-        # per lease, per drop or per error, not per packet.
+        # The other eager call sites fire per lease, per drop or per error, not
+        # per packet, so they are left alone.
         LOGGER.debug(
             "[XID=%08x] Received %s from %s", msg.xid, msg_ty_name, context.client.ip
         )
