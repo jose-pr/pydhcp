@@ -150,6 +150,28 @@ def test_a_capture_file_format_without_its_extra_names_the_extra_of_this_package
     assert "pktcap[" not in str(error.value)
 
 
+def test_the_extra_named_comes_from_what_pktcap_says_is_missing_not_from_its_wording(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """pktcap's error carries the format and the extra as data. Whatever its
+    text says, the writer's own error names this package's extra."""
+    import pktcap
+
+    def refuse(*args: object, **options: object) -> object:
+        raise pktcap.MissingExtraError(
+            "worded some other way", format="toml", extra="toml"
+        )
+
+    monkeypatch.setattr(pktcap, "CaptureWriter", refuse)
+
+    with pytest.raises(ImportError) as error:
+        DHCPCaptureWriter(tmp_path / "{xid}.toml", "toml", per_capture=True)
+
+    assert _the_command_for("toml") in str(error.value)
+    assert "TOML" in str(error.value)
+    assert "worded some other way" not in str(error.value)
+
+
 # -- the command line, which turns each of them into one line -----------------------
 
 

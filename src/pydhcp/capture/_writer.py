@@ -11,6 +11,7 @@ from types import TracebackType
 
 import pktcap as _pktcap
 
+from .._extras import missing as _missing
 from ._events import CaptureEvent, serialize_event
 
 LOGGER = _logging.getLogger(__name__)
@@ -63,12 +64,12 @@ def _open(
         # Building opens nothing. A record file is appended to; a capture file
         # cannot be, and a second run replaces it.
         return build(per_capture, True) if _is_record(writer) else writer
-    except ImportError as error:
-        # pktcap names its own extra; a pydhcp user installs it through pydhcp's.
-        said = str(error)
-        if 'pip install "pktcap[' in said:
-            raise ImportError(said.replace('"pktcap[', '"pydhcp[')) from None
-        raise
+    except _pktcap.MissingExtraError as error:
+        # pktcap's extra for a format has the name of pydhcp's, and a pydhcp
+        # user installs it through pydhcp.
+        raise ImportError(
+            _missing(f"{error.format.upper()} output", error.extra)
+        ) from None
     except ValueError:
         if not per_capture:
             try:
