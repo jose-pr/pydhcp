@@ -248,7 +248,7 @@ def test_async_listener_builds_a_packet_info_context():
 
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE,
-    reason="needs a second loopback address; macOS aliases only 127.0.0.1",
+    reason="needs a second loopback address; this host binds only 127.0.0.1",
 )
 @pytest.mark.parametrize("already_waiting", [False, True])
 def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(

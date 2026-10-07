@@ -56,7 +56,7 @@ def test_rebinding_keeps_the_ephemeral_port_and_the_socket() -> None:
 
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE,
-    reason="needs a second loopback address; macOS aliases only 127.0.0.1",
+    reason="needs a second loopback address; this host binds only 127.0.0.1",
 )
 def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
     """The matching change must not defeat the point of matching."""

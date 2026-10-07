@@ -140,7 +140,7 @@ def _exchange_discover(
 @needs_pktinfo
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE,
-    reason="the OFFER is unicast to 127.0.0.50; macOS aliases only 127.0.0.1",
+    reason="the OFFER is unicast to 127.0.0.50; this host binds only 127.0.0.1",
 )
 def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     """End to end, on the base allocator. A wrong local address does not raise:

@@ -253,7 +253,7 @@ def test_shutdown_from_a_handler_does_not_block_and_ends_the_loop() -> None:
 
 @pytest.mark.skipif(
     not LOOPBACK_ALIAS_BINDABLE,
-    reason="needs three loopback addresses; macOS aliases only 127.0.0.1",
+    reason="needs three loopback addresses; this host binds only 127.0.0.1",
 )
 def test_a_handler_that_shuts_down_is_not_called_again_in_the_same_turn() -> None:
     """Every socket already readable in the same `select()` was still serviced

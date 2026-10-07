@@ -29,7 +29,7 @@ def _can_bind_loopback_alias(address: str = "127.0.0.2") -> bool:
     """Is an address other than 127.0.0.1 usable as a second local address?
 
     Linux routes the whole 127.0.0.0/8 to the loopback, so 127.0.0.2 binds
-    without any setup. macOS aliases **only** 127.0.0.1 onto `lo0`, so the same
+    without any setup. a BSD aliases **only** 127.0.0.1 onto its loopback, so the same
     bind fails with `EADDRNOTAVAIL` until someone runs
     `ifconfig lo0 alias 127.0.0.2`.
 

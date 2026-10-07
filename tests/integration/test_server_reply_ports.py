@@ -101,7 +101,8 @@ def test_the_two_ports_are_class_attributes_a_harness_may_set() -> None:
 
 
 @pytest.mark.skipif(
-    not LOOPBACK_ALIAS_BINDABLE, reason="needs a second loopback address, 127.0.0.2"
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="needs a second loopback address; this host binds only 127.0.0.1",
 )
 def test_one_datagram_cannot_steer_a_reply_to_a_port_of_its_choosing() -> None:
     """Real sockets. The sender names a relay, 127.0.0.2, and sends from port X.

@@ -469,7 +469,8 @@ def _refused_an_unassigned_pin(caplog) -> bool:
 
 
 @pytest.mark.skipif(
-    not LOOPBACK_ALIAS_BINDABLE, reason="127.0.0.2 is not usable on this host"
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="needs a second loopback address; this host binds only 127.0.0.1",
 )
 def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
     caplog,
@@ -1017,7 +1018,8 @@ def test_no_local_address_means_no_pin() -> None:
 
 
 @pytest.mark.skipif(
-    not LOOPBACK_ALIAS_BINDABLE, reason="127.0.0.2 is not usable on this host"
+    not LOOPBACK_ALIAS_BINDABLE,
+    reason="needs a second loopback address; this host binds only 127.0.0.1",
 )
 def test_a_pinned_reply_leaves_from_the_pinned_address(caplog) -> None:
     """On real sockets: the receiver sees the pinned source, not the one the
