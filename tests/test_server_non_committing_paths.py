@@ -63,6 +63,7 @@ class _ServedServer(DHCPServer):
     def acquire_lease(self, client_id, server_id, msg, *, commit=True):
         import pydhcp.server as server_module
 
+        # private: the module's own name for the host enumeration, replaced to stand for a host
         real = server_module._net.host_ip_interfaces
         server_module._net.host_ip_interfaces = lambda *a, **k: iter(
             [NetworkInterface("eth0", SERVED)]

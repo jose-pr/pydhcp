@@ -31,8 +31,12 @@ from pydhcp import (
     NetworkInterface,
     SocketAddress,
 )
+
+# private: the unit under test is not exported from a public module
 from pydhcp import _clock, _leniency
 from pydhcp.lease import InMemoryLeaseBackend
+
+# private: the unit under test is not re-exported from a public module
 from pydhcp.listener._limit import BRIEF_OCTETS, _brief, _LogLimit
 from pydhcp.listener._receive import _arrival
 from pydhcp.options import DHCPOptionCode
@@ -53,7 +57,9 @@ class Clock:
     def __init__(self) -> None:
         self.t = 1000.0
 
+    # private: state asserted for which there is no public view
     def instant(self) -> _clock._Instant:
+        # private: state asserted for which there is no public view
         return _clock._Instant(UTC0 + dt.timedelta(seconds=self.t), self.t)
 
 
@@ -216,13 +222,16 @@ def test_the_listener_counts_every_datagram_a_decoder_forgave(
     clock: Clock,
 ) -> None:
     listener = DHCPListener(listen=("127.0.0.1", 0))
+    # private: the clock the listener reads: the one seam for time
     listener._read_clock = clock.instant  # type: ignore[method-assign]
     listener.bind()
+    # private: the OS socket: its options and closed state have no public view
     sock = listener._sockets[0]
     data = octets()
     try:
         with caplog.at_level(logging.DEBUG, logger="pydhcp"):
             for _ in range(INSIDE):
+                # private: drives one datagram through the receive path without a socket
                 listener._dispatch(data, SocketAddress("127.0.0.1", 68), sock)
     finally:
         listener.close()
@@ -233,9 +242,11 @@ def test_the_listener_counts_every_datagram_a_decoder_forgave(
 
 def test_a_clean_datagram_is_not_counted_as_forgiven(clock: Clock) -> None:
     listener = DHCPListener(listen=("127.0.0.1", 0))
+    # private: the clock the listener reads: the one seam for time
     listener._read_clock = clock.instant  # type: ignore[method-assign]
     listener.bind()
     try:
+        # private: drives one datagram through the receive path without a socket; the OS socket: its options and closed state have no public view
         listener._dispatch(
             build_request().encode(),
             SocketAddress("127.0.0.1", 68),
@@ -257,11 +268,13 @@ def test_the_collector_counts_only_while_it_is_open() -> None:
 
 # -- the listener -------------------------------------------------------------
 
+# private: the name is looked up in the module that reads it, so the host or the clock can be stood for
 CORE = "pydhcp.listener._core"
 
 
 def _listener(clock: Clock, **kwargs: ty.Any) -> DHCPListener:
     listener = DHCPListener(listen=("127.0.0.1", 0), **kwargs)
+    # private: the clock the listener reads: the one seam for time
     listener._read_clock = clock.instant  # type: ignore[method-assign]
     listener.bind()
     return listener
@@ -271,8 +284,10 @@ def test_an_undecodable_datagram_is_limited_and_counted(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
     listener = _listener(clock)
+    # private: the OS socket: its options and closed state have no public view
     sock = listener._sockets[0]
     try:
+        # private: drives one datagram through the receive path without a socket
         _assert_bounded(
             caplog,
             clock,
@@ -290,6 +305,7 @@ def test_an_undecodable_datagram_names_the_octets_it_had_not_the_octets(
     listener = _listener(clock)
     try:
         with caplog.at_level(logging.WARNING, logger="pydhcp"):
+            # private: drives one datagram through the receive path without a socket
             listener._dispatch(b"\x1b[31m\n", SocketAddress("127.0.0.1", 68), None)  # type: ignore[arg-type]
     finally:
         listener.close()
@@ -307,11 +323,14 @@ def test_a_handler_error_is_limited_counted_and_traced_once(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
     listener = _Raises(listen=("127.0.0.1", 0))
+    # private: the clock the listener reads: the one seam for time
     listener._read_clock = clock.instant  # type: ignore[method-assign]
     listener.bind()
+    # private: the OS socket: its options and closed state have no public view
     sock = listener._sockets[0]
     data = build_request().encode()
     try:
+        # private: drives one datagram through the receive path without a socket
         _assert_bounded(
             caplog,
             clock,
@@ -336,6 +355,7 @@ def test_handler_errors_of_different_classes_are_limited_apart(
             raise errors[0]
 
     listener = Varies(listen=("127.0.0.1", 0))
+    # private: the clock the listener reads: the one seam for time
     listener._read_clock = clock.instant  # type: ignore[method-assign]
     listener.bind()
     data = build_request().encode()
@@ -343,6 +363,7 @@ def test_handler_errors_of_different_classes_are_limited_apart(
         with caplog.at_level(logging.ERROR, logger="pydhcp"):
             for error in errors + errors:
                 errors[0] = error
+                # private: drives one datagram through the receive path without a socket; the OS socket: its options and closed state have no public view
                 listener._dispatch(
                     data, SocketAddress("127.0.0.1", 68), listener._sockets[0]
                 )
@@ -355,6 +376,7 @@ def test_an_oversized_datagram_is_limited_and_counted_by_the_sync_listener(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
     listener = _listener(clock, max_packet_size=576)
+    # private: the OS socket: its options and closed state have no public view
     sock = listener._sockets[0]
     port = listener.bound_addresses[0].port
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -362,6 +384,7 @@ def test_an_oversized_datagram_is_limited_and_counted_by_the_sync_listener(
 
         def send() -> None:
             sender.sendto(b"\x01" * 1200, ("127.0.0.1", port))
+            # private: drives one datagram through the receive path
             listener._receive_one(sock)
 
         _assert_bounded(caplog, clock, CORE, send)
@@ -378,6 +401,7 @@ def test_an_oversized_datagram_is_limited_and_counted_by_the_async_listener(
 
     async def scenario() -> AsyncDHCPListener:
         listener = AsyncDHCPListener(listen=("127.0.0.1", 0), max_packet_size=576)
+        # private: the clock the listener reads: the one seam for time
         listener._read_clock = clock.instant  # type: ignore[method-assign]
         await listener.start()
         port = listener.bound_addresses[0].port
@@ -417,6 +441,7 @@ def test_a_receive_error_is_limited_and_counted(
     caplog: pytest.LogCaptureFixture, clock: Clock
 ) -> None:
     listener = _listener(clock)
+    # private: the OS socket: its options and closed state have no public view
     sock = listener._sockets[0]
 
     class Broken:
@@ -426,8 +451,10 @@ def test_a_receive_error_is_limited_and_counted(
         def close(self) -> None:
             sock.close()
 
+    # private: the driver's endpoint table, checked for leaks
     listener._endpoints[sock] = Broken()  # type: ignore[assignment]
     try:
+        # private: drives one datagram through the receive path
         _assert_bounded(caplog, clock, CORE, lambda: listener._receive_one(sock))
     finally:
         listener.close()
@@ -445,9 +472,11 @@ def test_truncated_control_data_is_limited(
     )
 
     def arrive() -> None:
+        # private: the control-data truncation flag as stored
         _arrival(datagram, 65535, listener._control_truncated)
 
     try:
+        # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
         _assert_bounded(caplog, clock, "pydhcp.listener._core", arrive)
     finally:
         listener.close()
@@ -486,6 +515,7 @@ def test_a_pin_that_keeps_failing_is_limited(
     finally:
         sock.close()
         peer.close()
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     assert len(_written(caplog, "pydhcp.listener._transport")) == 1
 
 
@@ -496,12 +526,14 @@ HANDLERS = "pydhcp.server._handlers"
 
 def _server(clock: Clock) -> DHCPServer:
     server = DHCPServer(lease_backend=InMemoryLeaseBackend())
+    # private: the clock the listener reads: the one seam for time
     server._read_clock = clock.instant  # type: ignore[method-assign]
     return server
 
 
 def _with_type_octets(raw: bytes) -> DHCPMessage:
     options = DHCPOptions()
+    # private: the options bag a codec or message holds
     options._options[int(DHCPOptionCode.DHCP_MESSAGE_TYPE)] = bytearray(raw)
     options[DHCPOptionCode.CLIENT_IDENTIFIER] = bytearray(b"\x01" + CHADDR)
     return build_request(None, options=options)
@@ -634,9 +666,11 @@ def test_an_unusable_option_is_limited_and_counted(
 
     def arrive() -> None:
         message = build_request(DHCPMessageType.DHCPDISCOVER)
+        # private: the options bag a codec or message holds
         message.options._options[int(code)] = bytearray(1)
         server.handle(message, _context(clock))
 
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     _assert_bounded(caplog, clock, "pydhcp.server._input", arrive)
     assert getattr(server.metrics, counter) == INSIDE + 1
 
@@ -647,6 +681,7 @@ def test_a_refused_quarantine_and_a_quarantined_offer_are_limited_and_counted(
     server = _server(clock)
     server.MAX_DECLINED_ADDRESSES = 1
     server.quarantine_address(ipaddress.IPv4Address("10.0.0.60"), now=clock.t)
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     _assert_bounded(
         caplog,
         clock,
@@ -662,6 +697,7 @@ def test_a_refused_quarantine_and_a_quarantined_offer_are_limited_and_counted(
             return DHCPLease(ipaddress.IPv4Address("10.0.0.60"))
 
     fixed = Fixed(lease_backend=InMemoryLeaseBackend())
+    # private: the clock the listener reads: the one seam for time
     fixed._read_clock = clock.instant  # type: ignore[method-assign]
     fixed.quarantine_address(ipaddress.IPv4Address("10.0.0.60"), now=clock.t)
     discover = build_request(DHCPMessageType.DHCPDISCOVER)
@@ -692,6 +728,7 @@ def test_a_reply_that_leaves_out_the_relay_information_is_limited_and_counted(
     clock: Clock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
@@ -717,6 +754,7 @@ def test_a_reply_that_does_not_decode_is_limited(
     clock: Clock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
@@ -767,6 +805,7 @@ def _relay(clock: Clock, **kwargs: ty.Any) -> DHCPRelay:
     relay = DHCPRelay(
         listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"], **kwargs
     )
+    # private: the clock the listener reads: the one seam for time
     relay._read_clock = clock.instant  # type: ignore[method-assign]
     return relay
 
@@ -776,6 +815,7 @@ def _relay_request(giaddr: str = "0.0.0.0", with_info: bool = False) -> DHCPMess
         DHCPMessageType.DHCPDISCOVER, giaddr=ipaddress.IPv4Address(giaddr)
     )
     if with_info:
+        # private: the options bag a codec or message holds
         message.options._options[int(DHCPOptionCode.RELAY_AGENT_INFORMATION)] = (
             bytearray(b"\x01\x02ab")
         )
@@ -888,6 +928,7 @@ def test_an_offer_without_a_server_identifier_is_limited_and_ignored(
     offer = build_request(DHCPMessageType.DHCPOFFER, op=DHCPOpcode.BOOTREPLY)
     offer.yiaddr = ipaddress.IPv4Address("10.0.0.50")
     taken: "list[ty.Any]" = []
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for; what an exchange does with a matched reply: asserted without a socket
     _assert_bounded(
         caplog,
         clock,
@@ -906,6 +947,7 @@ def test_a_foreign_ack_is_limited_and_ignored(
     ack = build_request(DHCPMessageType.DHCPACK, op=DHCPOpcode.BOOTREPLY)
     ack.options[DHCPOptionCode.SERVER_IDENTIFIER] = ipaddress.IPv4Address("10.0.0.66")
     taken: "list[ty.Any]" = []
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for; what an exchange does with a matched reply: asserted without a socket
     _assert_bounded(
         caplog,
         clock,
@@ -930,6 +972,7 @@ def test_a_hook_that_fails_every_time_is_limited(
 
     capture = DHCPCapture(listen=("127.0.0.1", 6767), hook=bad)
     message = build_request()
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     _assert_bounded(
         caplog,
         clock,
@@ -944,4 +987,5 @@ def test_a_hook_that_fails_every_time_is_limited(
 def test_every_listener_owns_its_own_limiter() -> None:
     one = DHCPListener(listen=("127.0.0.1", 0))
     two = DHCPListener(listen=("127.0.0.1", 0))
+    # private: the log limiter: its state is the subject
     assert one._log_limit is not two._log_limit

@@ -49,6 +49,7 @@ class RecordingListener(DHCPListener):
 
 def _drain(listener: DHCPListener, turns: int = 1) -> None:
     """Run the receive loop just long enough to take what is already queued."""
+    # private: the wait bound as stored
     listener._poll_interval = 0.05
     thread = threading.Thread(target=listener.serve_forever, daemon=True)
     thread.start()
@@ -481,9 +482,11 @@ def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
     a pin to an address it does not assign, and only that refusal skips."""
     listener = _wildcard_listener()
     port = listener.bound_addresses[0].port
+    # private: the packet-info probe's result: no public view
     if not listener._pktinfo:
         listener.close()
         pytest.skip("no packet info on this platform")
+    # private: the log limiter: its state is the subject
     listener._log_limit = _LogLimit()
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     client.bind(("127.0.0.1", 0))
@@ -511,6 +514,7 @@ def test_a_broadcast_is_reported_as_one_with_the_interface_address_as_source() -
     reports that address and not the address of the interface that heard it."""
     listener = _wildcard_listener()
     port = listener.bound_addresses[0].port
+    # private: the packet-info probe's result: no public view
     if not listener._pktinfo:
         listener.close()
         pytest.skip("no packet info on this platform")

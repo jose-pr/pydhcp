@@ -103,6 +103,7 @@ def test_a_pool_that_keeps_its_counter_on_the_server_gives_each_client_its_own()
         "10.0.0.102",
     ]
     assert results == [(ip, ip) for ip, _ in results], "an ACK changed the address"
+    # private: the lease store a backend holds: no public listing
     bound = {lease.ip for lease in server.lease_backend._leases.values()}  # type: ignore[attr-defined]
     assert len(bound) == 3
     assert server.next_host == 103

@@ -15,6 +15,7 @@ def _sample_packet() -> DHCPMessage:
 
 @pytest.mark.parametrize("format_name", ["json", "yaml", "toml", "ini"])
 def test_packet_structured_round_trip_for_each_format(format_name: str) -> None:
+    # private: the optional TOML reader, switched off to test its absence; the optional TOML writer, switched off to test its absence
     if format_name == "toml" and (
         structured._tomllib is None or structured._tomli_w is None
     ):

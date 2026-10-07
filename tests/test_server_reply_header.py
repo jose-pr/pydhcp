@@ -60,6 +60,7 @@ def test_next_server_fields_are_never_the_clients(server, lease, resp_ty) -> Non
     receive them back stamped with the server identifier, which is the pair a
     PXE client acts on.
     """
+    # private: the reply builder, called directly to read the reply it makes
     resp = server._create_response(_request(), lease, SERVER_ID, resp_ty)
     assert resp.siaddr == IPv4("0.0.0.0")
     assert resp.sname == ""
@@ -68,6 +69,7 @@ def test_next_server_fields_are_never_the_clients(server, lease, resp_ty) -> Non
 
 def test_offer_carries_no_ciaddr(server, lease) -> None:
     """Table 3: ciaddr is 0 in a DHCPOFFER."""
+    # private: the reply builder, called directly to read the reply it makes
     resp = server._create_response(
         _request(), lease, SERVER_ID, DHCPMessageType.DHCPOFFER
     )
@@ -81,6 +83,7 @@ def test_ack_still_echoes_ciaddr(server, lease) -> None:
     be widened to cover both: a client renewing from BOUND puts its address in
     ciaddr and expects it back.
     """
+    # private: the reply builder, called directly to read the reply it makes
     resp = server._create_response(
         _request(), lease, SERVER_ID, DHCPMessageType.DHCPACK
     )
@@ -101,6 +104,7 @@ def test_giaddr_is_echoed_so_a_relay_can_route_the_reply(
     would strand every relayed client, which is exactly the kind of
     over-broad fix this review has already had to back out twice.
     """
+    # private: the reply builder, called directly to read the reply it makes
     resp = server._create_response(_request(), lease, SERVER_ID, resp_ty)
     assert resp.giaddr == IPv4("203.0.113.6")
 
@@ -110,6 +114,7 @@ def test_giaddr_is_echoed_so_a_relay_can_route_the_reply(
     [DHCPMessageType.DHCPOFFER, DHCPMessageType.DHCPACK, DHCPMessageType.DHCPNAK],
 )
 def test_hops_and_secs_are_reset(server, lease, resp_ty) -> None:
+    # private: the reply builder, called directly to read the reply it makes
     resp = server._create_response(_request(), lease, SERVER_ID, resp_ty)
     assert resp.hops == 0
     assert resp.secs == timedelta(0)

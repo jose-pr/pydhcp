@@ -33,6 +33,7 @@ def test_parse_wildcard_expands_ipv4_interfaces(monkeypatch) -> None:
         NetworkInterface("eth0", ipaddress.IPv4Interface("192.0.2.10/24")),
         NetworkInterface("eth1", ipaddress.IPv4Interface("198.51.100.10/24")),
     ]
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr("pydhcp._network.host_ip_interfaces", lambda: iter(interfaces))
 
     assert _parselisteners("*", (67,)) == [
@@ -112,6 +113,7 @@ def test_server_constructors_accept_per_interface_and_multiple_endpoints() -> No
         SocketAddress("127.0.0.1", 6767),
         SocketAddress("127.0.0.1", 6768),
     ]
+    # private: the parsed listen spec: `bound_addresses` is empty until the bind
     assert server._listen == expected
     assert async_server._listen == expected
 
@@ -257,6 +259,7 @@ def test_listener_is_a_context_manager() -> None:
 
     with DHCPListener(listen=("127.0.0.1", 0)) as listener:
         assert listener.bound_addresses
+        # private: the OS socket: its options and closed state have no public view
         sockets = list(listener._sockets)  # see above: closed-ness, not addresses
 
     assert listener.bound_addresses == ()

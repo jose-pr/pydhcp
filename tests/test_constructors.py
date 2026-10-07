@@ -81,6 +81,7 @@ def test_reuse_address_and_receive_buffer_size_are_arguments(
     def record(*args: _ty.Any, **kwargs: _ty.Any) -> None:
         seen.update(kwargs)
 
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr("pydhcp.listener._core._bind_sockets", record)
     _build(
         cls, listen=("127.0.0.1", 0), reuse_address=True, receive_buffer_size=4096
@@ -94,6 +95,7 @@ def test_reuse_address_and_receive_buffer_size_are_arguments(
 
 
 def test_the_poll_interval_is_a_keyword_and_select_timeout_is_gone() -> None:
+    # private: the wait bound as stored
     assert DHCPListener(poll_interval=0.25)._poll_interval == 0.25
     with pytest.raises(TypeError):
         DHCPListener(select_timeout=0.25)  # type: ignore[call-arg]

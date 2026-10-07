@@ -11,7 +11,10 @@ import logging
 
 import pytest
 
+# private: the unit under test is not exported from a public module
 from pydhcp import _constants as constants
+
+# private: the unit under test is not re-exported from a public module
 from pydhcp._network import SocketAddress
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 from pydhcp.listener._core import _ListenerCore
@@ -39,6 +42,7 @@ def test_max_packet_size_has_one_default_that_is_the_largest_datagram(
     """`None` and 0 both mean the constant, so the receive buffer asked of the
     socket is the same on both drivers: one octet over it, to tell a datagram
     that fills the limit from one that exceeds it."""
+    # private: the receive limit as stored
     assert driver(listen=("127.0.0.1", 0))._max_packet_size == (
         constants.UDP_MAX_PACKET_SIZE
     )
@@ -61,6 +65,7 @@ def test_constructing_with_per_interface_enumerates_nothing(
 ) -> None:
     listener = driver(listen="*", per_interface=True)
     assert len(enumerations) == 0
+    # private: the parsed listen spec: `bound_addresses` is empty until the bind
     assert listener._listen == [SocketAddress(ipaddress.IPv4Address("0.0.0.0"), 67)] + [
         SocketAddress(ipaddress.IPv4Address("0.0.0.0"), 68)
     ]
@@ -76,6 +81,7 @@ def test_the_wildcard_is_expanded_when_binding(driver: type, enumerations) -> No
         bound = {a.ip for a in listener.bound_addresses}
         assert bound and ipaddress.IPv4Address("0.0.0.0") not in bound
     finally:
+        # private: the release path, called directly
         listener._close_sockets()
     assert listener.bound_addresses == ()
 
@@ -86,7 +92,9 @@ def test_an_undecodable_datagram_is_counted_and_warned_the_same(
 ) -> None:
     listener = driver(listen=("127.0.0.1", 0))
     client = SocketAddress(ipaddress.IPv4Address("192.0.2.9"), 68)
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     with caplog.at_level(logging.WARNING, logger="pydhcp.listener._core"):
+        # private: drives one datagram through the receive path without a socket
         listener._dispatch(b"\x01\x02", client, None)  # type: ignore[arg-type]
     assert listener.metrics.packets_dropped_error == 1
     assert listener.metrics.packets_received == 0

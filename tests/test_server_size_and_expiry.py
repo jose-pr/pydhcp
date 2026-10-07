@@ -121,6 +121,7 @@ def test_lease_time_is_the_nearest_second_to_the_time_left(
     up advertised 601 for the 600 seconds a pool granted."""
     now = datetime(2026, 10, 6, 12, 0, tzinfo=timezone.utc)
     server = _FixedLeaseServer(now + timedelta(seconds=remaining))
+    # private: the reply builder, called directly to read the reply it makes
     reply = server._create_response(
         _message(DHCPMessageType.DHCPREQUEST),
         DHCPLease(IPv4("10.0.0.50"), now + timedelta(seconds=remaining)),

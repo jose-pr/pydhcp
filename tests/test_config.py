@@ -31,6 +31,7 @@ def test_load_config_yml_extension(tmp_path) -> None:
 
 
 def test_load_config_toml(tmp_path) -> None:
+    # private: the optional TOML reader, switched off to test its absence
     if config._tomllib is None:
         pytest.skip("TOML config loading requires optional TOML dependencies")
     path = tmp_path / "config.toml"

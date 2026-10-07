@@ -20,7 +20,11 @@ import pytest
 from helpers import build_request
 from pydhcp import DHCPMessage, DHCPOptions, DHCPValueError
 from pydhcp.options import DHCPOptionCode
+
+# private: the unit under test is not exported from a public module
 from pydhcp.options import _codecs as codecs
+
+# private: the unit under test is not re-exported from a public module
 from pydhcp.options._codecs import *  # noqa: F401,F403
 from pydhcp.options._codecs import _addresses, _mos, _vendor
 from pydhcp.packet import DHCPMessageType

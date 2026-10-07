@@ -34,6 +34,8 @@ from pydhcp import (
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
+
+# private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
 from pydhcp.server._core import _ServerCore
 
 IPv4 = ipaddress.IPv4Address
@@ -350,12 +352,14 @@ def test_the_quarantine_runs_on_the_time_it_is_given() -> None:
     interface = Mock(network=ipaddress.IPv4Network("127.0.0.0/8"), ip=LOOPBACK)
     server.quarantine_address(ip, now=1000.0)
     held = server.DECLINE_QUARANTINE_SECONDS
+    # private: the server's refusal rule, called directly
     assert server._address_refusal(ip, interface, "c", now=1000.0 + held - 1)
     assert server._address_refusal(ip, interface, "c", now=1000.0 + held + 1) is None
 
 
 def test_a_hook_called_without_a_stamp_gets_the_drivers_reading() -> None:
     server = DHCPServer(listen=("127.0.0.1", 0))
+    # private: the clock reading a core takes: the one seam for time
     instant = server._instant(_context(None, None))
     assert instant.utc.tzinfo is not None
     assert abs(instant.monotonic - time.monotonic()) < 5

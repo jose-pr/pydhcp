@@ -123,6 +123,7 @@ def test_a_failure_is_logged_once_per_interval_with_a_bounded_line(
     assert len(failures) == 1
     assert "\n" not in failures[0].getMessage()
     assert len(failures[0].getMessage()) < 600
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     assert failures[0].name == "pydhcp.capture._command"
 
 

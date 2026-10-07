@@ -13,6 +13,8 @@ import pathlib
 import pytest
 
 from pydhcp import DHCPDecodeError, DHCPMessage, DHCPOptions, DHCPOpcode
+
+# private: the unit under test is not exported from a public module
 from pydhcp import _nvt
 from pydhcp.options import BaseDHCPOptionCode, Bytes, String
 
@@ -183,6 +185,7 @@ def test_from_mapping_takes_the_codemap_to_mapping_used() -> None:
     assert mapping["options"]["SITE_NAME"] == "lab-1"
     again = DHCPMessage.from_mapping(mapping, codemap=_Site)
     assert bytes(again.options[224]) == b"lab-1"
+    # private: the code map as stored
     assert again.options._codemap is _Site
     with pytest.raises(ValueError, match="SITE_NAME"):
         DHCPMessage.from_mapping(mapping)

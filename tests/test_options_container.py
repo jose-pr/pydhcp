@@ -16,6 +16,8 @@ from pydhcp.options import (
     U32,
     U8,
 )
+
+# private: the unit under test is not re-exported from a public module
 from pydhcp.options._frozen import FrozenDHCPOptions
 
 SUBNET = int(DHCPOptionCode.SUBNET_MASK)

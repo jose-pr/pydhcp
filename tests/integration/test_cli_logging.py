@@ -49,6 +49,7 @@ def _event() -> CaptureEvent:
 
 
 def test_module_loggers_are_children_of_the_package_logger() -> None:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     assert capture_module.LOGGER.name == "pydhcp.capture._core"
     assert cli_module.LOGGER.name == "pydhcp.cli"
     for logger in (capture_module.LOGGER, cli_module.LOGGER):
@@ -150,6 +151,7 @@ def test_the_capture_hook_logs_through_the_module_logger(tmp_path, caplog) -> No
 
     by_message = {r.getMessage().split(":")[0]: r for r in caplog.records}
     failure = by_message["Capture hook command failed (3)"]
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     assert failure.name == "pydhcp.capture._command"
     output = [r for r in caplog.records if "wrote" in r.getMessage()]
     assert output and output[0].name == "pydhcp.capture._command"
@@ -177,6 +179,7 @@ def test_every_module_that_logs_does_so_on_its_own_logger() -> None:
     for name in _pydhcp_modules():
         module = importlib.import_module(name)
         logger = module.__dict__.get("LOGGER")
+        # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
         if not isinstance(logger, logging.Logger) or name == "pydhcp._log":
             continue
         seen += 1
@@ -200,12 +203,14 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
 
     def emit() -> None:
         server.handle(reply, _event().context)
+        # private: the warning rule, called directly
         interfaces._warn_synthetic.cache_clear()
         interfaces._warn_synthetic("192.0.2.77")
 
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         emit()
     loud = {record.name for record in caplog.records}
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     assert "pydhcp.server._handlers" in loud
     assert "pydhcp.listener._interfaces" in loud
 

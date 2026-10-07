@@ -53,6 +53,7 @@ def test_option_code_over_one_octet_names_the_value() -> None:
     # returns early on `isinstance(256, int)` and never reaches the branch.
     codes = DHCPOptionCodes[DHCPOptionCode]  # type: ignore[index]
     with pytest.raises(ValueError) as exc:
+        # private: the list codecs' normaliser: its refusals are the subject
         codes._normalize(256)
     assert "256" in _message_of(exc)
 
@@ -151,10 +152,12 @@ def test_dead_helpers_are_gone() -> None:
 
 def test_toml_guard_lives_in_one_place() -> None:
     """`structured` sources its TOML probes from `config`, not its own ladder."""
+    # private: the optional TOML reader, switched off to test its absence
     assert structured._tomllib is config._tomllib or (
         structured._tomllib is None and config._tomllib is None
     )
     assert config._import_toml_reader() is structured._tomllib
+    # private: the optional TOML writer, switched off to test its absence
     assert config._import_toml_writer() is structured._tomli_w
 
 

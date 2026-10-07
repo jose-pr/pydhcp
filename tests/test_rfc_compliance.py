@@ -54,6 +54,7 @@ def test_lease_expiration_total_seconds():
         datetime.now(timezone.utc) + timedelta(hours=1, minutes=1, seconds=1),
         DHCPOptions(),
     )
+    # private: the reply builder, called directly to read the reply it makes
     resp = server._create_response(
         DHCPMessage(
             op=DHCPOpcode.BOOTREQUEST,

@@ -26,6 +26,8 @@ from pydhcp import (
     DHCPRequestContext,
     SocketAddress,
 )
+
+# private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
 from pydhcp.capture._core import _CaptureCore
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 from pydhcp.packet import DHCPMessageType

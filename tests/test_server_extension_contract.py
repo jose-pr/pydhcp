@@ -137,6 +137,7 @@ def _context() -> DHCPRequestContext:
 
 
 def test_release_lease_is_told_the_local_address_on_every_path(monkeypatch) -> None:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", SERVED),
@@ -274,6 +275,7 @@ def test_one_overridden_lookup_answers_init_reboot_release_and_decline(
     assert server.is_quarantined(LOOPBACK)
     assert server.metrics.leases_declined == 1
     assert server.lease_backend.lookup(server.asked[0]) is None, "backend untouched"
+    # private: the lease store a backend holds: no public listing
     assert len(server.lease_backend._leases) == 0  # type: ignore[attr-defined]
 
 
@@ -300,6 +302,7 @@ def test_release_through_the_overridden_lookup_checks_the_address(monkeypatch) -
 
 
 def _discover_reply_decodes(monkeypatch, level: int) -> int:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", SERVED),

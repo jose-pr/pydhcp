@@ -118,4 +118,5 @@ def test_a_code_class_that_is_an_int_still_converts() -> None:
         pass
 
     assert int(IntCode(53)) == 53
+    # private: the code map as stored
     assert DHCPOptions()._codemap is DHCPOptionCode

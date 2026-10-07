@@ -10,6 +10,7 @@ import pytest
 
 import netimps
 
+# private: the unit under test is not exported from a public module
 from pydhcp import _network as network  # the module's own surface is what is tested
 from pydhcp import NetworkInterface, SocketAddress
 

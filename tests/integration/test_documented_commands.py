@@ -233,6 +233,7 @@ def test_a_readme_command_line_runs_as_written(
         assert command.process.poll() is None, "\n".join(command.stderr)
     finally:
         command.kill()
+        # private: the driver's thread set, checked for leaks
         for thread in command._threads:
             thread.join(10)
     text = "\n".join(command.stderr)

@@ -550,6 +550,7 @@ def test_the_writer_is_the_sink_of_a_capture(
 def _heard(
     payload: "_ty.Optional[bytes]", xid: int = 0x1234ABCD, at: datetime = HEARD
 ) -> CaptureEvent:
+    # private: the named tuple's own method
     context = _context()._replace(payload=payload)
     return CaptureEvent(_message(xid=xid), context, at)
 

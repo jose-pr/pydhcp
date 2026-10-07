@@ -105,6 +105,7 @@ def test_every_wildcard_spelling_takes_the_packet_info_path(spec) -> None:
     skip packet info and expand into one socket per address -- which on Linux
     hears no broadcast DISCOVER at all."""
     assert _pktinfo_supported(spec, None), spec
+    # private: the packet-info probe's result: no public view
     assert DHCPListener(listen=spec)._pktinfo, spec
 
 

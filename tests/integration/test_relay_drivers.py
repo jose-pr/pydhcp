@@ -29,6 +29,8 @@ from pydhcp import (
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
+
+# private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
 from pydhcp.relay._core import _RelayCore
 
 IPv4 = ipaddress.IPv4Address
@@ -146,6 +148,7 @@ def test_the_pending_table_ages_on_the_receive_time_of_each_datagram() -> None:
     relay.handle(
         request, _context(99, 1000.0 + relay.PENDING_TTL_SECONDS - 1, "10.0.0.6")
     )
+    # private: the relay's pending table: its bound and eviction are the subject
     (entry,) = relay._pending_clients.values()
     assert entry.client.ip == IPv4("10.0.0.5")
 

@@ -61,6 +61,7 @@ def test_an_unknown_message_type_does_not_escape_handle(caplog) -> None:
 def test_an_option_53_of_the_wrong_size_is_dropped_with_its_octets(caplog) -> None:
     server = DHCPServer(lease_backend=InMemoryLeaseBackend())
     message = _message_with_raw_type(1)
+    # private: the options bag a codec or message holds
     message.options._options[int(DHCPOptionCode.DHCP_MESSAGE_TYPE)] = bytearray()
     with caplog.at_level(logging.WARNING, logger="pydhcp"):
         server.handle(message, _context())
@@ -115,6 +116,7 @@ def _wire(kind: DHCPMessageType, code: DHCPOptionCode, octets: int, xid: int):
 
 @pytest.fixture
 def served(monkeypatch: pytest.MonkeyPatch) -> None:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", SERVED),

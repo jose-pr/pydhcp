@@ -416,6 +416,7 @@ def test_dhcp_capture_logs_hook_errors_without_fail_fast(capture_class, caplog) 
 
     capture = capture_class(listen=("127.0.0.1", 6767), hook=bad_hook)
 
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     with caplog.at_level(logging.ERROR, logger="pydhcp.capture._core"):
         capture.handle(_message(), _context())
 
@@ -515,6 +516,7 @@ def test_dhcp_capture_hook_error_stays_none_without_fail_fast(capture_class) -> 
 
 
 def _event_sent_to(destination: str | None) -> CaptureEvent:
+    # private: the named tuple's own method
     context = _context()._replace(
         destination=IPv4(destination) if destination else None,
         is_unicast=None if destination is None else destination == "192.0.2.1",

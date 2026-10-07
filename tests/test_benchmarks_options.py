@@ -42,6 +42,7 @@ def test_write_json_report_creates_expected_payload(tmp_path, monkeypatch) -> No
     timings = iter([1.0, 2.0, 4.0, 5.0, 10.0])
     monkeypatch.setattr(module.timeit, "timeit", lambda func, number: next(timings))
     output_path = tmp_path / "benchmarks" / "bench_options.json"
+    # private: the benchmark script's helper, called with the timer replaced
     results = module._measure_benchmarks(iterations=1)
 
     module.write_json_report(output_path, 1, results)

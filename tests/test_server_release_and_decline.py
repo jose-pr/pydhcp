@@ -52,6 +52,7 @@ def _context(interface: ipaddress.IPv4Interface) -> DHCPRequestContext:
 @pytest.fixture
 def served(monkeypatch) -> None:
     """The host serves 10.0.0.0/24 from 10.0.0.1, whatever adapters this machine has."""
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", IFACE_A),
@@ -112,6 +113,7 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
     """
     import pydhcp.server as server_module
 
+    # private: the module's own name for the host enumeration, replaced to stand for a host
     monkeypatch.setattr(
         server_module._net,
         "host_ip_interfaces",
@@ -119,6 +121,7 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
             [NetworkInterface("eth0", IFACE_A), NetworkInterface("eth1", IFACE_B)]
         ),
     )
+    # private: the module's own name for netimps, replaced to stand for a host
     monkeypatch.setattr(
         server_module._netimps,
         "is_local_address",
@@ -143,6 +146,7 @@ def test_a_second_address_of_this_host_does_not_delete_the_binding(
 def test_the_identity_check_asks_the_real_host(server) -> None:
     """Unmocked: loopback is this host and a TEST-NET-3 address (RFC 5737) is
     not, whatever this machine's adapters hold."""
+    # private: the server's identifier rule, called directly
     assert server._is_our_server_id(IPv4("127.0.0.1"), IPv4("10.255.0.1")) is True
     assert server._is_our_server_id(IPv4("203.0.113.77"), IPv4("10.255.0.1")) is False
 
@@ -151,11 +155,13 @@ def _foreign_request(server, monkeypatch) -> str:
     """Seed nothing; send a REQUEST that names a server that is not this host."""
     import pydhcp.server as server_module
 
+    # private: the module's own name for the host enumeration, replaced to stand for a host
     monkeypatch.setattr(
         server_module._net,
         "host_ip_interfaces",
         lambda *a, **k: iter([NetworkInterface("eth0", IFACE_A)]),
     )
+    # private: the module's own name for netimps, replaced to stand for a host
     monkeypatch.setattr(
         server_module._netimps,
         "is_local_address",
@@ -287,6 +293,7 @@ def test_a_decline_naming_another_server_is_ignored(
     server, served, monkeypatch
 ) -> None:
     """Option 54 is the one thing a DECLINE says about who it is for."""
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._netimps.is_local_address", lambda a, **_k: False
     )
@@ -306,6 +313,7 @@ def test_a_decline_flood_does_not_push_a_genuine_report_out(server, served) -> N
     for n in range(40):
         server.quarantine_address(IPv4(f"10.0.0.{100 + n}"))
     assert server.is_quarantined(IPv4("10.0.0.50"))
+    # private: the quarantine table: its bound is the subject
     assert len(server._declined) == 4
     assert server.metrics.quarantines_refused == 37
 

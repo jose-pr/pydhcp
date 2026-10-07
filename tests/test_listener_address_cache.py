@@ -25,6 +25,8 @@ import ipaddress
 import pytest
 
 from helpers import build_request
+
+# private: the unit under test is not exported from a public module
 from pydhcp import _network as net  # the host-interface enumeration is not public
 from pydhcp import server as server_module
 from pydhcp.listener import (
@@ -129,6 +131,7 @@ def test_an_async_bind_forces_it_too(enumerations) -> None:
         netimps.get_interface(IPv4("127.0.0.1"), cache=True)
         assert len(enumerations) == 2
     finally:
+        # private: the release path, called directly
         listener._close_sockets()
 
 
@@ -161,6 +164,7 @@ def test_a_synthetic_interface_is_still_refused() -> None:
     server.handle(build_request(options=options), context)
 
     assert transport.sent == [], "offered a lease from an address we do not hold"
+    # private: the host's adapters decide the pool: a fabricated interface stands for one
     assert server_module._servable_interface(IPv4("203.0.113.9")) is None
 
 
@@ -182,6 +186,7 @@ def test_the_lookup_does_not_apply_the_apipa_filter(monkeypatch) -> None:
         seen.append(cache)
         return iter([apipa] if not filter or filter(apipa) else [])
 
+    # private: the module's own name for the host enumeration, replaced to stand for a host
     monkeypatch.setattr(server_module._net, "host_ip_interfaces", fake)
 
     # The predicate excludes APIPA, so nothing is servable...

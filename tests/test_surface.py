@@ -260,6 +260,7 @@ EXPECTED_STRUCTURED = [
     "loads",
 ]
 
+# private: the name is looked up in the module that reads it, so the host or the clock can be stood for
 SURFACE = {
     "pydhcp": EXPECTED_ROOT,
     "pydhcp.capture": EXPECTED_CAPTURE,

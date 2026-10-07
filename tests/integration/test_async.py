@@ -84,6 +84,7 @@ def test_async_server_has_the_same_state_as_the_sync_one():
         assert not missing, f"async server is missing {missing}"
         # and the state actually works, not just exists
         server.quarantine_address(IPv4("10.0.0.5"))
+        # private: the quarantine table: its bound is the subject
         assert IPv4("10.0.0.5") in server._declined
         # Every attribute DHCPServer._init_server_state owns must be on both.
         # Listener internals legitimately differ (the async half has a worker
@@ -201,6 +202,7 @@ def test_async_listener_uses_the_same_receive_path_as_the_sync_one():
 
     for spec in ("*", ("*", 10067), None):
         sync = DHCPListener(listen=spec)
+        # private: the packet-info probe's result: no public view
         expected = sync._pktinfo
         assert (
             AsyncDHCPListener(listen=spec)._pktinfo == expected
@@ -266,9 +268,11 @@ def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
         server = MockAsyncDHCPServer(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
         await server.start()
         try:
+            # private: the driver's task set, checked for leaks
             keep, drop = server._tasks
             if already_waiting:
                 await asyncio.sleep(0)  # both receive tasks run to their `arecv`
+            # private: the parsed listen spec: `bound_addresses` is empty until the bind
             server._listen = server._listen[:1]
             server.bind()
             await asyncio.wait_for(drop, timeout=10.0)

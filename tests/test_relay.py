@@ -19,6 +19,8 @@ from pydhcp.options import DHCPOptionCode
 from pydhcp.options import RelayAgentInformation, TLVOption
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
+
+# private: the unit under test is not exported from a public module
 from pydhcp.relay import _core as relay_core
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
@@ -403,6 +405,7 @@ def test_pending_clients_map_is_bounded_and_evicts_oldest_first(relay_class):
         msg.xid = xid
         relay.handle(msg, _context(client_port=40000 + xid))
 
+    # private: the relay's pending table: its bound and eviction are the subject
     assert len(relay._pending_clients) == 4
     # Oldest evicted, most recent four kept, insertion order preserved. The key
     # is (xid, chaddr): an xid alone is not an identity, since it is readable
@@ -421,6 +424,7 @@ def test_reply_for_an_evicted_xid_falls_back_to_the_well_known_client_port(relay
     second = _discover()
     second.xid = 2
     relay.handle(second, _context(client_port=45001))
+    # private: the relay's pending table: its bound and eviction are the subject
     assert 1 not in relay._pending_clients
 
     reply = _reply("10.0.0.1", yiaddr="10.0.0.50")
@@ -526,6 +530,7 @@ def test_upstream_forward_drops_the_pktinfo_pin(relay_class):
     pinned = PktInfoUDPTransport(Mock())
     pinned.ifindex, pinned.local_ip = 7, IPv4("10.99.0.1")
 
+    # private: the relay's reply transport, called directly
     routed = relay_class._routed_transport(pinned)
 
     assert type(routed) is UDPTransport
@@ -574,6 +579,7 @@ def host(monkeypatch):
     machine it runs on; a test adds an interface to the dict.
     """
     held: "dict[str, netimps.Interface]" = {}
+    # private: the module's own name for netimps, replaced to stand for a host
     monkeypatch.setattr(
         relay_core._netimps,
         "get_interface",
@@ -693,6 +699,7 @@ def test_a_forged_flood_evicts_the_oldest_entry_and_costs_that_reply_only_its_po
             _stamped(40000 + forged, 102.0, ip="10.0.0.66"),
         )
 
+    # private: the relay's pending table: its bound and eviction are the subject
     assert len(relay._pending_clients) == 2
     assert _reply_goes(relay, 1, 103.0) == (68, 4)
 
@@ -708,6 +715,7 @@ def test_a_flood_from_the_standard_port_occupies_nothing(relay_class):
             _stamped(68, 101.0, ip="10.0.0.66"),
         )
 
+    # private: the relay's pending table: its bound and eviction are the subject
     assert list(relay._pending_clients) == [(1, CHADDR)]
 
 
@@ -721,6 +729,7 @@ def test_an_entry_expires_after_its_ttl(relay_class, host):
     held = relay.PENDING_TTL_SECONDS
     assert _reply_goes(relay, 1, 100.0 + held - 1)[0] == 40001
     assert _reply_goes(relay, 1, 100.0 + held)[0] == 68
+    # private: the relay's pending table: its bound and eviction are the subject
     assert len(relay._pending_clients) == 0
 
 
@@ -738,11 +747,13 @@ def test_expiring_does_not_walk_the_table(relay_class):
                 yield value
 
     relay = relay_class(listen=("127.0.0.1", 6767), server_addresses=["192.0.2.1"])
+    # private: the relay's pending table: its bound and eviction are the subject
     relay._pending_clients = Counting()
     for xid in range(50):
         relay.handle(_request(xid), _stamped(40000 + xid, 100.0 + xid))
     Counting.looked_at = 0
 
+    # private: the relay's expiry, called directly
     relay._expire_pending(100.0 + 50)
 
     assert Counting.looked_at <= 1
@@ -759,6 +770,7 @@ def test_a_request_that_reuses_a_pending_transaction_from_another_address_is_dro
 
     attacker.transport.send.assert_not_called()
     assert relay.metrics.packets_dropped_reused_transaction == 1
+    # private: the relay's pending table: its bound and eviction are the subject
     assert relay._pending_clients[(1, CHADDR)].client == SocketAddress(
         "10.0.0.50", 40001
     )
@@ -771,6 +783,7 @@ def test_a_request_from_the_same_address_replaces_the_entry(relay_class):
     relay.handle(_request(1), _stamped(40001, 100.0))
     relay.handle(_request(1), _stamped(40002, 101.0))
 
+    # private: the relay's pending table: its bound and eviction are the subject
     assert relay._pending_clients[(1, CHADDR)].client.port == 40002
     assert relay.metrics.packets_dropped_reused_transaction == 0
 
@@ -855,7 +868,9 @@ def test_pending_entries_expire_rather_than_accumulate(relay_class):
     request.xid = 0xCCCC
     relay.handle(request, _client_context("10.0.0.50", 40003))
 
+    # private: the relay's expiry, called directly
     relay._expire_pending(time.monotonic())
+    # private: the relay's pending table: its bound and eviction are the subject
     assert dict(relay._pending_clients) == {}
 
 

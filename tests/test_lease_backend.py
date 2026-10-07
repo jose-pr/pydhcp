@@ -238,6 +238,7 @@ def test_in_memory_backend_survives_concurrent_use():
         thread.join()
 
     assert errors == [], errors[:3]
+    # private: the lease store a backend holds: no public listing
     assert len(backend._leases) == 8 * 200
 
 
@@ -268,6 +269,7 @@ def test_lease_store_is_bounded():
     )
 
     assert accepted == backend.MAX_LEASES
+    # private: the lease store a backend holds: no public listing
     assert len(backend._leases) == backend.MAX_LEASES
     assert backend.refused_while_full == 500 - backend.MAX_LEASES
 

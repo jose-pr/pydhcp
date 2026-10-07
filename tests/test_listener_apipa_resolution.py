@@ -18,6 +18,7 @@ import socket
 
 import pytest
 
+# private: the unit under test is not exported from a public module
 from pydhcp import _network as net  # the host-interface enumeration is not public
 
 # the arrival-interface lookup is not public

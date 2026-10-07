@@ -126,6 +126,7 @@ def test_client_queues_matching_bootreply() -> None:
             seen.append((msg, context))
 
     client = RecordingClient(listen=("127.0.0.1", 6768))
+    # private: the transactions the client still waits for: no public view
     client._pending_keys.add((0xAABBCCDD, CHADDR))
     context = _context()
 
@@ -140,26 +141,22 @@ def test_client_queues_matching_bootreply() -> None:
     assert client.drain_replies() == []
 
 
-def test_client_send_uses_bound_udp_transport(monkeypatch) -> None:
-    client = DHCPClient(listen=("127.0.0.1", 6768))
-    socket = object()
-    client._sockets.append(socket)  # type: ignore[arg-type]
-    transport = Mock()
-    transport.send.return_value = 300
-    monkeypatch.setattr("pydhcp.client._sync.UDPTransport", lambda sock: transport)
+def test_client_send_puts_the_message_on_the_wire_from_its_bound_socket() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as peer:
+        peer.bind(("127.0.0.1", 0))
+        peer.settimeout(10.0)
+        with DHCPClient(listen=("127.0.0.1", 0)) as client:
+            message = client.build_discover(CHADDR, xid=0xCAFEBABE)
 
-    message = client.build_discover(CHADDR, xid=0xCAFEBABE)
+            sent = client.send(message, dst="127.0.0.1", port=peer.getsockname()[1])
 
-    assert client.send(message, dst="192.0.2.1", port=6767) == 300
-    data, dest = transport.send.call_args.args
-    port = transport.send.call_args.kwargs["port"]
-    mac = transport.send.call_args.kwargs["client_mac"]
-    assert DHCPMessage.decode(data).xid == 0xCAFEBABE
-    assert dest == IPv4("192.0.2.1")
-    assert port == 6767
-    assert mac == CHADDR
-    # `send` does not register the transaction: an exchange does.
-    assert (0xCAFEBABE, CHADDR) not in client._pending_keys
+            data, source = peer.recvfrom(4096)
+            assert source == client.bound_addresses[0].to_tuple()
+            assert sent == len(data)
+            assert DHCPMessage.decode(data).xid == 0xCAFEBABE
+            assert DHCPMessage.decode(data).chaddr == CHADDR
+            # `send` does not register the transaction: an exchange does.
+            assert (0xCAFEBABE, CHADDR) not in client._pending_keys
 
 
 def test_client_dora_against_real_server() -> None:
@@ -258,6 +255,7 @@ def test_client_discover_offer_times_out_when_nothing_answers() -> None:
     finally:
         silent.close()
 
+    # private: the transactions the client still waits for: no public view
     assert client._pending_keys == set()
 
 
@@ -368,6 +366,7 @@ def test_client_reply_queue_is_bounded_and_counts_what_it_drops():
     for index in range(client.MAX_QUEUED_REPLIES + 50):
         client.handle(_canned_offer(index), context)
 
+    # private: the client's reply queue: no public view
     assert client._replies.qsize() == client.MAX_QUEUED_REPLIES
     assert client.metrics.replies_dropped_overflow == 50
     # the newest replies are the ones kept
@@ -386,6 +385,7 @@ def test_pending_keys_do_not_accumulate_across_exchanges():
         with pytest.raises(DHCPTimeoutError):
             client.dora(CHADDR, timeout=0.05, retries=0)
 
+    # private: the transactions the client still waits for: no public view
     assert client._pending_keys == set(), client._pending_keys
 
 
@@ -483,6 +483,7 @@ def test_retransmission_interval_is_jittered_within_the_rfc_band():
     """
     client = DHCPClient(listen=("127.0.0.1", 0))
 
+    # private: the client's schedule: fixed so that no test waits for real seconds
     draws = [next(client._retransmit_intervals(4.0, 0)) for _ in range(64)]
 
     assert len(set(draws)) > 1
@@ -496,6 +497,7 @@ def test_retransmission_interval_is_capped_at_the_rfc_maximum():
     re-synchronise backed-off clients exactly where they spend their time."""
     client = DHCPClient(listen=("127.0.0.1", 0))
 
+    # private: the client's schedule: fixed so that no test waits for real seconds
     late = list(client._retransmit_intervals(2.0, 20))[6:]
 
     assert late, "the schedule ended early"
@@ -512,6 +514,7 @@ def test_a_first_interval_above_the_cap_is_held_at_the_cap():
     client = DHCPClient(listen=("127.0.0.1", 0))
 
     for timeout, retries in ((65.0, 1), (120.0, 0), (1000.0, 2)):
+        # private: the client's schedule: fixed so that no test waits for real seconds
         waits = list(client._retransmit_intervals(timeout, retries))
 
         assert len(waits) == retries + 1
@@ -522,6 +525,7 @@ def test_a_subclass_cap_below_the_timeout_is_honoured():
     class Impatient(DHCPClient):
         RETRANSMIT_MAX_INTERVAL = 10.0
 
+    # private: the client's schedule: fixed so that no test waits for real seconds
     waits = list(Impatient(listen=("127.0.0.1", 0))._retransmit_intervals(30.0, 1))
 
     assert all(9.0 <= wait <= 11.0 for wait in waits), waits
@@ -614,6 +618,7 @@ def test_a_dhcpnak_ends_the_exchange_at_once_and_is_raised():
     assert client.kinds() == ["DHCPDISCOVER", "DHCPREQUEST"]
     assert refused.value.nak.message_type is DHCPMessageType.DHCPNAK
     assert refused.value.nak.chaddr == CHADDR
+    # private: the transactions the client still waits for: no public view
     assert client._pending_keys == set()
 
 
@@ -687,6 +692,7 @@ def test_a_timeout_is_a_timeout_error_and_a_package_error():
 
     assert isinstance(raised.value, DHCPTimeoutError)
     assert isinstance(raised.value, DHCPError)
+    # private: the transactions the client still waits for: no public view
     assert client._pending_keys == set()
 
 
@@ -696,10 +702,13 @@ def test_a_timeout_is_a_timeout_error_and_a_package_error():
 def _real_clock_client(schedule):
     """A client on the real clock with a fixed retransmission schedule."""
     client = _ScriptedClient(listen=("127.0.0.1", 0), answers={})
+    # private: the client's clock: stubbed so that no test waits for real seconds
     client._monotonic = time.monotonic
+    # private: the client's wait: stubbed so that no test waits for real seconds
     client._wait_for = lambda waiter, msg_type, timeout, server=None: (
         DHCPClient._wait_for(client, waiter, msg_type, timeout, server)
     )
+    # private: the client's schedule: fixed so that no test waits for real seconds
     client._retransmit_intervals = lambda timeout, retries: iter(schedule)
     return client
 
@@ -735,6 +744,7 @@ def test_the_wait_the_deadline_cuts_is_the_last_one_whatever_the_clock_says():
     after the wait the deadline cut. Nothing is sent after that wait."""
     client = _ScriptedClient(listen=("127.0.0.1", 0), answers={})
     client.WAIT_COST = 0.0  # the wait returns with the clock where it was
+    # private: the client's schedule: fixed so that no test waits for real seconds
     client._retransmit_intervals = lambda timeout, retries: iter([0.5, 1.0, 2.0])
 
     with pytest.raises(DHCPTimeoutError):
@@ -772,20 +782,23 @@ def test_a_deadline_that_is_not_positive_is_refused(deadline):
 # --- send() alone remembers nothing; an exchange registers its own key ---
 
 
-def test_send_used_on_its_own_leaves_no_transaction_behind(monkeypatch):
-    client = DHCPClient(listen=("127.0.0.1", 0))
-    client._sockets.append(object())
-    transport = Mock()
-    transport.send.return_value = 300
-    monkeypatch.setattr("pydhcp.client._sync.UDPTransport", lambda sock: transport)
+def test_send_used_on_its_own_leaves_no_transaction_behind():
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as peer:
+        peer.bind(("127.0.0.1", 0))
+        port = peer.getsockname()[1]
+        with DHCPClient(listen=("127.0.0.1", 0)) as client:
+            for xid in range(5000):
+                client.send(
+                    client.build_release(CHADDR, ciaddr="10.0.0.50", xid=xid),
+                    dst="127.0.0.1",
+                    port=port,
+                )
 
-    for xid in range(5000):
-        client.send(client.build_release(CHADDR, ciaddr="10.0.0.50", xid=xid))
-
-    assert client._pending_keys == set()
-    # Still an observer: an unrelated reply is queued, not dropped.
-    client.handle(_canned_offer(0x99), _context())
-    assert client.next_reply(timeout=0) is not None
+            # private: the transactions the client still waits for: no public view
+            assert client._pending_keys == set()
+            # Still an observer: an unrelated reply is queued, not dropped.
+            client.handle(_canned_offer(0x99), _context())
+            assert client.next_reply(timeout=0) is not None
 
 
 def test_an_exchange_registers_its_key_before_the_first_send():
@@ -803,6 +816,7 @@ def test_an_exchange_registers_its_key_before_the_first_send():
         client.discover_offer(CHADDR, timeout=2.0, retries=0)
 
     assert seen == [True]
+    # private: the transactions the client still waits for: no public view
     assert client._pending_keys == set()
 
 
@@ -845,6 +859,7 @@ def test_reply_with_a_foreign_chaddr_is_ignored():
     the same reasoning as `DHCPRelay._pending_key`.
     """
     client = DHCPClient(listen=("127.0.0.1", 0))
+    # private: the transactions the client still waits for: no public view
     client._pending_keys.add((0xAABBCCDD, CHADDR))
     context = _context()
 

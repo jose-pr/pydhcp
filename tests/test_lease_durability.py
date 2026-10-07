@@ -444,6 +444,7 @@ def test_the_lease_time_a_client_is_told_never_exceeds_the_policy_across_a_chang
     from pydhcp.packet import DHCPMessageType
 
     served = ipaddress.IPv4Interface("10.0.0.1/24")
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", served),

@@ -82,6 +82,7 @@ def test_close_on_a_running_listener_ends_the_receive_thread(
     assert listener.start() is None
     wait_bound(listener)
     (thread,) = [t for t in threading.enumerate() if t.name == "pydhcp-listener"]
+    # private: the OS socket: its options and closed state have no public view
     sockets = list(listener._sockets)
 
     began = time.monotonic()
@@ -141,7 +142,9 @@ def test_with_binds_and_does_not_serve(cls: type) -> None:
     with _make(cls) as listener:
         assert listener.bound_addresses
         assert threading.active_count() == threads_before
+        # private: the driver's thread, checked for leaks
         assert listener._receive_thread is None
+        # private: the OS socket: its options and closed state have no public view
         sockets = list(listener._sockets)
     assert listener.bound_addresses == ()
     assert all(sock.fileno() == -1 for sock in sockets)
@@ -170,6 +173,7 @@ def test_serve_forever_blocks_until_shutdown_and_leaves_the_sockets_to_close() -
         # Shut down is not closed: it can serve again.
         again = threading.Thread(target=listener.serve_forever, daemon=True)
         again.start()
+        # private: the lifecycle flag: no public view
         wait_for(lambda: listener._serving, "a second serve_forever()")
         listener.shutdown()
         again.join(WAIT_SECONDS)
@@ -401,6 +405,7 @@ def test_serve_forever_raises_the_bind_error_and_is_not_left_serving() -> None:
         with pytest.raises(OSError):
             listener.serve_forever()
         assert listener.wait_closed(WAIT_SECONDS) is True
+        # private: the lifecycle flag: no public view
         assert not listener._serving
     finally:
         holder.close()
@@ -432,7 +437,9 @@ def test_async_with_binds_and_does_not_serve(cls: type, loop_type: type) -> None
     async def main() -> None:
         async with _make(cls) as listener:
             assert listener.bound_addresses
+            # private: the driver's task set, checked for leaks
             assert listener._tasks == []
+            # private: the OS socket: its options and closed state have no public view
             sockets = list(listener._sockets)
         assert listener.bound_addresses == ()
         assert all(sock.fileno() == -1 for sock in sockets)
@@ -456,7 +463,9 @@ def test_a_second_start_is_an_error_and_adds_no_task(
         try:
             waiting = asyncio.ensure_future(listener.wait_closed())
             await asyncio.sleep(0)
+            # private: the driver's task set, checked for leaks
             receiving = list(listener._tasks)
+            # private: the OS socket: its options and closed state have no public view
             assert len(receiving) == len(listener._sockets) == 1
             with pytest.raises(RuntimeError, match="already serving"):
                 await listener.start()
@@ -501,6 +510,7 @@ def test_aclose_from_another_task_ends_serve_forever_quietly(loop_type: type) ->
         serving = asyncio.ensure_future(listener.serve_forever())
         await asyncio.sleep(0)  # the task runs up to the wait for `shutdown()`
         assert not serving.done()
+        # private: the OS socket: its options and closed state have no public view
         sockets = list(listener._sockets)
         await listener.aclose()
         assert await asyncio.wait_for(serving, WAIT_SECONDS) is None
@@ -578,6 +588,7 @@ def test_start_raises_the_bind_error_and_leaves_nothing_running(
             with pytest.raises(OSError):
                 await listener.start()
             assert listener.bound_addresses == ()
+            # private: the driver's task set, checked for leaks; the driver's worker, checked for leaks
             assert listener._tasks == [] and listener._worker is None
             assert await listener.wait_closed(0.1) is True
             holder.close()

@@ -342,7 +342,9 @@ def test_the_async_class_agrees_about_the_receive_path(
     for spec in ("*", ("*", 10067), None):
         left = sync(listen=spec, **kwargs)
         right = asyncy(listen=spec, **kwargs)
+        # private: the packet-info probe's result: no public view
         assert left._pktinfo == right._pktinfo, f"{spec!r}"
+        # private: the parsed listen spec: `bound_addresses` is empty until the bind
         assert len(left._listen) == len(right._listen), f"{spec!r}"
 
 
@@ -585,6 +587,7 @@ def test_async_relay_state_is_only_touched_by_one_thread() -> None:
                 if seen.is_set():
                     break
                 await asyncio.sleep(0.02)
+            # private: the relay's pending table: its bound and eviction are the subject
             assert seen.is_set(), f"only {len(relay._pending_clients)} of {count}"
             assert len(threads) == 1, f"handlers ran on {len(threads)} threads"
             assert threading.current_thread().ident not in threads

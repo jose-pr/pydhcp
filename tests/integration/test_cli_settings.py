@@ -17,6 +17,8 @@ import typing as _ty
 import pytest
 
 from cli_process import SHOW_SETTINGS, run_cli
+
+# private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
 from pydhcp._config import _tomllib
 from pydhcp.cli import main
 from pydhcp.cli._settings import traceback_requested
@@ -432,6 +434,7 @@ def test_every_declared_field_of_every_command_has_a_variable() -> None:
     """The table above names a variable for each field a command declares."""
     from pydhcp.cli import App
 
+    # private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
     from pydhcp.cli._settings import _NOT_SETTINGS
 
     for command in App._subcommands_ or ():
@@ -777,6 +780,8 @@ def test_a_config_option_is_a_path(tmp_path: pathlib.Path) -> None:
 
 def _every_variable() -> "set[str]":
     from pydhcp.cli import App
+
+    # private: the unit under test is not re-exported from a public module
     from pydhcp.cli._settings import CONFIG_ENV, CONFIG_FORMAT_ENV, TRACEBACK_ENV
 
     names = {CONFIG_ENV, CONFIG_FORMAT_ENV, TRACEBACK_ENV, "PYDHCP_MCP"}
@@ -804,6 +809,8 @@ def test_every_variable_the_command_reads_is_documented(document: str) -> None:
 
 def test_the_layer_table_names_every_variable_a_field_declares() -> None:
     from pydhcp.cli import App
+
+    # private: the unit under test is not re-exported from a public module
     from pydhcp.cli._settings import CONFIG_ENV, CONFIG_FORMAT_ENV
 
     declared = {

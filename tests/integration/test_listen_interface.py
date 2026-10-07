@@ -58,10 +58,13 @@ def test_a_limited_socket_admits_only_its_interfaces_and_counts_the_rest(
     listener = driver(listen=(_loopback(), 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        # private: the interface allow-list a listener builds: no public view
         allowed = listener._allowed[sock]
         assert allowed == frozenset({_loopback().index})
 
+        # private: the receive path's admission check, driven without a socket
         assert listener._admits(_arrival(_loopback().index), sock)
         assert listener.metrics.packets_dropped_other_interface == 0
         assert not listener._admits(_arrival(_loopback().index + 100), sock)
@@ -78,8 +81,11 @@ def test_an_unlimited_socket_admits_everything() -> None:
     listener = DHCPListener(listen=("*", 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        # private: the interface allow-list a listener builds: no public view
         assert listener._allowed == {}
+        # private: the receive path's admission check, driven without a socket
         assert listener._admits(_arrival(12345), sock)
         assert listener.metrics.packets_dropped_other_interface == 0
     finally:
@@ -88,6 +94,7 @@ def test_an_unlimited_socket_admits_everything() -> None:
 
 def test_the_wildcard_named_plainly_beside_an_interface_has_no_limit() -> None:
     listener = DHCPListener(listen="*:0,lo:0")
+    # private: the limiter's table: its bound is the subject
     assert listener._limits == {}
 
 
@@ -97,9 +104,11 @@ def test_a_drop_is_logged_once_through_the_limiter(caplog) -> None:
     listener = DHCPListener(listen=(_loopback(), 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
         with caplog.at_level(logging.DEBUG, logger="pydhcp"):
             for _ in range(50):
+                # private: the receive path's admission check, driven without a socket
                 listener._admits(_arrival(_loopback().index + 100), sock)
         lines = [
             r
@@ -289,7 +298,9 @@ def test_nothing_is_bound_to_a_device_where_the_host_has_no_such_binding(
     listener.bind()
     try:
         assert seen and all(kwargs.get("device") is None for kwargs in seen)
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        # private: the interface allow-list a listener builds: no public view
         assert listener._allowed[sock] == frozenset({_loopback().index})
     finally:
         listener.close()
@@ -310,6 +321,7 @@ def test_a_socket_is_bound_to_the_adapter_the_grammar_resolved(
         assert fake.resolved == 1
         # The allow-list stays as a second check.
         (sock,) = listener._sockets
+        # private: the receive path's admission check, driven without a socket
         assert not listener._admits(_arrival(_loopback().index + 100), sock)
         assert listener.metrics.packets_dropped_other_interface == 1
     finally:
@@ -343,7 +355,9 @@ def test_a_socket_serving_several_adapters_is_not_bound_to_one_of_them(
     listener.bind()
     try:
         assert fake.devices == [None]
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        # private: the interface allow-list a listener builds: no public view
         assert len(listener._allowed[sock]) == 2
     finally:
         listener.close()
@@ -384,8 +398,11 @@ def test_a_refused_device_binding_falls_back_to_the_filter_and_says_so_once(
     try:
         assert len(fake.devices) == 2 and fake.devices[0] is not None
         assert fake.devices[1] is None
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        # private: the interface allow-list a listener builds: no public view
         assert listener._allowed[sock] == frozenset({_loopback().index})
+        # private: the receive path's admission check, driven without a socket
         assert listener._admits(_arrival(_loopback().index), sock)
         assert not listener._admits(_arrival(_loopback().index + 100), sock)
         assert listener.metrics.packets_dropped_other_interface == 1
@@ -403,6 +420,7 @@ def test_a_bind_that_fails_for_another_reason_is_not_mistaken_for_a_refused_devi
     listener = DHCPListener(listen=(_loopback(), 0))
     with pytest.raises(netimps.AddressInUseError):
         listener.bind()
+    # private: the OS socket: its options and closed state have no public view
     assert listener._sockets == [] and listener.bound_addresses == ()
     # Not a refusal of the device: no second attempt, the error is the caller's.
     assert len(fake.devices) == 1 and fake.calls == 1

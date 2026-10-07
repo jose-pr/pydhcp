@@ -13,6 +13,8 @@ import typing as _ty
 
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
+
+# private: the unit under test is not re-exported from a public module
 from pydhcp.options._codecs import *  # noqa: F401,F403
 
 #: class -> (arguments of one value, arguments of a different value).

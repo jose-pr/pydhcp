@@ -97,4 +97,5 @@ def test_the_identity_check_still_sees_a_link_local_address(host) -> None:
     """
     server = DHCPServer(lease_backend=InMemoryLeaseBackend())
 
+    # private: the server's identifier rule, called directly
     assert server._is_our_server_id(IPv4("169.254.11.89"), IPv4("10.0.0.1")) is True

@@ -166,8 +166,11 @@ def test_a_dora_against_the_thread_based_server(loop_type: type) -> None:
                 )
                 assert _is_ack(ack), ack
                 assert ack is not None and ack.yiaddr == IPv4("127.0.0.1")
+                # private: the transactions the client still waits for: no public view
                 assert client._pending_keys == set()
+                # private: the driver's waiter table, checked for leaks
                 assert client._waiters == {}
+                # private: the driver's worker, checked for leaks
                 assert client._worker is None, "the client needs no worker thread"
 
     _run(loop_type, main)
@@ -216,6 +219,7 @@ def test_an_exchange_gives_up_after_the_schedule_and_not_before(
         try:
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
+                # private: the client's schedule: fixed so that no test waits for real seconds
                 client._retransmit_intervals = (  # type: ignore[method-assign]
                     lambda timeout, retries: iter(schedule)
                 )
@@ -228,7 +232,9 @@ def test_an_exchange_gives_up_after_the_schedule_and_not_before(
                         broadcast=False,
                     )
                 elapsed = time.monotonic() - began
+                # private: the transactions the client still waits for: no public view
                 assert client._pending_keys == set()
+                # private: the driver's waiter table, checked for leaks
                 assert client._waiters == {}
                 await await_until(
                     lambda: len(peer.received) >= 2,
@@ -307,6 +313,7 @@ def test_cancelling_a_pending_exchange_leaves_nothing_behind(loop_type: type) ->
                     )
                 )
                 await _until(lambda: peer.received, "the DISCOVER at the peer")
+                # private: the driver's waiter table, checked for leaks; the transactions the client still waits for: no public view
                 assert client._waiters and client._pending_keys
                 pending.cancel()
                 with pytest.raises(asyncio.CancelledError):
@@ -314,6 +321,7 @@ def test_cancelling_a_pending_exchange_leaves_nothing_behind(loop_type: type) ->
                 assert client._waiters == {}
                 assert client._pending_keys == set()
                 assert len(asyncio.all_tasks()) == receiving, "the exchange left a task"
+            # private: the OS socket: its options and closed state have no public view
             sockets = list(client._sockets)
             assert sockets == [] and client.bound_addresses == ()
         finally:
@@ -351,6 +359,7 @@ def test_two_exchanges_at_once_each_receive_their_own_reply(loop_type: type) -> 
                 assert first.chaddr == CHADDR
                 assert second.chaddr == OTHER_CHADDR
                 assert first.xid != second.xid
+                # private: the driver's waiter table, checked for leaks; the transactions the client still waits for: no public view
                 assert client._waiters == {} and client._pending_keys == set()
 
     _run(loop_type, main)
@@ -552,7 +561,9 @@ def test_a_failed_send_leaves_no_transaction_accepted(loop_type: type) -> None:
             async def refuse(*_args: _ty.Any, **_kwargs: _ty.Any) -> int:
                 raise OSError("network unreachable")
 
+            # private: the OS socket: its options and closed state have no public view
             sock = client._sockets[0]
+            # private: the driver's endpoint table, checked for leaks
             real = client._endpoints[sock]
             client._endpoints[sock] = types.SimpleNamespace(  # type: ignore[assignment]
                 asend=refuse
@@ -561,6 +572,7 @@ def test_a_failed_send_leaves_no_transaction_accepted(loop_type: type) -> None:
                 message = client.build_discover(CHADDR, xid=3)
                 with pytest.raises(OSError, match="unreachable"):
                     await client.send(message, dst="127.0.0.1", port=9)
+                # private: the transactions the client still waits for: no public view
                 assert client._pending_keys == set()
                 assert client.metrics.packets_sent == 0
             finally:
@@ -601,6 +613,7 @@ def test_a_dhcpnak_ends_the_exchange_and_is_raised(loop_type: type) -> None:
                         port=peer.port,
                         broadcast=False,
                     )
+                # private: the transactions the client still waits for: no public view; the driver's waiter table, checked for leaks
                 assert client._pending_keys == set() and client._waiters == {}
                 return refused.value, list(peer.received)
         finally:
@@ -657,6 +670,7 @@ def test_a_deadline_bounds_the_whole_call(loop_type: type) -> None:
         try:
             async with AsyncDHCPClient(listen=LOCAL) as client:
                 await client.start()
+                # private: the client's schedule: fixed so that no test waits for real seconds
                 client._retransmit_intervals = (  # type: ignore[method-assign]
                     lambda timeout, retries: iter(schedule)
                 )
@@ -699,6 +713,7 @@ def test_the_wait_the_deadline_cuts_is_the_last_one_whatever_the_clock_says(
         try:
             async with EarlyTimer(listen=LOCAL) as client:
                 await client.start()
+                # private: the client's schedule: fixed so that no test waits for real seconds
                 client._retransmit_intervals = (  # type: ignore[method-assign]
                     lambda timeout, retries: iter([0.5, 1.0, 2.0])
                 )
@@ -735,6 +750,7 @@ def test_send_used_on_its_own_leaves_no_transaction_behind(loop_type: type) -> N
                         dst="127.0.0.1",
                         port=peer.port,
                     )
+                # private: the transactions the client still waits for: no public view
                 assert client._pending_keys == set()
         finally:
             peer.close()

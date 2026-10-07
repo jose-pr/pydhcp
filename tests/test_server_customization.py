@@ -378,6 +378,7 @@ def test_init_reboot_from_an_unknown_client_is_answered_with_silence(
     silent. Answering makes it a rogue server for clients that belong to another
     server on the same segment. The record is what the stock `acquire_lease`
     finds: it allocates nothing for a REQUEST."""
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
@@ -553,6 +554,7 @@ def test_allocator_grants_a_free_in_subnet_address() -> None:
 @pytest.fixture
 def served(monkeypatch: pytest.MonkeyPatch) -> None:
     """`_servable_interface` answers with the network `_LoopbackServer` allocates from."""
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.server._policy._servable_interface",
         lambda _ip: NetworkInterface("test0", _LoopbackServer.NETWORK),

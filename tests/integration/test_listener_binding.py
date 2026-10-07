@@ -64,6 +64,7 @@ def test_rebinding_keeps_the_ephemeral_port_and_the_socket() -> None:
     listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         first_socket = listener._sockets[0]
         first_address = listener.bound_addresses[0]
 
@@ -87,8 +88,10 @@ def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
     listener = DHCPListener(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         assert len(listener._sockets) == 2
         dropped = listener._sockets[1]
+        # private: the parsed listen spec: `bound_addresses` is empty until the bind
         listener._listen = listener._listen[:1]
 
         listener.bind()
@@ -156,6 +159,7 @@ def test_the_duplicate_bind_really_would_have_stolen_the_datagrams() -> None:
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         port = first.bound_addresses[0].port
+        # private: the parsed listen spec: `bound_addresses` is empty until the bind
         second._listen = [type(second._listen[0])("127.0.0.1", port)]
         second.bind()  # no error: this is the behaviour being pinned
         assert second.bound_addresses[0].port == port
@@ -163,6 +167,7 @@ def test_the_duplicate_bind_really_would_have_stolen_the_datagrams() -> None:
         sender.sendto(b"x" * 20, ("127.0.0.1", port))
         import select
 
+        # private: the OS socket: its options and closed state have no public view
         readable, _, _ = select.select(first._sockets + second._sockets, [], [], 1.0)
         assert len(readable) == 1, "both sockets were fed, which is not the point"
     finally:
@@ -175,6 +180,7 @@ def test_reuse_address_is_opt_in_and_reaches_the_socket() -> None:
     listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         sock = listener._sockets[0]
         assert sock.getsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR) == 0
     finally:
@@ -209,6 +215,7 @@ def test_the_receive_buffer_is_grown_or_the_shortfall_is_reported(caplog) -> Non
     with caplog.at_level(logging.INFO, logger="pydhcp"):
         listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         granted = _rcvbuf(listener._sockets[0])
     finally:
         listener.close()
@@ -227,6 +234,7 @@ def test_a_zero_receive_buffer_keeps_the_os_default() -> None:
     listener = Default(listen=("127.0.0.1", 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         assert _rcvbuf(listener._sockets[0]) == _rcvbuf(plain)
     finally:
         listener.close()
@@ -241,6 +249,7 @@ def test_the_default_bind_asks_windows_for_exclusive_use() -> None:
     listener = DHCPListener(listen=("127.0.0.1", 0))
     listener.bind()
     try:
+        # private: the OS socket: its options and closed state have no public view
         sock = listener._sockets[0]
         assert sock.getsockopt(socket.SOL_SOCKET, SO_EXCLUSIVEADDRUSE) != 0
     finally:
@@ -297,7 +306,9 @@ def test_a_bind_that_fails_partway_closes_what_it_opened() -> None:
         with pytest.raises(OSError):
             listener.bind()
         assert listener.bound_addresses == ()
+        # private: the OS socket: its options and closed state have no public view
         assert listener._sockets == []
+        # private: the driver's endpoint table, checked for leaks
         assert listener._endpoints == {}
     finally:
         holder.close()
@@ -311,7 +322,9 @@ def test_a_failed_bind_keeps_the_sockets_an_earlier_bind_opened() -> None:
     listener.bind()
     try:
         before = listener.bound_addresses
+        # private: the OS socket: its options and closed state have no public view
         socket_before = listener._sockets[0]
+        # private: the parsed listen spec: `bound_addresses` is empty until the bind
         listener._listen = list(listener._listen) + [
             type(listener._listen[0])("127.0.0.1", port)
         ]
@@ -459,6 +472,7 @@ def test_a_held_port_is_reported_in_netimps_words() -> None:
 
 
 def test_a_socket_that_fails_to_close_is_logged_not_swallowed(caplog) -> None:
+    # private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
     from pydhcp.listener._binding import _close_socket
 
     class Stubborn:
@@ -466,6 +480,7 @@ def test_a_socket_that_fails_to_close_is_logged_not_swallowed(caplog) -> None:
             raise OSError("already gone")
 
     endpoints = {}
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     with caplog.at_level(logging.DEBUG, logger="pydhcp.listener._binding"):
         _close_socket(Stubborn(), endpoints)  # type: ignore[arg-type]
     assert any(

@@ -805,6 +805,7 @@ def test_copy_shares_no_mutable_state_with_the_original():
 
     copied = original.copy()
     assert copied is not original
+    # private: the code map as stored
     assert copied._codemap is original._codemap
     assert dict(copied.items(decoded=False)) == dict(original.items(decoded=False))
 

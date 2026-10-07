@@ -15,6 +15,8 @@ import netimps
 import pytest
 
 from pydhcp import AsyncDHCPListener, DHCPListener, SocketAddress
+
+# private: the unit under test is not re-exported from a public module
 from pydhcp._config import load_config
 from pydhcp.cli import main
 from pydhcp.server import DHCPServer
@@ -193,6 +195,7 @@ def test_a_constructor_stores_what_the_table_says(
     spec: ty.Any, expected: "list[SocketAddress]"
 ) -> None:
     listener = DHCPListener(listen=spec)
+    # private: the parsed listen spec: `bound_addresses` is empty until the bind
     stored = listener._listen
     # The default ports of a listener are 67 and 68: one binding per default.
     assert [a for a in stored if a in expected] == [a for a in expected if a in stored]
@@ -200,6 +203,7 @@ def test_a_constructor_stores_what_the_table_says(
 
 
 def test_the_default_ports_follow_a_binding_without_one() -> None:
+    # private: the parsed listen spec: `bound_addresses` is empty until the bind
     assert DHCPListener(listen="127.0.0.1")._listen == _addresses(
         ("127.0.0.1", 67), ("127.0.0.1", 68)
     )
@@ -228,11 +232,13 @@ def test_a_pair_binds_one_socket_on_that_port(spec: ty.Any) -> None:
 
 @pytest.mark.parametrize("spec", [("127.0.0.1", "6767"), ["127.0.0.1", 6767]], ids=repr)
 def test_a_text_or_listed_port_is_one_port_not_digits(spec: ty.Any) -> None:
+    # private: the parsed listen spec: `bound_addresses` is empty until the bind
     assert DHCPListener(listen=spec)._listen == _addresses(("127.0.0.1", 6767))
 
 
 def test_a_refused_spec_binds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     bound: "list[object]" = []
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
         "pydhcp.listener._binding._netimps.bind",
         lambda *a, **k: bound.append(a),
@@ -416,6 +422,7 @@ def test_every_constructor_reads_an_interface_without_asking_the_host(
     monkeypatch.setattr(netimps, "iter_interfaces", refuse)
     monkeypatch.setattr(netimps, "get_interfaces", refuse)
     listener = driver(listen=spec)
+    # private: the parsed listen spec: `bound_addresses` is empty until the bind
     assert set(sockets) <= set(listener._listen)
 
 
@@ -442,6 +449,7 @@ def test_an_unknown_interface_is_refused_by_bind_and_binds_nothing() -> None:
     listener = DHCPListener(listen="no-such-adapter-7:0")
     with pytest.raises(ValueError, match="no interface matches 'no-such-adapter-7'"):
         listener.bind()
+    # private: the OS socket: its options and closed state have no public view
     assert listener._sockets == [] and listener.bound_addresses == ()
 
 
@@ -453,6 +461,7 @@ def test_a_host_name_is_an_adapter_name_and_is_never_resolved() -> None:
     listener = DHCPListener(listen="localhost:0")
     with pytest.raises(ValueError, match="host name is never resolved"):
         listener.bind()
+    # private: the OS socket: its options and closed state have no public view
     assert listener._sockets == []
 
 
@@ -463,7 +472,9 @@ def test_an_interface_is_found_by_name_by_mac_and_as_an_object() -> None:
     for listener in (by_name, by_object):
         listener.bind()
         try:
+            # private: the OS socket: its options and closed state have no public view
             (socket_,) = listener._sockets
+            # private: the interface allow-list a listener builds: no public view
             assert listener._allowed[socket_] >= {adapter.index}
             assert str(listener.bound_addresses[0].ip) == "0.0.0.0"
         finally:

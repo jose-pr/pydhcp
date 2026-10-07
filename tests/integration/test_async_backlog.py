@@ -88,6 +88,7 @@ def test_a_blocked_handler_queues_no_more_than_the_bound(factory: _ty.Any) -> No
             assert listener.metrics.packets_dropped_backlog == 92
             listener.release.set()
             await _until(lambda: listener.handled >= 8)
+            # private: the relay's pending table: its bound and eviction are the subject
             await _until(lambda: listener._pending == 0)  # nothing is still in flight
             assert listener.handled == 8
         finally:
@@ -125,6 +126,7 @@ def test_stopping_discards_the_queue_without_errors(
         listener = Blocked(listen=("127.0.0.1", 0), max_queued=64)
         await listener.start()
         await _flood(listener.bound_addresses[0].port, 30)
+        # private: the relay's pending table: its bound and eviction are the subject
         await _until(lambda: listener._pending >= 30)
         listener.shutdown()
         assert await listener.wait_closed(10.0)
@@ -151,6 +153,7 @@ def test_stopping_discards_the_queue_without_errors(
 
 def test_the_bound_has_a_default_and_is_a_constructor_option() -> None:
     assert AsyncDHCPListener.MAX_QUEUED_DATAGRAMS == 1024
+    # private: the hand-off bound as stored
     assert AsyncDHCPListener(listen=("127.0.0.1", 0))._max_queued == 1024
     for made in (
         AsyncDHCPListener(listen=("127.0.0.1", 0), max_queued=7),
