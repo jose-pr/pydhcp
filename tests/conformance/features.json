@@ -161,11 +161,11 @@
   "role": "server",
   "feature": "DHCPDECLINE from a sender that holds no lease",
   "rfc": "RFC 2131 s4.3.3",
-  "implemented": false,
+  "implemented": true,
   "cases": [
    "server-decline-without-a-lease"
   ],
-  "note": "Ignored; an open difference."
+  "note": "The address is quarantined whoever sent it; `DECLINE_REQUIRES_LEASE` restores the stricter rule."
  },
  {
   "role": "server",

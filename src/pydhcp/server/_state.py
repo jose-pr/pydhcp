@@ -58,6 +58,15 @@ class _ServerState(_Timed):
     #: `quarantines_refused`): a flood does not push a genuine report out.
     MAX_DECLINED_ADDRESSES = 1024
 
+    #: Whether a DHCPDECLINE marks only an address its sender holds. RFC 2131
+    #: s4.3.3 says the server "MUST mark the network address as not available"
+    #: whoever reports it, and `False` does: the address, inside the served
+    #: network and not the server's own, is quarantined within the bounds above.
+    #: `True` is stricter than the RFC, because a client identifier is not
+    #: authenticated: only an address the sender holds as a binding or an offer
+    #: is marked.
+    DECLINE_REQUIRES_LEASE: bool = False
+
     #: The UDP destination port of a reply sent to a relay (`giaddr` set), and of
     #: one sent to a client. RFC 1542 s5.4 fixes them at BOOTPS (67) and BOOTPC
     #: (68) whatever port the request came from; a harness that runs a relay or

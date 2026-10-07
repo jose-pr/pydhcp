@@ -273,14 +273,15 @@ class _Handlers(_Replies):
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPNAK)
 
     def handle_decline(self, msg: DHCPMessage, context: DHCPRequestContext) -> None:
-        """Handle DHCPDECLINE: quarantine the address the sender holds, and release it.
+        """Handle DHCPDECLINE: quarantine the address it names, and release the sender's own.
 
-        RFC 2131 s4.3.3 makes the server mark a declined address unavailable.
-        Nothing authenticates the sender, so only the address the sender itself
-        holds, as a binding or an outstanding offer, is marked: a DECLINE
-        naming any other address, one outside the served network, or one that
-        names another server in option 54 changes nothing and is counted in
-        `declines_ignored`.
+        RFC 2131 s4.3.3: "The server MUST mark the network address as not
+        available", whoever sent it. A DECLINE naming an address outside the
+        served network, this host's own, or another server in option 54 changes
+        nothing and is counted in `declines_ignored`; the quarantine is bounded
+        (`MAX_DECLINED_ADDRESSES`). A record is released only when it is the
+        sender's own, for the declined address. `DECLINE_REQUIRES_LEASE` marks
+        only an address the sender holds, as a binding or an outstanding offer.
         """
         client_id = msg.get_client_id()
         actual_server_id = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
@@ -322,7 +323,8 @@ class _Handlers(_Replies):
         # Counted as a decline, not a release: the client found the address
         # already in use, which is the opposite of an orderly hand-back.
         self.metrics.leases_declined += 1
-        self.release_lease(client_id, actual_server_id, msg)
+        if held is not None and held.ip == declined:
+            self.release_lease(client_id, actual_server_id, msg)
 
     def _refused_as_quarantined(
         self,

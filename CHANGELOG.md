@@ -184,8 +184,7 @@ someone upgrading from 0.7.0.
   dhclient 4.4.3-P1, over 25 recorded exchanges (`tests/conformance/`) that replay on every platform with no
   peer installed. The README section "Differences from dnsmasq and ISC dhclient" states how far the
   comparison goes and lists the ten differences that are on purpose; `docs/conformance.md` has the table of
-  what each role covers and the RFC text behind each difference. One difference is open and recorded as
-  an expected failure: a DHCPDECLINE from a sender that holds no lease is ignored.
+  what each role covers and the RFC text behind each difference. No difference is open.
 
 ### Changed
 
@@ -1100,15 +1099,18 @@ Replace each name in the left column with the one beside it.
   `packets_dropped_malformed_option`); an unusable 51 or 57 is treated as absent
   (`options_ignored_malformed`). Each is logged once per interval with the XID and
   the client, where the listener used to log a traceback per datagram.
-- **A DHCPDECLINE quarantines only an address the sender holds.** Any client could
-  quarantine any address for ten minutes, an address outside the network or the
-  server's own included, and 1024 such reports evicted a genuine one. Only the
-  sender's own binding or outstanding offer, in the served network and (when
-  option 54 is present) with option 54 naming this server, is now quarantined and
-  released; anything else changes nothing and is counted in `declines_ignored`. At
-  `MAX_DECLINED_ADDRESSES` a new address is refused (`quarantines_refused`) rather
-  than the oldest evicted. The quarantine is applied to whatever lease
-  `acquire_lease` returns, so an override is not offered a declined address again.
+- **A DHCPDECLINE is believed within bounds.** Any client could quarantine any address for
+  ten minutes, an address outside the network or the server's own included, and 1024 such
+  reports evicted a genuine one. The address a DHCPDECLINE names is quarantined whoever sent
+  it (RFC 2131 s4.3.3: the server "MUST mark the network address as not available") when it
+  is in the served network, is not the server's own and, when option 54 is present, option
+  54 names this server; the sender's own record for it, if any, is released. Anything else
+  changes nothing and is counted in `declines_ignored`. At `MAX_DECLINED_ADDRESSES` a new
+  address is refused (`quarantines_refused`) rather than the oldest evicted. The quarantine
+  is applied to whatever lease `acquire_lease` returns, so an override is not offered a
+  declined address again. **`DHCPServer.DECLINE_REQUIRES_LEASE = True`** (class attribute,
+  default `False`) marks only an address the sender holds as a binding or an outstanding
+  offer, which is stricter than the RFC.
 - **A unicast reply whose route leaves by another interface arrives.** Every
   reply on a wildcard socket was pinned to the arrival interface's index, so a
   unicast (a reply to a relay's `giaddr`, a RENEWING client) whose route is through

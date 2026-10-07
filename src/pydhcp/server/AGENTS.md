@@ -143,16 +143,15 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
     for none. The default reads `lease_backend`. A DHCPDECLINE, a DHCPRELEASE and a
     REQUEST naming another server ask it to learn what the sender holds; a server
     that keeps its leases elsewhere overrides this one method.
-  - **`.handle_decline()`** quarantines only an address the sender holds**: the
-    address option 50 names (else `ciaddr`, else the one the sender holds) must be
-    the sender's own binding or outstanding offer according to `lookup_lease`,
-    lie in the served network, and option 54, when present, must name this server.
-    The sender's lease is then released and the address quarantined
-    (`leases_declined`). Any other DECLINE changes nothing and is counted in
-    `declines_ignored`: client identifiers are unauthenticated, so a DECLINE from
-    another client for a held address, for an address nobody was offered, for one
-    outside the network or for the server's own would otherwise take addresses
-    out of the pool at one packet each.
+  - **`.handle_decline()`** quarantines the address option 50 names (else `ciaddr`, else
+    the one the sender holds), **whoever sent it** (RFC 2131 §4.3.3: "MUST mark the
+    network address as not available"): it must lie in the served network, not be this
+    host's own (unless the sender holds a lease on it), and option 54, when present, must
+    name this server. A record the sender holds for it, as a binding or an offer, is
+    released too (`leases_declined`); any other DECLINE changes nothing and is counted
+    in `declines_ignored`. A forged one is contained by `MAX_DECLINED_ADDRESSES` and
+    `DECLINE_QUARANTINE_SECONDS`. **`DECLINE_REQUIRES_LEASE`** (class attribute, `False`)
+    is the stricter rule, which departs from that MUST: only an address the sender holds.
   - **Options 50, 51, 54 and 57 are decoded once, at the top of `.handle()`**,
     inside one guard: a wrong-length option 50 or 54 (the message cannot say which
     address or which server) drops the message, counted in

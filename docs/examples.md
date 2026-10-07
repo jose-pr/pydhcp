@@ -77,8 +77,9 @@ asked about a client in four places: INIT-REBOOT, RELEASE, DECLINE and a REQUEST
 names another server. The first goes through `acquire_lease()`; the others ask
 `lookup_lease(client_id)`, which reads `lease_backend` unless you override it, and a
 release reaches your store through `release_lease()`. Override those two when the leases
-are not in `lease_backend`. A DHCPDECLINE quarantines an address only when `lookup_lease()`
-says the sender holds it. When you do store leases in `lease_backend`, answer a
+are not in `lease_backend`. A DHCPDECLINE quarantines the address it names whoever sent it, and
+`lookup_lease()` says whether the sender's own record is released with it
+(`DECLINE_REQUIRES_LEASE = True` marks only an address the sender holds). When you do store leases in `lease_backend`, answer a
 `commit=False` call with `offer` and a `commit=True` call with `commit`, so that an address
 offered to a client that never accepts is given back.
 

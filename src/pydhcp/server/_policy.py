@@ -342,7 +342,13 @@ class _LeasePolicy(_InputGuard):
         held: _ty.Optional[DHCPLease],
         actual_server_id: _ipaddress.IPv4Address,
     ) -> _ty.Optional[str]:
-        """Say why a DHCPDECLINE must not quarantine `declined`, or None if it may."""
+        """Say why a DHCPDECLINE must not quarantine `declined`, or None if it may.
+
+        RFC 2131 s4.3.3 does not ask who sent it, so by default an address
+        inside the served network that is not this host's own is marked
+        whoever reports it, within the quarantine's bounds;
+        `DECLINE_REQUIRES_LEASE` asks for a lease of the sender's on it.
+        """
         if declined is None:
             return "it names no address"
         server_id = msg.options.get(
@@ -352,13 +358,20 @@ class _LeasePolicy(_InputGuard):
             server_id, actual_server_id
         ):
             return f"it names another server, {server_id}"
-        if held is None:
-            return "the sender holds no lease"
-        if held.ip != declined:
-            return f"the sender holds {held.ip}, not {declined}"
+        if self.DECLINE_REQUIRES_LEASE:
+            if held is None:
+                return "the sender holds no lease"
+            if held.ip != declined:
+                return f"the sender holds {held.ip}, not {declined}"
         served = _servable_interface(actual_server_id)
         if served is None or declined not in served.network:
             return f"{declined} is outside the served network"
+        if self._is_our_server_id(declined, actual_server_id) and not (
+            held is not None and held.ip == declined
+        ):
+            # A lease the sender holds on it is the store's word that it is the
+            # sender's to give back; without one, a host's own address is not.
+            return f"{declined} is this server's own address"
         return None
 
     def is_quarantined(

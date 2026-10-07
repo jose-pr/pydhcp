@@ -17,6 +17,7 @@ from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
+from pydhcp import AsyncDHCPServer
 from pydhcp.server import DHCPServer
 from helpers import build_request
 
@@ -208,7 +209,7 @@ def test_a_request_naming_another_server_keeps_a_binding(server, monkeypatch) ->
     assert server.metrics.leases_released == 0
 
 
-# --- DHCPDECLINE quarantines only what the sender holds ------------------------
+# --- DHCPDECLINE marks the address it names, whoever sent it (RFC 2131 s4.3.3) ---
 
 OTHER_CHADDR = bytes([0x02, 0, 0, 0, 0x0B, 0xAD])
 
@@ -226,6 +227,19 @@ def _decline_from(
 
 def _holder_id() -> str:
     return _message(DHCPMessageType.DHCPREQUEST).get_client_id()
+
+
+@pytest.fixture(params=[DHCPServer, AsyncDHCPServer], ids=["thread", "asyncio"])
+def either(request, served):
+    """The server of each driver, serving 10.0.0.0/24 from 10.0.0.1."""
+    return request.param(lease_backend=InMemoryLeaseBackend())
+
+
+def _discover_for(chaddr: bytes, address: str) -> DHCPMessage:
+    options = DHCPOptions()
+    options[DHCPOptionCode.DHCP_MESSAGE_TYPE] = DHCPMessageType.DHCPDISCOVER
+    options[DHCPOptionCode.REQUESTED_IP] = IPv4(address)
+    return build_request(options=options, chaddr=chaddr)
 
 
 def test_the_holders_decline_quarantines_its_binding_and_releases_it(
@@ -248,6 +262,131 @@ def test_the_decline_of_an_outstanding_offer_quarantines_it(server, served) -> N
     assert server.metrics.leases_declined == 1
 
 
+def test_a_decline_from_a_client_that_holds_nothing_quarantines_the_address(
+    either,
+) -> None:
+    """RFC 2131 s4.3.3: "The server MUST mark the network address as not available"."""
+    either.handle(_decline_from(OTHER_CHADDR, "10.0.0.60"), _context(IFACE_A))
+
+    assert either.is_quarantined(IPv4("10.0.0.60"))
+    assert either.metrics.leases_declined == 1
+    assert either.metrics.declines_ignored == 0
+
+
+def test_the_next_discover_for_a_declined_address_gets_no_offer(either) -> None:
+    either.handle(_decline_from(OTHER_CHADDR, "10.0.0.60"), _context(IFACE_A))
+
+    asked = _context(IFACE_A)
+    either.handle(_discover_for(CHADDR, "10.0.0.60"), asked)
+
+    assert asked.transport.send.call_count == 0
+    assert either.lease_backend.lookup(_holder_id()) is None
+
+
+def test_an_address_not_declined_is_still_offered(either) -> None:
+    """The control of the test above: the same DISCOVER for another address is answered."""
+    either.handle(_decline_from(OTHER_CHADDR, "10.0.0.60"), _context(IFACE_A))
+
+    asked = _context(IFACE_A)
+    either.handle(_discover_for(CHADDR, "10.0.0.61"), asked)
+
+    assert asked.transport.send.call_count == 1
+
+
+@pytest.mark.parametrize(
+    "address, why",
+    [
+        ("10.0.0.50", "another client's binding"),
+        ("10.0.0.51", "an address nobody was offered"),
+    ],
+)
+def test_a_decline_from_a_client_that_does_not_hold_the_address_marks_it(
+    either, address, why
+) -> None:
+    holder = _seed(either, "10.0.0.50")
+    either.handle(_decline_from(OTHER_CHADDR, address), _context(IFACE_A))
+    assert either.is_quarantined(IPv4(address)), why
+    # Only a record the sender holds is released: the other client keeps its own.
+    assert either.lease_backend.lookup(holder) is not None
+    assert either.metrics.leases_declined == 1
+    assert either.metrics.declines_ignored == 0
+
+
+@pytest.mark.parametrize(
+    "address, why",
+    [
+        ("198.51.100.7", "an address outside the served network"),
+        ("10.0.0.1", "the server's own address"),
+    ],
+)
+def test_a_decline_for_an_address_that_cannot_be_served_changes_nothing(
+    either, address, why
+) -> None:
+    holder = _seed(either, "10.0.0.50")
+    either.handle(_decline_from(OTHER_CHADDR, address), _context(IFACE_A))
+    assert not either.is_quarantined(IPv4(address)), why
+    assert either.lease_backend.lookup(holder) is not None
+    assert either.metrics.declines_ignored == 1
+    assert either.metrics.leases_declined == 0
+
+
+def test_a_decline_of_the_servers_own_address_the_sender_holds_a_lease_on_is_believed(
+    either,
+) -> None:
+    """The store's record is the sender's: an override that leases it is not second-guessed."""
+    _seed(either, "10.0.0.1")
+    either.handle(_decline_from(CHADDR, "10.0.0.1"), _context(IFACE_A))
+    assert either.is_quarantined(IPv4("10.0.0.1"))
+    assert either.lease_backend.lookup(_holder_id()) is None
+
+
+def test_a_decline_naming_another_address_than_the_one_held_marks_that_one(
+    either,
+) -> None:
+    """The sender's own binding is another address, and stays: only what it holds is released."""
+    holder = _seed(either, "10.0.0.50")
+    either.handle(_decline_from(CHADDR, "10.0.0.51"), _context(IFACE_A))
+    assert either.is_quarantined(IPv4("10.0.0.51"))
+    assert not either.is_quarantined(IPv4("10.0.0.50"))
+    held = either.lease_backend.lookup(holder)
+    assert held is not None and held.ip == IPv4("10.0.0.50")
+    assert either.metrics.leases_declined == 1
+
+
+def test_a_decline_from_a_client_that_holds_nothing_is_bounded(either) -> None:
+    """The bound a holder's decline has: a new address is refused, no older one pushed out."""
+    either.MAX_DECLINED_ADDRESSES = 2
+    for last in (60, 61, 62, 63):
+        either.handle(_decline_from(OTHER_CHADDR, f"10.0.0.{last}"), _context(IFACE_A))
+    assert either.is_quarantined(IPv4("10.0.0.60"))
+    assert either.is_quarantined(IPv4("10.0.0.61"))
+    assert not either.is_quarantined(IPv4("10.0.0.62"))
+    assert not either.is_quarantined(IPv4("10.0.0.63"))
+    assert either.metrics.quarantines_refused == 2
+
+
+def test_a_decline_from_a_client_that_holds_nothing_and_names_another_server_is_ignored(
+    either, monkeypatch
+) -> None:
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
+    monkeypatch.setattr(
+        "pydhcp.server._policy._netimps.is_local_address", lambda a, **_k: False
+    )
+    either.handle_decline(
+        _decline_from(OTHER_CHADDR, "10.0.0.60", IPv4("192.0.2.77")), _context(IFACE_A)
+    )
+    assert not either.is_quarantined(IPv4("10.0.0.60"))
+    assert either.metrics.declines_ignored == 1
+
+
+# --- DECLINE_REQUIRES_LEASE: the stricter rule, for a site that wants it ---------
+
+
+def test_the_switch_is_a_class_attribute_that_is_off() -> None:
+    assert DHCPServer.DECLINE_REQUIRES_LEASE is False
+    assert AsyncDHCPServer.DECLINE_REQUIRES_LEASE is False
+
+
 @pytest.mark.parametrize(
     "address, why",
     [
@@ -257,26 +396,39 @@ def test_the_decline_of_an_outstanding_offer_quarantines_it(server, served) -> N
         ("10.0.0.1", "the server's own address"),
     ],
 )
-def test_a_decline_from_a_client_that_does_not_hold_the_address_changes_nothing(
-    server, served, address, why
+def test_with_the_switch_a_decline_from_a_client_that_does_not_hold_the_address_changes_nothing(
+    either, address, why
 ) -> None:
-    holder = _seed(server, "10.0.0.50")
-    server.handle(_decline_from(OTHER_CHADDR, address), _context(IFACE_A))
-    assert not server.is_quarantined(IPv4(address)), why
-    assert server.lease_backend.lookup(holder) is not None
-    assert server.metrics.declines_ignored == 1
-    assert server.metrics.leases_declined == 0
+    either.DECLINE_REQUIRES_LEASE = True
+    holder = _seed(either, "10.0.0.50")
+    either.handle(_decline_from(OTHER_CHADDR, address), _context(IFACE_A))
+    assert not either.is_quarantined(IPv4(address)), why
+    assert either.lease_backend.lookup(holder) is not None
+    assert either.metrics.declines_ignored == 1
+    assert either.metrics.leases_declined == 0
 
 
-def test_a_decline_naming_another_address_than_the_one_held_changes_nothing(
-    server, served
+def test_with_the_switch_a_decline_naming_another_address_than_the_one_held_changes_nothing(
+    either,
 ) -> None:
-    holder = _seed(server, "10.0.0.50")
-    server.handle(_decline_from(CHADDR, "10.0.0.51"), _context(IFACE_A))
-    assert not server.is_quarantined(IPv4("10.0.0.51"))
-    assert not server.is_quarantined(IPv4("10.0.0.50"))
-    assert server.lease_backend.lookup(holder) is not None
-    assert server.metrics.declines_ignored == 1
+    either.DECLINE_REQUIRES_LEASE = True
+    holder = _seed(either, "10.0.0.50")
+    either.handle(_decline_from(CHADDR, "10.0.0.51"), _context(IFACE_A))
+    assert not either.is_quarantined(IPv4("10.0.0.51"))
+    assert not either.is_quarantined(IPv4("10.0.0.50"))
+    assert either.lease_backend.lookup(holder) is not None
+    assert either.metrics.declines_ignored == 1
+
+
+def test_with_the_switch_the_holders_decline_still_quarantines_and_releases(
+    either,
+) -> None:
+    either.DECLINE_REQUIRES_LEASE = True
+    _seed(either, "10.0.0.50")
+    either.handle(_decline_from(CHADDR, "10.0.0.50"), _context(IFACE_A))
+    assert either.is_quarantined(IPv4("10.0.0.50"))
+    assert either.lease_backend.lookup(_holder_id()) is None
+    assert either.metrics.leases_declined == 1
 
 
 def test_a_held_address_outside_the_served_network_is_not_quarantined(
@@ -289,7 +441,7 @@ def test_a_held_address_outside_the_served_network_is_not_quarantined(
     assert server.metrics.declines_ignored == 1
 
 
-def test_a_decline_naming_another_server_is_ignored(
+def test_a_decline_from_a_holder_naming_another_server_is_ignored(
     server, served, monkeypatch
 ) -> None:
     """Option 54 is the one thing a DECLINE says about who it is for."""

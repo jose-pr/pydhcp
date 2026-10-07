@@ -336,8 +336,7 @@ It differs on purpose in these ways, each asserted by the suite as this library 
 | `client-option-order` | ISC dhclient 4.4.3-P1 lists the message type, then the server identifier, then the requested address in REQUEST and DECLINE; this library lists the requested address before the server identifier; the order carries no meaning. |
 | `relay-hop-limit` | A request whose 'hops' is 5 is relayed by dnsmasq 2.92 and dropped by this library, whose limit is 4 and is set by `max_hops`. |
 
-One difference is open and the suite holds it as an expected failure: a DHCPDECLINE from a
-sender that holds no lease is ignored. The features each role covers, and which are implemented, are in the
+The features each role covers, and which are implemented, are in the
 [conformance page](https://jose-pr.github.io/pydhcp/conformance/) of the documentation.
 
 ## Development

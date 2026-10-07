@@ -35,7 +35,7 @@ case is not recorded: the reference cannot produce it, or no case asks it yet. O
 | server | DHCPINFORM answered with an ACK that carries no address | RFC 2131 s4.3.5 | yes | `server-inform` |  |
 | server | DHCPRELEASE | RFC 2131 s4.3.4 | yes | `server-release` |  |
 | server | DHCPDECLINE of an address the sender holds | RFC 2131 s4.3.3 | yes | `server-decline` | The address is quarantined. |
-| server | DHCPDECLINE from a sender that holds no lease | RFC 2131 s4.3.3 | no | `server-decline-without-a-lease` | Ignored; an open difference. |
+| server | DHCPDECLINE from a sender that holds no lease | RFC 2131 s4.3.3 | yes | `server-decline-without-a-lease` | The address is quarantined whoever sent it; `DECLINE_REQUIRES_LEASE` restores the stricter rule. |
 | server | Renewal and rebinding times (options 58 and 59) in OFFER and ACK | RFC 2131 s4.4.5 | yes |  | Half and seven eighths of the lease time in the same reply, without fuzz; every server case compares both options. |
 | server | An address pool | RFC 2131 s4.3.1 | no |  | The stock server has no pool: a subclass supplies leases through `acquire_lease`. |
 | server | Static host-to-address assignments | RFC 2131 s4.3.1 | no |  | Through a subclass, as for a pool. |

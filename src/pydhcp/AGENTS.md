@@ -233,8 +233,8 @@ DHCPMetrics.snapshot()
     `packets_dropped_malformed_option` (a message dropped for an option 50 or 54 of
     the wrong length), `options_ignored_malformed` (an option 51 or 57 of the wrong
     length, treated as absent), `declines_ignored` (a DHCPDECLINE that quarantined
-    nothing: the sender holds no lease for the address, it is outside the served
-    network, or option 54 names another server) and `quarantines_refused` (an
+    nothing: the address is outside the served network or the server's own, or option 54
+    names another server; with `DECLINE_REQUIRES_LEASE`, one the sender does not hold) and `quarantines_refused` (an
     address the full quarantine refused).
   - **`leases_offered` counts offers, `leases_allocated` counts commits.** A
     DHCPOFFER holds an address (`offer`) and adds one to `leases_offered`; the

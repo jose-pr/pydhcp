@@ -1,9 +1,1 @@
-[
- {
-  "case": "server-decline-without-a-lease",
-  "aspects": [
-   "discover count"
-  ],
-  "reason": "A DHCPDECLINE from a sender that holds no lease is ignored here and retires the address in dnsmasq 2.92; RFC 2131 s4.3.3 says 'The server MUST mark the network address as not available'."
- }
-]
+[]
