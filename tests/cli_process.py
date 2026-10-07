@@ -89,9 +89,14 @@ def run_cli(
 
 
 def free_port() -> int:
-    """A UDP port on 127.0.0.1 nothing holds right now."""
+    """A UDP port nothing holds on any address right now.
+
+    Asked of the wildcard address: a number free on 127.0.0.1 may be held on
+    another address of the host, and a command told to listen on every address
+    is then refused.
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
-        probe.bind(("127.0.0.1", 0))
+        probe.bind(("0.0.0.0", 0))
         return int(probe.getsockname()[1])
 
 
