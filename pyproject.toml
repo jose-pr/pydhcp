@@ -41,8 +41,17 @@ pydhcp = "pydhcp.cli:main"
 # One extra per capability. `dev` refers to them by name, so a development
 # install exercises all of them and no range is written twice.
 cli = ['duho>=0.6.0,<0.7']
-yaml = ['PyYAML>=6.0']
-toml = ['tomli-w>=1.2.0', 'tomli>=2.4.0; python_version < "3.11"']
+# PyYAML is 1.0-and-above in spirit (6.x, one API in use: safe_load and
+# safe_dump), so it is major-scoped. The floor is the lowest release that
+# installs: 6.0 has wheels only for Python 3.9 to 3.11 and none for Windows on
+# ARM64, and from source it does not build (it needs a Cython older than the one
+# a build gets), so there the floor is 6.0.1, which builds from source.
+yaml = [
+    'PyYAML>=6.0,<7; python_version < "3.12" and (sys_platform != "win32" or platform_machine != "ARM64")',
+    'PyYAML>=6.0.1,<7; python_version >= "3.12" or (sys_platform == "win32" and platform_machine == "ARM64")',
+]
+# tomli-w: dumps(); tomli: loads() and TOMLDecodeError; both present in these floors.
+toml = ['tomli-w>=1.0,<2', 'tomli>=2.0,<3; python_version < "3.11"']
 dev = ['pydhcp[cli,yaml,toml]', 'black', 'build', 'twine', 'hatchling', 'mypy', 'pip-audit', 'pytest', 'pytest-cov', 'hypothesis>=6.100']
 docs = ['mkdocs', 'mkdocs-material', 'mkdocstrings[python]']
 

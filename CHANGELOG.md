@@ -168,6 +168,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the `capture` format without an ending and the configuration format are JSON or come from the
   file's name.
 
+- **Dependency ranges are scoped to a series and their floors install**: `PyYAML>=6.0,<7` (the floor
+  is 6.0.1 on Windows on ARM64 and from Python 3.12, where 6.0 has no wheel and does not build),
+  `tomli>=2.0,<3` (below Python 3.11), `tomli-w>=1.0,<2`; they were open-ended, with floors of
+  `tomli-w` 1.2.0 and `tomli` 2.4.0 that no API in use needs. The suite passes with each at its floor.
+
 - **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
   `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
   `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is
