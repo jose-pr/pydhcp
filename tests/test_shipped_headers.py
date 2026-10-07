@@ -408,6 +408,7 @@ def _namespace():
     import ipaddress
 
     space = {}
+    # private: the headers print defaults that name the size constants and the address types
     for name in ("pydhcp._constants", "pydhcp._network", *reversed(PUBLIC)):
         space.update(vars(importlib.import_module(name)))
     space.update(
