@@ -26,7 +26,8 @@ src/pydhcp/        the package (src layout: an editable install or PYTHONPATH is
 tests/             pytest suite (tests/AGENTS.md)
 examples/          runnable examples; tests/test_examples.py imports each one
 benchmarks/        run.py plus per-suite scripts, JSON output for comparison
-docs/              mkdocs site (mkdocs.yml at the root)
+docs/              mkdocs site (mkdocs.yml at the root); `python docs/options_table.py --write`
+                   regenerates the options table of options.md after a registry change
 ```
 
 ## Environment

@@ -10,6 +10,10 @@ edit_uri: edit/main/docs/
 # repo-level markdown.
 docs_dir: docs
 
+# The generator of the options table sits beside the page it writes.
+exclude_docs: |
+  options_table.py
+
 theme:
   name: material
   palette:
