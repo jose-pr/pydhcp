@@ -17,7 +17,7 @@ import typing as _ty
 
 import pytest
 
-from conftest import build_request
+from helpers import build_request
 from pydhcp import DHCPMessage, DHCPOptions, DHCPValueError
 from pydhcp.options import DHCPOptionCode
 from pydhcp.options import _codecs as codecs

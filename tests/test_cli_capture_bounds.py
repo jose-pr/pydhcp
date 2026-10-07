@@ -17,7 +17,7 @@ import stat
 import pytest
 
 from cli_process import Running, free_port, run_cli
-from conftest import build_request
+from helpers import build_request
 from pydhcp.options import DHCPOptionCode
 
 

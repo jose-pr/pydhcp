@@ -304,7 +304,6 @@ def test_expired_leases_are_reclaimed_before_refusing():
     for n in range(backend.MAX_LEASES):
         backend.allocate(f"transient-{n}", _host(n), 0)  # already expiring
 
-    time.sleep(0.01)
     assert backend.allocate("newcomer", IPv4Address("10.0.0.2"), 3600) is not None
     assert backend.lookup("newcomer") is not None
 

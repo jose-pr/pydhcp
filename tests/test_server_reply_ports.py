@@ -16,7 +16,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from conftest import (
+from helpers import (
     CHADDR,
     LOOPBACK_ALIAS_BINDABLE,
     FixedLeaseServer,

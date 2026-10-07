@@ -21,7 +21,7 @@ from ipaddress import IPv4Address as IPv4
 
 import pytest
 
-from conftest import CHADDR, FixedLeaseServer, running
+from helpers import CHADDR, FixedLeaseServer, await_until, running
 from driving import LOOPS, WAIT_SECONDS, threads_settle
 from pydhcp import (
     AsyncDHCPClient,
@@ -230,7 +230,10 @@ def test_an_exchange_gives_up_after_the_schedule_and_not_before(
                 elapsed = time.monotonic() - began
                 assert client._pending_keys == set()
                 assert client._waiters == {}
-                await asyncio.sleep(0.1)  # the last datagram has reached the peer
+                await await_until(
+                    lambda: len(peer.received) >= 2,
+                    "the last datagram to reach the peer",
+                )
                 return elapsed, list(peer.received), client.metrics.packets_sent
         finally:
             peer.close()
@@ -473,7 +476,7 @@ def test_next_reply_waits_for_a_reply(loop_type: type) -> None:
         async with AsyncDHCPClient(listen=LOCAL) as client:
             await client.start()
             waiting = asyncio.ensure_future(client.next_reply(timeout=3.0))
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0)  # the call runs up to its wait
             assert not waiting.done()
             client.handle(_reply(5), None)  # type: ignore[arg-type]
             got = await asyncio.wait_for(waiting, WAIT_SECONDS)
@@ -668,7 +671,10 @@ def test_a_deadline_bounds_the_whole_call(loop_type: type) -> None:
                     )
                 assert isinstance(raised.value, TimeoutError)
                 elapsed = time.monotonic() - began
-                await asyncio.sleep(0.1)
+                await await_until(
+                    lambda: len(peer.received) >= 2,
+                    "the last datagram to reach the peer",
+                )
                 return elapsed, len(peer.received)
         finally:
             peer.close()

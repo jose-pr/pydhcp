@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
+import select
 import signal
 import socket
 import subprocess
@@ -23,7 +24,7 @@ import typing as _ty
 
 import pytest
 
-from conftest import LOOPBACK_ALIAS_BINDABLE, build_request, wait_bound
+from helpers import LOOPBACK_ALIAS_BINDABLE, build_request, wait_bound, wait_until
 from driving import LOOPS, WAIT_SECONDS, threads_settle, wait_for
 from pydhcp.capture import AsyncDHCPCapture, DHCPCapture
 from pydhcp.client import AsyncDHCPClient, DHCPClient
@@ -277,7 +278,13 @@ def test_a_handler_that_shuts_down_is_not_called_again_in_the_same_turn() -> Non
     for address in addresses:
         sender.sendto(payload, address)
     sender.close()
-    time.sleep(0.3)  # let all three land, so one select() reports all three
+    # All three on the sockets before the loop starts, so one select() reports all
+    # three. The listener's sockets are private; they are the only thing to ask.
+    sockets = list(listener._sockets)
+    wait_until(
+        lambda: len(select.select(sockets, [], [], 0)[0]) == len(sockets),
+        "all three datagrams to be queued",
+    )
 
     # Serving begins with the loop; `shutdown()` needs it to have been claimed,
     # which `serve_forever()` does before it receives anything.
@@ -492,7 +499,7 @@ def test_aclose_from_another_task_ends_serve_forever_quietly(loop_type: type) ->
     async def main() -> None:
         listener = _make(AsyncDHCPListener)
         serving = asyncio.ensure_future(listener.serve_forever())
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0)  # the task runs up to the wait for `shutdown()`
         assert not serving.done()
         sockets = list(listener._sockets)
         await listener.aclose()
@@ -507,7 +514,7 @@ def test_serve_forever_leaves_the_sockets_to_aclose(loop_type: type) -> None:
     async def main() -> None:
         listener = _make(AsyncDHCPListener)
         serving = asyncio.ensure_future(listener.serve_forever())
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(0)  # the task runs up to the wait for `shutdown()`
         listener.shutdown()
         await asyncio.wait_for(serving, WAIT_SECONDS)
         assert listener.bound_addresses

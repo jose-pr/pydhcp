@@ -13,7 +13,7 @@ import socket
 
 import pytest
 
-from conftest import DUPLICATE_UDP_BIND_ALLOWED, LOOPBACK_ALIAS_BINDABLE
+from helpers import DUPLICATE_UDP_BIND_ALLOWED, LOOPBACK_ALIAS_BINDABLE
 
 from pydhcp.listener import DHCPListener
 

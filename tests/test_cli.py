@@ -35,7 +35,7 @@ from pydhcp.options import DHCPOptionCode
 from netimps import MACAddress
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
-from conftest import build_request
+from helpers import build_request
 
 
 def test_cmd_interfaces(capsys, monkeypatch) -> None:

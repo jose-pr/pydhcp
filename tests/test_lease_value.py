@@ -17,7 +17,7 @@ from ipaddress import IPv4Address as IPv4
 from unittest.mock import Mock
 
 import pytest
-from conftest import build_request
+from helpers import build_request
 
 from pydhcp import (
     DHCPLease,

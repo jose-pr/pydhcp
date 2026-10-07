@@ -15,7 +15,7 @@ import pytest
 from pydhcp import DHCPDecodeError, DHCPMessage, DHCPOptionCode, DHCPOptions
 from pydhcp import DHCPValueError
 from pydhcp.options import Bytes, DHCPOptionType, OptionCodec
-from conftest import build_request
+from helpers import build_request
 
 CODE = 224
 FORMATS = ("json", "yaml", "toml", "ini")

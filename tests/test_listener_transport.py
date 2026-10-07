@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import select
 import socket
 import threading
 import time
 
 import pytest
 
-from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
+from helpers import LOOPBACK_ALIAS_BINDABLE, build_request
 from driving import LOOPS
 import ipaddress
 
@@ -548,7 +549,15 @@ def test_a_reply_to_a_vanished_client_does_not_cost_the_next_datagram(caplog) ->
     address = listener.bound_addresses[0]
     # The reply to the vanished client, from the listening socket itself.
     listener._sockets[0].sendto(b"x" * 20, ("127.0.0.1", closed_port))
-    time.sleep(0.1)
+    # The port-unreachable is queued by the stack after the send, and nothing
+    # reports it on the listener's own socket. A connected probe sending to the
+    # same dead port is readable once its own error is in, which is after the
+    # first one was.
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as probe:
+        probe.connect(("127.0.0.1", closed_port))
+        probe.send(b"x")
+        ready, _, _ = select.select([probe], [], [], 3.0)
+        assert ready, "the stack never reported the port as unreachable"
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sender.sendto(build_request().encode(), (str(address.ip), address.port))
     sender.close()

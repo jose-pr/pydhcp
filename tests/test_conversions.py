@@ -26,7 +26,7 @@ from pydhcp.packet import (
     HardwareAddressType,
     structured,
 )
-from conftest import build_request
+from helpers import build_request
 
 DATA = pathlib.Path(__file__).parent / "data"
 FORMATS = ("json", "yaml", "toml", "ini")

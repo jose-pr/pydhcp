@@ -13,7 +13,7 @@ import ipaddress
 import typing as _ty
 from unittest.mock import Mock
 
-from conftest import build_request
+from helpers import build_request
 from pydhcp import (
     DHCPLease,
     DHCPMessage,

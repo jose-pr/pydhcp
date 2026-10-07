@@ -16,7 +16,7 @@ from pydhcp.packet import (
     DHCPOpcode,
     HardwareAddressType,
 )
-from conftest import CHADDR, build_request
+from helpers import CHADDR, build_request
 
 
 def _wire(chaddr_len: int, htype: int = 1, *, hlen: "int | None" = None) -> bytes:

@@ -30,7 +30,7 @@ from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
 from pydhcp.packet import DHCPMessageType
 
-from conftest import build_request
+from helpers import build_request
 from hook_programs import python_hook
 
 

@@ -33,7 +33,7 @@ from pydhcp.packet import DHCPMessageType
 # The allocator reads the host's adapters through this name in the private
 # module that owns it; a test serves a fixed interface by replacing it there.
 from pydhcp.server import _policy
-from conftest import build_request
+from helpers import build_request
 
 UTC = dt.timezone.utc
 T0 = dt.datetime(2026, 10, 6, 12, 0, 0, tzinfo=UTC)

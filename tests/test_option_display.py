@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from conftest import build_request
+from helpers import build_request
 from pydhcp import DHCPMessage, DHCPOptions
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType

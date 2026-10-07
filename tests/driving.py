@@ -10,21 +10,15 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import sys
 import threading
 import time
 import typing as _ty
 
 import pytest
 
-from conftest import running
+from helpers import LOOPS, running
 
 WAIT_SECONDS = 3.0
-
-if sys.platform == "win32":
-    LOOPS = [asyncio.ProactorEventLoop, asyncio.SelectorEventLoop]  # type: ignore[attr-defined]
-else:
-    LOOPS = [asyncio.SelectorEventLoop]
 
 
 def driver_params(sync_class: type, async_class: type) -> "list[_ty.Any]":

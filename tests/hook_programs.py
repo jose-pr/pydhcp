@@ -21,7 +21,7 @@ from unittest.mock import MagicMock
 
 from pydhcp import CaptureEvent, DHCPRequestContext, NetworkInterface, SocketAddress
 from pydhcp.options import DHCPOptionCode
-from conftest import build_request
+from helpers import build_request
 
 
 def python_hook(directory: pathlib.Path, name: str, source: str) -> pathlib.Path:

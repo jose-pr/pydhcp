@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
+from helpers import LOOPBACK_ALIAS_BINDABLE, LOOPS, build_request, run_on
 from pydhcp import DHCPServer
 import netimps
 
@@ -41,8 +41,10 @@ needs_pktinfo = pytest.mark.skipif(
 
 
 def test_packet_info_is_available_where_netimps_supports_it() -> None:
-    if not sys.platform.startswith(_PKTINFO_PLATFORMS):
-        pytest.skip(f"packet info is not promised on {sys.platform}")
+    """Where netimps promises packet info it must report it; elsewhere the probe decides."""
+    promised = sys.platform.startswith(_PKTINFO_PLATFORMS)
+    if not promised and not netimps.has_pktinfo(socket.AF_INET):
+        pytest.skip(f"netimps reports no packet info on {sys.platform}")
     assert netimps.has_pktinfo(socket.AF_INET), (
         f"packet info reported unavailable on {sys.platform} "
         f"{sys.version.split()[0]}"
@@ -162,21 +164,39 @@ def test_a_wildcard_server_allocates_and_replies(spec) -> None:
     assert reply.options.get(DHCPOptionCode.SERVER_IDENTIFIER) == IPv4("127.0.0.1")
 
 
-@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="Linux semantics")
+def _a_broadcast_reaches_a_wildcard_socket() -> bool:
+    """Does a datagram sent to the loopback network's broadcast address arrive at a
+    socket bound to the wildcard, on this host?
+
+    The limited broadcast leaves by the default interface, so it is not a
+    datagram a test may send; the loopback network's own broadcast address stays
+    on the host and is the one the wildcard-versus-address distinction can be
+    observed with.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as receiver:
+        receiver.bind(("0.0.0.0", 0))
+        receiver.settimeout(1.0)
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sender:
+            sender.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            try:
+                sender.sendto(b"probe", ("127.255.255.255", receiver.getsockname()[1]))
+                receiver.recv(16)
+            except OSError:
+                return False
+    return True
+
+
+@pytest.mark.skipif(
+    not _a_broadcast_reaches_a_wildcard_socket(),
+    reason="a datagram to 127.255.255.255 does not reach a wildcard socket here",
+)
 @pytest.mark.parametrize("spelling", ["tuple", "0.0.0.0:p", "*:p"])
 def test_every_wildcard_spelling_hears_a_limited_broadcast(spelling) -> None:
     """The failure the spelling bug produced: on Linux an address-bound socket
-    receives no limited broadcast. Measured before the fix: 0 of 3 seen for the
-    string spellings, 3 of 3 for the tuple."""
-    probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    probe.bind(("0.0.0.0", 0))
-    port = probe.getsockname()[1]
-    probe.close()
-    spec = {
-        "tuple": ("0.0.0.0", port),
-        "0.0.0.0:p": f"0.0.0.0:{port}",
-        "*:p": f"*:{port}",
-    }
+    receives no broadcast. Measured before the fix: 0 of 3 seen for the string
+    spellings, 3 of 3 for the tuple. The datagram goes to the loopback network's
+    broadcast address and stays on this host; the port is the one the bind chose."""
+    spec = {"tuple": ("0.0.0.0", 0), "0.0.0.0:p": "0.0.0.0:0", "*:p": "*:0"}
 
     listener = _Recording(listen=spec[spelling], poll_interval=0.05)
     listener.bind()
@@ -184,7 +204,8 @@ def test_every_wildcard_spelling_hears_a_limited_broadcast(spelling) -> None:
     sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sender.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
     try:
-        sender.sendto(build_request().encode(), ("255.255.255.255", port))
+        port = listener.bound_addresses[0].port
+        sender.sendto(build_request().encode(), ("127.255.255.255", port))
         _wait(lambda: listener.contexts)
     finally:
         sender.close()
@@ -193,11 +214,11 @@ def test_every_wildcard_spelling_hears_a_limited_broadcast(spelling) -> None:
     assert listener.contexts, f"{spelling}: the broadcast never arrived"
 
 
-@needs_pktinfo
-def test_the_async_listener_learns_where_a_datagram_arrived() -> None:
-    """On the platform's *default* loop -- Windows' proactor included, where
-    `add_reader` does not exist and the old fallback could carry no packet
-    info at all."""
+def _arrival_through_the_async_listener(loop_type: "type | None") -> "list":
+    """One datagram to a wildcard `AsyncDHCPListener`; the contexts it handled.
+
+    `loop_type` None is the platform's default loop, whatever `asyncio.run` picks.
+    """
 
     class Recording(AsyncDHCPListener):
         def __init__(self, *args, **kwargs) -> None:
@@ -224,8 +245,29 @@ def test_the_async_listener_learns_where_a_datagram_arrived() -> None:
         assert listener.bound_addresses == (), "aclose() did not close the sockets"
         return listener.contexts
 
-    contexts = asyncio.run(scenario())
+    if loop_type is None:
+        return asyncio.run(scenario())  # type: ignore[no-any-return]
+    return run_on(loop_type, scenario())  # type: ignore[no-any-return]
 
+
+def _assert_it_learned_where_it_arrived(contexts: "list") -> None:
     assert contexts, "nothing reached handle()"
     assert contexts[0].local_ip == IPv4("127.0.0.1")
     assert contexts[0].ifindex
+
+
+@needs_pktinfo
+def test_the_async_listener_learns_where_a_datagram_arrived() -> None:
+    """On the platform's *default* loop -- Windows' proactor included, where
+    `add_reader` does not exist and the old fallback could carry no packet
+    info at all."""
+    _assert_it_learned_where_it_arrived(_arrival_through_the_async_listener(None))
+
+
+@needs_pktinfo
+@pytest.mark.parametrize("loop_type", LOOPS, ids=lambda loop: loop.__name__)
+def test_the_async_listener_learns_where_a_datagram_arrived_on_each_loop(
+    loop_type: type,
+) -> None:
+    """The same, on each loop class the platform offers, built directly."""
+    _assert_it_learned_where_it_arrived(_arrival_through_the_async_listener(loop_type))

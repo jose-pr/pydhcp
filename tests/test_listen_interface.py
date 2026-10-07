@@ -17,7 +17,7 @@ import netimps
 import pytest
 from driving import LOOPS
 
-from conftest import build_request
+from helpers import build_request
 from pydhcp import AsyncDHCPListener, DHCPListener
 
 # the arrival record is not public

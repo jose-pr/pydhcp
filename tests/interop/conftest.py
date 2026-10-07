@@ -131,3 +131,9 @@ def record_case(
     (target / "case.json").write_bytes(
         (json.dumps(document, indent=1) + "\n").encode("utf-8")
     )
+
+
+@pytest.fixture(autouse=True)
+def allow_off_host_destination() -> bool:
+    """These tests exist to send between network namespaces and to real peers."""
+    return True

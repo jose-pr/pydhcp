@@ -6,7 +6,7 @@ from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
-from conftest import LOOPBACK_ALIAS_BINDABLE, build_request
+from helpers import LOOPBACK_ALIAS_BINDABLE, build_request
 
 
 class MockAsyncDHCPServer(AsyncDHCPServer):
@@ -268,7 +268,7 @@ def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
         try:
             keep, drop = server._tasks
             if already_waiting:
-                await asyncio.sleep(0.1)  # let both reach their `arecv`
+                await asyncio.sleep(0)  # both receive tasks run to their `arecv`
             server._listen = server._listen[:1]
             server.bind()
             await asyncio.wait_for(drop, timeout=10.0)

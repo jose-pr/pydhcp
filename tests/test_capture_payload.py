@@ -13,7 +13,7 @@ import typing as _ty
 
 import pytest
 
-from conftest import build_request
+from helpers import build_request
 from driving import driver_params, serve, wait_for
 from capture_input import short_datagram
 from pydhcp import AsyncDHCPCapture, CaptureEvent, DHCPCapture

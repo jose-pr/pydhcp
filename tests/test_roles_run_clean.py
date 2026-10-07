@@ -16,7 +16,7 @@ import typing as _ty
 
 import pytest
 
-from conftest import CHADDR, FixedLeaseServer, build_request, running
+from helpers import CHADDR, FixedLeaseServer, build_request, running
 from driving import LOOPS, WAIT_SECONDS, wait_for
 from pydhcp import DHCPClient
 from pydhcp.capture import AsyncDHCPCapture, DHCPCapture

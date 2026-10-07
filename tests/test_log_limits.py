@@ -37,7 +37,7 @@ from pydhcp.listener._limit import BRIEF_OCTETS, _brief, _LogLimit
 from pydhcp.listener._receive import _arrival
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
-from conftest import build_request
+from helpers import build_request
 
 import netimps
 

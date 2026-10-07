@@ -2,7 +2,7 @@ from pydhcp import DHCPClient, DHCPRelay
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
 from ipaddress import IPv4Address as IPv4
-from conftest import FixedLeaseServer, running
+from helpers import FixedLeaseServer, running
 
 CHADDR = b"\x11\x22\x33\x44\x55\x66"
 

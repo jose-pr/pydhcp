@@ -6,7 +6,7 @@ from pydhcp import DHCPMessage, DHCPOptions
 from pydhcp.packet import DHCPMessageType
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import structured
-from conftest import build_request
+from helpers import build_request
 
 
 def _sample_packet() -> DHCPMessage:

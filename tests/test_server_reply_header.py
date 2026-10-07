@@ -16,7 +16,7 @@ from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.server import DHCPServer
-from conftest import build_request
+from helpers import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
 SERVER_ID = IPv4("10.0.0.1")

@@ -37,7 +37,7 @@ from pydhcp import (
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
-from conftest import CHADDR, build_request
+from helpers import CHADDR, build_request
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 
 SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "pydhcp"

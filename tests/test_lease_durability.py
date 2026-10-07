@@ -432,7 +432,7 @@ def test_the_lease_time_a_client_is_told_never_exceeds_the_policy_across_a_chang
     import ipaddress
     from unittest.mock import Mock
 
-    from conftest import CHADDR, build_request
+    from helpers import CHADDR, build_request
     from pydhcp import (
         DHCPMessage,
         DHCPRequestContext,

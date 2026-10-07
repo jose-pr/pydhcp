@@ -20,7 +20,7 @@ import typing as _ty
 
 import pytest
 
-from conftest import build_request
+from helpers import build_request
 from pydhcp import AsyncDHCPServer
 from pydhcp.capture import AsyncDHCPCapture
 from pydhcp.listener import AsyncDHCPListener
@@ -88,7 +88,7 @@ def test_a_blocked_handler_queues_no_more_than_the_bound(factory: _ty.Any) -> No
             assert listener.metrics.packets_dropped_backlog == 92
             listener.release.set()
             await _until(lambda: listener.handled >= 8)
-            await asyncio.sleep(0.2)
+            await _until(lambda: listener._pending == 0)  # nothing is still in flight
             assert listener.handled == 8
         finally:
             listener.release.set()
@@ -130,7 +130,7 @@ def test_stopping_discards_the_queue_without_errors(
         assert await listener.wait_closed(10.0)
         listener.release.set()
         await _until(lambda: listener.handled >= 1)
-        await asyncio.sleep(0.3)
+        await _until(lambda: listener._pending == 0)  # nothing is still in flight
         await listener.aclose()
         return listener
 

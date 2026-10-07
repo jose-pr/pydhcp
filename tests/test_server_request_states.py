@@ -34,7 +34,7 @@ from pydhcp.packet import DHCPMessageType
 # The allocator reads the host's adapters through this name in the private
 # module that owns it; a test serves a fixed interface by replacing it there.
 from pydhcp.server import _policy
-from conftest import build_request
+from helpers import build_request
 
 SERVED = ipaddress.IPv4Interface("10.0.0.1/24")
 SERVER = SERVED.ip

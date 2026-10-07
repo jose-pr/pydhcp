@@ -16,7 +16,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from conftest import CHADDR, build_request
+from helpers import CHADDR, build_request
 from driving import WAIT_SECONDS, driver_params, serve, wait_for
 from pydhcp import (
     AsyncDHCPCapture,

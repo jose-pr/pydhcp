@@ -42,7 +42,7 @@ from pydhcp.packet import DHCPMessageType
 from ipaddress import IPv4Address as IPv4
 
 from capture_input import short_datagram
-from conftest import build_request
+from helpers import build_request
 
 HEARD = datetime(2026, 7, 14, 12, 30, 15, tzinfo=timezone.utc)
 

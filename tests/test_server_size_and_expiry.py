@@ -16,7 +16,7 @@ from pydhcp import SocketAddress
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from pydhcp.server import DHCPServer
-from conftest import build_request
+from helpers import build_request
 
 CHADDR = bytes([0x00, 0x11, 0x22, 0x33, 0x44, 0x55])
 SERVED = ipaddress.IPv4Interface("10.0.0.1/24")

@@ -17,7 +17,7 @@ from pydhcp.lease import InMemoryLeaseBackend
 from ipaddress import IPv4Address as IPv4
 from pydhcp import SocketAddress
 from pydhcp.server import DHCPServer
-from conftest import build_request
+from helpers import build_request
 
 
 def _message(message_type: DHCPMessageType) -> DHCPMessage:

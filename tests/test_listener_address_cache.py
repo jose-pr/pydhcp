@@ -24,7 +24,7 @@ import ipaddress
 
 import pytest
 
-from conftest import build_request
+from helpers import build_request
 from pydhcp import _network as net  # the host-interface enumeration is not public
 from pydhcp import server as server_module
 from pydhcp.listener import (
