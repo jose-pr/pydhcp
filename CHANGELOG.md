@@ -1108,9 +1108,11 @@ Replace each name in the left column with the one beside it.
   changes nothing and is counted in `declines_ignored`. At `MAX_DECLINED_ADDRESSES` a new
   address is refused (`quarantines_refused`) rather than the oldest evicted. The quarantine
   is applied to whatever lease `acquire_lease` returns, so an override is not offered a
-  declined address again. **`DHCPServer.DECLINE_REQUIRES_LEASE = True`** (class attribute,
-  default `False`) marks only an address the sender holds as a binding or an outstanding
-  offer, which is stricter than the RFC.
+  declined address again. The holder of an address another client declined is answered
+  DHCPNAK at its next renewal, for as long as the quarantine lasts.
+  **`DHCPServer.DECLINE_REQUIRES_LEASE = True`** (class attribute, default `False`) marks
+  only an address the sender holds as a binding or an outstanding offer, which is stricter
+  than the RFC.
 - **A unicast reply whose route leaves by another interface arrives.** Every
   reply on a wildcard socket was pinned to the arrival interface's index, so a
   unicast (a reply to a relay's `giaddr`, a RENEWING client) whose route is through

@@ -312,6 +312,41 @@ def test_a_decline_from_a_client_that_does_not_hold_the_address_marks_it(
     assert either.metrics.declines_ignored == 0
 
 
+def test_the_holder_of_an_address_another_client_declined_is_refused_its_renewal(
+    either,
+) -> None:
+    """What believing a DECLINE costs: the holder of the address is told to start over."""
+    _seed(either, "10.0.0.50")
+    either.handle(_decline_from(OTHER_CHADDR, "10.0.0.50"), _context(IFACE_A))
+
+    renewal = _context(IFACE_A)
+    either.handle(_message(DHCPMessageType.DHCPREQUEST, ciaddr="10.0.0.50"), renewal)
+
+    reply = DHCPMessage.decode(renewal.transport.send.call_args.args[0])
+    assert (
+        reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPNAK
+    )
+    assert either.metrics.addresses_refused == 1
+
+
+def test_with_the_switch_the_holder_keeps_renewing_through_another_clients_decline(
+    either,
+) -> None:
+    """The control of the test above: under the stricter rule the renewal is acknowledged."""
+    either.DECLINE_REQUIRES_LEASE = True
+    _seed(either, "10.0.0.50")
+    either.handle(_decline_from(OTHER_CHADDR, "10.0.0.50"), _context(IFACE_A))
+
+    renewal = _context(IFACE_A)
+    either.handle(_message(DHCPMessageType.DHCPREQUEST, ciaddr="10.0.0.50"), renewal)
+
+    reply = DHCPMessage.decode(renewal.transport.send.call_args.args[0])
+    assert (
+        reply.options.get(DHCPOptionCode.DHCP_MESSAGE_TYPE) == DHCPMessageType.DHCPACK
+    )
+    assert either.metrics.addresses_refused == 0
+
+
 @pytest.mark.parametrize(
     "address, why",
     [

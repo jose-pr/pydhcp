@@ -149,9 +149,10 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
     host's own (unless the sender holds a lease on it), and option 54, when present, must
     name this server. A record the sender holds for it, as a binding or an offer, is
     released too (`leases_declined`); any other DECLINE changes nothing and is counted
-    in `declines_ignored`. A forged one is contained by `MAX_DECLINED_ADDRESSES` and
-    `DECLINE_QUARANTINE_SECONDS`. **`DECLINE_REQUIRES_LEASE`** (class attribute, `False`)
-    is the stricter rule, which departs from that MUST: only an address the sender holds.
+    in `declines_ignored`. A forged one costs the address's holder a DHCPNAK at its next
+    renewal, for at most `MAX_DECLINED_ADDRESSES` addresses and `DECLINE_QUARANTINE_SECONDS`
+    each. **`DECLINE_REQUIRES_LEASE`** (class attribute, `False`) is the stricter rule,
+    which departs from that MUST: only an address the sender holds is marked.
   - **Options 50, 51, 54 and 57 are decoded once, at the top of `.handle()`**,
     inside one guard: a wrong-length option 50 or 54 (the message cannot say which
     address or which server) drops the message, counted in
