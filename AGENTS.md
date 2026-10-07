@@ -121,4 +121,5 @@ runs the real-peer tests (`tests/AGENTS.md`).
 Version lives in `pyproject.toml`. Pre-1.0, a **MINOR** bump means the
 documented API broke — new methods, new optional keyword arguments and fixes
 are all PATCH, so a `~=0.x.0` subscriber gets additions without re-reading.
+Each release gets a `CHANGELOG.md` section and a short `RELEASENOTES.md` entry.
 Pushing a `v*` tag publishes; `ci-*` tags only run CI.

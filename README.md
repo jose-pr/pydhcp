@@ -331,7 +331,8 @@ input or a `ci-bench-*` tag adds the benchmark job.
 ### Releasing
 
 This project follows [Semantic Versioning](https://semver.org/) and keeps a
-[`CHANGELOG.md`](https://github.com/jose-pr/pydhcp/blob/main/CHANGELOG.md). Pushing a tag matching `v*` triggers the release
+[`CHANGELOG.md`](https://github.com/jose-pr/pydhcp/blob/main/CHANGELOG.md) and a
+[`RELEASENOTES.md`](https://github.com/jose-pr/pydhcp/blob/main/RELEASENOTES.md). Pushing a tag matching `v*` triggers the release
 workflow. The docs site is rebuilt and published when a release completes and when a
 documentation change reaches `main`, and can be rebuilt on demand from any ref (`docs.yml`,
 run manually).

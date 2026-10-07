@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+This release breaks the documented API: names, public module paths, constructor signatures, the
+lifecycle of every role, the extras and what malformed input raises. Old names are not kept as
+aliases. "Added" lists what is new, "Changed" has the detail of each behaviour that differs,
+"Renamed" is the lookup from an old name to its new one, "Removed" lists what is gone and "Fixed"
+the defects corrected on the way. [RELEASENOTES.md](https://github.com/jose-pr/pydhcp/blob/main/RELEASENOTES.md) has the short version for
+someone upgrading from 0.7.0.
+
 ### Added
 
 - **A `Bound: <address>` record (INFO) after each listening socket is bound**, with the port the kernel gave: `Listening on:` is
@@ -136,7 +143,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Two more counters in `DHCPMetrics`**: `informs_ignored` (a DHCPINFORM whose
   `ciaddr` the server will not answer) and `relay_info_omitted` (a reply sent without
   option 82 because it would not fit the options field).
-
 - **`DHCPServer.is_quarantined(ip, *, now=None)` and `.lookup_lease(client_id)`**
   (and the same on `AsyncDHCPServer`). `is_quarantined` says whether an address is
   out of the pool after a DHCPDECLINE; the server asks it of every lease a hook
@@ -146,6 +152,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`DHCPOptions.retain(codes)`**: keep only the options whose code is in `codes`.
 - **Four counters in `DHCPMetrics`**: `packets_dropped_malformed_option`,
   `options_ignored_malformed`, `declines_ignored` and `quarantines_refused`.
+- Documentation: the shipped API header is a top header, `src/pydhcp/AGENTS.md`, and one header per
+  package (`listener`, `server`, `client`, `relay`, `capture`, `packet`, `options`, `options/_codecs` and
+  `cli`), each printing the signatures of its names, with the exceptions, the command line, the environment
+  variables and the gotchas; a test checks every name and every printed signature against the live object.
+  The README follows the standard layout and its Python examples run under test; the site has a changelog
+  page, `pydhcp.packet.structured`, `load_config` and the exceptions on the API page, the capture filter
+  grammar in `compile_capture_filter`'s docstring, and a table of every named option code with its codec,
+  RFC and departures, generated from the registry (`docs/options.md`); `tests/AGENTS.md` describes the suite.
 
 ### Changed
 
@@ -167,24 +181,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   for code that caught `NotImplementedError` there. No default needs an extra: `packet --format`,
   the `capture` format without an ending and the configuration format are JSON or come from the
   file's name.
-
 - **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
   `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
 - **Dependency ranges are scoped to a series and their floors install**: `PyYAML>=6.0,<7` (the floor
   is 6.0.1 on Windows on ARM64 and from Python 3.12, where 6.0 has no wheel and does not build),
   `tomli>=2.0,<3` (below Python 3.11), `tomli-w>=1.0,<2`; they were open-ended, with floors of
   `tomli-w` 1.2.0 and `tomli` 2.4.0 that no API in use needs. The suite passes with each at its floor.
-
-- **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
-  `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
-  `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is
-  `PYDHCP_CAPTURE_PER_CAPTURE` (a boolean) and the configuration key `output_mode` is `per_capture`.
-  **Breaking** for a command line, a variable or a file that said `--output-mode`.
-- **Breaking: `pydhcp.capture.validate_filename_pattern`, `CaptureEvent.format_filename` and
-  `pydhcp.cli.MAX_PER_CAPTURE_FILES` are gone.** Building a `DHCPCaptureWriter` makes the same
-  checks of the pattern and raises `ValueError` (the message names the field and lists the fields);
-  `pydhcp.capture.MAX_CAPTURE_FILES` is the default budget. The cleaning of a filename value
-  is pktcap's, the same rule: a name that Windows opens as a device (`NUL`) now gets a leading `_`.
 - **Breaking: `pydhcp.cli` exports `App`, `main` and the six commands, and nothing else.**
   `PACKET_FORMATS` and `CAPTURE_FORMATS` are no longer re-exported from it (the capture formats are
   `pktcap.OUTPUT_FORMATS`). `server`, `relay` and `capture` declare `--listen` and `--per-interface`
@@ -294,11 +296,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   table now holds only the port of a client that is not on port 68, evicts the oldest entry
   at `MAX_PENDING_CLIENTS` (an evicted client's reply goes to port 68), and expires from
   its front, so the cost of a request or a reply no longer grows with the entries a flood
-  left (about 90 microseconds with a full table, about 1). A request that reuses the
+  left. A request that reuses the
   transaction of a pending one from another source address is dropped and counted in
   `packets_dropped_reused_transaction`; it used to be logged as ignored and forwarded
   all the same. The reused-transaction record is logged by `pydhcp.relay._pending`.
-
 - **Breaking, in behaviour: a reply goes to port 67 when it goes to a relay and port 68
   otherwise, whatever port the request came from** (RFC 1542 section 5.4: "The UDP
   destination port MUST be set to BOOTPS (67)" for `giaddr`, "to BOOTPC (68)" for
@@ -309,7 +310,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `REPLY_TO_RELAY_PORT` (67) and `REPLY_TO_CLIENT_PORT` (68) of `DHCPServer` and
   `AsyncDHCPServer`; a test harness whose relay or client listens on another port sets
   them. A real client (port 68) and a real relay (port 67) are unaffected.
-
 - **Breaking: text in `listen` that is not an IPv4 address is an interface name.**
   `"eth0"`, `"localhost:6767"` and `("localhost", 6767)` raised
   `ipaddress.AddressValueError` and are now read as adapter names (a host name is
@@ -439,9 +439,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the wire is unchanged. A record the client logs (an OFFER without a server
   identifier) is named `pydhcp.client._core`, and a test that patches
   `pydhcp.client.UDPTransport` patches `pydhcp.client._sync.UDPTransport`.
-- **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
-  are gone** (they exported nothing); the layers are private modules of
-  `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.
 - **`DHCPRequestContext` carries the time its datagram arrived**: two new
   trailing fields, `received_at` (timezone-aware UTC) and `received_monotonic`
   (`time.monotonic()` seconds), stamped by the listener. A context built by hand
@@ -466,17 +463,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Requires netimps 0.4.0** (`netimps>=0.4.0,<0.5`, was `>=0.3.3,<0.4`).
   netimps renamed its public names without an alias, so no range covers both
   series.
-- **Breaking: `pydhcp.network.APIPA` is now `pydhcp.network.LINK_LOCAL_V4`**,
-  following the name netimps gave the same network (`169.254.0.0/16`). No alias
-  is kept: replace `APIPA` with `LINK_LOCAL_V4`. Its type is `IPv4Network`
-  rather than the v4/v6 union. `host_ip_interfaces()`'s default filter is
-  unchanged.
-- **Breaking: `pydhcp.network.MACAddress.as_str()` is gone**, with the netimps
-  method it came from; use `.format(sep=":", *, upper=False)`. `str(mac)` is
-  still `00-11-22-33-44-55`, and `f"{mac}"` and `"%s" % mac` agree with it.
-  Instances are now read-only, `copy` and `pickle` keep the subclass, a bad
-  value raises `netimps.NetimpsValueError` (still a `ValueError`) and
-  `MACAddress.try_parse()` raises `TypeError` for a non-`str`.
 - **`host:port` text is read strictly.** In `listen=`, `--listen` and each
   `pydhcp relay --server`, the port is ASCII digits only and square brackets
   may enclose only an IPv6 literal. `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`,
@@ -494,21 +480,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Deployments: `NETIMPS_NO_SOCKET_PATCH` is now an error.** With it set,
   `import pydhcp` raises `ValueError` at import; use `NETIMPS_SOCKET_PATCH=0`
   to disable the `socket` patch.
-
-- **Breaking: `pydhcp.network` holds only pydhcp's own types** (`HardwareAddressType`,
-  `NetworkInterface`, `SocketAddress`, `host_ip_interfaces`). `IPv4`, `IPv6`, `IP`,
-  `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `LINK_LOCAL_V4` and
-  `SocketOption` are gone from it: import `ipaddress.IPv4Address` and the others from
-  `ipaddress`, and `LINK_LOCAL_V4` and `SocketOption` from `netimps`. `WILDCARD_V4` is
-  not public: write `ipaddress.IPv4Address("0.0.0.0")`. No alias is kept.
 - **Breaking: `NetworkInterface.mac` is a `netimps.MACAddress`, and `pydhcp.MACAddress` is
   gone** (import it from `netimps`). `str(mac)` is now `aa:bb:cc:dd:ee:ff` where it was `AA-BB-CC-DD-EE-FF`; `pydhcp
   interfaces` still prints the hyphenated upper-case form, through `mac.format("-",
-  upper=True)`.
-- **Breaking: `SocketAddress.listen()` is gone.** The listener calls `netimps.bind()`
-  directly with the arguments it always passed (`broadcast=True`, `connreset=False`, an
-  exclusive address unless `reuse_address` is set), so what a bound socket does on the wire
-  is unchanged; the method's own `connreset=True` default was never reached.
+  upper=True)`. The netimps type has no `as_str()`: use `.format(sep=":", *, upper=False)`;
+  instances are read-only, `copy` and `pickle` keep the subclass, a bad value raises
+  `netimps.NetimpsValueError` (still a `ValueError`) and `MACAddress.try_parse()` raises
+  `TypeError` for a non-`str`. `pydhcp.network.APIPA` is `netimps.LINK_LOCAL_V4`, an
+  `IPv4Network`, and `host_ip_interfaces()`'s default filter is unchanged.
 - **A failed bind raises netimps' own error, with its own message.** The suggestions
   "try port N+1000" and "Try 6767 for testing" are no longer appended to it.
 - **An adapter holding loopback and routable addresses answers from the routable one.**
@@ -521,7 +500,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   A destination that is the subnet broadcast of an adapter this host holds is now treated
   like the limited broadcast (no local address is taken from it); only the limited
   broadcast and multicast were before.
-
 - **Breaking: every module that is not an import path of its own is private.**
   `pydhcp.log`, `.config`, `.constants`, `.metrics`, `.nvt` and `.network` are
   `pydhcp._log`, `._config`, `._constants`, `._metrics`, `._nvt` and `._network`;
@@ -543,7 +521,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `pydhcp.cli.capture_hook` and the other command modules `pydhcp.cli._capture_hook`
   and so on. A `--loglevel` or a filter naming one of them follows; one naming
   `pydhcp` or `pydhcp.listener` is unaffected.
-
 - **Breaking: the root exports the packet enums and no longer exports the address
   aliases or the specialised codec families.** `pydhcp.DHCPMessageType`,
   `pydhcp.DHCPOpcode`, `pydhcp.DHCPFlags` and `pydhcp.DHCPPort` are new (the same
@@ -587,7 +564,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 | `pydhcp.MoSFQDNRecord` | `pydhcp.options.MoSFQDNRecord` |
 | `pydhcp.MoSIPv4AddressList` | `pydhcp.options.MoSIPv4AddressList` |
 | `pydhcp.MoSFQDNList` | `pydhcp.options.MoSFQDNList` |
-
 - **Every public module declares `__all__`.** `pydhcp.options`, `.client`, `.relay`,
   `.capture`, `.lease`, `.packet.structured` and `.server.handlers`, `.policy` and
   `.reply` (the last three export nothing) gained one; a name outside it is not API.
@@ -598,12 +574,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   (`_bind_sockets`, `_arrival`, `_TruncatedDatagram`, `_split_host_port`,
   `_load_capture_hook`, `_write_capture_record` and the rest). They are in the private
   modules that define them.
-- **Breaking: `DHCPOptionCode.ensure_registered()` is gone.** The built-in codecs are
-  bound to the standard option codes when `pydhcp.options` is imported, so a lookup
-  never depends on an earlier call; there is no alias to call. A codec registered with
-  `register_type` afterwards replaces the built-in one, as before. `DHCPMessageType` is
-  defined in the options package (`pydhcp.packet.DHCPMessageType` and
-  `pydhcp.DHCPMessageType` are the same object).
 - **`DHCPMetrics` is `pydhcp.listener.DHCPMetrics`**, where it was
   `pydhcp.metrics.DHCPMetrics` and then a private module's. `pydhcp.options` exports
   `MIN_OPTION_CODE`, `MAX_OPTION_CODE` and every option codec in one list, and
@@ -646,7 +616,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   lease (it used to be built from one with the wildcard address and an infinite
   expiry, and then had its address and lease time removed); what the client
   receives is unchanged.
-
 - **Breaking: one name per conversion.**
   - `DHCPMessage.summary()` is the display `dumps()` was; nothing reads it back,
     and `dumps` now means only what `json.dumps` means. `HardwareAddressType.dumps`
@@ -852,8 +821,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   DISCOVER; it works once it gains `offer` and `commit`. `allocate` and `offer` refuse
   an address another client holds in either state (`allocate` used to store one
   address for two clients), and `renew` extends a bound lease only.
-  `InMemoryLeaseBackend.lookup_by_ip` is answered from an address index: its cost
-  no longer grows with the number of leases.
+  `InMemoryLeaseBackend.lookup_by_ip` is answered from an address index.
 - **Breaking: the stock server answers a DHCPREQUEST from what it holds, shape by
   shape (RFC 2131 section 4.3.2).** A SELECTING request (option 54 names this server)
   it cannot satisfy gets a DHCPNAK where it got silence, and one with no offer
@@ -889,9 +857,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Renamed
 
-**Breaking.** Every public class name spells its acronyms in capitals, and the
-generic names take the `DHCP` prefix. No alias is kept: an old name is not
-importable. Replace each name in the left column with the one beside it.
+**Breaking.** Every public class name spells its acronyms in capitals, the generic names take the
+`DHCP` prefix, the lifecycle and conversion methods take the standard's names, and the modules that
+are not an import path of their own are private. No alias is kept: an old name is not importable.
+Replace each name in the left column with the one beside it.
 
 | Was | Now |
 | --- | --- |
@@ -920,8 +889,6 @@ importable. Replace each name in the left column with the one beside it.
 | `RequestContext` | `DHCPRequestContext` |
 | `UdpTransport` | `UDPTransport` |
 | `PktInfoUdpTransport` | `PktInfoUDPTransport` |
-| `Transport` | `DHCPTransport` |
-| `pydhcp.options.type.IPv4Address` (the option codec) | `IPv4AddressOption`; `IPv4Address` is only the address type |
 | `TlvOption` | `TLVOption` |
 | `UriList` | `URIList` |
 | `RdnssSelection` | `RDNSSSelection` |
@@ -959,22 +926,78 @@ importable. Replace each name in the left column with the one beside it.
 | `CccAsReqAsRepBackoffRetrySubOption` | `CCCASBackoffRetrySubOption` |
 | `CccApReqApRepBackoffRetry` | `CCCAPBackoffRetry` |
 | `CccApReqApRepBackoffRetrySubOption` | `CCCAPBackoffRetrySubOption` |
+| `Transport` | `DHCPTransport` |
+| `IPv4Address (the codec in pydhcp.options.type)` | `IPv4AddressOption` |
+| `NoClientIdentity` | `NoClientIdentityError` |
 | `pydhcp.network.WILDCARD_IPv4` | `WILDCARD_V4` |
 | `HardwareAddressType.IP_ARP_over_ISO_7816_3` | `HardwareAddressType.IP_ARP_OVER_ISO_7816_3` |
-| `DHCPOptionCode.GRD` (option 212) | `DHCPOptionCode.SIXRD`; `GRD` stays as an alias member, so `DHCPOptionCode(212).name` is now `SIXRD` |
-| `DHCPMessage.dumps()` | `DHCPMessage.summary()` |
-| `HardwareAddressType.dumps(address)` | `HardwareAddressType.format_address(address)` |
-| `load_message(text, format)`, `dump_message(message, format)` | `DHCPMessage.from_text(text, format)`, `message.to_text(format)` |
-| `load_mapping(text, format)`, `dump_mapping(data, format)` | `pydhcp.packet.structured.loads(text, format)`, `.dumps(data, format)` |
-| `SocketAddress.compat()` | `SocketAddress.to_tuple()` |
-| `DHCPMessage.client_id()` | `DHCPMessage.get_client_id()` |
-| `DHCPServer.lease_seconds(msg)` | `DHCPServer.get_lease_seconds(msg)` |
+| `DhcpOptionCode.GRD` | `DHCPOptionCode.SIXRD, with GRD kept as an alias member` |
 | `ListenSpec` | `ListenLike` |
+| `ListenAddress, ListenBinding, ListenPort` | `private, or documented in a header` |
 | `ServerAddress` | `ServerAddressLike` |
-| `send(..., destination=...)`, `DHCPTransport.send(..., dest, ...)` | `dst` |
-| `Bytes(src=...)` | `Bytes(value=...)` |
-| `_dhcp_read`, `_dhcp_write`, `_dhcp_len_hint`, `_dhcp_decode`, `_dhcp_encode` | `unpack_from`, `pack_into`, `fixed_size`, `unpack`, `pack` |
-| `__json__`, `_display_text` | `to_json`, `display_text` |
+| `IPv4 \| str (13 annotations)` | `IPv4AddressLike` (`Union[IPv4Address, str]`), with `ClientIdentifierLike` (`pydhcp.client`), `PacketFilterLike` (`pydhcp.capture`), `ListenLike` and `ServerAddressLike` |
+| `pydhcp.network.IPv4, IPv6, IP, IPNetwork and the other aliases of netimps or ipaddress objects` | `removed; callers import IPv4Address, IPv6Address, IPAddress, IPNetwork from netimps or ipaddress` |
+| `.listen()` | `.serve_forever()` |
+| `.stop()` | `.shutdown()` |
+| `.wait()` | `.wait_closed(timeout=None)` |
+| `async .stop() then nothing; the inherited .close() raises` | `await .aclose(); async with` |
+| `.start(cancellation_token=None) -> Thread \| None` | `.start() -> None, raising what bind() raised` |
+| `start() after close() serves again` | `closed is final` |
+| `DhcpMessage.dumps(codemap=None)` | `DHCPMessage.summary(codemap=None)` |
+| `HardwareAddressType.dumps(address)` | `HardwareAddressType.format_address(address)` |
+| `load_message(text, format), dump_message(message, format)` | `DHCPMessage.from_text(text, format), DHCPMessage.to_text(format)` |
+| `load_mapping(text, format), dump_mapping(data, format)` | `pydhcp.packet.structured.loads(text, format), dumps(data, format)` |
+| `SocketAddress.compat()` | `SocketAddress.to_tuple()` |
+| `SocketAddress(sock)` | `SocketAddress.from_socket(sock)` |
+| `SocketAddress.listen(...)` | `removed; netimps.bind(...) at the one call site` |
+| `DhcpOptions.decode(options, base_offset), which fills self` | `DHCPOptions.decode(data) classmethod; the in-place form private` |
+| `DhcpMessage.encode() -> bytearray` | `DHCPMessage.encode() -> bytes, and __bytes__` |
+| `the codec contract _dhcp_read, _dhcp_write, _dhcp_len_hint, _dhcp_decode, _dhcp_encode, __json__, __concrete__` | `unpack_from`, `pack_into`, `fixed_size`, `unpack`, `pack`, `to_json`, `display_text`; the contract is the `OptionCodec` protocol |
+| `Transport (a class whose send raises NotImplementedError), BaseDhcpOptionCode` | `DHCPTransport` and `OptionCode`/`BaseDHCPOptionCode` are `typing.Protocol`s or abstract bases |
+| `DhcpMessage.client_id(func=None)` | `DHCPMessage.get_client_id()` |
+| `DhcpServer.lease_seconds(msg)` | `DHCPServer.get_lease_seconds(msg)` |
+| `Transport.send, DhcpClient.send: dest, destination` | `DHCPTransport.send(data, dst, *, port, client_mac)` and `DHCPClient.send(message, *, dst, port)`; `discover_offer` and `dora` keep `destination=` |
+| `Bytes: src` | `value` |
+| `listener/{sync,aio,binding,interfaces,receive,spec,transport}.py` | `listener/{_sync,_asyncio,_binding,_interfaces,_receive,_spec,_transport}.py` |
+| `server/{handlers,policy,reply}.py` | `server/_core.py (policy and replies, no sockets), server/_sync.py, server/_asyncio.py` |
+| `options/{base,code,registry}.py` | `options/{_codes,_registry}.py; no base.py` |
+| `options/type/ and its ten modules` | `options/_codecs/...; the name type stops shadowing the builtin` |
+| `packet/{enums,message}.py` | `packet/{_enums,_message}.py; packet/structured.py stays public if loads and dumps live there` |
+| `log.py, config.py, constants.py, metrics.py, nvt.py` | `_log.py, _config.py, _constants.py, _metrics.py, _nvt.py, their public names re-exported from the root or a public module` |
+| `_utils.py` | `named for what it owns: _missing.py, _generic.py` |
+| `network/` | `_network/`, private; its public names are re-exported from the root or a public module |
+
+### Removed
+
+- **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
+  `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
+  `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is
+  `PYDHCP_CAPTURE_PER_CAPTURE` (a boolean) and the configuration key `output_mode` is `per_capture`.
+  **Breaking** for a command line, a variable or a file that said `--output-mode`.
+- **Breaking: `pydhcp.capture.validate_filename_pattern`, `CaptureEvent.format_filename` and
+  `pydhcp.cli.MAX_PER_CAPTURE_FILES` are gone.** Building a `DHCPCaptureWriter` makes the same
+  checks of the pattern and raises `ValueError` (the message names the field and lists the fields);
+  `pydhcp.capture.MAX_CAPTURE_FILES` is the default budget. The cleaning of a filename value
+  is pktcap's, the same rule: a name that Windows opens as a device (`NUL`) now gets a leading `_`.
+- **Breaking: `pydhcp.network` holds only pydhcp's own types** (`HardwareAddressType`,
+  `NetworkInterface`, `SocketAddress`, `host_ip_interfaces`). `IPv4`, `IPv6`, `IP`,
+  `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `LINK_LOCAL_V4` and
+  `SocketOption` are gone from it: import `ipaddress.IPv4Address` and the others from
+  `ipaddress`, and `LINK_LOCAL_V4` and `SocketOption` from `netimps`. `WILDCARD_V4` is
+  not public: write `ipaddress.IPv4Address("0.0.0.0")`. No alias is kept.
+- **Breaking: `SocketAddress.listen()` is gone.** The listener calls `netimps.bind()`
+  directly with the arguments it always passed (`broadcast=True`, `connreset=False`, an
+  exclusive address unless `reuse_address` is set), so what a bound socket does on the wire
+  is unchanged; the method's own `connreset=True` default was never reached.
+- **`pydhcp.server.handlers`, `pydhcp.server.policy` and `pydhcp.server.reply`
+  are gone** (they exported nothing); the layers are private modules of
+  `pydhcp.server`, so a record they log is named `pydhcp.server._handlers` and so on.
+- **Breaking: `DHCPOptionCode.ensure_registered()` is gone.** The built-in codecs are
+  bound to the standard option codes when `pydhcp.options` is imported, so a lookup
+  never depends on an earlier call; there is no alias to call. A codec registered with
+  `register_type` afterwards replaces the built-in one, as before. `DHCPMessageType` is
+  defined in the options package (`pydhcp.packet.DHCPMessageType` and
+  `pydhcp.DHCPMessageType` are the same object).
 
 ### Fixed
 
@@ -1135,11 +1158,11 @@ importable. Replace each name in the left column with the one beside it.
   `ValueError`, as the RFC requires senders to clear them.
 - **A domain list can no longer cost a datagram's worth of CPU and memory.**
   Decoding options 119, 141, 88 and 146 followed compression pointers with no
-  limit, so one 60 KB datagram of chained pointers took 15 s and 112 MB to
-  read. A decoded name is now at most 255 octets (RFC 1035 s2.3.4), a name
+  limit, so one datagram of chained pointers could cost far more CPU and memory
+  than its size. A decoded name is now at most 255 octets (RFC 1035 s2.3.4), a name
   follows at most 127 pointers, and a pointer must point strictly backwards to
   the start of a label of an earlier name; otherwise the option raises
-  `ValueError` (the same datagram is now refused in 0.06 s). A last name left
+  `ValueError`. A last name left
   unfinished at the end of the option is discarded (RFC 3397 s3) rather than
   kept, and a final octet that starts a pointer no longer raises `IndexError`.
 - Re-binding a started `AsyncDHCPListener` whose listen list shrank retires the
