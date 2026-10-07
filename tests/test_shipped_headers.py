@@ -256,6 +256,70 @@ def test_a_nested_header_is_named_by_the_one_above_it():
     )
 
 
+# -- the contributor files -------------------------------------------------------------------------
+
+
+def _root_file():
+    root = ROOT / "AGENTS.md"
+    if not root.exists():
+        pytest.skip("the root AGENTS.md is not part of this tree")
+    return root
+
+
+def test_the_root_file_names_the_headers_directly_below_it():
+    """A parent indexes its own children and no deeper: the package headers are the top header's."""
+    root = _root_file()
+    headers = _committed_headers()
+    children = [p for p in headers if _nearest_parent_header(p, headers) == "AGENTS.md"]
+    assert "src/pydhcp/AGENTS.md" in children and "tests/AGENTS.md" in children
+    rows = [line for line in _lines(root) if line.startswith("|")]
+    missing = [p for p in children if not any(p in row for row in rows)]
+    assert (
+        not missing
+    ), "a table row of the root AGENTS.md does not name: %s" % ", ".join(missing)
+
+
+def test_the_root_file_is_not_over_its_limit():
+    assert len(_lines(_root_file())) <= ROOT_MAX_LINES
+
+
+def test_the_root_file_has_the_standard_sections_in_order():
+    headings = re.findall(r"^## (.*)$", _text(_root_file()), flags=re.M)
+    assert headings == ["Layout", "Environment", "Checks", "Conventions", "Releasing"]
+
+
+def test_the_tests_header_is_not_over_its_limit():
+    header = ROOT / "tests" / "AGENTS.md"
+    if not header.exists():
+        pytest.skip("tests/AGENTS.md is not part of this tree")
+    assert len(_lines(header)) <= TESTS_MAX_LINES
+
+
+def test_the_tests_header_names_every_test_file_and_directory():
+    tests = ROOT / "tests"
+    header = tests / "AGENTS.md"
+    if not header.exists():
+        pytest.skip("tests/AGENTS.md is not part of this tree")
+    text = _text(header)
+    data = {"cases", "expected", "__pycache__", "data"}
+    names = [
+        p.relative_to(tests).as_posix()
+        for p in tests.rglob("*")
+        if p.is_file()
+        and not data & set(p.relative_to(tests).parts)
+        and p.suffix in (".py", ".ini", ".json")
+        and p.name != "__init__.py"
+    ]
+    directories = [p.name for p in tests.iterdir() if p.is_dir() and p.name not in data]
+    # A file under a directory is named by its name inside that directory's list.
+    missing = [
+        n
+        for n in names + [d + "/" for d in directories]
+        if n not in text and n.rsplit("/", 1)[-1] not in text
+    ]
+    assert not missing, "tests/AGENTS.md does not name: %s" % ", ".join(missing)
+
+
 # -- the signature probe ---------------------------------------------------------------------------
 
 _FENCE = re.compile(r"^```python\n(.*?)^```", re.S | re.M)
