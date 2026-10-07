@@ -308,6 +308,39 @@ it. The complete reference, with every signature and gotcha and the module each 
 lives in, is [`src/pydhcp/AGENTS.md`](https://github.com/jose-pr/pydhcp/blob/main/src/pydhcp/AGENTS.md)
 and the headers beside the code it lists; they ship inside the package.
 
+## Differences from dnsmasq and ISC dhclient
+
+The references are **dnsmasq 2.92** for the server and for the relay (`--dhcp-relay`),
+and **ISC dhclient 4.4.3-P1** for the client. The suite replays what they answered in 25
+recorded cases, recorded on Fedora 44 by `tests/conformance/record.py` and stored under
+`tests/conformance/cases/`, so a run on any system, with no peer installed, checks them.
+Fidelity is to the messages: for the same input and configuration, every header field,
+which options are present with each one's octets and order, how many replies there are
+(none included) and where each is sent. Not claimed: the text of option 56, timing (the
+retransmission schedule is RFC 2131 section 4.1's), logs, lease files, the command line and
+which free address a pool gives. BusyBox 1.37 udhcpc is run against the roles as an
+interoperability peer, and is not a reference.
+
+It differs on purpose in these ways, each asserted by the suite as this library behaves:
+
+| Difference | What differs |
+| --- | --- |
+| `siaddr-left-zero` | dnsmasq 2.92 writes its own address in 'siaddr' of every reply; this library leaves it 0.0.0.0, because the field names the next bootstrap server and this library supplies none. |
+| `server-option-order` | The server lists its options in another order than dnsmasq 2.92 (this library: message type, subnet mask, broadcast address, router, then lease time and server identifier); the order carries no meaning. |
+| `offer-broadcast-without-address` | To a client with no address whose broadcast flag is clear, dnsmasq 2.92 unicasts the OFFER to the offered address; this library broadcasts it, because a plain UDP socket cannot deliver to an address the client does not own yet (set `UNICAST_TO_UNCONFIGURED_CLIENT` for a transport that can). |
+| `reply-port-68` | A renewal sent from a port other than 68 is answered by dnsmasq 2.92 to that port; this library answers to port 68 (its lenient mode, `STRICT_REPLY_PORTS = False`, answers to the sender's port). |
+| `offer-held` | While the only address is on offer to one client, dnsmasq 2.92 offers it again to a second client that asks; this library holds it for the first and leaves the second unanswered until the hold ends. |
+| `relayed-reply-hops-zero` | In the reply to a relayed request dnsmasq 2.92 echoes the request's 'hops'; this library sends 0. |
+| `host-name-not-echoed` | dnsmasq 2.92 echoes the client's host name (option 12) in the ACK when the client lists it among the parameters it asks for; this library holds no value for it and does not send one. |
+| `client-broadcast-flag` | ISC dhclient 4.4.3-P1 leaves the broadcast flag clear in DISCOVER, REQUEST and DECLINE; this library's client sets it (`broadcast=True`, the default), because a plain UDP socket cannot receive a unicast reply before the host holds the address. |
+| `client-option-order` | ISC dhclient 4.4.3-P1 lists the message type, then the server identifier, then the requested address in REQUEST and DECLINE; this library lists the requested address before the server identifier; the order carries no meaning. |
+| `relay-hop-limit` | A request whose 'hops' is 5 is relayed by dnsmasq 2.92 and dropped by this library, whose limit is 4 and is set by `max_hops`. |
+
+Two differences are open and the suite holds each as an expected failure: the renewal and
+rebinding times (options 58 and 59) are not sent, and a DHCPDECLINE from a sender that holds
+no lease is ignored. The features each role covers, and which are implemented, are in the
+[conformance page](https://jose-pr.github.io/pydhcp/conformance/) of the documentation.
+
 ## Development
 
 ```bash

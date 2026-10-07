@@ -28,6 +28,9 @@ examples/          runnable examples; tests/test_examples.py imports each one
 benchmarks/        run.py plus per-suite scripts, JSON output for comparison
 docs/              mkdocs site (mkdocs.yml at the root); `python docs/options_table.py --write`
                    regenerates the options table of options.md after a registry change
+                   and `docs/conformance_table.py --write` the tables of conformance.md
+tests/conformance/ recorded dnsmasq and ISC dhclient exchanges replayed against the roles, the
+                   differences and the recorder (tests/AGENTS.md "The conformance suite")
 ```
 
 ## Environment

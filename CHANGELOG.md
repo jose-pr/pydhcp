@@ -174,6 +174,13 @@ someone upgrading from 0.7.0.
   page, `pydhcp.packet.structured`, `load_config` and the exceptions on the API page, the capture filter
   grammar in `compile_capture_filter`'s docstring, and a table of every named option code with its codec,
   RFC and departures, generated from the registry (`docs/options.md`); `tests/AGENTS.md` describes the suite.
+- Conformance: the server and the relay are compared with dnsmasq 2.92 and the client with ISC
+  dhclient 4.4.3-P1, over 25 recorded exchanges (`tests/conformance/`) that replay on every platform with no
+  peer installed. The README section "Differences from dnsmasq and ISC dhclient" states how far the
+  comparison goes and lists the ten differences that are on purpose; `docs/conformance.md` has the table of
+  what each role covers and the RFC text behind each difference. Two differences are open and recorded as
+  expected failures: the renewal and rebinding times (options 58 and 59) are not sent, and a DHCPDECLINE
+  from a sender that holds no lease is ignored.
 
 ### Changed
 

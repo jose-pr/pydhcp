@@ -73,5 +73,7 @@ pydhcp server --config server.yaml
 - [Examples](examples.md): a custom lease backend, a custom server policy, a config file,
   the packet client and a full DORA exchange.
 - [Common DHCP options](options.md): typed examples for the options most sites set.
+- [Conformance](conformance.md): what is compared with dnsmasq and ISC dhclient, what each role
+  covers and the differences.
 - [Deployment](deployment.md) and [Troubleshooting](troubleshooting.md).
 - [FAQ](faq.md) and the [changelog](changelog.md).

@@ -1,0 +1,364 @@
+[
+ {
+  "role": "server",
+  "feature": "DHCPDISCOVER answered with an OFFER",
+  "rfc": "RFC 2131 s4.3.1",
+  "implemented": true,
+  "cases": [
+   "server-discover"
+  ],
+  "note": "The address comes from `acquire_lease`; the case gives the client a static address."
+ },
+ {
+  "role": "server",
+  "feature": "OFFER to a client with no address and the broadcast flag clear",
+  "rfc": "RFC 2131 s4.1",
+  "implemented": true,
+  "cases": [
+   "server-discover-no-broadcast-flag"
+  ],
+  "note": "Broadcast, unless `UNICAST_TO_UNCONFIGURED_CLIENT` is set."
+ },
+ {
+  "role": "server",
+  "feature": "DISCOVER through a relay (giaddr set, option 82 present)",
+  "rfc": "RFC 2131 s4.1, RFC 3046",
+  "implemented": true,
+  "cases": [
+   "server-discover-relayed"
+  ],
+  "note": "The option 82 is echoed last."
+ },
+ {
+  "role": "server",
+  "feature": "An offered address held for its client",
+  "rfc": "RFC 2131 s4.3.1",
+  "implemented": true,
+  "cases": [
+   "server-offer-hold"
+  ],
+  "note": "A second client is left unanswered while the only address is on offer."
+ },
+ {
+  "role": "server",
+  "feature": "REQUEST in SELECTING answered with an ACK",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [
+   "server-request-selecting"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "REQUEST for another address than the one offered, answered with a NAK",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [
+   "server-request-selecting-other-address"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "REQUEST in INIT-REBOOT",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [
+   "server-request-init-reboot"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "INIT-REBOOT from a client the server knows nothing about",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [
+   "server-request-unknown-client"
+  ],
+  "note": "Silence."
+ },
+ {
+  "role": "server",
+  "feature": "INIT-REBOOT for an address on another network, answered with a NAK",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [
+   "server-request-wrong-subnet"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "REQUEST in RENEWING",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [
+   "server-request-renewing"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "The port a renewal's ACK goes to",
+  "rfc": "RFC 1542 s5.4",
+  "implemented": true,
+  "cases": [
+   "server-request-renewing-from-another-port"
+  ],
+  "note": "Port 68 in the default strict mode."
+ },
+ {
+  "role": "server",
+  "feature": "REQUEST in REBINDING",
+  "rfc": "RFC 2131 s4.3.2",
+  "implemented": true,
+  "cases": [],
+  "note": "Answered like RENEWING; no case asks the broadcast shape."
+ },
+ {
+  "role": "server",
+  "feature": "The client's host name (option 12) in the ACK",
+  "rfc": "RFC 2132 s3.14",
+  "implemented": false,
+  "cases": [
+   "server-request-selecting-host-name"
+  ],
+  "note": "Not echoed."
+ },
+ {
+  "role": "server",
+  "feature": "DHCPINFORM answered with an ACK that carries no address",
+  "rfc": "RFC 2131 s4.3.5",
+  "implemented": true,
+  "cases": [
+   "server-inform"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "DHCPRELEASE",
+  "rfc": "RFC 2131 s4.3.4",
+  "implemented": true,
+  "cases": [
+   "server-release"
+  ],
+  "note": ""
+ },
+ {
+  "role": "server",
+  "feature": "DHCPDECLINE of an address the sender holds",
+  "rfc": "RFC 2131 s4.3.3",
+  "implemented": true,
+  "cases": [
+   "server-decline"
+  ],
+  "note": "The address is quarantined."
+ },
+ {
+  "role": "server",
+  "feature": "DHCPDECLINE from a sender that holds no lease",
+  "rfc": "RFC 2131 s4.3.3",
+  "implemented": false,
+  "cases": [
+   "server-decline-without-a-lease"
+  ],
+  "note": "Ignored; an open difference."
+ },
+ {
+  "role": "server",
+  "feature": "Renewal and rebinding times (options 58 and 59) in OFFER and ACK",
+  "rfc": "RFC 2131 s4.4.5",
+  "implemented": false,
+  "cases": [],
+  "note": "Not sent; an open difference."
+ },
+ {
+  "role": "server",
+  "feature": "An address pool",
+  "rfc": "RFC 2131 s4.3.1",
+  "implemented": false,
+  "cases": [],
+  "note": "The stock server has no pool: a subclass supplies leases through `acquire_lease`."
+ },
+ {
+  "role": "server",
+  "feature": "Static host-to-address assignments",
+  "rfc": "RFC 2131 s4.3.1",
+  "implemented": false,
+  "cases": [],
+  "note": "Through a subclass, as for a pool."
+ },
+ {
+  "role": "server",
+  "feature": "BOOTP clients with no message type option",
+  "rfc": "RFC 951, RFC 1542",
+  "implemented": false,
+  "cases": [],
+  "note": "The server dispatches on the message type option."
+ },
+ {
+  "role": "server",
+  "feature": "Rapid commit",
+  "rfc": "RFC 4039",
+  "implemented": false,
+  "cases": [],
+  "note": "The option is decoded; the two-message exchange is not served."
+ },
+ {
+  "role": "server",
+  "feature": "PXE and proxy DHCP",
+  "rfc": "",
+  "implemented": false,
+  "cases": [],
+  "note": "The boot file and server name fields are carried; no PXE logic."
+ },
+ {
+  "role": "server",
+  "feature": "Lease persistence",
+  "rfc": "",
+  "implemented": true,
+  "cases": [],
+  "note": "`FileLeaseBackend` writes a JSON file; no recorded case."
+ },
+ {
+  "role": "server",
+  "feature": "DHCPv6",
+  "rfc": "RFC 8415",
+  "implemented": false,
+  "cases": [],
+  "note": "Out of scope."
+ },
+ {
+  "role": "client",
+  "feature": "DHCPDISCOVER",
+  "rfc": "RFC 2131 s4.4.1",
+  "implemented": true,
+  "cases": [
+   "client-discover"
+  ],
+  "note": ""
+ },
+ {
+  "role": "client",
+  "feature": "REQUEST in SELECTING after an OFFER",
+  "rfc": "RFC 2131 s4.4.1",
+  "implemented": true,
+  "cases": [
+   "client-request-selecting"
+  ],
+  "note": ""
+ },
+ {
+  "role": "client",
+  "feature": "REQUEST in INIT-REBOOT",
+  "rfc": "RFC 2131 s4.4.2",
+  "implemented": true,
+  "cases": [
+   "client-request-init-reboot"
+  ],
+  "note": ""
+ },
+ {
+  "role": "client",
+  "feature": "DHCPRELEASE",
+  "rfc": "RFC 2131 s4.4.6",
+  "implemented": true,
+  "cases": [
+   "client-release"
+  ],
+  "note": ""
+ },
+ {
+  "role": "client",
+  "feature": "DHCPDECLINE",
+  "rfc": "RFC 2131 s4.4.1",
+  "implemented": true,
+  "cases": [
+   "client-decline"
+  ],
+  "note": ""
+ },
+ {
+  "role": "client",
+  "feature": "DHCPINFORM",
+  "rfc": "RFC 2131 s4.4.3",
+  "implemented": true,
+  "cases": [],
+  "note": "dhclient sends none, so there is nothing to record."
+ },
+ {
+  "role": "client",
+  "feature": "REQUEST in RENEWING and REBINDING, with lease timers",
+  "rfc": "RFC 2131 s4.4.5",
+  "implemented": false,
+  "cases": [],
+  "note": "The caller builds the REQUEST; the client keeps no lease timers."
+ },
+ {
+  "role": "client",
+  "feature": "Configuring the network interface with the lease",
+  "rfc": "",
+  "implemented": false,
+  "cases": [],
+  "note": "The client does not change the host's addresses."
+ },
+ {
+  "role": "client",
+  "feature": "DHCPv6",
+  "rfc": "RFC 8415",
+  "implemented": false,
+  "cases": [],
+  "note": "Out of scope."
+ },
+ {
+  "role": "relay",
+  "feature": "A client's DISCOVER relayed to the server",
+  "rfc": "RFC 1542 s4.1.1",
+  "implemented": true,
+  "cases": [
+   "relay-discover"
+  ],
+  "note": "giaddr stamped, hops incremented."
+ },
+ {
+  "role": "relay",
+  "feature": "A server's OFFER relayed to the client",
+  "rfc": "RFC 1542 s4.1.2",
+  "implemented": true,
+  "cases": [
+   "relay-offer"
+  ],
+  "note": ""
+ },
+ {
+  "role": "relay",
+  "feature": "The hop limit",
+  "rfc": "RFC 1542 s4.1.1",
+  "implemented": true,
+  "cases": [
+   "relay-discover-over-hop-limit"
+  ],
+  "note": "Requests above 4 hops are dropped by default; `max_hops` sets it."
+ },
+ {
+  "role": "relay",
+  "feature": "A request another relay already stamped",
+  "rfc": "RFC 1542 s4.1.1",
+  "implemented": true,
+  "cases": [
+   "relay-request-already-relayed"
+  ],
+  "note": "giaddr is kept."
+ },
+ {
+  "role": "relay",
+  "feature": "Relay agent information (option 82) inserted",
+  "rfc": "RFC 3046",
+  "implemented": true,
+  "cases": [],
+  "note": "Opt-in (`insert_relay_agent_info`); no recorded case."
+ }
+]

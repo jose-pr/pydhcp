@@ -53,6 +53,7 @@ SECTIONS = [
     "Quick start",
     "Command line",
     "API overview",
+    "Differences from dnsmasq and ISC dhclient",
     "Development",
     "License",
 ]
