@@ -1,0 +1,31 @@
+{
+ "description": "A DISCOVER another relay already stamped (giaddr set, hops 1), unicast to this relay.",
+ "role": "relay",
+ "topology": "relayed",
+ "config": {
+  "local": "10.99.0.1",
+  "server": "10.98.0.2",
+  "replies": {}
+ },
+ "steps": [
+  {
+   "name": "discover",
+   "from": "client",
+   "src": "10.99.0.7",
+   "sport": 67,
+   "dst": "10.99.0.1",
+   "dport": 67,
+   "message": {
+    "type": "DISCOVER",
+    "chaddr": "02:00:00:99:00:02",
+    "flags": 32768,
+    "prl": [1, 3, 6, 12, 15, 28, 51, 58, 59],
+    "xid": "1001a181",
+    "hops": 1,
+    "giaddr": "10.99.0.7"
+   },
+   "holds": "10.99.0.7"
+  }
+ ],
+ "not_compared": []
+}

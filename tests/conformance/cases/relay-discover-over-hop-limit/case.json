@@ -1,0 +1,29 @@
+{
+ "description": "A DISCOVER that has already crossed five relays (hops 5).",
+ "role": "relay",
+ "topology": "relayed",
+ "config": {
+  "local": "10.99.0.1",
+  "server": "10.98.0.2",
+  "replies": {}
+ },
+ "steps": [
+  {
+   "name": "discover",
+   "from": "client",
+   "src": "0.0.0.0",
+   "sport": 68,
+   "dst": "255.255.255.255",
+   "dport": 67,
+   "message": {
+    "type": "DISCOVER",
+    "chaddr": "02:00:00:99:00:02",
+    "flags": 32768,
+    "prl": [1, 3, 6, 12, 15, 28, 51, 58, 59],
+    "xid": "1001a171",
+    "hops": 5
+   }
+  }
+ ],
+ "not_compared": []
+}

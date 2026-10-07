@@ -1,0 +1,44 @@
+{
+ "description": "A client that holds its lease and is told to release it: the RELEASE.",
+ "role": "client",
+ "topology": "single",
+ "config": {
+  "chaddr": "02:00:00:99:00:02",
+  "server": "10.99.0.1",
+  "prl": [1, 28, 3, 15, 6, 12, 26],
+  "messages": 1,
+  "holds": "10.99.0.100",
+  "dhclient": {
+   "send_host_name": false,
+   "release": true,
+   "lease": {
+    "address": "10.99.0.100",
+    "server": "10.99.0.1",
+    "mask": "255.255.255.0"
+   },
+   "script_status": 0
+  },
+  "replies": {}
+ },
+ "steps": [
+  {
+   "name": "release"
+  }
+ ],
+ "pydhcp": [
+  {
+   "call": "build_release",
+   "args": {
+    "ciaddr": "10.99.0.100",
+    "server_identifier": "10.99.0.1"
+   }
+  }
+ ],
+ "not_compared": [
+  {
+   "aspect": "destination",
+   "step": "release",
+   "why": "a builder builds a message and the caller names where it goes"
+  }
+ ]
+}

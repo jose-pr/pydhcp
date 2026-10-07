@@ -1,0 +1,65 @@
+{
+ "description": "A client whose configuration script refuses the address it was acked: the DECLINE after the DISCOVER and the REQUEST.",
+ "role": "client",
+ "topology": "single",
+ "config": {
+  "chaddr": "02:00:00:99:00:02",
+  "server": "10.99.0.1",
+  "prl": [1, 28, 3, 15, 6, 12, 26],
+  "messages": 3,
+  "holds": null,
+  "dhclient": {
+   "send_host_name": false,
+   "release": false,
+   "lease": null,
+   "script_status": 1
+  },
+  "replies": {
+   "DISCOVER": {
+    "type": "OFFER",
+    "yiaddr": "10.99.0.100",
+    "server_id": "10.99.0.1",
+    "lease": 300,
+    "options": [[1, "ffffff00"], [3, "0a630001"], [28, "0a6300ff"]]
+   },
+   "REQUEST": {
+    "type": "ACK",
+    "yiaddr": "10.99.0.100",
+    "server_id": "10.99.0.1",
+    "lease": 300,
+    "options": [[1, "ffffff00"], [3, "0a630001"], [28, "0a6300ff"]]
+   }
+  }
+ },
+ "steps": [
+  {
+   "name": "discover"
+  },
+  {
+   "name": "request-selecting"
+  },
+  {
+   "name": "decline"
+  }
+ ],
+ "pydhcp": [
+  {
+   "call": "dora",
+   "args": {}
+  },
+  {
+   "call": "build_decline",
+   "args": {
+    "requested_ip": "10.99.0.100",
+    "server_identifier": "10.99.0.1"
+   }
+  }
+ ],
+ "not_compared": [
+  {
+   "aspect": "destination",
+   "step": "decline",
+   "why": "a builder builds a message and the caller names where it goes"
+  }
+ ]
+}

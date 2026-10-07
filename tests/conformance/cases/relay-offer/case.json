@@ -1,0 +1,36 @@
+{
+ "description": "The server's OFFER comes back to the relay: what it forwards to the client, and where.",
+ "role": "relay",
+ "topology": "relayed",
+ "config": {
+  "local": "10.99.0.1",
+  "server": "10.98.0.2",
+  "replies": {
+   "DISCOVER": {
+    "type": "OFFER",
+    "yiaddr": "10.99.0.100",
+    "server_id": "10.98.0.2",
+    "lease": 300,
+    "options": [[1, "ffffff00"], [3, "0a630001"], [28, "0a6300ff"]]
+   }
+  }
+ },
+ "steps": [
+  {
+   "name": "discover",
+   "from": "client",
+   "src": "0.0.0.0",
+   "sport": 68,
+   "dst": "255.255.255.255",
+   "dport": 67,
+   "message": {
+    "type": "DISCOVER",
+    "chaddr": "02:00:00:99:00:02",
+    "flags": 32768,
+    "prl": [1, 3, 6, 12, 15, 28, 51, 58, 59],
+    "xid": "1001a161"
+   }
+  }
+ ],
+ "not_compared": []
+}

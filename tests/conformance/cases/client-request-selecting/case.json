@@ -1,0 +1,49 @@
+{
+ "description": "The DISCOVER and the SELECTING REQUEST a client sends when a server offers an address.",
+ "role": "client",
+ "topology": "single",
+ "config": {
+  "chaddr": "02:00:00:99:00:02",
+  "server": "10.99.0.1",
+  "prl": [1, 28, 3, 15, 6, 12, 26],
+  "messages": 2,
+  "holds": null,
+  "dhclient": {
+   "send_host_name": false,
+   "release": false,
+   "lease": null,
+   "script_status": 0
+  },
+  "replies": {
+   "DISCOVER": {
+    "type": "OFFER",
+    "yiaddr": "10.99.0.100",
+    "server_id": "10.99.0.1",
+    "lease": 300,
+    "options": [[1, "ffffff00"], [3, "0a630001"], [28, "0a6300ff"]]
+   },
+   "REQUEST": {
+    "type": "ACK",
+    "yiaddr": "10.99.0.100",
+    "server_id": "10.99.0.1",
+    "lease": 300,
+    "options": [[1, "ffffff00"], [3, "0a630001"], [28, "0a6300ff"]]
+   }
+  }
+ },
+ "steps": [
+  {
+   "name": "discover"
+  },
+  {
+   "name": "request-selecting"
+  }
+ ],
+ "pydhcp": [
+  {
+   "call": "dora",
+   "args": {}
+  }
+ ],
+ "not_compared": []
+}
