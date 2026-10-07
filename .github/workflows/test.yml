@@ -71,7 +71,7 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[dev,toml]
+          python -m pip install -e .[dev]
 
       - name: Check formatting (black)
         run: python -m black --check src tests benchmarks examples
@@ -139,7 +139,7 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[dev,docs,toml]
+          python -m pip install -e .[dev,docs]
 
       # A hosted macOS runner is disposable, so it can be given the loopback
       # addresses the tests that reply from, or to, an address other than
@@ -228,15 +228,15 @@ jobs:
           print("\n".join(pins) or "(no floors declared)")
 
       - name: Install at the floors
-        run: python -m pip install -c floors.txt -e ".[dev,toml]"
+        run: python -m pip install -c floors.txt -e ".[dev]"
 
       - name: Run tests
         run: python -m pytest tests -q -rs
 
-  # What a user gets from `pip install pydhcp` with no extra: the library
-  # imports, the console script runs, and a feature that needs the toml extra
-  # names the package it needs instead of raising an ImportError. The test jobs
-  # above always have every extra.
+  # What a user gets from `pip install pydhcp` with no extra: the library imports
+  # and loads no optional module, the command says it needs the `cli` extra, and
+  # a feature that needs the yaml or toml extra names it. Then the `cli` extra
+  # alone: the command runs. The test jobs above always have every extra.
   bare:
     name: Bare install (py${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -271,21 +271,25 @@ jobs:
       - name: Install with no extra
         run: python -m pip install .
 
-      - name: The library imports, the command runs, and a missing extra is named
+      - name: The library imports with no optional module, and the command names its extra
         shell: bash
         working-directory: ${{ runner.temp }}
         run: |
-          python -c "import pydhcp; print('imported', pydhcp.__version__)"
-          pydhcp --version
-          pydhcp interfaces > /dev/null
-          if echo 00 | pydhcp packet --decode > /dev/null 2> err.txt; then
-            echo "a malformed packet decoded"; exit 1
-          fi
-          cat err.txt
-          grep -q "cannot process the packet" err.txt
-          python -c "import tomli_w" 2> /dev/null && { echo "tomli_w is installed in a bare environment"; exit 1; }
           python - <<'PY'
+          import sys
+
           import pydhcp
+          import pydhcp.cli
+
+          optional = ("duho", "yaml", "tomli", "tomli_w", "tomllib")
+          loaded = sorted(m for m in sys.modules if m.split(".")[0] in optional)
+          assert loaded == [], loaded
+          for name in ("duho", "yaml", "tomli_w"):
+              try:
+                  __import__(name)
+              except ImportError:
+                  continue
+              raise SystemExit(name + " is installed in a bare environment")
 
           message = pydhcp.DHCPMessage.from_mapping(
               {
@@ -295,14 +299,47 @@ jobs:
                   "chaddr": "00:11:22:33:44:55", "sname": "", "file": "", "options": {},
               }
           )
-          try:
-              message.to_text("toml")
-          except NotImplementedError as error:
-              assert "tomli-w" in str(error), error
-              print("toml without the extra says:", error)
-          else:
-              raise SystemExit("toml was written without the extra")
+          assert message.to_text("json") and message.to_text("ini")
+          for fmt in ("yaml", "toml"):
+              try:
+                  message.to_text(fmt)
+              except ImportError as error:
+                  assert 'pip install "pydhcp[%s]"' % fmt in str(error), error
+                  print(fmt, "without the extra says:", error)
+              else:
+                  raise SystemExit(fmt + " was written without its extra")
           PY
+          for run in "pydhcp --help" "python -m pydhcp --help"; do
+            if $run > out.txt 2> err.txt; then
+              echo "'$run' ran without the cli extra"; exit 1
+            fi
+            cat err.txt
+            test ! -s out.txt
+            grep -q 'pip install "pydhcp\[cli\]"' err.txt
+          done
+
+      - name: Add the cli extra alone
+        run: python -m pip install ".[cli]"
+
+      - name: The command runs, and the other extras are still named
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          pydhcp --version
+          pydhcp interfaces > /dev/null
+          if echo 00 | pydhcp packet --decode > /dev/null 2> err.txt; then
+            echo "a malformed packet decoded"; exit 1
+          fi
+          cat err.txt
+          grep -q "cannot process the packet" err.txt
+          if python -c "import yaml" 2> /dev/null; then
+            echo "yaml is installed without its extra"; exit 1
+          fi
+          if echo "op: BOOTREQUEST" | pydhcp packet --encode --format yaml > /dev/null 2> err.txt; then
+            echo "yaml decoded without its extra"; exit 1
+          fi
+          cat err.txt
+          grep -q 'pip install "pydhcp\[yaml\]"' err.txt
 
   # What a user installs is the built wheel, not the checkout: build it, install
   # it into a clean environment away from the source tree, run the console
@@ -349,7 +386,7 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           if [ -d wheel-env/Scripts ]; then BIN=wheel-env/Scripts; else BIN=wheel-env/bin; fi
-          "$BIN/python" -m pip install "$(ls dist/*.whl)"
+          "$BIN/python" -m pip install "$(ls dist/*.whl)[cli]"
           "$BIN/pydhcp" --version
           "$BIN/pydhcp" interfaces > /dev/null
           "$BIN/python" - <<'PY'
@@ -400,7 +437,7 @@ jobs:
       - name: Install package and test dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e .[dev,toml]
+          python -m pip install -e .[dev]
 
       # dnsmasq-base is the daemon without its system service, which would
       # otherwise start on the runner and bind ports 53 and 67.

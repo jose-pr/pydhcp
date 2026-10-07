@@ -38,8 +38,8 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install package with all extras
-        run: python -m pip install -e ".[dev,toml]"
+      - name: Install package with all extras (dev refers to them)
+        run: python -m pip install -e ".[dev]"
       - name: Run tests
         run: python -m pytest tests -q -rs
 
@@ -76,7 +76,7 @@ jobs:
           open("floors.txt", "w").write("\n".join(pins) + "\n")
           print("\n".join(pins) or "(no floors declared)")
       - name: Install at the floors
-        run: python -m pip install -c floors.txt -e ".[dev,toml]"
+        run: python -m pip install -c floors.txt -e ".[dev]"
       - name: Run tests
         run: python -m pytest tests -q -rs
 
@@ -147,6 +147,17 @@ jobs:
         run: |
           python -m venv "$RUNNER_TEMP/smoke"
           "$RUNNER_TEMP/smoke/bin/pip" install "$(ls dist/*.whl)"
+      - name: Without the cli extra the command says which extra it needs
+        run: |
+          if "$RUNNER_TEMP/smoke/bin/pydhcp" --help > out.txt 2> err.txt; then
+            echo "the command ran without the cli extra"; exit 1
+          fi
+          cat err.txt
+          test ! -s out.txt
+          grep -q 'pip install "pydhcp\[cli\]"' err.txt
+      - name: Add the cli extra
+        run: |
+          "$RUNNER_TEMP/smoke/bin/pip" install "$(ls dist/*.whl)[cli]"
       - name: Import it, find the files it must ship, run the console script
         working-directory: ${{ runner.temp }}
         run: |
