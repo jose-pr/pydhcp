@@ -18,7 +18,7 @@ import pytest
 
 from pydhcp import DHCPMessage
 
-DATA = pathlib.Path(__file__).parent / "data" / "capture_output"
+DATA = pathlib.Path(__file__).resolve().parents[1] / "data" / "capture_output"
 EXPECTED = DATA / "expected"
 
 _SPEC = importlib.util.spec_from_file_location(

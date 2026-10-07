@@ -1089,3 +1089,26 @@ def test_hash_agrees_with_eq_for_records_holding_a_list_payload():
 
     e = ClasslessRoute("10.0.0.1", "192.0.2.0/24")
     assert len({e, ClasslessRoute("10.0.0.1", "192.0.2.0/24")}) == 1
+
+
+def test_classless_route():
+    from pydhcp.options import ClasslessRoute
+    from ipaddress import IPv4Network
+
+    # 24-bit subnet, router 192.168.1.1, network 192.168.1.0/24
+    net = IPv4Network("192.168.1.0/24")
+    gw = IPv4("192.168.1.1")
+    route = ClasslessRoute(gw, net)
+
+    # Encode
+    encoded = route.pack()
+    # Expect 1 byte mask (24), 3 bytes prefix (192.168.1), 4 bytes router (192.168.1.1)
+    assert len(encoded) == 8
+    assert encoded[0] == 24
+    assert encoded[1:4] == b"\xc0\xa8\x01"  # 192.168.1
+    assert encoded[4:] == b"\xc0\xa8\x01\x01"  # 192.168.1.1
+
+    # Decode
+    decoded = ClasslessRoute.unpack(encoded)
+    assert decoded.network == net
+    assert decoded.gateway == gw

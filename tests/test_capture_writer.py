@@ -2,7 +2,7 @@
 
 Nothing here imports the command line. The octets a record file holds, and the
 names the command gives its files, are pinned from the outside by
-`tests/test_capture_output.py`.
+`tests/integration/test_capture_output.py`.
 """
 
 from __future__ import annotations

@@ -4,6 +4,7 @@ the standard library's under another door."""
 from __future__ import annotations
 
 import ipaddress
+from ipaddress import IPv4Address as IPv4
 
 import pytest
 
@@ -85,3 +86,19 @@ def test_a_socket_address_port_is_one_a_socket_can_have() -> None:
             SocketAddress("127.0.0.1", port)
     assert SocketAddress("127.0.0.1", 0).port == 0
     assert str(SocketAddress("127.0.0.1", 65535)) == "127.0.0.1:65535"
+
+
+def test_link_local_network_is_the_rfc_3927_range():
+    from netimps import LINK_LOCAL_V4
+
+    assert str(LINK_LOCAL_V4) == "169.254.0.0/16"
+    assert IPv4("169.254.1.1") in LINK_LOCAL_V4
+    assert IPv4("192.0.2.1") not in LINK_LOCAL_V4
+
+
+def test_socket_address():
+    addr = SocketAddress("127.0.0.1", 8080)
+    assert addr.ip == IPv4("127.0.0.1")
+    assert addr.port == 8080
+    assert addr.to_tuple() == ("127.0.0.1", 8080)
+    assert str(addr) == "127.0.0.1:8080"

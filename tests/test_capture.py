@@ -457,7 +457,7 @@ def test_dhcp_capture_hook_fail_fast_stops_the_capture(capture_class) -> None:
     The two listeners shut down by different mechanisms (a wake socket versus
     an event on the loop), so what is asserted here is the part that has to be
     the same on both: the real `shutdown()` is called and the reason is recorded.
-    `tests/test_async.py` drives the async mechanism itself, on a live loop.
+    `tests/integration/test_async.py` drives the async mechanism itself, on a live loop.
     """
 
     def bad_hook(event):

@@ -40,7 +40,7 @@ from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPO
 from helpers import CHADDR, build_request
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 
-SRC = pathlib.Path(__file__).resolve().parent.parent / "src" / "pydhcp"
+SRC = pathlib.Path(__file__).resolve().parents[2] / "src" / "pydhcp"
 
 
 # --- The async halves must be a mixin, not a copy ----------------------------

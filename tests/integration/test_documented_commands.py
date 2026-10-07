@@ -27,7 +27,7 @@ from helpers import build_request
 from pydhcp.cli import App
 from pydhcp.options import DHCPOptionCode
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ROOT = pathlib.Path(__file__).resolve().parents[2]
 README = ROOT / "README.md"
 DOCUMENTS = [
     README,
