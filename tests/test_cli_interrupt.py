@@ -18,21 +18,26 @@ import typing as _ty
 
 import pytest
 
+# The listener waits for datagrams in `select.select`. The wrapper announces on the
+# first such wait, so the interrupt lands while the command is receiving and not
+# while it is still binding.
 _WRAPPER = """
+import select
 import signal
 import sys
 
-import pydhcp.listener._sync as sync
-
-serve = sync.DHCPListener.serve_forever
-
-
-def announced(self):
-    print("serving", flush=True)
-    serve(self)
+wait = select.select
+announced = []
 
 
-sync.DHCPListener.serve_forever = announced
+def waiting(readers, writers, errors, timeout=None):
+    if not announced and timeout:
+        announced.append(True)
+        print("serving", flush=True)
+    return wait(readers, writers, errors, timeout)
+
+
+select.select = waiting
 if sys.platform == "win32":
     signal.signal(signal.SIGBREAK, signal.default_int_handler)
 sys.argv[0] = "pydhcp"
@@ -69,19 +74,34 @@ def test_ctrl_c_stops_the_command_with_status_zero_and_no_traceback(
         text=True,
         creationflags=flags,
     )
+    watchdog = threading.Timer(30.0, proc.kill)
     try:
         # A watchdog, so a command that never prints cannot hang the suite.
-        watchdog = threading.Timer(30.0, proc.kill)
         watchdog.start()
         assert proc.stdout is not None
-        assert proc.stdout.readline().strip() == "serving", "the command did not start"
+        announced = proc.stdout.readline().strip()
+        if announced != "serving":
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            pytest.fail(
+                f"the command did not start receiving (printed {announced!r}); "
+                f"status {proc.returncode}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+            )
         try:
             _interrupt(proc)
         except (OSError, ValueError) as error:  # pragma: no cover - no console
             pytest.skip(f"cannot deliver a console signal here: {error}")
-        stdout, stderr = proc.communicate(timeout=20)
-        watchdog.cancel()
+        try:
+            stdout, stderr = proc.communicate(timeout=20)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            stdout, stderr = proc.communicate()
+            pytest.fail(
+                "the command was still running 20 s after the interrupt\n"
+                f"stdout:\n{stdout}\nstderr:\n{stderr}"
+            )
     finally:
+        watchdog.cancel()
         if proc.poll() is None:
             proc.kill()
             proc.wait()
