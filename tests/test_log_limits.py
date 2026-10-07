@@ -402,7 +402,11 @@ def test_an_oversized_datagram_is_limited_and_counted_by_the_async_listener(
             await listener.aclose()
         return listener
 
-    listener = asyncio.new_event_loop().run_until_complete(scenario())
+    loop = asyncio.new_event_loop()
+    try:
+        listener = loop.run_until_complete(scenario())
+    finally:
+        loop.close()
     lines = _written(caplog, CORE)
     assert len(lines) == 2
     assert f"[{INSIDE + 1} occurrences so far" in lines[1].getMessage()

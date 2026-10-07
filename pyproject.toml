@@ -78,6 +78,12 @@ exclude = ["*.local.*"]
 # put tests/ on sys.path first.
 pythonpath = ["src", "tests"]
 testpaths = ["tests"]
+# A warning is a failure: an unclosed socket or file, an un-awaited coroutine or a
+# deprecation in a dependency stops the run instead of scrolling past. A needed
+# exception is listed here as narrowly as the warning's own text, with its reason.
+filterwarnings = ["error"]
+# An expected failure that passes is a failure, so the fix removes its marker.
+xfail_strict = true
 
 [tool.black]
 # The project's *minimum* Python, so black never emits syntax the floor cannot

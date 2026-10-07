@@ -164,6 +164,10 @@ def run(argv: "_ty.Sequence[str]", sent: "_ty.Sequence[bytes]") -> Done:
         if process.poll() is None:
             process.kill()
             process.wait()
+        for thread in threads:
+            thread.join(10)
+        process.stdout.close()
+        process.stderr.close()
     return Done(status, b"".join(stdout), stderr)
 
 

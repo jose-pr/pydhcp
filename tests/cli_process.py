@@ -168,11 +168,19 @@ class Running:
             raise AssertionError(
                 "the command did not end by itself:\n" + "\n".join(self.stderr)
             ) from None
-        for thread in self._threads:
-            thread.join(10)
+        self._close()
         return status
 
     def kill(self) -> None:
         if self.process.poll() is None:
             self.process.kill()
             self.process.wait()
+        self._close()
+
+    def _close(self) -> None:
+        """Let the readers reach end of file, then release the child's pipes."""
+        for thread in self._threads:
+            thread.join(10)
+        for stream in (self.process.stdout, self.process.stderr):
+            if stream is not None:
+                stream.close()
