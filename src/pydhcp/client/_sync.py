@@ -129,9 +129,14 @@ class DHCPClient(_ClientCore, DHCPListener):
                 attempts = 0
                 for interval in self._retransmit_intervals(timeout, retries):
                     now = self._monotonic()
+                    last = False
                     if ends is not None:
                         if ends - now <= 0:
                             break
+                        # The deadline falls inside this wait, so it is the last:
+                        # a timer may fire a clock tick early, and what the clock
+                        # then says must not buy another send.
+                        last = ends - now <= interval
                         interval = min(interval, ends - now)
                     self._stamp_secs(message, now - started_at)
                     attempts += 1
@@ -139,6 +144,8 @@ class DHCPClient(_ClientCore, DHCPListener):
                     reply = self._wait_for(waiter, msg_type, interval, server)
                     if reply is not None:
                         return reply
+                    if last:
+                        break
                 raise self._timed_out(msg_type, attempts, ends)
         finally:
             # The exchange is over either way. Left in place, this set only ever

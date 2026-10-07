@@ -950,6 +950,10 @@ importable. Replace each name in the left column with the one beside it.
 
 ### Fixed
 
+- **A deadline no longer lets one more datagram out after the last wait.** The clients cut the wait the
+  deadline falls in to what it leaves, but then read the clock again and sent once more when it still showed time left,
+  which a timer firing a clock tick early (15.6 ms on Windows) made happen. The wait the deadline cuts is the last one,
+  whatever the clock says, in `DHCPClient` and `AsyncDHCPClient`.
 - **An interrupt that lands between a sync listener's claim and its receive loop no longer makes `close()` wait five seconds.**
   `serve_forever()` and `start()` marked the listener as serving and only then entered the `try` that releases the claim, so a
   `KeyboardInterrupt` (or any exception) in between left it looking busy: `close()` waited its full five seconds and logged

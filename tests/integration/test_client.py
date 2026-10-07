@@ -730,6 +730,20 @@ def test_a_deadline_bounds_the_whole_call_and_timeout_keeps_its_meaning():
     assert client.kinds() == ["DHCPDISCOVER"] * 2
 
 
+def test_the_wait_the_deadline_cuts_is_the_last_one_whatever_the_clock_says():
+    """A timer may fire a clock tick early, so the clock still shows time left
+    after the wait the deadline cut. Nothing is sent after that wait."""
+    client = _ScriptedClient(listen=("127.0.0.1", 0), answers={})
+    client.WAIT_COST = 0.0  # the wait returns with the clock where it was
+    client._retransmit_intervals = lambda timeout, retries: iter([0.5, 1.0, 2.0])
+
+    with pytest.raises(DHCPTimeoutError):
+        client.discover_offer(CHADDR, deadline=0.7)
+
+    assert client.intervals == [0.5, pytest.approx(0.7)]
+    assert client.kinds() == ["DHCPDISCOVER"] * 2
+
+
 def test_a_deadline_counts_across_both_halves_of_a_dora():
     client = _real_clock_client([0.4, 0.4, 0.4])
     client.answers = {

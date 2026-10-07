@@ -685,6 +685,45 @@ def test_a_deadline_bounds_the_whole_call(loop_type: type) -> None:
 
 
 @loop_types
+def test_the_wait_the_deadline_cuts_is_the_last_one_whatever_the_clock_says(
+    loop_type: type,
+) -> None:
+    """A timer may fire a clock tick early, so the clock still shows time left
+    after the wait the deadline cut. Nothing is sent after that wait."""
+
+    class EarlyTimer(_StubbedClockClient):
+        WAIT_COST = 0.0  # the wait returns with the clock where it was
+
+    async def main() -> "tuple[list[float], int]":
+        peer = _Peer()
+        try:
+            async with EarlyTimer(listen=LOCAL) as client:
+                await client.start()
+                client._retransmit_intervals = (  # type: ignore[method-assign]
+                    lambda timeout, retries: iter([0.5, 1.0, 2.0])
+                )
+                with pytest.raises(DHCPTimeoutError):
+                    await client.discover_offer(
+                        CHADDR,
+                        deadline=0.7,
+                        destination="127.0.0.1",
+                        port=peer.port,
+                        broadcast=False,
+                    )
+                await await_until(
+                    lambda: len(peer.received) >= 2, "the datagrams to arrive"
+                )
+                await asyncio.sleep(0.2)
+                return client.intervals, len(peer.received)
+        finally:
+            peer.close()
+
+    intervals, sent = _run(loop_type, main)
+    assert intervals == [0.5, pytest.approx(0.7)]
+    assert sent == 2
+
+
+@loop_types
 def test_send_used_on_its_own_leaves_no_transaction_behind(loop_type: type) -> None:
     async def main() -> None:
         peer = _Peer()

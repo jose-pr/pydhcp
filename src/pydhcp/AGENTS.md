@@ -667,7 +667,8 @@ A test that patches a module global patches it in the private module that reads 
     defaults the call is bounded at about 2+4+8 s (±1 s each) rather than 3×2 s.
     **`deadline`** (seconds, `None` for none) bounds the whole call, whatever the
     schedule: no transmission starts after it and the last wait is cut to what
-    it leaves; a value that is not positive is a `ValueError`. Each transmission
+    it leaves, and nothing is sent after that wait whatever the clock then shows;
+    a value that is not positive is a `ValueError`. Each transmission
     carries a real `secs` — seconds since the exchange began (§2).
   - `.dora(chaddr, *, timeout=2.0, retries=2, deadline=None, destination=...,
     port=..., xid=None, client_identifier=None, parameter_request_list=None,
