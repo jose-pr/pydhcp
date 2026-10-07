@@ -93,7 +93,7 @@ def test_no_document_spells_the_loglevel_option_with_an_equals_sign() -> None:
 # -- the README's lines, as processes ------------------------------------------------
 
 README_LINES = _commands(README)
-SERVING = ("server", "capture")
+SERVING = ("server", "capture", "relay")
 
 
 def _packet_hex() -> str:
