@@ -27,37 +27,17 @@ APIPA = ipaddress.IPv4Interface("169.254.11.89/16")
 
 
 @pytest.fixture
-def apipa_only(monkeypatch):
+def apipa_only(fake_adapters):
     """A host whose only non-loopback interface is link-local.
 
     Constructed rather than waiting for the machine to grow one -- which is
     exactly the dependency that made the original failure look like a
     commit regression.
     """
-    interfaces = [
-        net.NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/8")),
-        net.NetworkInterface("Wi-Fi 2", APIPA),
-    ]
-
-    def fake(filter=True, family=4, *, cache=False):
-        if filter is True:
-            filter = lambda ni: ni.ip not in netimps.LINK_LOCAL_V4
-        for ni in interfaces:
-            if not filter or filter(ni):
-                yield ni
-
-    monkeypatch.setattr(net, "host_ip_interfaces", fake)
-    import netimps
-
-    # The resolver asks netimps which adapter holds an address, unfiltered.
-    adapters = {
-        ni.ip: netimps.Interface(ni.name, index=n + 1, ips=[ni.ip_interface])
-        for n, ni in enumerate(interfaces)
-    }
-    monkeypatch.setattr(
-        netimps, "get_interface", lambda address, **_kw: adapters.get(address)
+    fake_adapters(
+        netimps.Interface("lo", 1, ips=[ipaddress.IPv4Interface("127.0.0.1/8")]),
+        netimps.Interface("Wi-Fi 2", 2, ips=[APIPA]),
     )
-    return interfaces[1]
 
 
 def _wildcard_socket() -> socket.socket:
@@ -66,7 +46,7 @@ def _wildcard_socket() -> socket.socket:
     return sock
 
 
-def test_an_apipa_only_interface_resolves_by_address(apipa_only, monkeypatch) -> None:
+def test_an_apipa_only_interface_resolves_by_address(apipa_only) -> None:
     sock = _wildcard_socket()
     try:
         resolved = _resolve_interface(sock, IPv4("169.254.11.89"), None)

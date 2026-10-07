@@ -33,32 +33,16 @@ ROUTABLE = ipaddress.IPv4Interface("10.0.0.1/24")
 
 
 @pytest.fixture
-def host(monkeypatch):
-    """A host holding one link-local address and one routable one."""
-    interfaces = [
-        NetworkInterface("Wi-Fi 2", LINK_LOCAL),
-        NetworkInterface("eth0", ROUTABLE),
-    ]
+def host(fake_adapters):
+    """A host holding one link-local address and one routable one.
 
-    def fake(filter=True, family=4, *, cache=False):
-        if filter is True:
-            filter = lambda ni: ni.ip not in netimps.LINK_LOCAL_V4
-        for ni in interfaces:
-            if not filter or filter(ni):
-                yield ni
-
-    import pydhcp.server as server_module
-
-    monkeypatch.setattr(server_module._net, "host_ip_interfaces", fake)
-    # The identity question ("do we hold this address") is netimps', and it
-    # answers from the same fake host: link-local included, unfiltered.
-    held = {ni.ip for ni in interfaces}
-    monkeypatch.setattr(
-        server_module._netimps,
-        "is_local_address",
-        lambda address, **_kw: address in held,
+    The identity question ("do we hold this address") is netimps' and answers
+    from the same list: link-local included, unfiltered.
+    """
+    return fake_adapters(
+        netimps.Interface("Wi-Fi 2", 1, ips=[LINK_LOCAL]),
+        netimps.Interface("eth0", 2, ips=[ROUTABLE]),
     )
-    return interfaces
 
 
 def _context(interface) -> DHCPRequestContext:

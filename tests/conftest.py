@@ -230,3 +230,37 @@ def enumerations() -> "_Enumerations":
     netimps.clear_interface_cache()
     yield _Enumerations()
     netimps.clear_interface_cache()
+
+
+@pytest.fixture
+def fake_adapters(monkeypatch):
+    """Describe the host's adapters, so the library's own selection runs over them.
+
+    `install(*adapters)` replaces what netimps enumerates with the given
+    `netimps.Interface` objects and makes its address lookups answer from the
+    same list. Nothing of pydhcp is replaced: the enumeration, the default
+    link-local filter and the lookups are the real functions.
+    """
+    import netimps
+
+    def install(*adapters: "netimps.Interface") -> "list[netimps.Interface]":
+        held = list(adapters)
+
+        def holder(address: _ty.Any) -> _ty.Any:
+            for adapter in held:
+                if any(ip.ip == address for ip in adapter.ips):
+                    return adapter
+            return None
+
+        monkeypatch.setattr(netimps, "get_interfaces", lambda **_kw: list(held))
+        monkeypatch.setattr(
+            netimps, "get_interface", lambda address, **_kw: holder(address)
+        )
+        monkeypatch.setattr(
+            netimps,
+            "is_local_address",
+            lambda address, **_kw: holder(address) is not None,
+        )
+        return held
+
+    return install

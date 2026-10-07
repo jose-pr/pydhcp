@@ -51,3 +51,42 @@ def test_family_is_given_as_a_number_or_a_socket_constant() -> None:
         isinstance(i.ip, IPv6Address)
         for i in host_ip_interfaces(filter=False, family=socket.AF_INET6)
     )
+
+
+def _host(fake_adapters):
+    import ipaddress
+
+    import netimps
+
+    return fake_adapters(
+        netimps.Interface("lo", 1, ips=[ipaddress.IPv4Interface("127.0.0.1/8")]),
+        netimps.Interface("eth0", 2, ips=[ipaddress.IPv4Interface("192.168.1.5/24")]),
+        netimps.Interface(
+            "Wi-Fi 2", 3, ips=[ipaddress.IPv4Interface("169.254.11.89/16")]
+        ),
+    )
+
+
+def test_the_default_leaves_out_a_link_local_address(fake_adapters) -> None:
+    """RFC 3927 s1.5: 169.254/16 is self-assigned, so it is never served from."""
+    _host(fake_adapters)
+
+    assert [str(i.ip) for i in host_ip_interfaces()] == ["127.0.0.1", "192.168.1.5"]
+
+
+def test_filter_false_lists_a_link_local_address_too(fake_adapters) -> None:
+    _host(fake_adapters)
+
+    assert [str(i.ip) for i in host_ip_interfaces(filter=False)] == [
+        "127.0.0.1",
+        "192.168.1.5",
+        "169.254.11.89",
+    ]
+
+
+def test_a_predicate_of_the_callers_replaces_the_default(fake_adapters) -> None:
+    _host(fake_adapters)
+
+    named = host_ip_interfaces(lambda ni: ni.name == "Wi-Fi 2")
+
+    assert [str(i.ip) for i in named] == ["169.254.11.89"]
