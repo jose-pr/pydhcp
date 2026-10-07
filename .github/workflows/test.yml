@@ -427,10 +427,14 @@ jobs:
 
       # dnsmasq-base is the daemon without its system service, which would
       # otherwise start on the runner and bind ports 53 and 67.
+      # Bounded: with the runner's package mirror unreachable, apt waited out
+      # the job's whole thirty minutes here (seen 2026-10-07).
       - name: Install the peers
+        timeout-minutes: 6
         run: |
-          sudo apt-get update
-          sudo apt-get install -y isc-dhcp-client dnsmasq-base busybox
+          apt_get() { sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20 "$@"; }
+          apt_get update
+          apt_get install -y isc-dhcp-client dnsmasq-base busybox
 
       # Ubuntu confines dhclient and dnsmasq with AppArmor profiles written for
       # the system services, which do not allow the temporary directory the
