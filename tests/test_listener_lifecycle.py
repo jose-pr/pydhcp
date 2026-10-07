@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import logging
 import signal
 import socket
 import subprocess
@@ -596,3 +597,54 @@ def test_an_async_class_has_no_blocking_vocabulary() -> None:
             assert not hasattr(cls, name), f"{cls.__name__}.{name}"
         for name in ("start", "serve_forever", "shutdown", "wait_closed", "close"):
             assert callable(getattr(cls, name))
+
+
+def test_an_interrupt_after_the_claim_and_before_the_loop_leaves_nothing_to_wait_for(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Ctrl-C can arrive at any bytecode of `serve_forever()`, claim included.
+
+    The loop is replaced by a step that raises `KeyboardInterrupt` the moment
+    the claim has been made. `close()` must then return at once and quietly: a
+    claim nobody serves under must not leave the listener looking busy.
+    """
+    listener = DHCPListener(listen=LOCAL)
+
+    def interrupted() -> None:
+        raise KeyboardInterrupt
+
+    # The step between the claim and the loop is private; this is its only seam.
+    monkeypatch.setattr(listener, "_serve", interrupted)
+    with pytest.raises(KeyboardInterrupt):
+        listener.serve_forever()
+
+    began = time.monotonic()
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        listener.close()
+
+    assert time.monotonic() - began < 2.0, "close() waited for a loop that never ran"
+    assert "did not end within" not in caplog.text
+    assert listener.bound_addresses == ()
+
+
+def test_an_interrupt_while_the_receive_thread_is_made_leaves_nothing_to_wait_for(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The same window in `start()`: the claim is made, the thread never is."""
+    listener = DHCPListener(listen=LOCAL)
+
+    def interrupted(*_args: _ty.Any, **_kwargs: _ty.Any) -> _ty.NoReturn:
+        raise KeyboardInterrupt
+
+    with monkeypatch.context() as patched:
+        patched.setattr(threading, "Thread", interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            listener.start()
+
+    began = time.monotonic()
+    with caplog.at_level(logging.WARNING, logger="pydhcp"):
+        listener.close()
+
+    assert time.monotonic() - began < 2.0, "close() waited for a loop that never ran"
+    assert "did not end within" not in caplog.text
+    assert listener.bound_addresses == ()

@@ -57,6 +57,9 @@ class DHCPListener(_ListenerCore):
         self._state_lock = _thread.Lock()
         self._close_lock = _thread.Lock()
         self._serving = False
+        #: Who made the claim that has not been released; each attempt holds its
+        #: own object, so one that is refused never releases another's.
+        self._claim_token: _ty.Optional[object] = None
         self._stopping = False
         self._idle = _thread.Event()
         self._idle.set()
@@ -67,7 +70,7 @@ class DHCPListener(_ListenerCore):
 
     # -- lifecycle ---------------------------------------------------------
 
-    def _claim(self) -> None:
+    def _claim(self, token: object) -> None:
         """Bind, then mark this caller as the one that serves."""
         self.bind()
         with self._state_lock:
@@ -75,6 +78,7 @@ class DHCPListener(_ListenerCore):
                 raise RuntimeError(f"{type(self).__name__} is closed")
             if self._serving:
                 raise RuntimeError(f"{type(self).__name__} is already serving")
+            self._claim_token = token
             wake_read, wake_write = _socket.socketpair()
             wake_read.setblocking(False)
             wake_write.setblocking(False)
@@ -89,8 +93,12 @@ class DHCPListener(_ListenerCore):
         Raises what `bind()` raised, and `RuntimeError` when already serving or
         closed. The sockets stay open on return: `close()` releases them.
         """
-        self._claim()
-        self._serve()
+        token = object()
+        try:
+            self._claim(token)
+            self._serve()
+        finally:
+            self._release(token)
 
     def start(self) -> None:
         """Bind, then receive on a new daemon thread.
@@ -99,15 +107,21 @@ class DHCPListener(_ListenerCore):
         be bound raises what `bind()` raised and leaves the listener unstarted
         and nothing bound. Raises `RuntimeError` when already serving or closed.
         """
-        self._claim()
-        # Daemon: nothing in the loop ends on its own, so a non-daemon thread
-        # keeps the interpreter alive after `main` returns.
-        thread = _thread.Thread(target=self._serve, name="pydhcp-listener", daemon=True)
-        self._receive_thread = thread
+        token = object()
+        thread: _ty.Optional[_thread.Thread] = None
         try:
+            self._claim(token)
+            # Daemon: nothing in the loop ends on its own, so a non-daemon thread
+            # keeps the interpreter alive after `main` returns.
+            thread = _thread.Thread(
+                target=self._serve, name="pydhcp-listener", daemon=True
+            )
+            self._receive_thread = thread
             thread.start()
         except BaseException:
-            self._finish_serving()
+            # A thread that began owns the release; one that did not leaves it here.
+            if thread is None or thread.ident is None:
+                self._release(token)
             raise
 
     def shutdown(self) -> None:
@@ -179,6 +193,11 @@ class DHCPListener(_ListenerCore):
             except OSError:  # pragma: no cover - full or closed: already woken
                 pass
 
+    def _release(self, token: object) -> None:
+        """Undo the claim made with `token`, if it is still held; otherwise nothing."""
+        if self._claim_token is token:
+            self._finish_serving()
+
     def _finish_serving(self) -> None:
         """Release what serving held and let `wait_closed()` return."""
         for sock in (self._wake_read, self._wake_write):
@@ -190,6 +209,7 @@ class DHCPListener(_ListenerCore):
         with self._state_lock:
             self._serving_ident = None
             self._serving = False
+            self._claim_token = None
         self._idle.set()
 
     def _serve(self) -> None:

@@ -229,7 +229,10 @@ everything below from `pydhcp.listener` itself.
       then release every socket. **Final and repeatable**: `.bind()`,
       `.start()`, `.serve_forever()` and `with` afterwards raise `RuntimeError`.
       On the receive thread (a handler calling it) it shuts down and returns
-      without joining; the loop releases the sockets as it ends.
+      without joining; the loop releases the sockets as it ends. An exception
+      or interrupt that ends `.serve_forever()` or `.start()` at any point,
+      before the loop runs included, leaves the listener idle: `.close()` returns
+      at once.
     - `with listener:` binds on entry (it does not serve) and calls `.close()` on
       exit.
     - The library installs **no signal handler**: Ctrl-C reaches
