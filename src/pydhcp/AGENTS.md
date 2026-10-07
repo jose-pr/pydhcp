@@ -7,7 +7,7 @@ project overview, install, extras (`cli`, `yaml`, `toml`), and CLI, see <https:/
 private `_network` package and the `options` and `packet` subpackages have
 their own headers (they ship as `pydhcp/{_network,options,packet}/AGENTS.md`).
 
-**What the root holds** (`pydhcp.__all__`, 54 names, `__version__` among them:
+**What the root holds** (`pydhcp.__all__`, 58 names, `__version__` among them:
 the installed distribution's version, read from its metadata): the main
 classes of each role (`DHCPServer`, `DHCPClient`, `DHCPRelay`, `DHCPCapture`
 and their async twins, the listeners and transports), `DHCPMessage` and the
@@ -19,15 +19,14 @@ is imported from the module that owns it:
 
 | Name | Home |
 | --- | --- |
-| `CCC*`, `MoS*`, `VI*` codecs, `IPv4AddressOption`, `List`, `Bytes`, `String`, `Boolean`, `BaseDHCPOptionCode` | `pydhcp.options` |
+| the other 53 names of `pydhcp.options`: the `CCC*`, `MoS*` and `VI*` codecs, `ClientFQDN`, `DomainName`, `EncapsulatedOptions`, `Flag`, `I32`, `IPv4AddressOption`, `List`, `RecordList`, `Bytes`, `String`, `OctetString`, `Boolean`, `PCPServerList`, `SIPServers`, `StatusCode`, `FixedLengthInteger`, `BaseFixedLengthInteger`, `OptionCode`, `OptionCodec`, `BaseDHCPOptionCode`, `MIN_OPTION_CODE`, `MAX_OPTION_CODE` | `pydhcp.options` |
 | `HardwareAddressType` | `pydhcp.packet` |
 | `loads`, `dumps` (the four structured formats, as mappings) | `pydhcp.packet.structured` |
 | `DHCPMetrics`, `ListenLike`, `BROADCAST_ADDRESS` | `pydhcp.listener` |
-| `ServerAddressLike`, `DEFAULT_MAX_HOPS` | `pydhcp.relay` |
+| `ServerAddressLike`, `DEFAULT_MAX_HOPS`, `RFC1542_MAX_HOPS` | `pydhcp.relay` |
 | `ClientIdentifierLike` | `pydhcp.client` |
-| `PacketFilterLike` | `pydhcp.capture` |
-| `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook`, `DHCPLayer`, `dissect_dhcp`, `register_dhcp_dissector`, `read_capture`, `capture_dissector`, `replay_capture` | `pydhcp.capture` |
-| `main`, `App` | `pydhcp.cli` |
+| `PacketFilterLike`, `CaptureHook`, `CapturePredicate`, `CaptureSink`, `HOOK_TIMEOUT_SECONDS`, `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`, `command_hook`, `DHCPLayer`, `dissect_dhcp`, `register_dhcp_dissector`, `read_capture`, `capture_dissector`, `replay_capture` | `pydhcp.capture` |
+| `main`, `App` and the command classes `Server`, `Relay`, `Capture`, `Replay`, `Packet`, `Interfaces` | `pydhcp.cli` |
 
 A name outside a module's `__all__` is not API. The address and MAC types are
 not re-exported: `IPv4Address`, `IPv4Network` and `IPv4Interface` come from
@@ -184,6 +183,10 @@ everything below from `pydhcp.listener` itself.
     INFO by pydhcp, naming the address, and by netimps at WARNING (once per
     process for each distinct request and grant). A failure to grow is logged at
     WARNING, never raised.
+  - **`DEFAULT_PORTS`** (class attribute) — the ports a binding with no port
+    of its own binds, the wildcard (`None`) included: `(67, 68)` on the two
+    listeners and on `DHCPCapture`/`AsyncDHCPCapture`, `(67,)` on the servers
+    and the relays, `(68,)` on the clients. A subclass sets its own.
   - `.bind() -> None` — open/refresh sockets for `self._listen`; raises
     `PermissionError` for privileged ports (<1024 without rights) and
     **`netimps.AddressInUseError`** (an `OSError`, never a `PermissionError`)
@@ -491,7 +494,7 @@ A test that patches a module global patches it in the private module that reads 
     is the base allocator's policy only, so an `.acquire_lease()` override
     that builds its own lease is unaffected.
   - `.quarantine_address(ip, *, now=None)` — stops offering `ip` for
-    `DECLINE_QUARANTINE_SECONDS`; `now` is `time.monotonic()` seconds, and when
+    **`DECLINE_QUARANTINE_SECONDS`** (class attribute, `600.0`); `now` is `time.monotonic()` seconds, and when
     omitted (as `handle_decline` calls it, so an override taking only `ip` keeps
     working) the driver's reading is used. The map holds at most
     **`MAX_DECLINED_ADDRESSES`** (1024): at the bound the entries that have run
@@ -587,8 +590,15 @@ A test that patches a module global patches it in the private module that reads 
     back an address held for the client by an *offer*, counted in
     `offers_withdrawn`; a binding is kept).
   - Reply destination: unicasts to `giaddr` when a relay is in play (RFC 2131
-    §4.1); otherwise uses `ciaddr`, then broadcasts if the client's `BROADCAST`
-    flag is set, else `yiaddr`, falling back to `255.255.255.255`. **The UDP
+    §4.1); otherwise to `ciaddr` when the client has one, else to
+    `255.255.255.255`: the client's `BROADCAST` flag asks for that, and a
+    client with no address yet is answered the same way with the flag clear,
+    because a plain UDP socket cannot deliver to a `yiaddr` the client does
+    not own (it cannot answer ARP for it). The reply goes to `yiaddr` only
+    over loopback, where there is no ARP and POSIX refuses the broadcast, or
+    when **`UNICAST_TO_UNCONFIGURED_CLIENT`** (class attribute, `False`) is
+    set for a transport that can address the client's hardware address. A
+    DHCPNAK with `giaddr` 0 is always broadcast. **The UDP
     destination port comes from where the reply goes, never from the request's
     source port** (RFC 1542 §5.4, three MUSTs): **`REPLY_TO_RELAY_PORT`** (class
     attribute, `67`) for a reply sent to `giaddr`, a DHCPNAK through a relay
@@ -764,9 +774,9 @@ client that is never started will always time out waiting for a reply.
   A request whose `giaddr` is one of the relay's own addresses (the receiving
   interface's or any host address) is dropped and counted in
   `metrics.packets_dropped_relay_loop`, whether or not insertion is on. **`max_hops`
-  defaults to 4**, the RFC 1542
-  §4.1.1 default, and must be 0..16 -- that clause's hard ceiling -- or the
-  constructor raises `ValueError`.
+  defaults to 4** (`pydhcp.relay.DEFAULT_MAX_HOPS`), the RFC 1542
+  §4.1.1 default, and must be 0..16 (`pydhcp.relay.RFC1542_MAX_HOPS`) -- that
+  clause's hard ceiling -- or the constructor raises `ValueError`.
   **`trust_client_relay_agent_info=False`**: a request
   with `giaddr` 0 (straight from a client) that already carries option 82 is
   **dropped** and counted in `metrics.packets_dropped_untrusted`, since the
@@ -1138,7 +1148,9 @@ IPv6-only interface can break at runtime. The `dst` filter key compares with
     over the target, so a reader sees the whole file or the previous one and
     an interrupted write cannot truncate it. The rename retries briefly on
     `PermissionError` (on Windows an indexer or antivirus holding the file
-    looks exactly like that).
+    looks exactly like that): **`REPLACE_ATTEMPTS`** (class attribute, `5`)
+    tries, waiting **`REPLACE_BACKOFF_SECONDS`** (`0.02`) times the attempt
+    number between them.
   - The file maps each client identifier to `{"ip", "expires", "state",
     "options"}` (option payloads as hex). `state` is `"offered"` or `"bound"`;
     an entry with no `state`, as older files hold, is bound. `expires` is an
@@ -1327,7 +1339,7 @@ loading (a command is `capture.command_hook`) and `cli._common` for the shared
 bases: `server`, `relay` and `capture` declare `--listen` and `--per-interface` once,
 in a base class that also gives each its `PYDHCP_<COMMAND>_*` variables and ends
 the run on Ctrl-C). `pydhcp.cli` exports `App`, `main` and the six command
-classes, and nothing else: no limit or format list is reachable only from there
+classes `Interfaces`, `Server`, `Relay`, `Packet`, `Capture` and `Replay`, and nothing else: no limit or format list is reachable only from there
 (`pydhcp.capture.MAX_CAPTURE_FILES`, `pktcap.OUTPUT_FORMATS`), and no command module
 is over 200 lines. Patch a name where the command module looks it up
 (`pydhcp.cli._server.DHCPServer`).

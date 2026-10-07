@@ -4,8 +4,9 @@ Header-file-style reference for `pydhcp.options`: the DHCP options
 container, the option-code registry, and the option payload codecs
 (private modules under `pydhcp.options._codecs`, exported from `pydhcp.options`).
 Every name below is importable from `pydhcp.options`; the top-level `pydhcp`
-package re-exports the generic codecs, **not** the `CCC*`, `MoS*` and `VI*`
-families, `IPv4AddressOption`, `List`, `Bytes`, `String` or `Boolean`. The top-level package header ships beside this
+package re-exports only the container, the code enum, the integers `U8`,
+`U16` and `U32` and the list and vendor codecs a handler commonly assigns; the
+top header's table names every one it does not. The top-level package header ships beside this
 one as `pydhcp/AGENTS.md`; for the project overview, install and CLI, see
 <https://github.com/jose-pr/pydhcp> (the repo-root `AGENTS.md` is contributor orientation and is not part
 of the installed package).
@@ -47,7 +48,8 @@ of the installed package).
   end-of-options. A code above 255 raises here too. `.decode()` is
   deliberately **not** checked: receive stays liberal and already treats 0
   and 255 as framing.
-  - **`.get(key, default=None, *, decode=True) -> Any`** — `decode=True`
+  - **`.get(key, default=None, decode=True) -> Any`** — `key` is positional
+    only (`get(key=53)` is a `TypeError`); `decode=True`
     (default) uses the code's registered `DHCPOptionType`; `decode=False`
     returns the raw `bytearray`; `decode=<type[DHCPOptionType]>` or
     `decode=<Callable[[bytearray], T]>` overrides the codec explicitly.
@@ -245,10 +247,12 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
 - **`String(value="")`** — RFC 2132 NVT-ASCII text; `value` is text or octets
   (read as text), anything else is a `TypeError`: `None` is not an empty
   string, delete the option instead. **Not** null-terminated: the
-  length octet delimits it, so a trailing NUL would be part of the value.
-  Measured, `String("abc")` encodes to `b"abc"`. (Some senders do append
-  one; `decode` keeps whatever arrived rather than stripping it, because
-  stripping would change a value that round-trips.)
+  length octet delimits it, and `String("abc")` encodes to `b"abc"`. Some
+  senders do append a NUL, so reading **ends the value at the first NUL
+  octet**: `b"abc\x00"` and `b"abc\x00def"` both read as `'abc'` (RFC 2132 §2
+  asks a receiver to delete trailing NULs; this drops what follows an
+  embedded one as well, which `OctetString` does not). A value that holds a
+  NUL therefore does not read back as it was written.
   Octets that are not valid UTF-8 are **preserved**, not replaced (logged at DEBUG), so
   the value re-encodes to exactly what arrived — a hostname or boot filename in
   another encoding survives being forwarded. They are held as surrogates, so
@@ -274,8 +278,8 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
   (`I32`: -2147483648 to 2147483647) and `TypeError` for a float or other type.
 - **`ClientIdentifier`** (`Bytes` subclass) — RFC 2132 client identifier
   (leading type octet + address bytes); requires ≥2 bytes on decode.
-- **`OptionOverload`** (`IntFlag`) — `NONE`/`FILE`/`SNAME`/`BOTH`; RFC 3396
-  overload selector, single octet.
+- **`OptionOverload`** (`IntFlag`) — `NONE`/`FILE`/`SNAME`/`BOTH`; RFC 2132 §9.3
+  option-overload selector (option 52), single octet.
 
 ### Network types (`_addresses.py`, `_domains.py`, `_fqdn.py`, `_servers.py`)
 
@@ -341,7 +345,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   compresses — pass a plain list, or `UncompressedDomainList`.
 - **`ClientFQDN(name="", flags=0, rcode1=0, rcode2=0, partial=False)`** — RFC 4702
   client FQDN (option 81): flags, RCODE1, RCODE2, then the name. `FLAG_S`/
-  `FLAG_O`/`FLAG_E`/`FLAG_N` are the defined bits; the name is RFC 1035 wire
+  `FLAG_O`/`FLAG_E`/`FLAG_N` are the defined bits (`FLAGS_MASK`, `0x0F`, holds them all); the name is RFC 1035 wire
   format when `FLAG_E` is set and ASCII otherwise, and `.encoded` reports
   which. With the E bit the field is a qualified name (with the terminating
   label), a **partial** name (without it) or empty (RFC 4702 §2.3):
@@ -368,7 +372,7 @@ client FQDN, and server-locator/status codecs. Import every one of them from
   `["a.com"]` rather than one entry per character. The root name (`""`, spelled
   `"."` too) marks the default RDNSS (§4.3): it is kept on decode, last or not,
   and written as a single zero octet. The six high bits of `flags` are reserved
-  and ignored on receipt, so a decoded `flags` is 0 to 3. Also built from one
+  and ignored on receipt (`PREFERENCE_BITS`, `0x03`, keeps the two low ones), so a decoded `flags` is 0 to 3. Also built from one
   sequence, the `(flags, primary, secondary, domains)` that `to_json` emits.
 - **`DomainName`** — a single **uncompressed** RFC 1035 name as the whole
   payload, through the shared name helpers (so the 63/255-octet limits apply

@@ -104,8 +104,8 @@ send; keep it that way.
   lines. Split by responsibility into a package rather than letting one file
   grow, and keep the package's `__init__` re-exporting the names callers
   already import, so a split never moves a public import path. One deliberate
-  exception: `options/_codes.py` is the `DHCPOptionCode` enum, ~830 lines of
-  RFC-documented members, and an `Enum`'s members cannot be split across
+  exception: `options/_codes.py` is the `DHCPOptionCode` enum, one RFC-documented member
+  per IANA code (the one module over the limit), and an `Enum`'s members cannot be split across
   modules. A class too big for one module becomes layers, each subclassing the
   last (see `server/` and `packet/_*.py`).
   `tests/test_import_structure.py` pins this: the list of public modules (every

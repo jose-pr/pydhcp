@@ -169,12 +169,14 @@ from pydhcp.client import DHCPClient
 from pydhcp.options import DHCPOptionCode
 
 client = DHCPClient(listen=("127.0.0.1", 6768))
+client.start()  # replies reach the queue only while the receive loop runs
 discover = client.build_discover(
     b"\x00\x11\x22\x33\x44\x55",
     parameter_request_list=[DHCPOptionCode.SUBNET_MASK, DHCPOptionCode.ROUTER],
 )
 client.send(discover, dst="127.0.0.1", port=6767)
-reply = client.next_reply(timeout=5)
+reply = client.next_reply(timeout=5)  # (message, context), or None after five seconds
+client.close()
 ```
 
 The example uses high ports so it can run without privileged DHCP ports during local tests.

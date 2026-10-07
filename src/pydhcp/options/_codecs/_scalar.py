@@ -137,7 +137,11 @@ _StringT = _ty.TypeVar("_StringT", bound="String")
 
 
 class String(DHCPOptionType, str):
-    """RFC 2132 NVT-ASCII string with null termination on the wire.
+    """RFC 2132 NVT-ASCII string, not null-terminated on the wire.
+
+    A value read from the wire ends at the first NUL octet, so a trailing NUL
+    and everything after an embedded one are dropped (RFC 2132 s2 asks a
+    receiver to delete trailing NULs; `OctetString` keeps every octet).
 
     Octets that are not valid UTF-8 are preserved rather than replaced, so a
     hostname or boot filename in another encoding survives a decode/encode round

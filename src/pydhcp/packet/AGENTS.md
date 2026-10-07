@@ -58,7 +58,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     cookie + END) decodes, and neither `MIN_LEGAL_SIZE` (548) nor
     `BOOTP_MIN_PACKET_SIZE` (300) is applied on receive. Real senders emit
     short datagrams, and `.encode()` pads only what pydhcp sends. Honors
-    RFC 3396 `OPTION_OVERLOAD` (decodes overflow options packed into the
+    RFC 2132 §9.3 `OPTION_OVERLOAD` (decodes overflow options packed into the
     `file`/`sname` fields).
   - **`.encode(max_packetsize: int = DHCP_MIN_LEGAL_PACKET_SIZE) ->
     bytes`** — serializes to wire bytes; `bytes(message)` is the same call
@@ -187,10 +187,8 @@ an error:
 - **Omit or quote `sname`/`file`.** A bare `sname:` loads as `None`, which means
   empty; a value that is not text, null, octets or `{"hex": ...}` raises.
 
-**`DHCPMessage.decode()` honours `cls`**, so a subclass decodes to itself — it
-used to hard-code `DHCPMessage(...)` while `from_mapping` already used `cls`.
-The annotation still says `-> DHCPMessage` on both; tightening them to `Self`
-is a separate typing decision.
+**`DHCPMessage.decode()` and `from_mapping()` honour `cls`**, so a subclass
+decodes to itself, and both are annotated to return the class they are called on.
 
 ## Enums (`_enums.py`)
 
