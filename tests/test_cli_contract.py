@@ -113,19 +113,18 @@ def test_the_process_exits_with_the_status() -> None:
     assert listed.stderr == ""
 
 
-def test_the_tool_server_is_not_started_by_its_variable() -> None:
-    """`PYDHCP_MCP=stdio` would serve the commands as tools; `serve` and `capture`
-    never return, so the root says no and the variable is not read."""
-    result = run_cli(
-        "interfaces", "--format", "json", env={"PYDHCP_MCP": "stdio"}, timeout=30
-    )
-
-    assert result.returncode == 0
-    assert isinstance(json.loads(result.stdout), list)
-
-
-def test_the_root_disables_the_tool_server() -> None:
-    assert pydhcp.cli.App._mcp_ is False
+def test_the_root_reads_the_tool_server_variable_and_four_commands_are_not_tools() -> (
+    None
+):
+    """`PYDHCP_MCP=stdio` serves `packet` and `interfaces`; the commands that do not
+    return, start programs or send datagrams leave themselves out."""
+    assert pydhcp.cli.App._mcp_ is True
+    left_out = {
+        str(command._parsername_)
+        for command in pydhcp.cli.App._subcommands_ or ()
+        if getattr(command, "_mcp_", True) is False
+    }
+    assert left_out == {"server", "relay", "capture", "replay"}
 
 
 # -- interfaces and packet output -------------------------------------------------

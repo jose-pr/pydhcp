@@ -16,6 +16,10 @@ someone upgrading from 0.7.0.
 
 ### Added
 
+- **`PYDHCP_MCP=stdio` serves `pydhcp.packet` and `pydhcp.interfaces` as MCP tools** (needs the `cli`
+  extra), over standard input and output instead of running a command. `server`, `relay`, `capture`
+  and `replay` are not tools. A tool call has no standard input, so `packet` without `input` fails
+  naming `--input`.
 - **`pydhcp.MACAddress`** is `netimps.MACAddress`, the same object, exported from the root because
   `NetworkInterface.mac` hands one to a caller. No other name of `netimps` is re-exported.
 - **`DHCPLease.replace(*, ip, expires, options, offered)`**: a new lease with the named fields

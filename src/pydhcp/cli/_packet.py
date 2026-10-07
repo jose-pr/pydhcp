@@ -27,7 +27,7 @@ class Packet(_Command):
             kwargs={"dest": "mode"},
         ),
     ] = False
-    "Read the message as hexadecimal text and print it in --format"
+    "Read the message as hexadecimal text and print it in the packet format (--format). Exactly one of decode and encode"
     ("--decode",)
 
     encode: _ty.Annotated[
@@ -40,25 +40,25 @@ class Packet(_Command):
             kwargs={"dest": "mode"},
         ),
     ] = False
-    "Read the message as a --format document and print it as hexadecimal text"
+    "Read the message as a document in the packet format (--format) and print it as hexadecimal text. Exactly one of decode and encode"
     ("--encode",)
 
     input: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_PACKET_INPUT")] = pathlib.Path(
         "-"
     )
-    "Input file path, or '-' for stdin"
+    "File to read the message from. Default '-': standard input, which a tool call does not have, so a tool names a file"
     ("--input", "-i")
 
     output: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_PACKET_OUTPUT")] = (
         pathlib.Path("-")
     )
-    "Output file path, or '-' for stdout"
+    "File to write the result to. Default '-': standard output, which is the tool call's result"
     ("--output", "-o")
 
     packet_format: _ty.Annotated[
         str, Meta(choices=PACKET_FORMATS, env="PYDHCP_PACKET_FORMAT")
     ] = "json"
-    "Packet text format; 'summary' is decode-only"
+    "Text format of the message: json, yaml, toml, ini or summary (summary is decode-only). Default: json"
     ("--format", "-f")
 
     def __call__(self) -> None:
@@ -67,6 +67,11 @@ class Packet(_Command):
         try:
             if str(self.input) == "-":
                 payload_text = sys.stdin.read()
+                if not payload_text.strip():
+                    raise _Failed(
+                        "no message on standard input: name a file with --input "
+                        "(the input field of a tool call)"
+                    )
             else:
                 payload_text = self.input.read_text(encoding="utf-8")
 

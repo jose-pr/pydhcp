@@ -28,10 +28,6 @@ class App(Cli):
     _parsername_ = "pydhcp"
     _version_ = AUTO
     _logger_name_ = "pydhcp"
-    # No command is a tool a program calls: serve, relay and capture never
-    # return, and `packet` and `interfaces` have a shell to run in. A switch per
-    # command does not exist, so PYDHCP_MCP is not read.
-    _mcp_ = False
     _config_loader_ = staticmethod(_settings.load_layer)
     _help_formatter_ = DefaultsFormatter
     _subcommands_ = [Interfaces, Server, Relay, Packet, Capture, Replay]

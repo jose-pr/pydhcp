@@ -282,8 +282,8 @@ the position; nothing starts on defaults by mistake.
 | `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` |
 | `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |
 
-A boolean accepts `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`. `PYDHCP_MCP` is not
-read: no command is served as a tool. A command hook is given `PYDHCP_CAPTURE_CLIENT_ID`,
+A boolean accepts `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`. `PYDHCP_MCP=stdio`
+serves `packet` and `interfaces` as tools over standard input and output; the other commands are not tools. A command hook is given `PYDHCP_CAPTURE_CLIENT_ID`,
 `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and `PYDHCP_CAPTURE_FORMAT`.
 
 ## API overview

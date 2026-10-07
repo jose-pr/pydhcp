@@ -16,6 +16,8 @@ class Server(_Listening):
     """Start DHCP server"""
 
     _parsername_ = "server"
+    # Not a tool: it does not return until it is stopped.
+    _mcp_ = False
 
     lease_file: _ty.Annotated[
         _ty.Optional[pathlib.Path], Meta(env="PYDHCP_SERVER_LEASE_FILE")

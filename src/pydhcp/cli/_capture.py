@@ -37,6 +37,9 @@ class Capture(_Listening):
     """Capture DHCP packets"""
 
     _parsername_ = "capture"
+    # Not a tool: it does not return until it is stopped, and
+    # starts a program per packet.
+    _mcp_ = False
 
     packet_filter: _ty.Annotated[
         _ty.Optional[str], Meta(env="PYDHCP_CAPTURE_FILTER", metavar="EXPRESSION")

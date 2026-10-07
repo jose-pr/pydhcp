@@ -50,8 +50,14 @@ main(argv: Sequence[str] | None = None) -> int
   a configuration file that cannot be used). An error is one line on stderr,
   `pydhcp: error: ...`; results go to stdout and logging to stderr. A closed
   stdout ends the command quietly, with status 1. Nothing is logged as
-  "starting" before the arguments are accepted. The root sets `_mcp_ = False`:
-  `PYDHCP_MCP` is not read and no command is served as a tool.
+  "starting" before the arguments are accepted.
+  **Tools:** with `PYDHCP_MCP=stdio` the program serves its commands as MCP tools over
+  standard input and output instead of running one: exactly `pydhcp.packet` and
+  `pydhcp.interfaces` (each field of the command is a property of the tool, named as the
+  field: `decode`, `encode`, `input`, `output`, `packet_format`; `output_format`). A tool
+  call has no standard input: `packet` without `input` fails naming `--input`. `server`,
+  `relay`, `capture` and `replay` are not tools: they do not return until stopped, start a
+  program per packet or send datagrams.
   Subcommands:
   `interfaces` (`--format text|json`: text is one tab-separated line per
   address, name, address, MAC or `-`, network; json is one array of objects

@@ -40,6 +40,8 @@ class Relay(_Listening):
     """Start DHCP relay agent"""
 
     _parsername_ = "relay"
+    # Not a tool: it does not return until it is stopped.
+    _mcp_ = False
 
     # A tuple, not a list: a mutable class-level default is shared by every
     # instance -- `a.server is b.server is Relay.server` -- so one command

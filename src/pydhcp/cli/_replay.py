@@ -18,6 +18,8 @@ class Replay(_Command):
     """Send the DHCP requests of a capture file again"""
 
     _parsername_ = "replay"
+    # Not a tool: it puts datagrams on a network.
+    _mcp_ = False
 
     input: _ty.Annotated[pathlib.Path, Meta(env="PYDHCP_REPLAY_INPUT")] = pathlib.Path(
         "-"
