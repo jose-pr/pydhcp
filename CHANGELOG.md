@@ -163,6 +163,9 @@ someone upgrading from 0.7.0.
 
 ### Changed
 
+- **The `cli` extra needs `duho` 0.7**: `duho>=0.7.0,<0.8`, where the requirement was
+  `>=0.6.0,<0.7`. The `pydhcp` command, its options, its environment variables and its output are
+  the same.
 - **Importing the package does not import `asyncio`.** `AsyncDHCPListener`,
   `AsyncDHCPServer`, `AsyncDHCPClient`, `AsyncDHCPRelay` and `AsyncDHCPCapture` are bound
   when first accessed, from `pydhcp` and from their own packages; their names and import

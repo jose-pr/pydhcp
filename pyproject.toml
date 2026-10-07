@@ -40,7 +40,7 @@ pydhcp = "pydhcp.cli:main"
 [project.optional-dependencies]
 # One extra per capability. `dev` refers to them by name, so a development
 # install exercises all of them and no range is written twice.
-cli = ['duho>=0.6.0,<0.7']
+cli = ['duho>=0.7.0,<0.8']
 # PyYAML is 1.0-and-above in spirit (6.x, one API in use: safe_load and
 # safe_dump), so it is major-scoped. The floor is the lowest release that
 # installs: 6.0 has wheels only for Python 3.9 to 3.11 and none for Windows on

@@ -108,9 +108,10 @@ runs the real-peer tests (`tests/AGENTS.md`).
     with `ast.literal_eval` on the class source: a literal only, never a call
     such as `Meta(...)`, or the field's whole metadata run is dropped without
     an error. Anything needing `Meta(...)` goes in `typing.Annotated[T, Meta(...)]`.
-  - `Meta(dest=...)` is declared but not read by duho's `ArgumentBuilder._kwargs()`:
-    only `Meta(kwargs={"dest": "mode"})` reaches `add_argument` (it is what
-    `Packet.decode` and `Packet.encode` share one attribute through).
+  - `Meta` has no `dest` field (`Meta(dest=...)` is a `TypeError` saying an
+    argument's dest is its field name): only `Meta(kwargs={"dest": "mode"})`
+    reaches `add_argument` (it is what `Packet.decode` and `Packet.encode` share
+    one attribute through).
   - `App._help_formatter_ = duho.DefaultsFormatter` appends `(default: X)` to the
     help of an option whose default is not `None`, `""` or `False`: do not write
     one in a field's docstring.
