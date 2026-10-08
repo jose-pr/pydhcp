@@ -369,7 +369,7 @@ def test_with_a_listener_that_cannot_bind_holds_no_port() -> None:
 def fresh_warning(monkeypatch: pytest.MonkeyPatch) -> None:
     """The warning is once per process: let each test see it again."""
     # the bind step is not public
-    import pydhcp.listener._binding as binding
+    import pydhcp.listener._endpoints as binding
 
     monkeypatch.setattr(binding, "_ADDRESS_BOUND_WARNED", False)
 
@@ -377,7 +377,7 @@ def fresh_warning(monkeypatch: pytest.MonkeyPatch) -> None:
 def _platform(monkeypatch: pytest.MonkeyPatch, hears_no_broadcast: bool) -> None:
     """Say what the platform does, without changing `sys.platform` under netimps."""
     # the bind step is not public
-    import pydhcp.listener._binding as binding
+    import pydhcp.listener._endpoints as binding
 
     monkeypatch.setattr(
         binding, "_address_bound_hears_no_broadcast", lambda: hears_no_broadcast
@@ -486,7 +486,7 @@ def test_a_held_port_is_reported_in_netimps_words() -> None:
 
 def test_a_socket_that_fails_to_close_is_logged_not_swallowed(caplog) -> None:
     # private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
-    from pydhcp.listener._binding import _close_socket
+    from pydhcp.listener._endpoints import _close_socket
 
     class Stubborn:
         def close(self) -> None:
@@ -494,7 +494,7 @@ def test_a_socket_that_fails_to_close_is_logged_not_swallowed(caplog) -> None:
 
     endpoints = {}
     # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    with caplog.at_level(logging.DEBUG, logger="pydhcp.listener._binding"):
+    with caplog.at_level(logging.DEBUG, logger="pydhcp.listener._endpoints"):
         _close_socket(Stubborn(), endpoints)  # type: ignore[arg-type]
     assert any(
         "Closing a listening socket failed" in r.getMessage() for r in caplog.records

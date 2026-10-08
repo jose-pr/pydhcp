@@ -177,7 +177,7 @@ def test_a_refused_spec_binds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     bound: "list[object]" = []
     # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
     monkeypatch.setattr(
-        "pydhcp.listener._binding._netimps.bind",
+        "netimps._listen._binding.bind",
         lambda *a, **k: bound.append(a),
     )
     for spec in [("127.0.0.1", True), "", ["127.0.0.1", 6767.5]]:

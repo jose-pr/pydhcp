@@ -1,4 +1,5 @@
-"""Claiming the listen ports, and what to say when one cannot be claimed."""
+"""What the listener does to the endpoints netimps opened: the receive buffer, the
+Bound record, the broadcast warning and closing."""
 
 from __future__ import annotations
 

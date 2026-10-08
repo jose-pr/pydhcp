@@ -14,7 +14,6 @@ from .._clock import _Instant
 from .._metrics import DHCPMetrics
 from ._interfaces import _resolve_interface
 from ._limit import _LogLimit
-from netimps import ListenAddress
 from ._transport import PktInfoUDPTransport, DHCPTransport, UDPTransport
 
 
@@ -67,27 +66,6 @@ def _is_loopback(context: DHCPRequestContext) -> bool:
         context.local_ip if context.local_ip is not None else context.interface.ip
     )
     return bool(candidate.is_loopback)
-
-
-def _pktinfo_supported(
-    listen: "_ty.Iterable[ListenAddress]", per_interface: "_ty.Optional[bool]"
-) -> bool:
-    """Whether this listener receives through the packet-info path.
-
-    Only a wildcard bind needs it. Without it a wildcard has to be expanded into
-    one socket per address -- which on Linux then receives no broadcasts at all,
-    so a client's DISCOVER never arrives.
-
-    `netimps.has_pktinfo` decides by asking a socket, never by testing a
-    constant's name: `getattr(socket, "IP_PKTINFO", None)` is None on CPython
-    3.9-3.11 on every platform while the kernel supports it throughout, so a
-    name test would leave this path off across half the supported range.
-    """
-    return (
-        per_interface is not True
-        and any(entry.address.is_unspecified for entry in listen)
-        and _netimps.has_pktinfo(_socket.AF_INET)
-    )
 
 
 class _Arrival(_ty.NamedTuple):

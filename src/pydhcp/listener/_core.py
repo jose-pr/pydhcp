@@ -18,7 +18,7 @@ from .. import _clock, _constants as _const, _leniency, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from ._binding import _close_socket, _prepare_endpoints
+from ._endpoints import _close_socket, _prepare_endpoints
 from ._limit import _brief, _LogLimit
 from ._receive import DHCPRequestContext, _Arrival, _context_for
 

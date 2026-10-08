@@ -3,7 +3,7 @@ import socket
 import pytest
 
 # the socket-closing step is not public
-from pydhcp.listener._binding import _close_socket
+from pydhcp.listener._endpoints import _close_socket
 from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPLease, DHCPOptions
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode

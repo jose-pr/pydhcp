@@ -103,7 +103,6 @@ def _code_lines(node: ast.AST, lines: "list[str]") -> "set[str]":
 #: If any of these lines turns up inside an async class body, the mixin has
 #: become a copy -- which is the defect this whole plan exists to avoid.
 _RECEIVE_PATH = (
-    "_pktinfo_supported",
     "_prepare_endpoints",
     "_arrival",
     "_close_socket",

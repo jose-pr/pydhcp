@@ -3,11 +3,11 @@
 Split by responsibility, one private module each:
 
 - `_transport`  -- how a reply leaves (`UDPTransport`, `PktInfoUDPTransport`)
-- `_spec`       -- the `listen` argument and the addresses it expands to
 - `_interfaces` -- which host interface a datagram arrived on
 - `_receive`    -- packet-info support and turning a netimps datagram into a
   `DHCPRequestContext`
-- `_binding`    -- claiming the ports, and the errors when that fails
+- `_endpoints`  -- what is done to the endpoints netimps binds: the receive
+  buffer, the records and the warning, closing
 - `_sync`       -- `DHCPListener`
 - `_asyncio`    -- `AsyncDHCPListener`
 """
