@@ -10,7 +10,7 @@ import typing as _ty
 
 from ..listener._asyncio import AsyncDHCPListener
 from ..listener._receive import DHCPRequestContext
-from ..listener._spec import ListenLike
+from netimps import ListenLike
 from ..listener._transport import _dest_string
 from ..options._codes import DHCPOptionCode
 from ..packet import _enums as _enum

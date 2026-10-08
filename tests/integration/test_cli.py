@@ -9,6 +9,7 @@ import sys
 import ipaddress
 from unittest.mock import MagicMock
 
+import netimps
 import pytest
 from datetime import datetime, timedelta, timezone
 
@@ -316,20 +317,16 @@ def test_parse_server_address_shares_the_listener_parser():
 
     Measured on the old CLI parser, which split on a lone ':': `[::1]:6767` has
     three, so the whole bracketed string fell through unparsed as a host, while
-    `listener._split_host_port` read the same text as ('::1', 6767). Note this
+    `netimps.split_host` read the same text as ('::1', 6767). Note this
     does not make an IPv6 upstream *work* -- `relay._normalize_server_address`
     still calls IPv4() on whatever it gets -- it makes one syntax mean one
     thing.
     """
-    # the listen-argument parser is not public
-    from pydhcp.listener._spec import _split_host_port
-
-    assert _parse_server_address("[::1]:6767") == _split_host_port("[::1]:6767")
+    assert _parse_server_address("[::1]:6767") == netimps.split_host("[::1]:6767")
 
 
 def test_parse_server_address_rejects_a_bare_port():
-    """`_split_host_port` defaults an empty host to the wildcard, which is a
-    listen address, not somewhere to forward to. The old parser turned
+    """An empty host is the wildcard in a listen address, not somewhere to forward to. The old parser turned
     `--server :6767` into ('0.0.0.0', 6767) and relayed into the void."""
     with pytest.raises(ValueError, match="upstream host"):
         _parse_server_address(":6767")

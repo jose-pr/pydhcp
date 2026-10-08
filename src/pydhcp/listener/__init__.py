@@ -19,7 +19,7 @@ import typing as _ty
 from .._lazy import bind as _bind
 from .._metrics import DHCPMetrics
 from ._receive import DHCPRequestContext
-from ._spec import ListenLike
+from netimps import ListenLike
 from ._sync import DHCPListener
 from ._transport import (
     BROADCAST_ADDRESS,

@@ -94,8 +94,8 @@ def test_an_unlimited_socket_admits_everything() -> None:
 
 def test_the_wildcard_named_plainly_beside_an_interface_has_no_limit() -> None:
     listener = DHCPListener(listen="*:0,lo:0")
-    # private: the limiter's table: its bound is the subject
-    assert listener._limits == {}
+    # private: the parsed listen specification: `bound_addresses` is empty until the bind
+    assert [entry.interfaces for entry in listener._listen] == [()]
 
 
 def test_a_drop_is_logged_once_through_the_limiter(caplog) -> None:

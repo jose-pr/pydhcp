@@ -104,7 +104,8 @@ def test_every_wildcard_spelling_takes_the_packet_info_path(spec) -> None:
     """`"0.0.0.0:67"` and `"*:67"` used to compare unequal to the wildcard,
     skip packet info and expand into one socket per address -- which on Linux
     hears no broadcast DISCOVER at all."""
-    assert _pktinfo_supported(spec, None), spec
+    parsed = netimps.parse_listen(spec, 67, family=socket.AF_INET)
+    assert _pktinfo_supported(parsed, None), spec
     # private: the packet-info probe's result: no public view
     assert DHCPListener(listen=spec)._pktinfo, spec
 

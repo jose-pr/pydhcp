@@ -10,7 +10,7 @@ import time as _time
 import typing as _ty
 
 from ..listener._receive import DHCPRequestContext
-from ..listener._spec import ListenLike
+from netimps import ListenLike
 from ..listener._sync import DHCPListener
 from ..listener._transport import UDPTransport
 from ..options._codes import DHCPOptionCode

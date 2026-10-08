@@ -14,7 +14,7 @@ import netimps as _netimps
 
 from ._core import _ListenerCore
 from ._receive import _Arrival, _TruncatedDatagram, _arrival
-from ._spec import ListenLike
+from netimps import ListenLike
 
 LOGGER = _logging.getLogger(__name__)
 

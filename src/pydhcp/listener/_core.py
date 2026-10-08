@@ -22,12 +22,7 @@ from ._binding import _bind_sockets, _close_socket, _requested
 from ._interfaces import _interface_adapters
 from ._limit import _brief, _LogLimit
 from ._receive import DHCPRequestContext, _Arrival, _context_for, _pktinfo_supported
-from ._spec import (
-    ListenLike,
-    _expand_wildcards,
-    _interface_limits,
-    _parselisteners,
-)
+from ._spec import _expand_wildcards
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -59,7 +54,7 @@ class _ListenerCore:
 
     def __init__(
         self,
-        listen: ListenLike = None,
+        listen: _netimps.ListenLike = None,
         *,
         max_packet_size: _ty.Optional[int] = None,
         per_interface: _ty.Optional[bool] = None,
@@ -68,16 +63,11 @@ class _ListenerCore:
     ) -> None:
         #: ``None`` and 0 both mean the largest UDP payload.
         self._max_packet_size = max_packet_size or _const.UDP_MAX_PACKET_SIZE
-        if listen is None:
-            listen = "*"
-        self._listen_spec = listen
-        self._listen = _parselisteners(
-            listen, self.DEFAULT_PORTS, expand_wildcard=False
+        #: What `listen` names; nothing is looked up until `bind()`.
+        self._listen = _netimps.parse_listen(
+            listen, self.DEFAULT_PORTS, family=_socket.AF_INET
         )
-        #: The interfaces a wildcard socket is limited to, by the address it
-        #: was asked for; resolved to indexes by `bind()`.
-        self._limits = _interface_limits(listen, self.DEFAULT_PORTS)
-        if self._limits and per_interface:
+        if per_interface and any(entry.interfaces for entry in self._listen):
             raise ValueError(
                 "per_interface cannot be combined with listening on an interface: "
                 "one socket per address hears no broadcast on most platforms"
@@ -106,9 +96,7 @@ class _ListenerCore:
         performs no I/O.
         """
         if self._pktinfo_probed is None:
-            self._pktinfo_probed = _pktinfo_supported(
-                self._listen_spec, self._per_interface
-            )
+            self._pktinfo_probed = _pktinfo_supported(self._listen, self._per_interface)
         return self._pktinfo_probed
 
     @property
@@ -146,9 +134,16 @@ class _ListenerCore:
         # Before anything is opened: an interface that does not exist is an
         # error of the arguments, and leaves no socket behind.
         # One lookup serves both the allow-list and the device.
+        limits = {
+            _net.SocketAddress(
+                _ty.cast(_ipaddress.IPv4Address, entry.address), entry.port
+            ): entry.interfaces
+            for entry in self._listen
+            if entry.interfaces
+        }
         adapters = {
             address: _interface_adapters(selectors)
-            for address, selectors in self._limits.items()
+            for address, selectors in limits.items()
         }
         allowed = {
             address: frozenset(adapter.index for adapter in found)
@@ -166,9 +161,14 @@ class _ListenerCore:
                 "listening on an interface needs packet info, which sockets on "
                 "this host do not report"
             )
-        listen = (
-            _expand_wildcards(self._listen) if self._expand_wildcard else self._listen
-        )
+        listen = [
+            _net.SocketAddress(
+                _ty.cast(_ipaddress.IPv4Address, entry.address), entry.port
+            )
+            for entry in self._listen
+        ]
+        if self._expand_wildcard:
+            listen = _expand_wildcards(listen)
         _bind_sockets(
             listen,
             self._sockets,

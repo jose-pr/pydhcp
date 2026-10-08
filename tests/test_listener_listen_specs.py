@@ -4,103 +4,9 @@ import pytest
 
 from pydhcp.listener import DHCPListener
 
-# the listen-argument parser is not public
-from pydhcp.listener._spec import _parselisteners
 from ipaddress import IPv4Address as IPv4
 from pydhcp import NetworkInterface, SocketAddress
 from pydhcp.server import AsyncDHCPServer, DHCPServer
-
-
-def test_parse_single_tuple() -> None:
-    assert _parselisteners(("127.0.0.1", 6767)) == [SocketAddress("127.0.0.1", 6767)]
-
-
-def test_parse_list_of_tuples_preserves_order_and_deduplicates() -> None:
-    assert _parselisteners(
-        [
-            ("127.0.0.1", 6767),
-            ("127.0.0.1", 6767),
-            ("127.0.0.1", 6768),
-        ]
-    ) == [
-        SocketAddress("127.0.0.1", 6767),
-        SocketAddress("127.0.0.1", 6768),
-    ]
-
-
-def test_parse_wildcard_expands_ipv4_interfaces(monkeypatch) -> None:
-    interfaces = [
-        NetworkInterface("eth0", ipaddress.IPv4Interface("192.0.2.10/24")),
-        NetworkInterface("eth1", ipaddress.IPv4Interface("198.51.100.10/24")),
-    ]
-    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    monkeypatch.setattr("pydhcp._network.host_ip_interfaces", lambda: iter(interfaces))
-
-    assert _parselisteners("*", (67,)) == [
-        SocketAddress("192.0.2.10", 67),
-        SocketAddress("198.51.100.10", 67),
-    ]
-
-
-def test_parse_string_host_with_default_port() -> None:
-    assert _parselisteners("127.0.0.1", (6767,)) == [SocketAddress("127.0.0.1", 6767)]
-
-
-def test_parse_host_port_string() -> None:
-    assert _parselisteners("127.0.0.1:6767") == [SocketAddress("127.0.0.1", 6767)]
-
-
-def test_parse_comma_separated_host_port_string() -> None:
-    assert _parselisteners("127.0.0.1:6767,127.0.0.1:6768") == [
-        SocketAddress("127.0.0.1", 6767),
-        SocketAddress("127.0.0.1", 6768),
-    ]
-
-
-def test_parse_multi_port_tuple() -> None:
-    assert _parselisteners(("127.0.0.1", [6767, 6768])) == [
-        SocketAddress("127.0.0.1", 6767),
-        SocketAddress("127.0.0.1", 6768),
-    ]
-
-
-@pytest.mark.parametrize(
-    "listen, message",
-    [
-        ("127.0.0.1:+6767", "invalid port"),
-        ("127.0.0.1: 6767", "invalid port"),
-        ("127.0.0.1:8_0", "invalid port"),
-        ("[127.0.0.1]:6767", "bracketed but not an IPv6 address"),
-        (("127.0.0.1:+6767", 67), "invalid port"),
-    ],
-)
-@pytest.mark.parametrize("per_interface", [False, True])
-def test_a_malformed_port_or_bracket_is_named_as_such(
-    listen, message, per_interface
-) -> None:
-    """A port that is not ASCII digits, and brackets around an IPv4 address,
-    are refused, and the message blames the port or the brackets, not the
-    address -- on the wildcard-detecting path and on the per-interface one."""
-    with pytest.raises(ValueError, match=message):
-        DHCPListener(listen=listen, per_interface=per_interface)
-
-
-@pytest.mark.parametrize("listen", ["::1", "[::1]:6767", ("fe80::1", 6767)])
-@pytest.mark.parametrize("per_interface", [False, True])
-def test_an_ipv6_address_is_refused_as_not_an_ipv4_address(
-    listen, per_interface
-) -> None:
-    """`listen` takes IPv4 addresses; both paths say so in the same words
-    (`ipaddress`'s), not a wildcard-detection error."""
-    with pytest.raises(ipaddress.AddressValueError, match="Expected 4 octets"):
-        DHCPListener(listen=listen, per_interface=per_interface)
-
-
-@pytest.mark.parametrize(
-    "listen", ["*", "*:6767", ":6767", "0.0.0.0:6767", "127.0.0.1:6767"]
-)
-def test_the_listen_forms_that_stay_valid(listen) -> None:
-    DHCPListener(listen=listen)
 
 
 def test_server_constructors_accept_per_interface_and_multiple_endpoints() -> None:
@@ -109,13 +15,11 @@ def test_server_constructors_accept_per_interface_and_multiple_endpoints() -> No
     server = DHCPServer(listen=listen, per_interface=True)
     async_server = AsyncDHCPServer(listen=listen, per_interface=True)
 
-    expected = [
-        SocketAddress("127.0.0.1", 6767),
-        SocketAddress("127.0.0.1", 6768),
-    ]
-    # private: the parsed listen spec: `bound_addresses` is empty until the bind
-    assert server._listen == expected
-    assert async_server._listen == expected
+    expected = [("127.0.0.1", 6767), ("127.0.0.1", 6768)]
+    for role in (server, async_server):
+        # private: the parsed listen spec: `bound_addresses` is empty until the bind
+        found = [(str(entry.address), entry.port) for entry in role._listen]
+        assert found == expected
 
 
 # --- IP_PKTINFO interface resolution ---

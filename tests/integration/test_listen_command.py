@@ -1,7 +1,7 @@
 """`pydhcp server --listen` and the `listen` key of a configuration file, on real sockets.
 
-The grammar itself is a table in `tests/test_listen_grammar.py`, run against the
-parser and the constructors. These tests are that the command reads the same text
+The grammar is netimps' and `tests/test_listen_grammar.py` pins pydhcp's use of it.
+These tests are that the command reads the same text
 from its flag and from each file format and binds what the table says: the rows
 with an explicit port are run with the port rewritten to one that is free, and
 the rows that name no port (67 and 68 are not ours to bind) stay in the table.
@@ -21,8 +21,49 @@ from command_run import run_command
 from helpers import LOOPBACK_ALIAS_BINDABLE
 from pydhcp import SocketAddress
 
-# the grammar's own tables
-from test_listen_grammar import ACCEPTED, REFUSED, _addresses, _ids
+
+def _addresses(*pairs: "tuple[str, int]") -> "list[SocketAddress]":
+    return [SocketAddress(ip, port) for ip, port in pairs]
+
+
+def _ids(table: "list[ty.Any]") -> "list[str]":
+    return [repr(row[0] if isinstance(row, tuple) else row) for row in table]
+
+
+#: text -> the addresses it names, with 67 as the default port. The grammar is
+#: netimps'; these are the spellings a command line or a file is likely to carry.
+ACCEPTED: "list[tuple[ty.Any, list[SocketAddress]]]" = [
+    ("*", _addresses(("0.0.0.0", 67))),
+    ("*:6767", _addresses(("0.0.0.0", 6767))),
+    (":6767", _addresses(("0.0.0.0", 6767))),
+    ("0.0.0.0:6767", _addresses(("0.0.0.0", 6767))),
+    ("127.0.0.1", _addresses(("127.0.0.1", 67))),
+    ("127.0.0.1:6767", _addresses(("127.0.0.1", 6767))),
+    (" 127.0.0.1:6767 ", _addresses(("127.0.0.1", 6767))),
+    (
+        "127.0.0.1:6767,127.0.0.2:6768",
+        _addresses(("127.0.0.1", 6767), ("127.0.0.2", 6768)),
+    ),
+    ("127.0.0.1:6767, ,127.0.0.1:6767", _addresses(("127.0.0.1", 6767))),
+    ("127.0.0.1:0", _addresses(("127.0.0.1", 0))),
+]
+
+#: Text the command must refuse before it binds anything.
+REFUSED: "list[tuple[ty.Any, ...]]" = [
+    ("",),
+    ("  ",),
+    (" , ",),
+    ("127.0.0.1:70000",),
+    ("127.0.0.1:+6767",),
+    ("127.0.0.1: 6767",),
+    ("127.0.0.1:8_0",),
+    ("127.0.0.1:port",),
+    ("[127.0.0.1]:6767",),
+    ("127.0.0.1:67:68",),
+    ("::1",),
+    ("[::1]:67",),
+]
+
 
 #: The example ports of the tables, each standing for a free one.
 EXAMPLE_PORTS = (6767, 6768, 6769)

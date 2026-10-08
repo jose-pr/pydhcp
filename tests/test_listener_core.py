@@ -66,8 +66,9 @@ def test_constructing_with_per_interface_enumerates_nothing(
     listener = driver(listen="*", per_interface=True)
     assert len(enumerations) == 0
     # private: the parsed listen spec: `bound_addresses` is empty until the bind
-    assert listener._listen == [SocketAddress(ipaddress.IPv4Address("0.0.0.0"), 67)] + [
-        SocketAddress(ipaddress.IPv4Address("0.0.0.0"), 68)
+    assert [(str(entry.address), entry.port) for entry in listener._listen] == [
+        ("0.0.0.0", 67),
+        ("0.0.0.0", 68),
     ]
 
 

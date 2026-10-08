@@ -6,7 +6,7 @@ import typing as _ty
 
 from ..lease import LeaseBackend
 from ..listener._asyncio import AsyncDHCPListener
-from ..listener._spec import ListenLike
+from netimps import ListenLike
 from ._core import _ServerCore
 
 

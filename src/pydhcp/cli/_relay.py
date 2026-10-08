@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import typing as _ty
 
+import netimps as _netimps
 from duho import Extend, Meta
 
-from ..listener._spec import _split_host_port
 from ..relay._core import DEFAULT_MAX_HOPS
 from ..relay._sync import DHCPRelay
 from ..packet._enums import DHCPPort
@@ -16,15 +16,15 @@ from ._common import _arguments, _Listening
 def _parse_server_address(value: str) -> "tuple[str, int]":
     """Split one `--server` argument into `(host, port)`, port 67 by default.
 
-    Shares the listener's parser rather than repeating it: splitting on a lone
-    ':' would read `--server "[::1]:6767"` -- three colons -- as a single opaque
-    host string, where the listener reads `("::1", 6767)`. One parser gives one
-    answer for the same syntax.
+    Shares netimps' parser with the listener rather than repeating it: splitting
+    on a lone ':' would read `--server "[::1]:6767"` -- three colons -- as a single
+    opaque host string, where the listener reads `("::1", 6767)`. One parser gives
+    one answer for the same syntax.
 
-    An empty host is rejected here even though `_split_host_port` defaults it to
-    `0.0.0.0`: the wildcard means "every local address" and is a reasonable
-    thing to *listen* on, but as the address of an upstream server to forward
-    *to* it is meaningless, so `--server :6767` is a typo worth reporting.
+    An empty host is rejected here although a listen address may be one: the
+    wildcard means "every local address" and is a reasonable thing to *listen* on,
+    but as the address of an upstream server to forward *to* it is meaningless, so
+    `--server :6767` is a typo worth reporting.
     """
     text = value.strip()
     if not text or (text.startswith(":") and not text.startswith("::")):
@@ -32,7 +32,7 @@ def _parse_server_address(value: str) -> "tuple[str, int]":
             f"--server needs an upstream host address, got {value!r}; "
             "a bare port has no server to forward to"
         )
-    host, port = _split_host_port(text)
+    host, port = _netimps.split_host(text)
     return host, int(DHCPPort.SERVER) if port is None else port
 
 

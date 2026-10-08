@@ -11,6 +11,7 @@ import ipaddress
 import logging
 import socket
 
+import netimps
 import pytest
 
 from helpers import DUPLICATE_UDP_BIND_ALLOWED, LOOPBACK_ALIAS_BINDABLE
@@ -83,7 +84,7 @@ def test_rebinding_keeps_the_ephemeral_port_and_the_socket() -> None:
 )
 def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
     """The matching change must not defeat the point of matching."""
-    # Two *distinct* requests: `_parselisteners` deduplicates, so the same
+    # Two *distinct* requests: `parse_listen` deduplicates, so the same
     # ("127.0.0.1", 0) twice is one address, not two.
     listener = DHCPListener(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
     listener.bind()
@@ -160,7 +161,9 @@ def test_the_duplicate_bind_really_would_have_stolen_the_datagrams() -> None:
     try:
         port = first.bound_addresses[0].port
         # private: the parsed listen spec: `bound_addresses` is empty until the bind
-        second._listen = [type(second._listen[0])("127.0.0.1", port)]
+        second._listen = (
+            netimps.ListenAddress(ipaddress.IPv4Address("127.0.0.1"), port, ()),
+        )
         second.bind()  # no error: this is the behaviour being pinned
         assert second.bound_addresses[0].port == port
 
@@ -325,9 +328,9 @@ def test_a_failed_bind_keeps_the_sockets_an_earlier_bind_opened() -> None:
         # private: the OS socket: its options and closed state have no public view
         socket_before = listener._sockets[0]
         # private: the parsed listen spec: `bound_addresses` is empty until the bind
-        listener._listen = list(listener._listen) + [
-            type(listener._listen[0])("127.0.0.1", port)
-        ]
+        listener._listen = listener._listen + (
+            netimps.ListenAddress(ipaddress.IPv4Address("127.0.0.1"), port, ()),
+        )
         with pytest.raises(OSError):
             listener.bind()
         assert listener.bound_addresses == before
