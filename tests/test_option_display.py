@@ -12,7 +12,7 @@ import pytest
 
 from helpers import build_request
 from pydhcp import DHCPMessage, DHCPOptions
-from pydhcp.options import DHCPOptionCode
+from pydhcp.options import DHCPOptionCode, PCPServerList
 from pydhcp.packet import DHCPMessageType
 
 # `_option_text` is the one function the display formats an option with.
@@ -148,3 +148,8 @@ def test_an_input_that_is_now_read_is_displayed_and_serialised() -> None:
     message = DHCPMessage.decode(build_request().encode())
     message.flags = DHCPFlags(0x8001)
     assert "BROADCAST|0x0001" in message.summary()
+
+
+def test_a_pcp_entry_reads_as_its_addresses_in_brackets() -> None:
+    servers = PCPServerList([["192.0.2.1", "192.0.2.2"], ["192.0.2.9"]])
+    assert _option_text(servers) == "['192.0.2.1', '192.0.2.2']\n['192.0.2.9']"

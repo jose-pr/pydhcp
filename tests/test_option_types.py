@@ -929,7 +929,7 @@ def test_rfc_wire_forms_decode_and_round_trip(code, payload, expected):
 
     def plain(item):
         # str() on a scalar codec gives its repr (U8(1)), so compare by value.
-        if isinstance(item, list):
+        if isinstance(item, (list, tuple)):
             return [plain(sub) for sub in item]
         return int(item) if isinstance(item, int) else str(item)
 

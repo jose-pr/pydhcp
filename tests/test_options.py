@@ -426,7 +426,7 @@ def test_typed_registrations_and_aliases():
     assert opts.get(DHCPOptionCode.RDNSS_SELECTION) == RDNSSSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
-    assert opts.get(DHCPOptionCode.V4_PCP_SERVER) == [["192.0.2.70", "192.0.2.71"]]
+    assert opts.get(DHCPOptionCode.V4_PCP_SERVER) == [("192.0.2.70", "192.0.2.71")]
     assert opts.get(DHCPOptionCode.IPV4_ADDRESS_MOS) == MoSIPv4AddressList(
         [
             MoSIPv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),
@@ -585,7 +585,7 @@ def test_registered_option_code_round_trips():
     _assert_scalar(decoded, DHCPOptionCode.QUERY_END_TIME, U32, 444)
     _assert_scalar(decoded, DHCPOptionCode.DHCP_STATE, U8, 7)
     _assert_scalar(decoded, DHCPOptionCode.DATA_SOURCE, U8, 3)
-    assert decoded.get(DHCPOptionCode.V4_PCP_SERVER)[0] == ["192.0.2.70", "192.0.2.71"]
+    assert decoded.get(DHCPOptionCode.V4_PCP_SERVER)[0] == ("192.0.2.70", "192.0.2.71")
     assert (
         decoded.get(DHCPOptionCode.MUD_URL_V4, decode=String)
         == "https://mud.example/policy"
@@ -626,7 +626,7 @@ def test_registered_option_code_round_trips():
     assert decoded.get(DHCPOptionCode.RDNSS_SELECTION) == RDNSSSelection(
         1, "192.0.2.1", "192.0.2.2", ["example.com"]
     )
-    assert decoded.get(DHCPOptionCode.V4_PCP_SERVER) == [["192.0.2.70", "192.0.2.71"]]
+    assert decoded.get(DHCPOptionCode.V4_PCP_SERVER) == [("192.0.2.70", "192.0.2.71")]
     assert decoded.get(DHCPOptionCode.IPV4_ADDRESS_MOS) == MoSIPv4AddressList(
         [
             MoSIPv4AddressRecord(1, ["192.0.2.10", "192.0.2.11"]),

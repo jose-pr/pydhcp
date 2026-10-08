@@ -220,7 +220,8 @@ StatusCode.try_parse(text, default=None)
   where a bare `U8` made any reply carrying the message undecodable.
 
 - **`PCPServerList`** — RFC 7291 §4 PCP servers: a list of **entries**, each a
-  list of IPv4 addresses written with a leading List-Length octet. A flat
+  tuple of IPv4 address texts (read-only: replace an entry, do not change one in
+  place) written with a leading List-Length octet. A flat
   address list read that octet as address data. `PCPServerList(["192.0.2.1"])`
   is accepted as one entry.
 

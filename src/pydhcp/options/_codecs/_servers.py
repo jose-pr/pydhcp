@@ -288,11 +288,13 @@ class StatusCode(_Record, _TextForm):
 _PCPServerListT = _ty.TypeVar("_PCPServerListT", bound="PCPServerList")
 
 
-class PCPServerList(_NormalizedList[list[str]]):
+class PCPServerList(_NormalizedList[tuple[str, ...]]):
     """RFC 7291 s4 PCP servers: one or more length-prefixed address lists.
 
     Each entry is a List-Length octet giving the octet count, then that many
-    octets of IPv4 addresses; separate entries are separate PCP servers.
+    octets of IPv4 addresses; separate entries are separate PCP servers. An
+    entry is stored as a tuple of address texts, so it cannot be changed past
+    the checks `append` makes: replace the entry instead.
     Registered as a flat `List[IPv4AddressOption]` the length octet was read as
     address data, so a conformant option raised and an emitted one carried no
     length octet at all.
@@ -311,10 +313,10 @@ class PCPServerList(_NormalizedList[list[str]]):
             self.append(entry)
 
     @classmethod
-    def _normalize(cls, entry: _ty.Any) -> list[str]:
+    def _normalize(cls, entry: _ty.Any) -> tuple[str, ...]:
         if isinstance(entry, (str, _IP)):
             entry = [entry]
-        addresses = [str(_IP(address)) for address in entry]
+        addresses = tuple(str(_IP(address)) for address in entry)
         if not addresses:
             raise DHCPValueError("PCPServerList entry must hold at least one address")
         if len(addresses) > 63:
@@ -360,6 +362,11 @@ class PCPServerList(_NormalizedList[list[str]]):
                 data.extend(_IP(address).packed)
                 written += 4
         return written
+
+    @staticmethod
+    def _item_text(entry: tuple[str, ...]) -> str:
+        """One entry as its addresses in brackets, the way a list of them reads."""
+        return "[" + ", ".join(repr(address) for address in entry) + "]"
 
     def to_json(self) -> list[list[str]]:
         return [list(entry) for entry in self]

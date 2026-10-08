@@ -45,6 +45,20 @@ def test_a_pcp_entry_of_64_addresses_is_refused_by_name() -> None:
     assert len(PCPServerList([addresses[:63]])[0]) == 63
 
 
+def test_a_pcp_entry_cannot_be_changed_past_the_checks() -> None:
+    """An entry held as a list took `entry.append(...)` in place: a 64th address, or
+    text that is no address, which then failed only when the option was packed."""
+    servers = PCPServerList(["192.0.2.1"])
+    entry = servers[0]
+    assert entry == ("192.0.2.1",)
+    with pytest.raises(AttributeError):
+        entry.append("not an address")  # type: ignore[attr-defined]
+    with pytest.raises(TypeError):
+        entry[0] = "not an address"  # type: ignore[index]
+    servers[0] = ["192.0.2.2", "192.0.2.3"]
+    assert servers == [("192.0.2.2", "192.0.2.3")]
+
+
 def test_a_client_identifier_of_one_octet_is_refused_when_written() -> None:
     # RFC 2132 section 9.14: a type octet and at least one more.
     with pytest.raises(DHCPValueError, match=r"ClientIdentifier.*at least 2"):

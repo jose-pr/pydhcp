@@ -196,6 +196,11 @@ someone upgrading from 0.7.0.
 
 ### Changed
 
+- **A `PCPServerList` entry is a tuple of address texts**, where it was a list, so an entry
+  cannot be changed past the checks: `servers[0].append(...)` put a 64th address or text that
+  is no address into an option, which failed only when it was packed. Replace the entry
+  (`servers[0] = [...]`) or append a new one. A decoded option compares equal to a list of
+  tuples; the display text and `to_json()` are the same.
 - **The `cli` extra needs `duho` 0.7**: `duho>=0.7.0,<0.8`, where the requirement was
   `>=0.6.0,<0.7`. The `pydhcp` command, its options, its environment variables and its output are
   the same.

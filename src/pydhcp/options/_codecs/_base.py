@@ -145,11 +145,11 @@ def is_codec_class(value: _ty.Any) -> bool:
 def display_of(value: _ty.Any) -> str:
     """The display text of `value`, a codec value or one of the plain items inside one.
 
-    A list codec reads as a bracketed list of its items' texts; the message
-    display prints a decoded list one item per line instead (`option_text`).
+    A list codec reads as a bracketed list of its items' texts (its own `_item_text`
+    for an item, where it has one); the message display prints one item per line.
     """
     if isinstance(value, list):
-        return "[" + ", ".join(display_of(item) for item in value) + "]"
+        return "[%s]" % ", ".join(map(getattr(value, "_item_text", display_of), value))
     if is_codec(value):
         return str(value.display_text())
     if isinstance(value, (_ipaddress.IPv4Address, _ipaddress.IPv4Network)):
@@ -160,7 +160,7 @@ def display_of(value: _ty.Any) -> str:
 def option_text(value: _ty.Any) -> str:
     """The text the message display shows for a decoded option, one line per list item."""
     if isinstance(value, list):
-        return "\n".join(display_of(item) for item in value)
+        return "\n".join(map(getattr(value, "_item_text", display_of), value))
     return display_of(value)
 
 
