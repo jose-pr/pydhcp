@@ -6,31 +6,12 @@ import logging as _logging
 import socket as _socket
 import sys as _sys
 import typing as _ty
-import weakref as _weakref
 
 import netimps as _netimps
 
 from .. import _constants as _const, _network as _net
 
 LOGGER = _logging.getLogger(__name__)
-
-#: The address each socket was *asked* to bind, which is not what it ended up
-#: bound to whenever that request named port 0. `_bind_sockets` matches already
-#: open sockets against the requested list, and keying them by `getsockname()`
-#: would make a port-0 request never match the socket it produced: a second
-#: `bind()` would close the socket and open a new one on another port, so every
-#: caller holding the first port would be talking to a closed socket.
-#: Weak keys, so an entry disappears with the socket it describes rather than
-#: pinning a closed one alive for the process's lifetime.
-_REQUESTED_ADDRESS: "_ty.MutableMapping[_socket.socket, _net.SocketAddress]" = (
-    _weakref.WeakKeyDictionary()
-)
-
-
-def _requested(sock: _socket.socket) -> "_ty.Optional[_net.SocketAddress]":
-    """The address `sock` was asked to bind, or `None` for one not bound here."""
-    return _REQUESTED_ADDRESS.get(sock)
-
 
 _ADDRESS_BOUND_WARNED = False
 
@@ -105,147 +86,22 @@ def _grow_receive_buffer(
         )
 
 
-def _bind_sockets(
-    listen: "_ty.Sequence[_net.SocketAddress]",
-    sockets: "list[_socket.socket]",
-    endpoints: "dict[_socket.socket, _netimps.UDPEndpoint]",
-    pktinfo: bool,
-    label: str = "",
-    reuse_address: bool = False,
-    receive_buffer: int = 0,
-    devices: "_ty.Optional[_ty.Mapping[_net.SocketAddress, _netimps.Interface]]" = None,
-    on_device_refused: "_ty.Optional[_ty.Callable[[_net.SocketAddress, _netimps.Interface, OSError], None]]" = None,
+def _prepare_endpoints(
+    endpoints: "_ty.Iterable[_netimps.UDPEndpoint]", label: str, receive_buffer: int
 ) -> None:
-    """Bind one socket per listen address, reusing any already bound.
+    """Grow each endpoint's receive buffer and say where it is bound.
 
-    Shared by both listeners. Held apart, the async copy silently lacked the
-    packet-info option and the bind-error hints, so the same mistake gives the
-    same helpful message from either listener.
-
-    Every socket gets a `netimps.UDPEndpoint` in `endpoints`, which is what both
-    listeners receive through; a wildcard one asks it for packet info, which it
-    enables itself with the right per-platform option.
-
-    Idempotent, including for port 0: an already open socket is matched against
-    the address it was *asked* for, not the one it was given, so re-binding a
-    port-0 listener keeps the ephemeral port it already has. See
-    `_REQUESTED_ADDRESS`.
-
-    ``receive_buffer`` grows each new socket's receive buffer to that many
-    octets (0 leaves the OS default); see `_grow_receive_buffer`.
-
-    ``devices`` maps a wildcard address to the one adapter its socket is bound
-    to, so the kernel delivers only that interface's datagrams. A bind the
-    kernel refuses for the device (`DeviceBindingUnsupportedError`, or
-    `PermissionError` where the option needs a capability) is repeated without
-    it and reported to ``on_device_refused``: the socket then hears every
-    interface and the caller's allow-list drops the rest, which is what the
-    caller asked to hear. An error the repeat raises too (a port in use, or
-    one that needs privilege) is the real one and propagates.
-
-    Binding is the moment the set of addresses served can change, so it drops
-    netimps' interface-enumeration cache rather than leaving the next lookup
-    to wait out the TTL.
-
-    A failure leaves the listener as it found it: the sockets this call opened
-    are closed before the error is raised, and the ones already bound stay.
+    ``receive_buffer`` is in octets, 0 leaving the OS default; see
+    `_grow_receive_buffer`. "Bound" is the line a supervisor or a test waits
+    for: it carries the port the kernel gave.
     """
-    _netimps.clear_interface_cache()
-    active: "dict[_net.SocketAddress, _socket.socket]" = {}
-    for sock in sockets:
-        requested = _REQUESTED_ADDRESS.get(sock)
-        if requested is None:  # pragma: no cover - not bound through here
-            try:
-                requested = _net.SocketAddress.from_socket(sock)
-            except OSError:
-                continue
-        active[requested] = sock
-    wanted = []
-    opened: "list[_socket.socket]" = []
-    for address in listen:
-        wanted.append(address)
-        if address in active:
-            continue
-        LOGGER.info(f"Listening on{' (' + label + ')' if label else ''}: {address}")
-        try:
-            # Exclusive unless REUSE_ADDRESS: a second bind of a port the first
-            # holds would otherwise *succeed silently* and receive nothing -- a
-            # misconfiguration, or another process quietly taking over a DHCP
-            # port, that looks exactly like a working start-up. netimps makes
-            # the exclusive bind the default on both platforms.
-            #
-            # connreset=False: on Windows an ICMP port-unreachable provoked by
-            # an earlier reply otherwise surfaces as ConnectionResetError on a
-            # *later, unrelated* receive -- measured: one client that had gone
-            # away logged a full ERROR traceback on the server.
-            device = devices.get(address) if devices else None
-            options: "dict[str, _ty.Any]" = dict(
-                family=_socket.AF_INET,
-                kind=_socket.SOCK_DGRAM,
-                reuse_address=False,
-                allow_address_takeover=reuse_address,
-                broadcast=True,
-                connreset=False,
-            )
-            if device is not None:
-                options["device"] = device
-            try:
-                sock = _netimps.bind(str(address.ip), address.port, **options)
-            except (_netimps.DeviceBindingUnsupportedError, PermissionError) as refused:
-                if device is None:
-                    raise
-                if on_device_refused is not None:
-                    on_device_refused(address, device, refused)
-                del options["device"]
-                sock = _netimps.bind(str(address.ip), address.port, **options)
-        except OSError:
-            _release(opened, sockets, endpoints)
-            raise
-        opened.append(sock)
-        sockets.append(sock)
-        try:
-            if receive_buffer:
-                _grow_receive_buffer(sock, address, receive_buffer)
-            endpoints[sock] = _netimps.UDPEndpoint(
-                sock, pktinfo=pktinfo and address.ip == _const.WILDCARD_V4
-            )
-        except BaseException:
-            _release(opened, sockets, endpoints)
-            raise
-        _REQUESTED_ADDRESS[sock] = address
-        # After the bind, with the port the kernel gave: the line a supervisor or a
-        # test waits for, since "Listening on" is logged before it.
-        LOGGER.info(
-            f"Bound{' (' + label + ')' if label else ''}: {_bound_address(sock, address)}"
-        )
+    for endpoint in endpoints:
+        sock = endpoint.socket
+        address = _net.SocketAddress.from_socket(sock)
+        if receive_buffer:
+            _grow_receive_buffer(sock, address, receive_buffer)
+        LOGGER.info(f"Bound{' (' + label + ')' if label else ''}: {address}")
         _warn_if_address_bound_hears_no_broadcast(address)
-    for address, sock in active.items():
-        if address not in wanted:
-            sockets.remove(sock)
-            _close_socket(sock, endpoints)
-
-
-def _bound_address(
-    sock: _socket.socket, asked: "_net.SocketAddress"
-) -> "_net.SocketAddress":
-    """The address `sock` is bound to, or the one asked for when it cannot say."""
-    try:
-        return _net.SocketAddress.from_socket(sock)
-    except OSError:  # pragma: no cover - a socket that closed under us
-        return asked
-
-
-def _release(
-    opened: "list[_socket.socket]",
-    sockets: "list[_socket.socket]",
-    endpoints: "dict[_socket.socket, _netimps.UDPEndpoint]",
-) -> None:
-    """Close the sockets one failed `_bind_sockets` call opened, and unlist them."""
-    for sock in opened:
-        if sock in sockets:
-            sockets.remove(sock)
-        _close_socket(sock, endpoints)
-    opened.clear()
 
 
 def _close_socket(

@@ -60,9 +60,9 @@ def test_a_limited_socket_admits_only_its_interfaces_and_counts_the_rest(
     try:
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
-        # private: the interface allow-list a listener builds: no public view
-        allowed = listener._allowed[sock]
-        assert allowed == frozenset({_loopback().index})
+        # private: the endpoint a socket is received through: no public view
+        endpoint = listener._endpoints[sock]
+        assert [i.index for i in endpoint.interfaces] == [_loopback().index]
 
         # private: the receive path's admission check, driven without a socket
         assert listener._admits(_arrival(_loopback().index), sock)
@@ -83,8 +83,8 @@ def test_an_unlimited_socket_admits_everything() -> None:
     try:
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
-        # private: the interface allow-list a listener builds: no public view
-        assert listener._allowed == {}
+        # private: the endpoint a socket is received through: no public view
+        assert listener._endpoints[sock].interfaces == ()
         # private: the receive path's admission check, driven without a socket
         assert listener._admits(_arrival(12345), sock)
         assert listener.metrics.packets_dropped_other_interface == 0
@@ -246,10 +246,13 @@ def test_the_wildcard_beside_an_interface_hears_every_interface() -> None:
 # -- binding the socket to the device ----------------------------------------------
 
 
+_READ_BY_NETIMPS = "netimps._listen._binding."
+
+
 class _Netimps:
-    """Stands in for `netimps.bind`: records `device=`, and where the host cannot
-    bind to a device it passes the call on without one. `refuse` is raised in
-    place of a bind that names a device."""
+    """Stands in for the `bind` that `netimps.bind_listen` calls: records `device=`
+    and passes the call on. `refuse` is raised in place of a bind that names a
+    device."""
 
     def __init__(
         self,
@@ -265,9 +268,12 @@ class _Netimps:
         self._always = always
         self._bind = netimps.bind
         self._iter = netimps.iter_interfaces
-        monkeypatch.setattr(netimps, "bind", self.bind)
-        monkeypatch.setattr(netimps, "iter_interfaces", self.iter_interfaces)
-        monkeypatch.setattr(netimps, "has_device_binding", lambda: True)
+        # private: the name is looked up in the module that reads it, so the host can be stood for
+        monkeypatch.setattr(_READ_BY_NETIMPS + "bind", self.bind)
+        # private: the name is looked up in the module that reads it, so the host can be stood for
+        monkeypatch.setattr(_READ_BY_NETIMPS + "iter_interfaces", self.iter_interfaces)
+        # private: the name is looked up in the module that reads it, so the host can be stood for
+        monkeypatch.setattr(_READ_BY_NETIMPS + "has_device_binding", lambda: True)
 
     def bind(self, *args: ty.Any, **kwargs: ty.Any) -> socket.socket:
         self.calls += 1
@@ -292,16 +298,19 @@ def test_nothing_is_bound_to_a_device_where_the_host_has_no_such_binding(
         seen.append(kwargs)
         return real(*args, **kwargs)
 
-    monkeypatch.setattr(netimps, "bind", spy)
-    monkeypatch.setattr(netimps, "has_device_binding", lambda: False)
+    # private: the name is looked up in the module that reads it, so the host can be stood for
+    monkeypatch.setattr(_READ_BY_NETIMPS + "bind", spy)
+    # private: the name is looked up in the module that reads it, so the host can be stood for
+    monkeypatch.setattr(_READ_BY_NETIMPS + "has_device_binding", lambda: False)
     listener = DHCPListener(listen=(_loopback(), 0))
     listener.bind()
     try:
         assert seen and all(kwargs.get("device") is None for kwargs in seen)
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
-        # private: the interface allow-list a listener builds: no public view
-        assert listener._allowed[sock] == frozenset({_loopback().index})
+        # private: the endpoint a socket is received through: no public view
+        endpoint = listener._endpoints[sock]
+        assert [i.index for i in endpoint.interfaces] == [_loopback().index]
     finally:
         listener.close()
 
@@ -357,8 +366,8 @@ def test_a_socket_serving_several_adapters_is_not_bound_to_one_of_them(
         assert fake.devices == [None]
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
-        # private: the interface allow-list a listener builds: no public view
-        assert len(listener._allowed[sock]) == 2
+        # private: the endpoint a socket is received through: no public view
+        assert len(listener._endpoints[sock].interfaces) == 2
     finally:
         listener.close()
 
@@ -393,21 +402,25 @@ def test_a_refused_device_binding_falls_back_to_the_filter_and_says_so_once(
 
     fake = _Netimps(monkeypatch, refuse=refusal)
     listener = DHCPListener(listen=(_loopback(), 0))
-    with caplog.at_level(logging.INFO, logger="pydhcp"):
+    with caplog.at_level(logging.INFO):
         listener.bind()
     try:
         assert len(fake.devices) == 2 and fake.devices[0] is not None
         assert fake.devices[1] is None
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
-        # private: the interface allow-list a listener builds: no public view
-        assert listener._allowed[sock] == frozenset({_loopback().index})
+        # private: the endpoint a socket is received through: no public view
+        endpoint = listener._endpoints[sock]
+        assert [i.index for i in endpoint.interfaces] == [_loopback().index]
         # private: the receive path's admission check, driven without a socket
         assert listener._admits(_arrival(_loopback().index), sock)
         assert not listener._admits(_arrival(_loopback().index + 100), sock)
         assert listener.metrics.packets_dropped_other_interface == 1
         said = [r for r in caplog.records if "device" in r.getMessage()]
         assert len(said) == 1, [r.getMessage() for r in caplog.records]
+        # The record is netimps': one WARNING for the call, on its listen logger.
+        assert said[0].name == "netimps._listen"
+        assert said[0].levelno == logging.WARNING
     finally:
         listener.close()
 

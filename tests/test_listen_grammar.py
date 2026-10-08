@@ -191,7 +191,9 @@ def test_a_refused_spec_binds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_an_unknown_interface_is_refused_by_bind_and_binds_nothing() -> None:
     listener = DHCPListener(listen="no-such-adapter-7:0")
-    with pytest.raises(ValueError, match="no interface matches 'no-such-adapter-7'"):
+    with pytest.raises(
+        netimps.NetimpsValueError, match="no interface matches 'no-such-adapter-7'"
+    ):
         listener.bind()
     # private: the OS socket: its options and closed state have no public view
     assert listener._sockets == [] and listener.bound_addresses == ()
@@ -203,7 +205,7 @@ def test_a_host_name_is_an_adapter_name_and_is_never_resolved() -> None:
     if any(a.name == "localhost" for a in netimps.get_interfaces()):
         pytest.skip("this host has an adapter named localhost")
     listener = DHCPListener(listen="localhost:0")
-    with pytest.raises(ValueError, match="host name is never resolved"):
+    with pytest.raises(netimps.NetimpsValueError, match="host name is never resolved"):
         listener.bind()
     # private: the OS socket: its options and closed state have no public view
     assert listener._sockets == []
@@ -218,8 +220,9 @@ def test_an_interface_is_found_by_name_by_mac_and_as_an_object() -> None:
         try:
             # private: the OS socket: its options and closed state have no public view
             (socket_,) = listener._sockets
-            # private: the interface allow-list a listener builds: no public view
-            assert listener._allowed[socket_] >= {adapter.index}
+            # private: the endpoint a socket is received through: no public view
+            served = listener._endpoints[socket_].interfaces
+            assert adapter.index in {i.index for i in served}
             assert str(listener.bound_addresses[0].ip) == "0.0.0.0"
         finally:
             listener.close()
@@ -228,7 +231,9 @@ def test_an_interface_is_found_by_name_by_mac_and_as_an_object() -> None:
         by_mac.bind()
         try:
             (socket_,) = by_mac._sockets
-            assert adapter.index in by_mac._allowed[socket_]
+            assert adapter.index in {
+                i.index for i in by_mac._endpoints[socket_].interfaces
+            }
         finally:
             by_mac.close()
 

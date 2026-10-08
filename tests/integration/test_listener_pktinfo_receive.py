@@ -23,8 +23,6 @@ import netimps
 
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 
-# the receive path is not public
-from pydhcp.listener._receive import _pktinfo_supported
 from ipaddress import IPv4Address as IPv4
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessage, DHCPMessageType
@@ -92,11 +90,11 @@ def test_a_wildcard_listener_learns_where_a_datagram_arrived() -> None:
 @pytest.mark.parametrize(
     "spec",
     [
-        ("0.0.0.0", 6767),
-        "0.0.0.0:6767",
-        "*:6767",
-        ["0.0.0.0:6767"],
-        "0.0.0.0:6767,127.0.0.1:6768",
+        ("0.0.0.0", 0),
+        "0.0.0.0:0",
+        "*:0",
+        ["0.0.0.0:0"],
+        "0.0.0.0:0,127.0.0.1:0",
     ],
 )
 @needs_pktinfo
@@ -104,10 +102,18 @@ def test_every_wildcard_spelling_takes_the_packet_info_path(spec) -> None:
     """`"0.0.0.0:67"` and `"*:67"` used to compare unequal to the wildcard,
     skip packet info and expand into one socket per address -- which on Linux
     hears no broadcast DISCOVER at all."""
-    parsed = netimps.parse_listen(spec, 67, family=socket.AF_INET)
-    assert _pktinfo_supported(parsed, None), spec
-    # private: the packet-info probe's result: no public view
-    assert DHCPListener(listen=spec)._pktinfo, spec
+    listener = DHCPListener(listen=spec)
+    listener.bind()
+    try:
+        # private: the endpoints a socket is received through: no public view
+        endpoints = list(listener._endpoints.values())
+        assert endpoints
+        for endpoint in endpoints:
+            wildcard = endpoint.socket.getsockname()[0] == "0.0.0.0"
+            assert endpoint.has_pktinfo == wildcard, spec
+        assert any(endpoint.has_pktinfo for endpoint in endpoints), spec
+    finally:
+        listener.close()
 
 
 def _exchange_discover(

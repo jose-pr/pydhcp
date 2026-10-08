@@ -484,8 +484,8 @@ def test_a_unicast_to_an_unlisted_address_is_answered_from_that_address(
     it does not assign, and only that refusal skips."""
     listener = _wildcard_listener()
     port = listener.bound_addresses[0].port
-    # private: the packet-info probe's result: no public view
-    if not listener._pktinfo:
+    # private: the endpoints a socket is received through: no public view
+    if not any(e.has_pktinfo for e in listener._endpoints.values()):
         listener.close()
         pytest.skip("no packet info on this platform")
     # private: the log limiter: its state is the subject
@@ -518,8 +518,8 @@ def test_a_broadcast_is_reported_as_one_with_the_interface_address_as_source() -
     reports that address and not the address of the interface that heard it."""
     listener = _wildcard_listener()
     port = listener.bound_addresses[0].port
-    # private: the packet-info probe's result: no public view
-    if not listener._pktinfo:
+    # private: the endpoints a socket is received through: no public view
+    if not any(e.has_pktinfo for e in listener._endpoints.values()):
         listener.close()
         pytest.skip("no packet info on this platform")
     client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

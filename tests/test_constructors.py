@@ -78,19 +78,25 @@ def test_reuse_address_and_receive_buffer_size_are_arguments(
 ) -> None:
     seen: "dict[str, _ty.Any]" = {}
 
-    def record(*args: _ty.Any, **kwargs: _ty.Any) -> None:
+    def record(*args: _ty.Any, **kwargs: _ty.Any) -> "tuple[()]":
         seen.update(kwargs)
+        return ()
+
+    def record_buffer(endpoints: _ty.Any, label: str, receive_buffer: int) -> None:
+        seen["receive_buffer"] = receive_buffer
 
     # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    monkeypatch.setattr("pydhcp.listener._core._bind_sockets", record)
+    monkeypatch.setattr("pydhcp.listener._core._netimps.bind_listen", record)
+    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
+    monkeypatch.setattr("pydhcp.listener._core._prepare_endpoints", record_buffer)
     _build(
         cls, listen=("127.0.0.1", 0), reuse_address=True, receive_buffer_size=4096
     ).bind()
-    assert seen["reuse_address"] is True and seen["receive_buffer"] == 4096
+    assert seen["allow_address_takeover"] is True and seen["receive_buffer"] == 4096
 
     seen.clear()
     _build(cls, listen=("127.0.0.1", 0)).bind()
-    assert seen["reuse_address"] is cls.REUSE_ADDRESS  # type: ignore[attr-defined]
+    assert seen["allow_address_takeover"] is cls.REUSE_ADDRESS  # type: ignore[attr-defined]
     assert seen["receive_buffer"] == cls.RECEIVE_BUFFER_SIZE  # type: ignore[attr-defined]
 
 

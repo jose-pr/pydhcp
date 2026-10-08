@@ -18,11 +18,9 @@ from .. import _clock, _constants as _const, _leniency, _network as _net
 from .._metrics import DHCPMetrics
 from ..packet import _enums as _enum
 from ..packet._message import DHCPMessage
-from ._binding import _bind_sockets, _close_socket, _requested
-from ._interfaces import _interface_adapters
+from ._binding import _close_socket, _prepare_endpoints
 from ._limit import _brief, _LogLimit
-from ._receive import DHCPRequestContext, _Arrival, _context_for, _pktinfo_supported
-from ._spec import _expand_wildcards
+from ._receive import DHCPRequestContext, _Arrival, _context_for
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -30,9 +28,10 @@ LOGGER = _logging.getLogger(__name__)
 class _ListenerCore:
     DEFAULT_PORTS: _ty.Sequence[int] = tuple(p.value for p in _enum.DHCPPort)
 
-    #: Whether to set ``SO_REUSEADDR`` on every listening socket when the
-    #: constructor's `reuse_address` is not given. Off: see `_bind_sockets` for
-    #: what sharing a DHCP port actually looks like when it goes wrong.
+    #: Whether a listening socket may share or take over its port when the
+    #: constructor's `reuse_address` is not given. Off: a second socket bound to
+    #: a port the first holds then succeeds silently and receives nothing, which
+    #: looks exactly like a working start-up.
     REUSE_ADDRESS: bool = False
 
     #: Receive buffer to ask the OS for on every listening socket, in octets,
@@ -76,33 +75,14 @@ class _ListenerCore:
         #: ``None`` takes the class attribute when binding.
         self._reuse_address = reuse_address
         self._receive_buffer_size = receive_buffer_size
-        self._pktinfo_probed: _ty.Optional[bool] = None
         #: Closed is final: set by `close()`, never cleared.
         self._closed = False
         self._sockets: list[_socket.socket] = []
         #: The netimps endpoint each socket is received through.
         self._endpoints: dict[_socket.socket, _netimps.UDPEndpoint] = {}
-        #: The interface indexes a socket serves, for a socket limited to some.
-        self._allowed: "dict[_socket.socket, frozenset[int]]" = {}
         self.metrics = DHCPMetrics()
         #: What a sender can make this listener, or the role on it, write.
         self._log_limit = _LogLimit()
-
-    @property
-    def _pktinfo(self) -> bool:
-        """Whether this listener receives through the packet-info path.
-
-        Asked of a socket on first use, which is `bind()`: a constructor
-        performs no I/O.
-        """
-        if self._pktinfo_probed is None:
-            self._pktinfo_probed = _pktinfo_supported(self._listen, self._per_interface)
-        return self._pktinfo_probed
-
-    @property
-    def _expand_wildcard(self) -> bool:
-        """Without packet info a wildcard is served by one socket per host address."""
-        return not self._pktinfo
 
     @property
     def bound_addresses(self) -> "tuple[_net.SocketAddress, ...]":
@@ -125,90 +105,55 @@ class _ListenerCore:
         pass
 
     def bind(self) -> None:
-        """Open the sockets. Idempotent; raises what the bind raised, leaving none open.
+        """Open the sockets the specification names; does nothing once they are open.
 
-        Raises `RuntimeError` once the listener is closed.
+        Raises what the bind raised, leaving none open, and `RuntimeError` once
+        the listener is closed.
         """
         if self._closed:
             raise RuntimeError(f"{type(self).__name__} is closed")
-        # Before anything is opened: an interface that does not exist is an
-        # error of the arguments, and leaves no socket behind.
-        # One lookup serves both the allow-list and the device.
-        limits = {
-            _net.SocketAddress(
-                _ty.cast(_ipaddress.IPv4Address, entry.address), entry.port
-            ): entry.interfaces
-            for entry in self._listen
-            if entry.interfaces
-        }
-        adapters = {
-            address: _interface_adapters(selectors)
-            for address, selectors in limits.items()
-        }
-        allowed = {
-            address: frozenset(adapter.index for adapter in found)
-            for address, found in adapters.items()
-        }
-        # A device is one adapter: a socket serving several (an `Interface` list,
-        # or a MAC that several adapters carry) is limited by the allow-list alone.
-        devices = (
-            {a: found[0] for a, found in adapters.items() if len(found) == 1}
-            if self.USE_DEVICE_BINDING and _netimps.has_device_binding()
-            else {}
-        )
-        if allowed and not self._pktinfo:
-            raise ValueError(
-                "listening on an interface needs packet info, which sockets on "
-                "this host do not report"
+        if self._sockets:
+            return
+        label = f" ({self._BIND_LABEL})" if self._BIND_LABEL else ""
+        for entry in self._listen:
+            LOGGER.info(
+                f"Listening on{label}: {entry.address}:{entry.port}"
+                + (
+                    f" ({len(entry.interfaces)} interface(s))"
+                    if entry.interfaces
+                    else ""
+                )
             )
-        listen = [
-            _net.SocketAddress(
-                _ty.cast(_ipaddress.IPv4Address, entry.address), entry.port
-            )
-            for entry in self._listen
-        ]
-        if self._expand_wildcard:
-            listen = _expand_wildcards(listen)
-        _bind_sockets(
-            listen,
-            self._sockets,
-            self._endpoints,
-            self._pktinfo,
-            label=self._BIND_LABEL,
-            reuse_address=(
+        endpoints = _netimps.bind_listen(
+            self._listen,
+            family=_socket.AF_INET,
+            # `None` expands a wildcard where the host reports no packet info.
+            per_address=True if self._per_interface else None,
+            device_binding=self.USE_DEVICE_BINDING,
+            allow_address_takeover=(
                 self.REUSE_ADDRESS
                 if self._reuse_address is None
                 else self._reuse_address
             ),
-            receive_buffer=(
-                self.RECEIVE_BUFFER_SIZE
-                if self._receive_buffer_size is None
-                else self._receive_buffer_size
-            ),
-            devices=devices,
-            on_device_refused=self._device_refused,
+            broadcast=True,
         )
-        self._allowed = {
-            sock: allowed[requested]
-            for sock in self._sockets
-            if (requested := _requested(sock)) in allowed
-        }
-
-    def _device_refused(
-        self, address: _net.SocketAddress, device: _netimps.Interface, error: OSError
-    ) -> None:
-        """Say that `address` is limited to its interface by the allow-list alone."""
-        self._log_limited(
-            LOGGER,
-            _logging.WARNING,
-            "device binding refused",
-            "Could not bind %s to the device %s (%s | %s): datagrams from other "
-            "interfaces are dropped after the receive instead.",
-            address,
-            device.name,
-            type(error).__name__,
-            _brief(error),
-        )
+        try:
+            _prepare_endpoints(
+                endpoints,
+                self._BIND_LABEL,
+                (
+                    self.RECEIVE_BUFFER_SIZE
+                    if self._receive_buffer_size is None
+                    else self._receive_buffer_size
+                ),
+            )
+        except BaseException:
+            for endpoint in endpoints:
+                _close_socket(endpoint.socket, {endpoint.socket: endpoint})
+            raise
+        for endpoint in endpoints:
+            self._sockets.append(endpoint.socket)
+            self._endpoints[endpoint.socket] = endpoint
 
     def _admits(self, arrival: _Arrival, sock: _socket.socket) -> bool:
         """Whether a datagram arrived on an interface this socket serves.
@@ -218,9 +163,12 @@ class _ListenerCore:
         interface, which is the only way to hear a broadcast. Where the socket
         is bound to its device the kernel delivers nothing from another
         interface and the count stays 0; this check remains as the second line.
+        The interfaces are the endpoint's (`UDPEndpoint.interfaces`); only the
+        arrival's index is at hand here, so it is compared with theirs.
         """
-        allowed = self._allowed.get(sock)
-        if allowed is None or arrival.ifindex in allowed:
+        endpoint = self._endpoints.get(sock)
+        served = endpoint.interfaces if endpoint is not None else ()
+        if not served or any(i.index == arrival.ifindex for i in served):
             return True
         self.metrics.packets_dropped_other_interface += 1
         self._log_limited(
@@ -229,7 +177,7 @@ class _ListenerCore:
             "datagram from another interface",
             "Dropping a datagram that arrived on interface %s: this socket serves %s.",
             arrival.ifindex,
-            sorted(allowed),
+            sorted(i.index for i in served),
         )
         return False
 

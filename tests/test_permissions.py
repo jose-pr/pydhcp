@@ -10,7 +10,8 @@ def _bind_raising(monkeypatch, error: OSError) -> None:
     def refuse(*args, **kwargs):
         raise error
 
-    monkeypatch.setattr(netimps, "bind", refuse)
+    # private: the name is looked up in the module that reads it, so the host can be stood for
+    monkeypatch.setattr("netimps._listen._binding.bind", refuse)
 
 
 def test_bind_permission_error(monkeypatch):

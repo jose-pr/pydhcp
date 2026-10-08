@@ -104,7 +104,7 @@ def _code_lines(node: ast.AST, lines: "list[str]") -> "set[str]":
 #: become a copy -- which is the defect this whole plan exists to avoid.
 _RECEIVE_PATH = (
     "_pktinfo_supported",
-    "_bind_sockets",
+    "_prepare_endpoints",
     "_arrival",
     "_close_socket",
     "_context_for",
@@ -337,13 +337,19 @@ def test_the_async_class_agrees_about_the_receive_path(
     A wildcard bind must take the packet-info path wherever the sync half does;
     expanding the wildcard instead is what loses every broadcast on Linux.
     """
-    for spec in ("*", ("*", 10067), None):
+    for spec in ("*:0", ("*", 0), "*:0,127.0.0.1:0"):
         left = sync(listen=spec, **kwargs)
         right = asyncy(listen=spec, **kwargs)
-        # private: the packet-info probe's result: no public view
-        assert left._pktinfo == right._pktinfo, f"{spec!r}"
-        # private: the parsed listen spec: `bound_addresses` is empty until the bind
-        assert len(left._listen) == len(right._listen), f"{spec!r}"
+        left.bind()
+        right.bind()
+        try:
+            # private: the endpoints a socket is received through: no public view
+            assert [e.has_pktinfo for e in left._endpoints.values()] == [
+                e.has_pktinfo for e in right._endpoints.values()
+            ], f"{spec!r}"
+        finally:
+            left.close()
+            asyncio.run(right.aclose())
 
 
 # --- Phases 2 and 3: the real loop, real sockets -----------------------------

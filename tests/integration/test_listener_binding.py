@@ -10,6 +10,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
+import typing as ty
 
 import netimps
 import pytest
@@ -78,27 +79,58 @@ def test_rebinding_keeps_the_ephemeral_port_and_the_socket() -> None:
         listener.close()
 
 
-@pytest.mark.skipif(
-    not LOOPBACK_ALIAS_BINDABLE,
-    reason="needs a second loopback address; this host binds only 127.0.0.1",
-)
-def test_rebinding_still_drops_an_address_no_longer_asked_for() -> None:
-    """The matching change must not defeat the point of matching."""
-    # Two *distinct* requests: `parse_listen` deduplicates, so the same
-    # ("127.0.0.1", 0) twice is one address, not two.
-    listener = DHCPListener(listen=[("127.0.0.1", 0), ("127.0.0.2", 0)])
+def test_a_second_bind_opens_nothing_closes_nothing_and_asks_the_host_nothing(
+    enumerations: ty.Any,
+) -> None:
+    """A bound listener is not bound again: an address the host gained since is
+    not picked up, and a specification that names one socket per address is not
+    read against the host's addresses a second time."""
+    listener = DHCPListener(listen="*:0", per_interface=True)
     listener.bind()
     try:
         # private: the OS socket: its options and closed state have no public view
-        assert len(listener._sockets) == 2
-        dropped = listener._sockets[1]
-        # private: the parsed listen spec: `bound_addresses` is empty until the bind
-        listener._listen = listener._listen[:1]
+        before = list(listener._sockets)
+        addresses = listener.bound_addresses
+        assert before, "the host holds no IPv4 address"
+        enumerated = len(enumerations)
 
         listener.bind()
 
-        assert len(listener._sockets) == 1
-        assert dropped.fileno() == -1, "the unwanted socket was left open"
+        assert listener._sockets == before
+        assert listener.bound_addresses == addresses
+        assert all(sock.fileno() != -1 for sock in before)
+        assert len(enumerations) == enumerated
+    finally:
+        listener.close()
+
+
+def test_one_socket_per_address_binds_the_link_local_addresses_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A listener that binds one socket per address binds every address the host
+    holds, 169.254/16 included: the address is stood for by a fake adapter and
+    the bind is redirected to loopback, so only the address asked for is seen."""
+    adapter = netimps.Interface(
+        "fake0", 99, mac=None, ips=[ipaddress.IPv4Interface("169.254.7.7/16")]
+    )
+    asked: "list[str]" = []
+    real = netimps.bind
+
+    def bind(host: str, port: int, **options: ty.Any) -> socket.socket:
+        asked.append(host)
+        return real("127.0.0.1", 0, **options)
+
+    # private: the name is looked up in the module that reads it, so the host can be stood for
+    monkeypatch.setattr(
+        "netimps._listen._binding.iter_addresses",
+        lambda **_: iter([(adapter, adapter.ips[0])]),
+    )
+    # private: the name is looked up in the module that reads it, so the host can be stood for
+    monkeypatch.setattr("netimps._listen._binding.bind", bind)
+    listener = DHCPListener(listen="*:0", per_interface=True)
+    listener.bind()
+    try:
+        assert asked == ["169.254.7.7"]
     finally:
         listener.close()
 
@@ -313,28 +345,6 @@ def test_a_bind_that_fails_partway_closes_what_it_opened() -> None:
         assert listener._sockets == []
         # private: the driver's endpoint table, checked for leaks
         assert listener._endpoints == {}
-    finally:
-        holder.close()
-        listener.close()
-
-
-def test_a_failed_bind_keeps_the_sockets_an_earlier_bind_opened() -> None:
-    """Only what the failing call opened is closed; the listener is as it was."""
-    holder, port = _held_port()
-    listener = DHCPListener(listen=("127.0.0.1", 0))
-    listener.bind()
-    try:
-        before = listener.bound_addresses
-        # private: the OS socket: its options and closed state have no public view
-        socket_before = listener._sockets[0]
-        # private: the parsed listen spec: `bound_addresses` is empty until the bind
-        listener._listen = listener._listen + (
-            netimps.ListenAddress(ipaddress.IPv4Address("127.0.0.1"), port, ()),
-        )
-        with pytest.raises(OSError):
-            listener.bind()
-        assert listener.bound_addresses == before
-        assert socket_before.fileno() != -1
     finally:
         holder.close()
         listener.close()

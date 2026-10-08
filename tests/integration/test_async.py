@@ -1,6 +1,9 @@
 import asyncio
 import socket
 import pytest
+
+# the socket-closing step is not public
+from pydhcp.listener._binding import _close_socket
 from pydhcp import AsyncDHCPServer, DHCPMessage, DHCPLease, DHCPOptions
 from pydhcp.packet import DHCPMessageType, DHCPOpcode
 from pydhcp.options import DHCPOptionCode
@@ -200,18 +203,22 @@ def test_async_listener_uses_the_same_receive_path_as_the_sync_one():
     """
     from pydhcp.listener import AsyncDHCPListener, DHCPListener
 
-    for spec in ("*", ("*", 10067), None):
+    for spec in ("*:0", ("*", 0)):
         sync = DHCPListener(listen=spec)
-        # private: the packet-info probe's result: no public view
-        expected = sync._pktinfo
-        assert (
-            AsyncDHCPListener(listen=spec)._pktinfo == expected
-        ), f"listeners disagree about the receive path for {spec!r}"
-        # And so the wildcard stays unexpanded in the same cases: expanding it is
-        # precisely what loses the broadcasts on Linux.
-        assert (len(AsyncDHCPListener(listen=spec)._listen) == len(sync._listen)) or (
-            not expected
-        )
+        asynchronous = AsyncDHCPListener(listen=spec)
+        sync.bind()
+        asynchronous.bind()
+        try:
+            # private: the endpoints a socket is received through: no public view
+            assert [e.has_pktinfo for e in sync._endpoints.values()] == [
+                e.has_pktinfo for e in asynchronous._endpoints.values()
+            ], f"listeners disagree about the receive path for {spec!r}"
+            # And so the wildcard stays unexpanded in the same cases: expanding it
+            # is precisely what loses the broadcasts on Linux.
+            assert len(sync._endpoints) == len(asynchronous._endpoints) == 1
+        finally:
+            sync.close()
+            asyncio.run(asynchronous.aclose())
 
 
 def test_async_listener_builds_a_packet_info_context():
@@ -256,10 +263,10 @@ def test_async_listener_builds_a_packet_info_context():
 def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
     already_waiting: bool,
 ) -> None:
-    """Re-binding a started listener whose listen list shrank closes the sockets
-    no longer wanted. Their receive tasks are waiting in `arecv`, which a close
-    wakes with `RuntimeError`; that is the endpoint saying it is closed, and must
-    not reach the loop as a task exception nobody retrieved."""
+    """Closing the socket of a started listener retires it. Its receive task is
+    waiting in `arecv`, which a close wakes with `RuntimeError`; that is the
+    endpoint saying it is closed, and must not reach the loop as a task exception
+    nobody retrieved."""
 
     async def run_test() -> "list[dict[str, object]]":
         reports: "list[dict[str, object]]" = []
@@ -272,9 +279,9 @@ def test_dropping_a_socket_under_a_waiting_receive_ends_its_task_quietly(
             keep, drop = server._tasks
             if already_waiting:
                 await asyncio.sleep(0)  # both receive tasks run to their `arecv`
-            # private: the parsed listen spec: `bound_addresses` is empty until the bind
-            server._listen = server._listen[:1]
-            server.bind()
+            # private: the OS socket and its endpoint, closed as the listener closes them
+            _keep_sock, dropped = server._sockets
+            _close_socket(dropped, server._endpoints)
             await asyncio.wait_for(drop, timeout=10.0)
             assert drop.exception() is None
             assert not keep.done()
