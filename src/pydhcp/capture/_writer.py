@@ -61,9 +61,12 @@ def _open(
 
     try:
         writer = build(per_capture)
-        # Building opens nothing. A record file is appended to; a capture file
-        # cannot be, and a second run replaces it.
-        return build(per_capture, True) if _is_record(writer) else writer
+        # Building opens nothing. A growing record file is appended to; a capture
+        # file cannot be, a second run replaces it, and a file per record is
+        # never appended to.
+        if _is_record(writer) and not per_capture:
+            return build(False, True)
+        return writer
     except _pktcap.MissingExtraError as error:
         # pktcap's extra for a format has the name of pydhcp's, and a pydhcp
         # user installs it through pydhcp.
