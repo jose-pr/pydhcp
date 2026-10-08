@@ -505,9 +505,32 @@ someone upgrading from 0.7.0.
   address; the attribute is now the server's own. `self.lease_backend` inside an
   override is the real backend on both calls; only the base implementation reads through
   a view that does not extend a binding when `commit` is false.
-- **Requires netimps 0.4.0** (`netimps>=0.4.0,<0.5`, was `>=0.3.3,<0.4`).
+- **Requires netimps 0.4.1** (`netimps>=0.4.1,<0.5`, was `>=0.3.3,<0.4`).
   netimps renamed its public names without an alias, so no range covers both
-  series.
+  series; 0.4.1 adds `parse_listen`, `bind_listen`, `ListenLike` and
+  `UDPEndpoint(interfaces=)`, which the listeners now read and bind `listen` through.
+- **The `listen` grammar and the binding policy are netimps'.** `pydhcp.listener.ListenLike` is
+  `netimps.ListenLike`, and every accepted `listen` names the same sockets as before. The
+  listener keeps the default ports, the receive buffer, the records and the warning that a socket
+  bound to an address hears no broadcast. What a user can see change:
+  - A second `bind()` on a listener that is bound opens nothing, closes nothing and does not read
+    the host's addresses, so it does not pick up an address the host gained: close the listener
+    and make another.
+  - A listener that binds one socket per address (`per_interface=True`, or a host whose sockets
+    report no packet info) binds every IPv4 address the host holds, the link-local ones
+    (169.254/16) among them, where it left those out. Name the addresses in `listen` to hear
+    fewer.
+  - A device binding the kernel refuses is one WARNING for each `bind()` on the logger
+    `netimps._listen`, where it was pydhcp's rate-limited record on `pydhcp.listener._core`.
+  - The message of a refused `listen` is netimps' (`listen names no address: []`, where it was
+    `... it is empty`).
+  - An error that was a plain `ValueError` (an empty specification, a bad port, a port written
+    twice, an unknown interface at `bind()`) is `netimps.NetimpsValueError`, still a `ValueError`.
+  - An IPv6 address as text (`"::1"`, `"[::1]:67"`, `"fe80::1%eth0"`, `("fe80::1", 6767)`) is
+    refused with `netimps.NetimpsValueError`, where it was `ipaddress.AddressValueError`: code
+    that caught that subclass by name catches `ValueError` instead.
+  - An `IPv6Address` object as a binding is refused the same way, as a value of the wrong family,
+    where it was `TypeError`: text and object now agree.
 - **`host:port` text is read strictly.** In `listen=`, `--listen` and each
   `pydhcp relay --server`, the port is ASCII digits only and square brackets
   may enclose only an IPv6 literal. `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`,

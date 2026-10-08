@@ -103,8 +103,8 @@ main(argv: Sequence[str] | None = None) -> int
   line with the file's path and, where the parser gives one, the position:
   `pydhcp: error: server.yaml:12:5: expected ',' or ']'`.
 
-- Each `--server` value is split by **`listener._split_host_port`**, the same
-  parser the `--listen` specs go through, and reaches `DHCPRelay` as a
+- Each `--server` value is split by **`netimps.split_host`**, the parser the
+  `--listen` specs go through, and reaches `DHCPRelay` as a
   `(host, port)` tuple with port 67 supplied when the argument names none.
   One difference from `--listen`: an
   empty host is **rejected** here rather than defaulted to `0.0.0.0` — the

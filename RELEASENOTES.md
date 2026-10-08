@@ -17,7 +17,7 @@ and a read of this list.
   "pydhcp[cli]"`, YAML packets and `.yaml` configuration files need `"pydhcp[yaml]"`, and TOML
   needs `"pydhcp[toml]"`; `import pydhcp` imports none of them. A missing one is an `ImportError`
   (or a `DHCPConfigError` for a configuration file) that names the extra, where it was a
-  `NotImplementedError`. `netimps>=0.4.0,<0.5` (0.3 is no longer supported) and `pktcap>=0.1.0,<0.2`
+  `NotImplementedError`. `netimps>=0.4.1,<0.5` (0.3 is no longer supported) and `pktcap>=0.1.0,<0.2`
   are required.
 - **Names.** Acronyms are upper case and the generic names take the `DHCP` prefix: `DhcpServer` is
   `DHCPServer`, `DhcpOptionCode` is `DHCPOptionCode`, `Transport` is `DHCPTransport`, `OpCode` is

@@ -10,7 +10,7 @@ source. It ships inside the package and is self-contained; the top header is
 ## Listeners (`pydhcp.listener`)
 
 A package split by responsibility into private modules (`_transport`,
-`_spec`, `_interfaces`, `_receive`, `_binding`, `_sync`, `_asyncio`); import
+`_interfaces`, `_receive`, `_endpoints`, `_core`, `_sync`, `_asyncio`); import
 everything below from `pydhcp.listener` itself.
 
 ```python
@@ -38,33 +38,38 @@ async AsyncDHCPListener.aclose() -> None
   `.bind()` (the packet-info probe and the wildcard expansion included).
   `listen` is **a binding or a sequence of bindings**, read by one parser
   (the constructors, `pydhcp server|relay|capture --listen` and the `listen`
-  key of a configuration file). `None` is the wildcard on the default ports. A
-  binding is: text — `"host"`, `"host:port"`, `"*"`, `"*:port"`, `":port"`, several
-  joined by commas; an `IPv4Address`, or `None` (the wildcard); a
-  `netimps.Interface` or `netimps.MACAddress` (an interface, below); or a **pair
-  `(host, ports)` as a tuple or a list** (a JSON, YAML or TOML file only has
-  lists, so `["127.0.0.1", 6767]` is one binding). In a pair the host is
-  `None`, blank text, `"*"`, text, an `IPv4Address`, an `Interface` or a
-  `MACAddress`, and the ports are an
-  `int`, digit text, `None` (the default ports) or a sequence of those
-  (`("127.0.0.1", [6767, 6768])`); the pair is read by
-  `netimps.split_host`, so a type, a range (0-65535) and a port written twice
-  that disagrees (`("*:67", 68)`) are checked. A sequence of two items is a pair
-  when the second is port-like (`None`, an `int`, digit text, a list of those),
-  else two bindings (`["127.0.0.1", "127.0.0.2"]`). **`None` as a host is the
-  wildcard everywhere**, `(None, 6767)` included. Refused at construction with
-  nothing bound: a `bool` or a bare number (`True`, `6767`) as an address or
-  a port (`TypeError`), an empty result (`""`, `" , "`, `[]`, a pair with no port;
-  `ValueError`), a bad or out-of-range port, and an IPv6 address
-  (`ipaddress.AddressValueError`). **Any wildcard spelling** — `"*"`, `"0.0.0.0"`,
-  `"*:67"`, `"0.0.0.0:67"`, `("0.0.0.0", 67)` — binds one wildcard socket and
+  key of a configuration file), which is netimps': the constructor calls
+  `netimps.parse_listen(listen, DEFAULT_PORTS, family=socket.AF_INET)` and keeps
+  the result in `._listen`. **The grammar is documented in netimps' header**,
+  `netimps/_listen/AGENTS.md` inside the installed package, and is not repeated
+  here; the common spellings are:
+
+  | `listen` | Binds |
+  | --- | --- |
+  | `None`, `"*"`, `"0.0.0.0"` | the wildcard, on the default ports |
+  | `"*:6767"`, `":6767"`, `(None, 6767)` | the wildcard, on port 6767 |
+  | `"127.0.0.1:6767,127.0.0.2"` | `127.0.0.1` on 6767, `127.0.0.2` on the default ports |
+  | `("127.0.0.1", [6767, 6768])` | `127.0.0.1` on two ports; a list `["127.0.0.1", 6767]` is the same pair, as a configuration file has it |
+  | `"eth1"`, `"eth1:6767"`, `"aa-bb-cc-dd-ee-ff"`, a `netimps.Interface` | the wildcard, limited to that interface (below) |
+
+  **A constructor performs no I/O**: no socket is opened, no adapter listed and
+  no file read until `.bind()`. A specification netimps refuses is refused at
+  construction with nothing bound: `TypeError` for a value of a type the grammar
+  does not take (a `bool`, a bare number, `bytes`), and `netimps.NetimpsValueError`
+  (a `ValueError`) for any other, whose message is netimps': a specification
+  naming no address, a bad or out-of-range port, a port written twice that
+  disagrees, brackets round an IPv4 address, and **an IPv6 address**, as text
+  (`"::1"`, `"[::1]:67"`) or as an `IPv6Address` object: DHCPv4 listens on IPv4.
+  **Any wildcard spelling** binds one wildcard socket and
   learns each datagram's arrival interface through `netimps.UDPEndpoint`
   (packet info), on Linux, macOS and Windows and on every supported CPython.
   `poll_interval` (seconds, default 1) is how often a wait for a datagram looks
   at the shutdown flag again; `.shutdown()` wakes it at once, so it matters only
   where Windows delivers Ctrl-C between waits. `max_packet_size`
   defaults to `UDP_MAX_PACKET_SIZE` (65535). `per_interface=True` disables
-  wildcard routing and binds one socket per interface address instead.
+  wildcard routing and binds one socket per interface address instead (the
+  host's addresses are read when `.bind()` runs, loopback and link-local ones
+  included; name the addresses in `listen` to hear fewer).
   **A socket bound to an address hears no broadcast on Linux** (measured: 0 of
   3 limited and 0 of 3 subnet broadcasts, against 3 of 3 for the wildcard;
   macOS and the BSDs are expected to match, unmeasured; Windows delivers it),
@@ -73,56 +78,39 @@ async AsyncDHCPListener.aclose() -> None
   wildcard alone. `.bind()` logs a WARNING once per process when it binds such
   an address. Every instance
   owns `self.metrics: DHCPMetrics` — there is no global metrics singleton.
-  - **Listening on an interface.** Text that is not an IPv4 address names an
-    interface, read in this order so that no name is looked up as a host name (a
-    host name is **never resolved**): the wildcard forms; an IPv4 address; a MAC
-    in any spelling (`aa:bb:cc:dd:ee:ff`, `aa-bb-cc-dd-ee-ff`, `aabb.ccdd.eeff`,
-    `aa.bb.cc.dd.ee.ff`, `aabbccddeeff`); otherwise an adapter name (`eth1`,
-    `Wi-Fi 2`, `eth0.100`). So `"eth1"` and `"localhost"` are both adapters, and an
-    adapter whose name is also an address or a MAC is given as a
-    `netimps.Interface`. The port follows the last colon (`"eth1:67"`,
-    `"aa-bb-cc-dd-ee-ff:67"`), so `eth0:1` is `eth0` on port 1: the colon spelling
-    of a MAC takes its port in a pair (`("aa:bb:cc:dd:ee:ff", 67)`) and an adapter
-    name that holds a colon is given as an `Interface`. A `/` in a name is
-    refused. **The adapter is looked up by `.bind()`**, not by the constructor
-    (`netimps.iter_interfaces`: a name names one adapter, a MAC every adapter
-    carrying it, an `Interface` itself); one that matches nothing raises
-    `ValueError` ("no interface matches ...") with nothing bound. The listener
-    binds **one wildcard socket** (so a broadcast is heard) and **drops, before
-    decoding, a datagram that arrived on another interface**, counting it in
-    `metrics.packets_dropped_other_interface` (and writing a DEBUG line through
-    the log limit). **On Linux** (`netimps.has_device_binding()`) a socket that
-    serves exactly one adapter is also **bound to that device**, so the kernel
-    delivers nothing from another interface, a broadcast included, and the count
-    stays 0 in normal operation; the drop stays as a second check. Elsewhere
-    (Windows, macOS, FreeBSD have no such option) the drop is the whole limit.
-    A socket serving several adapters (a MAC several carry, or several
-    interfaces on one port) is limited by the drop alone. If the kernel refuses
-    the device (`DeviceBindingUnsupportedError`, or `PermissionError` where the
-    option needs a capability) the socket is bound without it and one WARNING
-    says so through the log limit: the listener then behaves as it does
-    elsewhere. The class attribute `USE_DEVICE_BINDING = False` forces the drop
-    alone. Several interfaces on one port share the socket; naming the
-    wildcard plainly on that port (`"*:67"`, `"0.0.0.0:67"`) takes precedence and
-    removes the limit. It needs packet info (`ValueError` at `.bind()` where the
-    socket reports none) and cannot be combined with `per_interface=True`
-    (`ValueError` at construction). Every listener, role and the client take it.
-  - **`host:port` text is read strictly** (netimps' `split_host`): the port is
-    ASCII digits only, and square brackets may enclose only an IPv6 literal.
-    `"127.0.0.1:+6767"`, `"127.0.0.1: 6767"`, `"127.0.0.1:8_0"` and
-    `"[127.0.0.1]:6767"` raise `ValueError` (netimps' `NetimpsValueError`),
-    the message naming the port or the brackets. The same rule applies to
-    each `--listen` and `--server` value. A host name is not an address:
-    `listen` takes IPv4 addresses and interfaces, a name is read as an adapter name
-    and never resolved, and IPv6 raises `ipaddress.AddressValueError`.
-  - **Wildcard expansion uses the APIPA-filtered address list.** A wildcard on
-    a platform without packet info (or with `per_interface=True`) becomes one
-    socket per `host_ip_interfaces()` address, read when `.bind()` runs and not when the listener is constructed, which
-    excludes 169.254/16: binding is *selection* (which addresses this process
-    answers on), not *resolution* (which interface a datagram arrived on, which
-    uses `filter=False`). A link-local address means DHCP did not answer —
-    RFC 3927 §1.5 does not assign those by DHCP. Name one explicitly in
-    `listen` to bind it anyway.
+  - **Listening on an interface.** An interface binding (an adapter name, a MAC,
+    a `netimps.Interface`) is one wildcard socket, so a broadcast is heard, whose
+    `UDPEndpoint.interfaces` are the adapters netimps found when `.bind()` ran:
+    a name names one adapter, a MAC every adapter carrying it. **The adapter is
+    looked up by `.bind()`**, not by the constructor, and one that matches
+    nothing raises `netimps.NetimpsValueError` ("no interface matches ...", a
+    host name is never resolved) with nothing bound. The listener **drops,
+    before decoding, a datagram that arrived on another interface** (the
+    endpoint's `admits` decides, by the arrival interface's index), counting it
+    in `metrics.packets_dropped_other_interface` (and writing a DEBUG line
+    through the log limit). **On Linux** (`netimps.has_device_binding()`) a
+    socket that serves exactly one adapter is also **bound to the device**, so
+    the kernel delivers nothing from another interface, a broadcast included,
+    and the count stays 0 in normal operation; the drop stays as a second
+    check. Elsewhere (Windows, macOS, FreeBSD have no such option) the drop is
+    the whole limit. A socket serving several adapters is limited by the drop
+    alone. If the kernel refuses the device (`DeviceBindingUnsupportedError`, or
+    `PermissionError` where the option needs a capability) netimps binds the
+    socket without it and says so **once for each `.bind()`, at WARNING, on the
+    logger `netimps._listen`**: the listener then behaves as it does elsewhere.
+    The class attribute `USE_DEVICE_BINDING = False` forces the drop alone.
+    Several interfaces on one port share the socket; naming the wildcard plainly
+    on that port (`"*:67"`) takes precedence and removes the limit. It needs
+    packet info (`netimps.NetimpsValueError` at `.bind()` where the socket
+    reports none) and cannot be combined with `per_interface=True`
+    (`ValueError` at construction, pydhcp's own message). Every listener, role
+    and the client take it.
+  - **Wildcard expansion is netimps'.** A wildcard on a platform without packet
+    info (or with `per_interface=True`) becomes one socket per IPv4 address the
+    host holds, read when `.bind()` runs and not when the listener is
+    constructed. **Every address is bound, 169.254/16 (link-local) and loopback
+    included**: serving is not filtered by what an address is. Name addresses
+    in `listen` to hear fewer.
   - **`REUSE_ADDRESS`** (class var, `False`) — whether a listener may share or
     take over its port (`netimps.bind(allow_address_takeover=True)`, i.e.
     `SO_REUSEADDR`). Off, because a second listener binding a port the first
@@ -145,16 +133,19 @@ async AsyncDHCPListener.aclose() -> None
     of its own binds, the wildcard (`None`) included: `(67, 68)` on the two
     listeners and on `DHCPCapture`/`AsyncDHCPCapture`, `(67,)` on the servers
     and the relays, `(68,)` on the clients. A subclass sets its own.
-  - **`.bind()`** — open/refresh sockets for `self._listen`; raises
+  - **`.bind()`** — opens the sockets `self._listen` names, through
+    `netimps.bind_listen`; raises
     `PermissionError` for privileged ports (<1024 without rights) and
     **`netimps.AddressInUseError`** (an `OSError`, never a `PermissionError`)
     when the port is taken — including a Windows `WSAEACCES` against an
     exclusive holder, since that platform has no privileged ports — both with
-    an actionable message. **Idempotent, port 0 included**: an open socket is
-    matched against the address it was *asked* for, so a re-bind keeps the
-    ephemeral port it already has rather than closing that socket and taking a
-    new port. Sockets are bound with `connreset=False`, so on Windows an ICMP
-    error from an earlier reply does not surface on a later receive.
+    an actionable message. **A listener that is bound is not bound again**:
+    `.bind()` then opens nothing, closes nothing and does not read the host's
+    addresses, so a second call neither keeps nor changes anything (an address
+    the host gained since is not picked up: close the listener and make
+    another). Sockets are bound with `connreset=False`, so on Windows an ICMP
+    error from an earlier reply does not surface on a later receive, and with
+    `SO_BROADCAST`.
   - **Lifecycle** — one state machine on the thread-based listener and on every
     role built on it (`DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient`):
     - **`.serve_forever()`** — binds, then receives on the **calling**
@@ -174,8 +165,8 @@ async AsyncDHCPListener.aclose() -> None
       raised (`AddressInUseError`, `PermissionError`, ...) out of `.start()`,
       with nothing bound and the listener unstarted. `RuntimeError` when
       already serving or closed: a second `.start()` is an error, never a second
-      thread. `.bind()` itself, when it fails partway, closes the sockets that
-      call opened and keeps the ones an earlier call bound.
+      thread. `.bind()` itself, when it fails partway, closes every socket it
+      opened.
     - **`.shutdown()`** — asks the loop to end. **Never blocks and is safe
       from any thread and from a handler**; a wake-up socket ends the wait at
       once, so it does not wait for a poll. A no-op when nothing is serving.
@@ -202,8 +193,9 @@ async AsyncDHCPListener.aclose() -> None
     actually bound to, read from the sockets rather than from the requested
     spec. Empty before `.bind()` and after `.close()`; a listener that was only
     shut down keeps its sockets. This is how a caller that passed port 0 learns
-    the ephemeral port it was given. Each socket logs `Listening on: <asked>` before
-    its bind and `Bound: <bound>` (INFO, the bound address) after it.
+    the ephemeral port it was given. `Listening on: <asked>` is logged (INFO) for each
+    address the specification names before any bind, and `Bound: <bound>` (INFO,
+    the bound address) for each socket after them all.
   - **`metrics.packets_dropped_truncated`** / **`metrics.packets_dropped_error`**
     — datagrams that did not fit `max_packet_size`, and datagrams lost to an
     error anywhere in receive/decode/handle. They are `DHCPMetrics` fields, so
@@ -357,9 +349,11 @@ DHCPRequestContext(transport, interface, client, client_mac, ifindex=None, local
   Handlers use `context.transport`/`context.interface` to reply out the same
   interface a request arrived on.
 
-- **`ListenLike`** — type alias for the `listen` argument accepted above: `None`, one
-  binding (text, an `IPv4Address`, a `netimps.Interface`, a `netimps.MACAddress`, or a
-  `(host, ports)` pair as tuple or list), or a sequence of bindings.
+- **`ListenLike`** — `netimps.ListenLike`, the type of the `listen` argument accepted
+  above: `None`, one binding (text, an address, a `netimps.Interface`, a
+  `netimps.MACAddress`, a `netimps.ListenAddress`, or a `(host, ports)` pair as tuple or
+  list), or a sequence of bindings. It also admits what a DHCPv4 listener refuses, an IPv6
+  address.
 
 - **`BROADCAST_ADDRESS`** (`"255.255.255.255"`) — the all-ones address every DHCP client can be
   reached at before it has one of its own (RFC 2131 §4.1).
@@ -379,11 +373,11 @@ host_ip_interfaces(filter=True, family=4, *, cache=False) -> Iterator[NetworkInt
   backed by `netimps.iter_addresses()`. `cache` is netimps' enumeration cache:
   `False` enumerates now, `True` reuses an enumeration up to
   `netimps.INTERFACE_CACHE_TTL` (1 s) old, a number is that TTL in seconds.
-  Per-packet callers pass `True`; `DHCPListener.bind()` clears the cache.
+  Per-packet callers pass `True`; `bind()` clears the cache.
   `filter=True` (default) excludes `netimps.LINK_LOCAL_V4` (APIPA) addresses;
   `filter=False` (falsy) includes everything; or pass a
-  `Callable[[NetworkInterface], bool]` predicate. Used by `DHCPListener`
-  wildcard binding, the `pydhcp interfaces` CLI subcommand, and
+  `Callable[[NetworkInterface], bool]` predicate. Used by the
+  `pydhcp interfaces` CLI subcommand and
   `DHCPServer`'s subnet lookup in `acquire_lease`/`get_inform_options`.
   - `family` is `4` or `AF_INET`, `6` or `AF_INET6`, or `None`; anything else
     raises `ValueError`.
