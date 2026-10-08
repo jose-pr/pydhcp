@@ -56,15 +56,8 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed first, from its branch, so the project install below finds
-      # the requirement already met. Remove this step once 0.4.0 is published.
-      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
-        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
-
       # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed after netimps because its own requirement is that
-      # unpublished netimps. Remove this step once 0.1.0 is published.
+      # yet. Remove this step once 0.1.0 is published.
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
@@ -124,15 +117,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed first, from its branch, so the project install below finds
-      # the requirement already met. Remove this step once 0.4.0 is published.
-      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
-        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
-
       # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed after netimps because its own requirement is that
-      # unpublished netimps. Remove this step once 0.1.0 is published.
+      # yet. Remove this step once 0.1.0 is published.
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
@@ -188,24 +174,18 @@ jobs:
         with:
           python-version: "3.9"
 
-      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
+      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
       # yet, so it has no version to pin and comes from its branch. Remove this
-      # step once 0.4.0 is published (the pin below then covers it).
-      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
-        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
-
-      # Temporary: pktcap 0.1.0, likewise. Installed after netimps because its
-      # own requirement is that unpublished netimps. Remove this step once 0.1.0
-      # is published.
+      # step once 0.1.0 is published (the pin below then covers it).
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       # The script reads the floors from pyproject.toml, evaluating each marker
       # for this runner, so a floor that differs by platform or Python is the one
-      # that applies here. The two skipped names have no published version to pin;
-      # drop --skip once both are on PyPI.
+      # that applies here. The skipped name has no published version to pin;
+      # drop --skip once it is on PyPI.
       - name: Pin every declared dependency to its floor
-        run: python .github/pin_floors.py --skip netimps pktcap
+        run: python .github/pin_floors.py --skip pktcap
 
       - name: Install at the floors
         run: python -m pip install -c floors.txt -e ".[dev]"
@@ -236,15 +216,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed first, from its branch, so the project install below finds
-      # the requirement already met. Remove this step once 0.4.0 is published.
-      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
-        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
-
       # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed after netimps because its own requirement is that
-      # unpublished netimps. Remove this step once 0.1.0 is published.
+      # yet. Remove this step once 0.1.0 is published.
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
@@ -348,17 +321,16 @@ jobs:
           python -m pip install build
           python -m build --wheel --outdir "${{ runner.temp }}/dist"
 
-      # Temporary: netimps 0.4.0 and pktcap 0.1.0, which the wheel requires, are
-      # not on PyPI yet. Installed into the fresh environment first, from their
-      # branches, so the wheel install finds the requirements already met. Remove
-      # this step once both are published.
-      - name: Install netimps and pktcap from their branches (until they are on PyPI)
+      # Temporary: pktcap 0.1.0, which the wheel requires, is not on PyPI yet.
+      # Installed into the fresh environment first, from its branch, so the wheel
+      # install finds the requirement already met. Remove this step once it is
+      # published.
+      - name: Install pktcap from its branch (until it is on PyPI)
         shell: bash
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv wheel-env
           if [ -d wheel-env/Scripts ]; then BIN=wheel-env/Scripts; else BIN=wheel-env/bin; fi
-          "$BIN/python" -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
           "$BIN/python" -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install the wheel, away from the checkout, and run the command
@@ -408,15 +380,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed first, from its branch, so the project install below finds
-      # the requirement already met. Remove this step once 0.4.0 is published.
-      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
-        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
-
       # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed after netimps because its own requirement is that
-      # unpublished netimps. Remove this step once 0.1.0 is published.
+      # yet. Remove this step once 0.1.0 is published.
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
@@ -513,15 +478,8 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Temporary: netimps 0.4.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed first, from its branch, so the project install below finds
-      # the requirement already met. Remove this step once 0.4.0 is published.
-      - name: Install netimps 0.4.0 from its branch (until it is on PyPI)
-        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
-
       # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Installed after netimps because its own requirement is that
-      # unpublished netimps. Remove this step once 0.1.0 is published.
+      # yet. Remove this step once 0.1.0 is published.
       - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
         run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 

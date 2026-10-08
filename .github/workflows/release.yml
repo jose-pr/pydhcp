@@ -9,9 +9,9 @@ name: Release
 # GitHub Release, then -- for final (non pre-release) tags only -- the PyPI
 # upload. docs.yml deploys the docs when this workflow completes.
 #
-# There is no step here that installs netimps or pktcap from a branch, on
-# purpose: this workflow must fail while either is unpublished, because a
-# release that needed an unpublished dependency could not be installed.
+# There is no step here that installs a dependency from a branch, on purpose:
+# this workflow must fail while one is unpublished (pktcap, as this is
+# written), because a release that needed it could not be installed.
 #
 # The tag reaches a script only as an environment variable (`env:`), never
 # spliced into its source. An expression that only tests it for a `-` is
