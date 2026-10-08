@@ -27,8 +27,10 @@ dependencies = [
     # 0.4.0: pydhcp uses the names netimps 0.4 settled on -- UDPEndpoint,
     # has_pktinfo, has_src_pinning, get_interface(index=), split_host,
     # Datagram.destination and truncated, LINK_LOCAL_V4, MACAddress.format --
-    # and netimps 0.3 spells them differently, with no alias.
-    "netimps>=0.4.0,<0.5",
+    # and netimps 0.3 spells them differently, with no alias. 0.4.1 adds
+    # parse_listen, bind_listen, ListenLike and UDPEndpoint(interfaces=) with
+    # admits, which the listeners read and bind `listen` through.
+    "netimps>=0.4.1,<0.5",
     # The capture filter grammar and the record writer (one growing file, or one
     # file per record under a name pattern, with a file budget).
     "pktcap>=0.1.0,<0.2",
