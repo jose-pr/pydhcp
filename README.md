@@ -158,7 +158,7 @@ pktcap's own commands filter DHCP with the same short keys when they are told to
 plugin (`pktcap_plugin`; it registers nothing until pktcap names it):
 
 ```bash
-PKTCAP_PLUGINS=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER and chaddr=00:11:22:33:44:55"
+PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER and chaddr=00:11:22:33:44:55"
 ```
 
 ### Basic packet client

@@ -131,8 +131,8 @@ register_dhcp_dissector(registry=None) -> None
 pktcap_plugin(registry) -> None
 ```
 
-- **`pktcap_plugin`** — the hook pktcap loads by name: `PKTCAP_PLUGINS=pydhcp.capture pktcap
-  convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` (or `--plugins pydhcp.capture`, or a `plugins`
+- **`pktcap_plugin`** — the hook pktcap loads by name: `PKTCAP_LOAD=pydhcp.capture pktcap
+  convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` (or `--load pydhcp.capture`, or a `load`
   key in pktcap's configuration file). `registry` is a `pktcap.DissectorRegistry`. It declares
   `DHCPLayer` in `registry` with the filter keys below, then calls `register_dhcp_dissector(registry)`;
   when that raises, the layer is taken out again and the error goes on, so a failed call registers

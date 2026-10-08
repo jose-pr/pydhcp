@@ -336,7 +336,7 @@ pktcap's commands load the same registration, and the filter keys of `pydhcp cap
 --filter` is unaffected.
 
 ```bash
-PKTCAP_PLUGINS=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"
+PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"
 ```
 
 Hooks can be trusted Python callables or commands. Command hooks receive the serialized

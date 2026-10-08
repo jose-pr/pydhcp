@@ -17,7 +17,7 @@ someone upgrading from 0.7.0.
 ### Added
 
 - **`pydhcp.capture.pktcap_plugin(registry)`**: the hook pktcap loads by name, so
-  `PKTCAP_PLUGINS=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` filters DHCP
+  `PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` filters DHCP
   with the keys `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`, each read as
   `compile_capture_filter` reads it (the same converters), so a value one refuses the other refuses when the
   filter is compiled. It declares `DHCPLayer` in the registry and calls

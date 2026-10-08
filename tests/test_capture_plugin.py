@@ -566,7 +566,7 @@ def test_pktcap_convert_with_the_plugin_named_writes_the_discovers_alone(
 ) -> None:
     out = _pktcap(
         ["convert", "-i", str(capture), "-f", "msg_type=DHCPDISCOVER"],
-        {"PKTCAP_PLUGINS": "pydhcp.capture"},
+        {"PKTCAP_LOAD": "pydhcp.capture"},
         tmp_path,
     )
     assert out.returncode == 0, out.stderr
@@ -585,7 +585,7 @@ def test_pktcap_convert_refuses_a_message_type_name_that_is_not_one_with_status_
 ) -> None:
     out = _pktcap(
         ["convert", "-i", str(capture), "-f", "msg_type=DISCOVER"],
-        {"PKTCAP_PLUGINS": "pydhcp.capture"},
+        {"PKTCAP_LOAD": "pydhcp.capture"},
         tmp_path,
     )
     assert out.returncode == 2 and "DISCOVER" in out.stderr and out.stdout == ""
@@ -608,7 +608,7 @@ def test_with_another_op_key_loaded_the_bare_key_is_status_2_naming_both_and_the
     directory.mkdir()
     (directory / (name + ".py")).write_bytes(_OTHER.encode("utf-8"))
     environment = {
-        "PKTCAP_PLUGINS": "pydhcp.capture," + name,
+        "PKTCAP_LOAD": "pydhcp.capture," + name,
         "PYTHONPATH": str(directory),
     }
     bare = _pktcap(["convert", "-i", str(capture), "-f", "op=1"], environment, tmp_path)
@@ -626,7 +626,7 @@ def test_with_another_op_key_loaded_the_bare_key_is_status_2_naming_both_and_the
 def test_pktcap_plugins_lists_the_keys_and_the_layer(
     need_command: None, tmp_path: pathlib.Path
 ) -> None:
-    out = _pktcap(["plugins"], {"PKTCAP_PLUGINS": "pydhcp.capture"}, tmp_path)
+    out = _pktcap(["plugins"], {"PKTCAP_LOAD": "pydhcp.capture"}, tmp_path)
     assert out.returncode == 0, out.stderr
     lines = out.stdout.splitlines()
     keys = next(line for line in lines if line.strip().startswith("keys:"))
