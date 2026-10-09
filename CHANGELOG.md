@@ -16,6 +16,18 @@ someone upgrading from 0.7.0.
 
 ### Added
 
+- **`pydhcp.capture.sniff_dhcp(listen=None, *, per_interface=None, stop=None, dissector=None)`
+  and `asniff_dhcp(listen=None, *, per_interface=None, dissector=None)`**: the DHCP messages that
+  reach `listen` as pktcap's dissected frames (`pktcap.DissectedFrame`), on threads and on an
+  event loop. They are `netimps.bind_listen` with DHCP's defaults (ports 67 and 68, IPv4,
+  broadcast allowed) handed to `pktcap.sniff_udp` and `asniff_udp`, with `capture_dissector()` when
+  no `dissector` is given; the last layer of a frame that holds a message is a `DHCPLayer`. The
+  sockets are bound by the call and closed when the iterator ends, fails, is closed, dropped or
+  (asynchronous) cancelled. They need the `pktcap` extra and use no `DHCPListener`.
+- **`DHCPLayer.summary()`**: one line (`DHCPOFFER xid=1A52B52E client=01:02:00:00:99:00:02
+  yiaddr=10.99.0.100`), the text pktcap's `text` format shows for a frame whose innermost layer is
+  DHCP. `capture_dissector()` now also declares the layer and its filter keys, so
+  `pktcap.frame_filter_for(dissector.registry)` compiles `msg_type=DHCPOFFER`.
 - **`pydhcp.capture.pktcap_plugin(registry)`**: the hook pktcap loads by name, so
   `PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` filters DHCP
   with the keys `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`, each read as

@@ -36,6 +36,21 @@ class DHCPLayer(_ty.NamedTuple):
     client_id: str
     message: _ty.Dict[str, _ty.Any]
 
+    def summary(self) -> str:
+        """One line for a person: the type, the transaction id, the client, and
+        `yiaddr` and `giaddr` when they are not zero.
+
+        `DHCPOFFER xid=1A52B52E client=01:02:00:00:99:00:02 yiaddr=10.99.0.100`.
+        This is the text pktcap's `text` format shows for a frame whose innermost
+        layer is this one.
+        """
+        parts = [f"{self.message_type} xid={self.xid:08X} client={self.client_id}"]
+        for key in ("yiaddr", "giaddr"):
+            value = self.message.get(key)
+            if value and value != "0.0.0.0":
+                parts.append(f"{key}={value}")
+        return " ".join(parts)
+
 
 def dissect_dhcp(data: bytes) -> "_pktcap.Dissected":
     """Read the DHCP message `data` holds: its `DHCPLayer`, and no payload after it.
@@ -76,3 +91,23 @@ def register_dhcp_dissector(
         for port in done:
             target.unregister("udp", port)
         raise
+
+
+def capture_dissector(
+    ports: _ty.Iterable[int] = DHCP_PORTS,
+) -> "_pktcap.FrameDissector":
+    """A frame dissector that reads DHCP on `ports`, over a copy of pktcap's registry.
+
+    The registry also declares :class:`DHCPLayer` and its filter keys (`msg_type`,
+    `xid`, `client_id`, `chaddr`, `op`, `option.NAME`), so `proto=dhcp` and
+    `msg_type=DHCPOFFER` compile against `dissector.registry`. The process-wide
+    registry is not changed, and whatever else is registered there is read as well.
+    Its `stats` say what could not be read.
+    """
+    from ._plugin import declare_dhcp_layer
+
+    registry = _pktcap.default_registry().copy()
+    declare_dhcp_layer(registry, replace=True)
+    for port in ports:
+        registry.register("udp", port, dissect_dhcp, replace=True)
+    return _pktcap.FrameDissector(registry)

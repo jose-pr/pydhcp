@@ -11,7 +11,7 @@ from .. import _extras
 from .. import _network as _net
 from ..packet._message import DHCPMessage
 from ..packet._enums import DHCPPort
-from ._dissector import DHCP_PORTS, DHCPLayer, dissect_dhcp
+from ._dissector import DHCP_PORTS, DHCPLayer, capture_dissector
 from ._events import CaptureEvent, PacketFilterLike
 from ._filter import compile_capture_filter
 
@@ -23,20 +23,6 @@ else:
 _EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
 
 CaptureFile = _ty.Union[str, "_os.PathLike[str]", _ty.BinaryIO]
-
-
-def capture_dissector(
-    ports: _ty.Iterable[int] = DHCP_PORTS,
-) -> _pktcap.FrameDissector:
-    """A frame dissector that reads DHCP on `ports`, over a copy of pktcap's registry.
-
-    The process-wide registry is not changed, and whatever else is registered there
-    is read as well. Its `stats` say what could not be read.
-    """
-    registry = _pktcap.default_registry().copy()
-    for port in ports:
-        registry.register("udp", port, dissect_dhcp, replace=True)
-    return _pktcap.FrameDissector(registry)
 
 
 def unread_note(name: str, frames: _pktcap.FrameDissector) -> str:

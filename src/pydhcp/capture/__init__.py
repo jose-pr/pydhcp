@@ -14,9 +14,15 @@ from ._events import (
 )
 from ._filter import compile_capture_filter
 from ._command import HOOK_TIMEOUT_SECONDS, command_hook
-from ._dissector import DHCPLayer, dissect_dhcp, register_dhcp_dissector
-from ._offline import capture_dissector, read_capture, replay_capture
+from ._dissector import (
+    DHCPLayer,
+    capture_dissector,
+    dissect_dhcp,
+    register_dhcp_dissector,
+)
+from ._offline import read_capture, replay_capture
 from ._plugin import pktcap_plugin
+from ._source import asniff_dhcp, sniff_dhcp
 from ._sync import DHCPCapture
 from ._writer import (
     FILENAME_FIELDS,
@@ -45,6 +51,7 @@ __all__ = [
     "HOOK_TIMEOUT_SECONDS",
     "MAX_CAPTURE_FILES",
     "UNIQUE_FILENAME_FIELDS",
+    "asniff_dhcp",
     "capture_dissector",
     "command_hook",
     "compile_capture_filter",
@@ -53,6 +60,7 @@ __all__ = [
     "read_capture",
     "register_dhcp_dissector",
     "replay_capture",
+    "sniff_dhcp",
 ]
 
 

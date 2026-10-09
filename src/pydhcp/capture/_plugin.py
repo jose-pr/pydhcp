@@ -131,14 +131,10 @@ def _option(clause: "_pktcap.FilterClause") -> LayerTest:
     return lambda layer: _option_text(layer.message["options"], code) == wanted
 
 
-def pktcap_plugin(registry: "_pktcap.DissectorRegistry") -> None:
-    """Declare :class:`DHCPLayer` and its filter keys in `registry`, then register the dissector.
-
-    The keys are `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`,
-    each read as `compile_capture_filter` reads it, and the `DHCPLayer` fields as `dhcp.FIELD`.
-    A call that raises leaves `registry` as it found it: `ValueError` for a layer name or a
-    port that is taken.
-    """
+def declare_dhcp_layer(
+    registry: "_pktcap.DissectorRegistry", *, replace: bool = False
+) -> None:
+    """Declare :class:`DHCPLayer` and its filter keys in `registry`; `ValueError` for a name taken."""
     registry.register_layer(
         DHCPLayer,
         keys={
@@ -149,7 +145,19 @@ def pktcap_plugin(registry: "_pktcap.DissectorRegistry") -> None:
             "chaddr": _chaddr,
             "option": _option,
         },
+        replace=replace,
     )
+
+
+def pktcap_plugin(registry: "_pktcap.DissectorRegistry") -> None:
+    """Declare :class:`DHCPLayer` and its filter keys in `registry`, then register the dissector.
+
+    The keys are `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`,
+    each read as `compile_capture_filter` reads it, and the `DHCPLayer` fields as `dhcp.FIELD`.
+    A call that raises leaves `registry` as it found it: `ValueError` for a layer name or a
+    port that is taken.
+    """
+    declare_dhcp_layer(registry)
     try:
         register_dhcp_dissector(registry)
     except Exception:

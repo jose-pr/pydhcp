@@ -147,6 +147,37 @@ pktcap_plugin(registry) -> None
   number. A second plugin that also registers `op` makes the bare `op` ambiguous: write `dhcp.op`.
 
 ```python
+sniff_dhcp(listen=None, *, per_interface=None, stop=None, dissector=None) ->
+    Iterator[pktcap.DissectedFrame]
+asniff_dhcp(listen=None, *, per_interface=None, dissector=None) ->
+    AsyncIterator[pktcap.DissectedFrame]
+```
+
+- **`sniff_dhcp`** — the DHCP messages that reach `listen`, as pktcap's dissected
+  frames, in arrival order. `listen` is netimps' listen specification
+  (`netimps.parse_listen`) with default ports 67 and 68 and IPv4: `None` is every
+  address, `"127.0.0.1:6767"` one socket, an adapter name or a MAC the sockets of that
+  adapter. The sockets are bound **when it is called**, broadcast allowed, and nothing
+  is opened when any part is refused (`ValueError` for an adapter that matches
+  nothing, `OSError` for a port that is taken). `per_interface=True` binds one socket
+  for each address of the host instead of a wildcard, which on Linux hears no
+  broadcast. The iterator closes every socket when it ends, fails, is closed or is
+  dropped; `stop()` is called between datagrams and at least once a second, and true
+  ends it. `dissector` omitted is `capture_dissector()` reading DHCP on 67, 68 and the
+  ports the sockets are bound to, so the last layer of a frame that holds a message is
+  a `DHCPLayer`; a datagram that is no message is a frame whose `error` says so. The IP
+  header of such a frame is made up and no other host's traffic is seen
+  (`pktcap.sniff_udp`). **`asniff_dhcp`** is the same on an event loop
+  (`pktcap.asniff_udp`): when it ends, fails or is cancelled every task is cancelled and
+  every socket closed, and a loop that stops early awaits its `aclose()`. Both raise an
+  `ImportError` naming the `pktcap` extra when it is not installed; importing
+  `pydhcp.capture` imports neither pktcap nor asyncio.
+- **`DHCPLayer.summary()`** — one line: the message type, `xid=` as eight hex digits,
+  `client=` and, when they are not zero, `yiaddr=` and `giaddr=`
+  (`DHCPOFFER xid=1A52B52E client=01:02:00:00:99:00:02 yiaddr=10.99.0.100`). It is what
+  pktcap's `text` format shows for a frame whose innermost layer is DHCP.
+
+```python
 read_capture(source, *, packet_filter=None, ports=(67, 68), dissector=None) ->
     Iterator[CaptureEvent]
 capture_dissector(ports=(67, 68)) -> pktcap.FrameDissector
@@ -163,7 +194,8 @@ capture_dissector(ports=(67, 68)) -> pktcap.FrameDissector
   damaged capture raises `pktcap.CaptureFormatError` **after** the events before the
   damage. **`capture_dissector`** is the
   default `dissector`: a copy of pktcap's registry (the process-wide one is left
-  alone) with `dissect_dhcp` on `ports`; pass your own and read its `stats` (and
+  alone) with `dissect_dhcp` on `ports` and `DHCPLayer` declared with its filter keys, so
+  `pktcap.frame_filter_for(dissector.registry)` compiles `proto=dhcp` and `msg_type=DHCPOFFER`; pass your own and read its `stats` (and
   `unsupported_linktypes`) afterwards to tell an empty capture from frames nothing
   could read: `malformed` frames held a message that did not decode or a cut-short
   layer. A `dissector` you pass must have `dissect_dhcp` registered on `ports`.

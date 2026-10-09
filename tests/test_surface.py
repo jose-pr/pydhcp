@@ -240,6 +240,7 @@ EXPECTED_CAPTURE = [
     "MAX_CAPTURE_FILES",
     "PacketFilterLike",
     "UNIQUE_FILENAME_FIELDS",
+    "asniff_dhcp",
     "capture_dissector",
     "command_hook",
     "compile_capture_filter",
@@ -248,6 +249,7 @@ EXPECTED_CAPTURE = [
     "read_capture",
     "register_dhcp_dissector",
     "replay_capture",
+    "sniff_dhcp",
 ]
 
 EXPECTED_LEASE = [

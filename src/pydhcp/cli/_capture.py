@@ -10,7 +10,8 @@ import pktcap as _pktcap
 from duho import Meta
 
 from ..capture._events import CaptureHook
-from ..capture._offline import capture_dissector, read_capture, unread_note
+from ..capture._dissector import capture_dissector
+from ..capture._offline import read_capture, unread_note
 from ..capture._run import CaptureRun
 from ..capture._sync import DHCPCapture
 from ..capture._writer import MAX_CAPTURE_FILES, DHCPCaptureWriter

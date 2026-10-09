@@ -77,6 +77,7 @@ def test_importing_the_package_loads_neither_pktcap_nor_asyncio(
         tmp_path,
         """
         import pydhcp, pydhcp.cli, pydhcp.capture
+        from pydhcp.capture import asniff_dhcp, sniff_dhcp
 
         assert "pktcap" not in sys.modules, "pktcap"
         assert "asyncio" not in sys.modules, "asyncio"
@@ -149,6 +150,8 @@ def test_the_packet_command_decodes_to_json_without_pktcap(
     "call",
     [
         'pydhcp.capture.dissect_dhcp(b"")',
+        'pydhcp.capture.sniff_dhcp("127.0.0.1:0")',
+        'pydhcp.capture.asniff_dhcp("127.0.0.1:0")',
         "pydhcp.capture.register_dhcp_dissector()",
         "pydhcp.capture.capture_dissector()",
         'pydhcp.capture.compile_capture_filter("xid=1")',
