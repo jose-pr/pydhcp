@@ -41,13 +41,13 @@ def test_each_capability_is_one_extra() -> None:
 
     assert _names(extras["cli"]) == {"duho"}
     assert _names(extras["pktcap"]) == {"pktcap"}
-    assert _names(extras["yaml"]) == {"pyyaml"}
-    assert _names(extras["toml"]) == {"tomli-w", "tomli"}
+    assert "yaml" not in extras
+    assert _names(extras["toml"]) == {"tomli"}
 
 
 def test_dev_refers_to_the_extras_by_name_and_repeats_no_range() -> None:
     extras = _project()["optional-dependencies"]
-    capabilities = {"cli", "pktcap", "yaml", "toml"}
+    capabilities = {"cli", "pktcap", "toml"}
 
     own = [Requirement(spec) for spec in extras["dev"] if spec.startswith("pydhcp")]
 
@@ -63,92 +63,10 @@ def test_dev_installs_the_record_formats_pktcap_writes() -> None:
     assert len(own) == 1 and own[0].extras == {"yaml", "toml"}
 
 
-def _floor(extra: str, environment: "_ty.Dict[str, str]") -> "_ty.List[str]":
-    floors = []
-    for spec in _project()["optional-dependencies"][extra]:
-        requirement = Requirement(spec)
-        if requirement.marker is None or requirement.marker.evaluate(
-            {"extra": "", **environment}
-        ):
-            floors.extend(
-                s.version for s in requirement.specifier if s.operator == ">="
-            )
-    return floors
-
-
-@pytest.mark.parametrize(
-    "environment, floor",
-    [
-        # 6.0 has wheels for these.
-        (
-            {
-                "python_version": "3.9",
-                "sys_platform": "linux",
-                "platform_machine": "x86_64",
-            },
-            "6.0",
-        ),
-        (
-            {
-                "python_version": "3.11",
-                "sys_platform": "darwin",
-                "platform_machine": "arm64",
-            },
-            "6.0",
-        ),
-        (
-            {
-                "python_version": "3.9",
-                "sys_platform": "win32",
-                "platform_machine": "AMD64",
-            },
-            "6.0",
-        ),
-        # No wheel of 6.0: Windows on ARM64, or Python 3.12 and later.
-        (
-            {
-                "python_version": "3.9",
-                "sys_platform": "win32",
-                "platform_machine": "ARM64",
-            },
-            "6.0.1",
-        ),
-        (
-            {
-                "python_version": "3.14",
-                "sys_platform": "win32",
-                "platform_machine": "ARM64",
-            },
-            "6.0.1",
-        ),
-        (
-            {
-                "python_version": "3.12",
-                "sys_platform": "linux",
-                "platform_machine": "x86_64",
-            },
-            "6.0.1",
-        ),
-        (
-            {
-                "python_version": "3.14",
-                "sys_platform": "linux",
-                "platform_machine": "aarch64",
-            },
-            "6.0.1",
-        ),
-    ],
-)
-def test_exactly_one_pyyaml_floor_applies_to_a_host(
-    environment: "_ty.Dict[str, str]", floor: str
-) -> None:
-    assert _floor("yaml", environment) == [floor]
-
-
 def test_every_runtime_dependency_has_a_ceiling_at_the_next_series() -> None:
     project = _project()
     specs = list(project["dependencies"])
-    for extra in ("cli", "pktcap", "yaml", "toml"):
+    for extra in ("cli", "pktcap", "toml"):
         specs += project["optional-dependencies"][extra]
 
     unbounded = [

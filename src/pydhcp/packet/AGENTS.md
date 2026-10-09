@@ -178,9 +178,10 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   - **`.to_text()`** / **`DHCPMessage.from_text()`** — the message as a document and back;
     `format` is `"json"`, `"yaml"`, `"toml"` or `"ini"` (case-insensitive),
     anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
-    out by `pydhcp.packet.structured` (below). `"yaml"` needs `pydhcp[yaml]`,
-    `"toml"` `pydhcp[toml]` (reading it needs only Python 3.11+); a missing one is
-    an `ImportError` giving the `pip install "pydhcp[...]"` line. The `message` of a capture command's record loads with `from_mapping`.
+    out by `pydhcp.packet.structured` (below). Every format but `"json"` is pktcap's
+    (`dumps_record`, `loads_record`) and needs `pydhcp[pktcap]`, `"yaml"` and `"toml"`
+    also `pktcap[yaml]` and `pktcap[toml]`; a missing one is an `ImportError` giving the
+    `pip install` line. The `message` of a capture command's record loads with `from_mapping`.
   - **`DHCPMessage.from_hex()`** — decode a message
     written as hexadecimal text, the form `pydhcp packet --decode` reads: spaces,
     tabs, line ends and colons between the digits are ignored. `ValueError` for any
@@ -244,10 +245,13 @@ dumps(data: dict[str, Any], format: str) -> str
   structured text format, with `json`'s meanings: `loads` takes content (never
   a file name), `dumps` returns text. `format` is one of `"json"`, `"yaml"`,
   `"toml"`, `"ini"` (case-insensitive); anything else raises `ValueError`.
-  `"yaml"` requires PyYAML (`pydhcp[yaml]`); `"toml"` requires `tomli-w` to write
-  and Python 3.11+ (`tomllib`) or `tomli` to read (`pydhcp[toml]`). Without one the
-  call raises `ImportError` whose message is `pip install "pydhcp[<extra>]"`; the
-  format stays a valid name. `DHCPMessage.from_text` / `.to_text` are these
+  `"json"` is the standard library's; `"yaml"`, `"toml"` and `"ini"` are pktcap's
+  `dumps_record` and `loads_record` and need `pydhcp[pktcap]` (`"yaml"` and `"toml"`
+  also `pktcap[yaml]` and `pktcap[toml]`). Without one the call raises `ImportError`
+  whose message is a `pip install` line; the format stays a valid name. The INI form is
+  a `[record]` section of the header fields and an `[options]` section, each value one
+  line of JSON; a document with `[message]` and `[options]` sections, as written before,
+  is read too. A list or text subclass in the mapping is written as the builtin. `DHCPMessage.from_text` / `.to_text` are these
   two around `from_mapping` / `to_mapping`.
 
 **Gotcha**: the INI loader/dumper sets `ConfigParser.optionxform = str`

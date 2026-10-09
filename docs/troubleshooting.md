@@ -39,9 +39,11 @@ Use summary output when you want a compact terminal view while troubleshooting c
 pydhcp packet --decode --input - --format summary
 ```
 
-If a command reports that YAML or TOML needs an extra, or that the command line needs the
-`cli` extra, install it in the environment running the CLI: `pip install "pydhcp[yaml]"`,
-`pip install "pydhcp[toml]"` or `pip install "pydhcp[cli]"`.
+If a command reports that captures or YAML, TOML or INI text need the `pktcap` extra, that
+TOML needs an extra, or that the command line needs the `cli` extra, install it in the
+environment running the CLI: `pip install "pydhcp[pktcap]"`, `pip install "pydhcp[toml]"` or
+`pip install "pydhcp[cli]"`. YAML and TOML text also need pktcap's own extras: `pip install
+"pktcap[yaml,toml]"`.
 
 ## Capturing live DHCP traffic
 

@@ -12,12 +12,10 @@ from . import _extras
 from .exceptions import DHCPConfigError
 
 #: The configuration formats, by name.
-CONFIG_FORMATS = ("json", "yaml", "toml", "ini")
+CONFIG_FORMATS = ("json", "toml", "ini")
 
 _SUFFIXES = {
     ".json": "json",
-    ".yaml": "yaml",
-    ".yml": "yaml",
     ".toml": "toml",
     ".ini": "ini",
 }
@@ -71,28 +69,6 @@ def _parse_json(text: str, path: str) -> _ty.Any:
         raise DHCPConfigError("nested too deeply", path) from None
 
 
-def _parse_yaml(text: str, path: str) -> _ty.Any:
-    try:
-        yaml = _extras.yaml_module()
-    except ImportError as error:
-        raise DHCPConfigError(str(error), path) from None
-    try:
-        return yaml.safe_load(text)
-    except yaml.YAMLError as error:
-        mark = getattr(error, "problem_mark", None)
-        problem = getattr(error, "problem", None)
-        raise DHCPConfigError(
-            _plain(problem) if problem else "not valid YAML",
-            path,
-            None if mark is None else mark.line + 1,
-            None if mark is None else mark.column + 1,
-        ) from None
-    except RecursionError:
-        raise DHCPConfigError("nested too deeply", path) from None
-    except (ValueError, TypeError, OverflowError):
-        raise DHCPConfigError("a value that is not valid YAML", path) from None
-
-
 def _parse_toml(text: str, path: str) -> _ty.Any:
     try:
         reader = _extras.toml_reader()
@@ -144,7 +120,6 @@ def _parse_ini(text: str, path: str) -> _ty.Any:
 
 _PARSERS: "dict[str, _ty.Callable[[str, str], _ty.Any]]" = {
     "json": _parse_json,
-    "yaml": _parse_yaml,
     "toml": _parse_toml,
     "ini": _parse_ini,
 }
@@ -156,16 +131,15 @@ def load_config(
     """Read one configuration file into a mapping of sections.
 
     `source` is a path, or `-` for standard input, which has no file name and
-    so needs `format`. The format is `format` (`json`, `yaml`, `toml` or `ini`,
+    so needs `format`. The format is `format` (`json`, `toml` or `ini`,
     any case) or else the file name's suffix; any other suffix is refused.
-    The text is UTF-8, with or without a byte-order mark. An empty YAML
-    document is an empty mapping.
+    The text is UTF-8, with or without a byte-order mark.
 
     A file that cannot be read raises the `OSError`. A document that does not
     parse, whose top level is not a mapping, or whose format cannot be told
     raises `DHCPConfigError` with the path and position and no text from the
-    document. A YAML file needs the `yaml` extra, and a TOML file Python 3.11+
-    or the `toml` extra: without it the `DHCPConfigError` names the extra.
+    document. A TOML file needs Python 3.11+ or the `toml` extra: without it the
+    `DHCPConfigError` names the extra.
     """
     if _os.fspath(source) == "-":
         path = STDIN_NAME
@@ -188,8 +162,6 @@ def load_config(
             f"not valid UTF-8 (byte offset {error.start})", path
         ) from None
     parsed = _PARSERS[name](text, path)
-    if parsed is None and name == "yaml":
-        return {}
     if not isinstance(parsed, dict):
         raise DHCPConfigError(
             f"the top level must be a mapping, not {type(parsed).__name__}", path

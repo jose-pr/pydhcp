@@ -4,24 +4,24 @@ This page collects a few short patterns that are useful when you start wiring `p
 
 ## Server config file
 
-`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, YAML, TOML, or INI, selected by file extension (`--config-format` names it when the file name does not; `--config -` reads standard input). The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A YAML config:
+`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, TOML or INI, selected by file extension (`--config-format` names it when the file name does not; `--config -` reads standard input). The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A YAML config:
 
-```yaml
-server:
-  listen: "*"
+```toml
+[server]
+listen = "*"
 ```
 
 ```bash
-pydhcp server --config server.yaml
+pydhcp server --config server.toml
 ```
 
 `listen` is text (`"127.0.0.1:6767,127.0.0.2:6768"`), an `[address, port]` pair
-(`listen: [127.0.0.1, 6767]`) or a list of either. `None`/`null` as the address is the
+(`listen = ["127.0.0.1", 6767]`) or a list of either. `None`/`null` as the address is the
 wildcard; an empty value, a boolean or a bare number is an error. Text that is not an
 IPv4 address names an interface (see [Listening on one
 interface](#listening-on-one-interface)).
 
-YAML files need the `yaml` extra (`pip install "pydhcp[yaml]"`). TOML files need Python 3.11+ (stdlib `tomllib`) or the `toml` extra on older versions.
+TOML files need Python 3.11+ (stdlib `tomllib`) or the `toml` extra on older versions. A `.yaml` or `.yml` file is refused like any other ending that names no format.
 
 ## Custom lease backend
 
@@ -391,4 +391,4 @@ can be omitted when piping. Structured packet text can also be encoded back to p
 pydhcp packet --encode --input packet.json --format json --output packet.hex
 ```
 
-YAML packet workflows require the `yaml` extra and TOML ones the `toml` extra: `pip install "pydhcp[yaml,toml]"`.
+A message as YAML, TOML or INI text is written and read by pktcap: `pip install "pydhcp[pktcap]" "pktcap[yaml,toml]"`. JSON needs nothing.

@@ -7,7 +7,7 @@ formats are portable, while actually serving DHCP still depends on OS socket
 permissions and platform-specific UDP behavior.
 
 - **Packet parsing and construction**: every DHCPv4 message, a `DHCPOptionCode` member and
-  a typed codec for each IANA option, and a JSON, YAML, TOML or INI form of every message.
+  a typed codec for each IANA option, and a JSON form of every message (YAML, TOML and INI with the `pktcap` extra).
   Liberal on receive, strict on send.
 - **Server base**: lease and option policy hooks, an in-memory and a file lease backend, and
   a threaded and an asyncio driver (`DHCPServer`, `AsyncDHCPServer`) over one core, so a fix
@@ -30,10 +30,10 @@ else you ask of it is an extra, one for each capability:
 | Extra | Adds | Needed for |
 | --- | --- | --- |
 | `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
-| `yaml` | `PyYAML` | YAML packets and `.yaml` configuration files |
-| `toml` | `tomli-w`, and `tomli` before Python 3.11 | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
+| `pktcap` | `pktcap` | captures (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text (which also needs `pktcap[yaml]` or `pktcap[toml]`) |
+| `toml` | `tomli` before Python 3.11 | `.toml` configuration files before Python 3.11 |
 
-For example `pip install "pydhcp[cli,yaml]"`. JSON and INI need no extra.
+For example `pip install "pydhcp[cli,pktcap]"`. JSON needs no extra.
 
 ## 30-second tour
 
@@ -63,7 +63,7 @@ system network stack.
 
 ```bash
 pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
-pydhcp server --config server.yaml
+pydhcp server --config server.toml
 ```
 
 ## Learn more

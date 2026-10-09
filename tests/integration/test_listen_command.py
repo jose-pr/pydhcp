@@ -196,24 +196,6 @@ FILES: "list[tuple[str, str, str, list[SocketAddress]]]" = [
         _addresses(("0.0.0.0", 6767)),
     ),
     (
-        "yaml",
-        "c.yaml",
-        "server:\n  listen: [127.0.0.1, 6767]\n",
-        _addresses(("127.0.0.1", 6767)),
-    ),
-    (
-        "yaml text",
-        "c.yaml",
-        "server:\n  listen: 127.0.0.1:6767\n",
-        _addresses(("127.0.0.1", 6767)),
-    ),
-    (
-        "yaml block list",
-        "c.yaml",
-        "server:\n  listen:\n    - 127.0.0.1:6767\n    - [127.0.0.2, 6768]\n",
-        _addresses(("127.0.0.1", 6767), ("127.0.0.2", 6768)),
-    ),
-    (
         "toml",
         "c.toml",
         '[server]\nlisten = ["127.0.0.1", 6767]\n',
@@ -242,9 +224,6 @@ BAD_FILES: "list[tuple[str, str, str]]" = [
         json.dumps({"server": {"listen": ["127.0.0.1", True]}}),
     ),
     ("json bare number", "c.json", json.dumps({"server": {"listen": 6767}})),
-    ("yaml bool port", "c.yaml", "server:\n  listen: [127.0.0.1, true]\n"),
-    ("yaml bare number", "c.yaml", "server:\n  listen: 6767\n"),
-    ("yaml empty", "c.yaml", "server:\n  listen: ''\n"),
     ("toml bool port", "c.toml", '[server]\nlisten = ["127.0.0.1", true]\n'),
     ("toml empty", "c.toml", '[server]\nlisten = ""\n'),
     ("toml bad port", "c.toml", '[server]\nlisten = ["127.0.0.1", 70000]\n'),
@@ -253,8 +232,6 @@ BAD_FILES: "list[tuple[str, str, str]]" = [
 
 
 def _skip_without_the_format(name: str) -> None:
-    if name.endswith(".yaml"):
-        pytest.importorskip("yaml")
     if name.endswith(".toml"):
         import sys
 

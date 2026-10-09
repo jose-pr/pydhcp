@@ -84,7 +84,7 @@ class _Configured(_Command):
     """
 
     config: _ty.Annotated[_ty.Optional[pathlib.Path], Meta(env=CONFIG_ENV)] = None
-    "Configuration file (JSON, YAML, TOML or INI) with a section named for this command; '-' reads standard input and needs --config-format. Default: none"
+    "Configuration file (JSON, TOML or INI) with a section named for this command; '-' reads standard input and needs --config-format. Default: none"
     ("--config",)
 
     config_format: _ty.Annotated[

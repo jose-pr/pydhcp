@@ -72,7 +72,7 @@ main(argv: Sequence[str] | None = None) -> int
   `--server` repeatable or comma-separated and **required**, `--max-hops`,
   `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`), `packet`
   (`--decode`/`--encode` mutually exclusive+required, `--input`/`--output`
-  accepting `-` for stdio, `--format json|yaml|toml|ini|summary`; `summary` is
+  accepting `-` for stdio, `--format json|yaml|toml|ini|summary`, all but `json` and `summary` through pktcap (its extra); `summary` is
   decode-only, its first line is the op and XID), `capture` and `replay` (below). Also gets
   `--version` (via `App._version_ = duho.AUTO`, resolved from installed
   package metadata) for free. Every option has one line of help, with its
@@ -82,7 +82,7 @@ main(argv: Sequence[str] | None = None) -> int
   the configuration file and the field's default, and duho applies that order
   to every field of every command (see "Environment variables" below for the
   names). `server`, `relay` and `capture` take `--config FILE` (or
-  `PYDHCP_CONFIG`) and `--config-format json|yaml|toml|ini`; `FILE` is `-` for
+  `PYDHCP_CONFIG`) and `--config-format json|toml|ini`; `FILE` is `-` for
   standard input, which needs the format. **There is no default location**: a
   daemon does not pick up a file nobody named. The file has one section per
   command, named for it, and its keys are the command's field names
@@ -94,10 +94,10 @@ main(argv: Sequence[str] | None = None) -> int
   user's, and a plugin is code that is imported, so only the command line, `PKTCAP_LOAD`
   and pktcap's own file name one:
 
-  ```yaml
-  server:
-    listen: 127.0.0.1:6767
-    lease_file: /var/lib/pydhcp/leases.json
+  ```toml
+  [server]
+  listen = "127.0.0.1:6767"
+  lease_file = "/var/lib/pydhcp/leases.json"
   ```
 
   A list is a list (`server: [192.0.2.1, 192.0.2.2]`); `listen` also takes
@@ -106,7 +106,7 @@ main(argv: Sequence[str] | None = None) -> int
   that is not a mapping, a key the command does not have, and a section of
   *another* command than the one run are each refused by name, status 2, one
   line with the file's path and, where the parser gives one, the position:
-  `pydhcp: error: server.yaml:12:5: expected ',' or ']'`.
+  `pydhcp: error: server.toml:12:5: expected ',' or ']'`.
 
 - Each `--server` value is split by **`netimps.split_host`**, the parser the
   `--listen` specs go through, and reaches `DHCPRelay` as a
@@ -158,14 +158,13 @@ load_config(source, format=None) -> dict[str, Any]
 - **`load_config`** — one configuration
   file as a mapping of sections. `source` is a path or `-` (standard input,
   which has no name and so needs `format`). The format is `format` (`json`,
-  `yaml`, `toml` or `ini`, any case) or else the file name's suffix (`.json`,
-  `.yaml`, `.yml`, `.toml`, `.ini`, any case); any other suffix is refused,
+  `toml` or `ini`, any case) or else the file name's suffix (`.json`, `.toml`,
+  `.ini`, any case); any other suffix is refused (`.yaml` and `.yml` among them),
   content is never sniffed. The text is UTF-8, with or without a byte-order
-  mark. An empty YAML file is `{}`. INI values are read without interpolation
-  (a `%` is text) and a duplicate section or key is an error; YAML is
-  `safe_load`. `.yaml` needs the `yaml` extra and `.toml` Python 3.11+ or the
-  `toml` extra; without it the `DHCPConfigError` says `pip install "pydhcp[yaml]"`
-  (or `[toml]`), and the format stays a listed one.
+  mark. INI values are read without interpolation (a `%` is text) and a duplicate
+  section or key is an error. `.toml` needs Python 3.11+ or the `toml` extra;
+  without it the `DHCPConfigError` says `pip install "pydhcp[toml]"`, and the
+  format stays a listed one.
 - A file that cannot be read raises the `OSError`. A document that does not parse,
   whose top level is not a mapping, or whose format cannot be told raises
   **`DHCPConfigError`** with `path`, `lineno` and `colno` (1-based, `None` when the

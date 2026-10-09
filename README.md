@@ -16,7 +16,7 @@ permissions and platform-specific UDP behavior. The documentation is at
 ## Features
 
 - **Packet parsing and construction** — every DHCPv4 message, a `DHCPOptionCode` member and
-  a typed codec for each IANA option, and a JSON, YAML, TOML or INI form of every message.
+  a typed codec for each IANA option, and a JSON form of every message (and YAML, TOML and INI with the `pktcap` extra).
   Liberal on receive, strict on send.
 - **Server base** — an overridable foundation with lease and option policy hooks, an
   in-memory and a file lease backend, and a threaded and an asyncio driver over one core.
@@ -43,9 +43,8 @@ else you ask of it is an extra, one for each capability:
 | Extra | Adds | Needed for |
 | --- | --- | --- |
 | `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
-| `pktcap` | `pktcap` | captures: `pydhcp capture` and `pydhcp replay`, the DHCP dissector and its filter keys, `sniff_dhcp` |
-| `yaml` | `PyYAML` | YAML packets (`--format yaml`, `DHCPMessage.to_text("yaml")`) and `.yaml` configuration files |
-| `toml` | `tomli-w`, and `tomli` before Python 3.11 | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
+| `pktcap` | `pktcap` | captures: `pydhcp capture` and `pydhcp replay`, the DHCP dissector and its filter keys, `sniff_dhcp`; a message as YAML, TOML or INI text (`--format`, `DHCPMessage.to_text`), which also needs `pktcap[yaml]` or `pktcap[toml]` |
+| `toml` | `tomli` before Python 3.11 | `.toml` configuration files before Python 3.11 (TOML packets and capture files need `pktcap[toml]`) |
 
 For example `pip install "pydhcp[cli,pktcap]"`. Without the `cli` extra the `pydhcp`
 command prints that it needs it and exits with status 1; without the `pktcap` extra
@@ -71,7 +70,7 @@ message.options[DHCPOptionCode.HOSTNAME] = "laptop"
 wire = message.encode()  # 300 octets, END-terminated
 again = DHCPMessage.decode(wire)
 assert again.options.get(DHCPOptionCode.HOSTNAME) == "laptop"
-print(again.to_text("json"))  # "yaml", "toml" and "ini" too
+print(again.to_text("json"))  # "yaml", "toml" and "ini" too, with the pktcap extra
 ```
 
 ### Synchronous server
@@ -239,7 +238,7 @@ pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_
 # (a program, run with no argument and no shell; on Windows an .exe, not a .cmd)
 pydhcp capture --listen 127.0.0.1:6767 --hook ./on-dhcp-capture
 
-# Start the DHCP server from a JSON, YAML, TOML or INI configuration file
+# Start the DHCP server from a JSON, TOML or INI configuration file
 pydhcp server --config config.json
 
 # Listen on multiple explicit endpoints while debugging
@@ -269,16 +268,17 @@ used). An error is one line on stderr, `pydhcp: error: ...`; results go to stdou
 Every option can also come from an environment variable, and `server`, `relay` and
 `capture` from a configuration file. The order is: the option, then the variable, then the
 file, then the default. The file is named, never searched for: `--config FILE` or
-`PYDHCP_CONFIG` (`-` reads standard input and needs `--config-format json|yaml|toml|ini`).
+`PYDHCP_CONFIG` (`-` reads standard input and needs `--config-format json|toml|ini`).
 It has one section per command and the keys are the field names:
 
-```yaml
-# server.yaml
-server:
-  listen: 127.0.0.1:6767
-  lease_file: /var/lib/pydhcp/leases.json
-relay:
-  server: [192.0.2.1, 192.0.2.2]
+```toml
+# server.toml
+[server]
+listen = "127.0.0.1:6767"
+lease_file = "/var/lib/pydhcp/leases.json"
+
+[relay]
+server = ["192.0.2.1", "192.0.2.2"]
 ```
 
 A file that does not parse, a section or key the command does not have (a misspelled

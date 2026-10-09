@@ -208,6 +208,17 @@ someone upgrading from 0.7.0.
 
 ### Changed
 
+- **A message as text beyond JSON is pktcap's.** `DHCPMessage.to_text` and `from_text`,
+  `pydhcp.packet.structured.dumps` and `loads` and `pydhcp packet --format` write and read JSON
+  with the standard library, as before (indented, two spaces), and `yaml`, `toml` and `ini` with
+  `pktcap.dumps_record` and `loads_record`: they need `pip install "pydhcp[pktcap]"`, and YAML and
+  TOML also pktcap's `yaml` and `toml` extras, whose own error names `pip install "pktcap[yaml]"`
+  or `"pktcap[toml]"`. The INI form has a `[record]` section for the header fields where it had
+  `[message]`, and a document with `[message]` and `[options]` is still read. A list or string
+  subclass in the mapping (a domain list, option 119) is written as the builtin, so a message
+  with one round-trips in YAML, where it was refused. TOML refuses, with the reason, a message
+  whose options it would write in another order (an option held as octets in the `hex` form
+  before a plain one), where it wrote them in that other order.
 - **`pydhcp capture` and `pydhcp replay` are pktcap's commands** (`pktcap.cli.Capture` and
   `Replay`) with DHCP's defaults: `--filter` is ANDed with `proto=dhcp`, ports are 67 and 68,
   `--listen` keeps pydhcp's grammar and binds with `netimps.bind_listen` (IPv4, broadcast allowed,
@@ -1093,6 +1104,12 @@ Replace each name in the left column with the one beside it.
 
 ### Removed
 
+- **No YAML in pydhcp's own code.** The `yaml` extra is gone (pktcap's `yaml` extra holds
+  PyYAML), and a configuration file is JSON, TOML or INI: `yaml` as a `--config-format`,
+  `PYDHCP_CONFIG_FORMAT` or `load_config` format, and the endings `.yaml` and `.yml`, are
+  refused as any unknown one is. Convert a settings file to TOML or JSON (`server:` with
+  `listen: "*"` is `[server]` with `listen = "*"`). The `toml` extra is the reader of a TOML
+  settings file alone (`tomli` before Python 3.11).
 - **Everything pktcap does is out of `pydhcp.capture` and the root**, and pydhcp's own capture
   classes, writer, filter and hook runner with it. Each name and what replaces it:
   - `DHCPCapture`, `AsyncDHCPCapture`: `pydhcp.capture.sniff_dhcp(listen)` and `asniff_dhcp(listen)`

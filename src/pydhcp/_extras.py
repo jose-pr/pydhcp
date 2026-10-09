@@ -19,18 +19,21 @@ def missing(what: str, extra: str) -> str:
 PKTCAP_NEEDED = "captures need the 'pktcap' extra: pip install \"pydhcp[pktcap]\""
 
 
-def pktcap_module() -> _ty.Any:
-    """`pktcap`, from the `pktcap` extra; `ImportError` with `PKTCAP_NEEDED` when it is absent.
+def pktcap_module(what: _ty.Optional[str] = None) -> _ty.Any:
+    """`pktcap`, from the `pktcap` extra; `ImportError` naming the extra when it is absent.
 
-    Only the module itself being absent is "not installed": a failure inside pktcap,
-    or in one of its own dependencies, is raised as it is.
+    The message is `PKTCAP_NEEDED`, or `what` needs the extra when a caller says what it
+    was doing. Only the module itself being absent is "not installed": a failure inside
+    pktcap, or in one of its own dependencies, is raised as it is.
     """
     try:
         import pktcap
     except ModuleNotFoundError as error:
         if error.name != "pktcap":
             raise
-        raise ImportError(PKTCAP_NEEDED) from error
+        raise ImportError(
+            PKTCAP_NEEDED if what is None else missing(what, "pktcap")
+        ) from error
     return pktcap
 
 
@@ -62,15 +65,6 @@ def has_pktcap() -> bool:
     return True
 
 
-def yaml_module() -> _ty.Any:
-    """PyYAML, from the `yaml` extra."""
-    try:
-        import yaml  # type: ignore[import-untyped]
-    except ImportError as error:
-        raise ImportError(missing("YAML", "yaml")) from error
-    return yaml
-
-
 def toml_reader() -> _ty.Any:
     """`tomllib` (Python 3.11 and later), else `tomli` from the `toml` extra."""
     try:
@@ -84,12 +78,3 @@ def toml_reader() -> _ty.Any:
     except ImportError as error:
         raise ImportError(missing("Reading TOML", "toml")) from error
     return tomli
-
-
-def toml_writer() -> _ty.Any:
-    """`tomli_w` from the `toml` extra; the standard library has no TOML writer."""
-    try:
-        import tomli_w
-    except ImportError as error:
-        raise ImportError(missing("Writing TOML", "toml")) from error
-    return tomli_w

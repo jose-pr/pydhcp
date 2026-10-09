@@ -639,11 +639,6 @@ MALFORMED = [
         '{"server": {"token": "' + SECRET + '", "listen": "127.0.0.1:1"',
         id="json",
     ),
-    pytest.param(
-        "bad.yaml",
-        "server:\n  token: " + SECRET + "\n  listen: [127.0.0.1:1\n",
-        id="yaml",
-    ),
     pytest.param("bad.ini", "token = " + SECRET + "\n[server]\n", id="ini"),
     pytest.param(
         "bad.toml",
@@ -671,25 +666,30 @@ def test_a_malformed_file_is_one_line_naming_the_file_and_where(
     "name, text, word",
     [
         ("l.json", "[1, 2]", "mapping"),
-        ("l.yaml", "- 1\n- 2\n", "mapping"),
-        ("s.yaml", "server: 127.0.0.1:6767\n", "'server' must be a mapping"),
-        ("n.yaml", "server: 5\n", "'server' must be a mapping"),
-        ("t.yaml", "sever:\n  listen: 127.0.0.1:6767\n", "unknown section 'sever'"),
+        ("s.json", '{"server": "127.0.0.1:6767"}', "'server' must be a mapping"),
+        ("n.json", '{"server": 5}', "'server' must be a mapping"),
         (
-            "o.yaml",
-            "server:\n  listen: 127.0.0.1:6767\nstray: 1\n",
+            "t.json",
+            '{"sever": {"listen": "127.0.0.1:6767"}}',
+            "unknown section 'sever'",
+        ),
+        (
+            "o.json",
+            '{"server": {"listen": "127.0.0.1:6767"}, "stray": 1}',
             "unknown section 'stray'",
         ),
         (
-            "k.yaml",
-            "server:\n  lisen: 127.0.0.1:6767\n",
+            "k.json",
+            '{"server": {"lisen": "127.0.0.1:6767"}}',
             "unknown key 'lisen' in section 'server'",
         ),
         (
-            "r.yaml",
-            "relay:\n  server: 192.0.2.1\n",
+            "r.json",
+            '{"relay": {"server": "192.0.2.1"}}',
             "section 'relay' belongs to another command",
         ),
+        ("c.yaml", "server: {}\n", "cannot tell the configuration format"),
+        ("c.yml", "server: {}\n", "cannot tell the configuration format"),
         ("c.json", '{"server": {"config": "x.json"}}', "unknown key 'config'"),
         ("s.conf", "[server]\nlisten = 127.0.0.1:6767\n", "'.conf'"),
         ("s", "{}", "cannot tell the configuration format"),
@@ -724,11 +724,11 @@ def test_a_file_that_is_not_utf8_is_refused(
 def test_a_missing_file_is_a_failed_run_naming_it(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    path = tmp_path / "absent.yaml"
+    path = tmp_path / "absent.json"
 
     line = _refused(capsys, "server", "--config", str(path), status=1)
 
-    assert "absent.yaml" in line
+    assert "absent.json" in line
 
 
 def test_a_duplicate_section_or_key_in_an_ini_file_is_refused(
@@ -760,20 +760,12 @@ def test_a_byte_order_mark_is_accepted(
     assert _resolve(program, "server", config=path)["listen"] == "127.0.0.1:2001"
 
 
-def test_an_empty_yaml_file_is_an_empty_configuration(
-    program: pathlib.Path, tmp_path: pathlib.Path
-) -> None:
-    path = _write(tmp_path, "empty.yaml", "")
-
-    assert _resolve(program, "server", config=path)["listen"] is None
-
-
 def test_every_command_that_runs_reads_the_file(
     program: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
     """`relay` and `capture` read a file too, and each refuses the other's section."""
     path = _write(
-        tmp_path, "relay.yaml", "relay:\n  server: [192.0.2.1]\n  max_hops: 9\n"
+        tmp_path, "relay.json", '{"relay": {"server": ["192.0.2.1"], "max_hops": 9}}'
     )
 
     resolved = _resolve(program, "relay", config=path)
@@ -827,7 +819,7 @@ def test_standard_input_is_checked_like_a_file(
         io.TextIOWrapper(io.BytesIO(("token: " + SECRET + "\n[").encode("utf-8"))),
     )
 
-    line = _refused(capsys, "server", "--config", "-", "--config-format", "yaml")
+    line = _refused(capsys, "server", "--config", "-", "--config-format", "ini")
 
     assert line.startswith("pydhcp: error: <stdin>:")
 
@@ -835,7 +827,7 @@ def test_standard_input_is_checked_like_a_file(
 def test_a_config_option_is_a_path(tmp_path: pathlib.Path) -> None:
     from pydhcp.cli import App
 
-    parsed = App._parser_().parse_args(["server", "--config", "x.yaml"])
+    parsed = App._parser_().parse_args(["server", "--config", "x.toml"])
     assert isinstance(parsed.config, pathlib.Path)
     parsed = App._parser_().parse_args(["packet", "--decode", "-i", "a", "-o", "b"])
     assert isinstance(parsed.input, pathlib.Path)

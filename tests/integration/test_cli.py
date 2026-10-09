@@ -320,11 +320,11 @@ def test_verbosity_flags_reach_the_library_logger() -> None:
 def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> None:
     """ConfigParser.read() ignores a path that does not exist, so a typo'd
     --config silently started a server on its defaults -- while the same typo in
-    a .yaml or .json path raised."""
+    a .toml or .json path raised."""
     # the loader behind the command line is not public
     from pydhcp._config import load_config
 
-    for suffix in (".ini", ".json", ".yaml"):
+    for suffix in (".ini", ".json", ".toml"):
         with pytest.raises((FileNotFoundError, OSError)):
             load_config(str(tmp_path / ("missing" + suffix)))
 

@@ -20,9 +20,9 @@ Run it on **3.9 (the floor) and on the latest Python**, each in its own venv nam
 what the host is (an emulated x64 CPython on an ARM64 host is `win-amd64`). Run one suite at
 a time on a machine: the tests share loopback and a second run's ports collide.
 
-`dev` is `pydhcp[cli,pktcap,yaml,toml]`, `pktcap[yaml,toml]` and the tooling, so a development
+`dev` is `pydhcp[cli,pktcap,toml]`, `pktcap[yaml,toml]` and the tooling, so a development
 install runs every test that needs an extra; without them those tests skip (read `-rs`, a green
-run with the `pktcap`, `yaml`, `toml` or `cli` tests skipped verifies nothing about them). A test of a missing
+run with the `pktcap`, `toml` or `cli` tests skipped verifies nothing about them). A test of a missing
 extra hides the module inside the test (`sys.modules[name] = None`) and never uninstalls.
 `pyproject.toml` sets `pythonpath = ["src", "tests"]`, so a test imports helpers by name
 (`from helpers import ...`), `filterwarnings = ["error"]` with no exception, and

@@ -46,49 +46,66 @@ def _message() -> DHCPMessage:
 # -- a missing dependency, by what asked for it -------------------------------------
 
 
-def test_yaml_text_without_pyyaml_names_the_yaml_extra(
+PKTCAP_LINE = (
+    "a message as YAML, TOML or INI text needs the 'pktcap' extra: "
+    + 'pip install "pydhcp[pktcap]"'
+)
+
+
+@pytest.mark.parametrize("fmt", ["yaml", "toml", "ini"])
+def test_text_beyond_json_without_pktcap_names_the_pktcap_extra(
+    monkeypatch: pytest.MonkeyPatch, fmt: str
+) -> None:
+    _block(monkeypatch, "pktcap")
+
+    with pytest.raises(ImportError) as written:
+        _message().to_text(fmt)
+    with pytest.raises(ImportError) as read:
+        DHCPMessage.from_text("op = 'BOOTREQUEST'\n", fmt)
+
+    assert str(written.value) == PKTCAP_LINE
+    assert str(read.value) == PKTCAP_LINE
+
+
+def test_yaml_text_without_pyyaml_names_the_yaml_extra_of_pktcap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """pktcap's own line is passed through: the format library is pktcap's extra."""
+    pytest.importorskip("pktcap")
     _block(monkeypatch, "yaml")
 
-    with pytest.raises(ImportError, match=r"'yaml' extra") as written:
+    with pytest.raises(ImportError) as written:
         _message().to_text("yaml")
     with pytest.raises(ImportError) as read:
         DHCPMessage.from_text("op: BOOTREQUEST\n", "yaml")
 
-    assert _the_command_for("yaml") in str(written.value)
-    assert _the_command_for("yaml") in str(read.value)
+    assert 'pip install "pktcap[yaml]"' in str(written.value)
+    assert 'pip install "pktcap[yaml]"' in str(read.value)
 
 
-def test_toml_text_without_a_writer_names_the_toml_extra(
+def test_toml_text_without_a_writer_names_the_toml_extra_of_pktcap(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    pytest.importorskip("pktcap")
     _block(monkeypatch, "tomli_w")
 
-    with pytest.raises(ImportError, match="Writing TOML") as error:
+    with pytest.raises(ImportError) as error:
         _message().to_text("toml")
 
-    assert _the_command_for("toml") in str(error.value)
+    assert 'pip install "pktcap[toml]"' in str(error.value)
 
 
-def test_toml_text_without_a_reader_names_the_toml_extra(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _block(monkeypatch, "tomllib", "tomli")
+def test_json_text_needs_no_extra(monkeypatch: pytest.MonkeyPatch) -> None:
+    _block(monkeypatch, *OPTIONAL)
 
-    with pytest.raises(ImportError, match="Reading TOML") as error:
-        DHCPMessage.from_text("op = 'BOOTREQUEST'\n", "toml")
+    text = _message().to_text("json")
 
-    assert _the_command_for("toml") in str(error.value)
+    assert DHCPMessage.from_text(text, "json").to_mapping() == _message().to_mapping()
 
 
 @pytest.mark.parametrize(
     "name, text, blocked, extra",
-    [
-        ("c.yaml", "server: {}\n", ("yaml",), "yaml"),
-        ("c.yml", "server: {}\n", ("yaml",), "yaml"),
-        ("c.toml", "[server]\n", ("tomllib", "tomli"), "toml"),
-    ],
+    [("c.toml", "[server]\n", ("tomllib", "tomli"), "toml")],
 )
 def test_a_file_that_needs_a_missing_extra_is_a_configuration_error(
     tmp_path: pathlib.Path,
@@ -119,12 +136,57 @@ def test_a_json_or_ini_file_needs_no_extra(
 
     assert load_config(tmp_path / "c.json") == {"server": {}}
     assert load_config(tmp_path / "c.ini") == {"server": {}}
-    for fmt in ("json", "ini"):
-        text = _message().to_text(fmt)
-        assert DHCPMessage.from_text(text, fmt).to_mapping() == _message().to_mapping()
 
 
-# -- the command line, which turns each of them into one line -----------------------
+@pytest.mark.parametrize("name", ["c.yaml", "c.yml", "C.YAML"])
+def test_a_yaml_configuration_file_is_an_unknown_format_like_any_other(
+    tmp_path: pathlib.Path, name: str
+) -> None:
+    path = tmp_path / name
+    path.write_text("server: {}\n", encoding="utf-8")
+
+    with pytest.raises(
+        DHCPConfigError, match="cannot tell the configuration format"
+    ) as error:
+        load_config(path)
+
+    assert error.value.path == str(path)
+    assert ".json, .toml, .ini" in str(error.value)
+
+
+def test_yaml_is_no_configuration_format_even_when_named(
+    tmp_path: pathlib.Path,
+) -> None:
+    path = tmp_path / "c.conf"
+    path.write_text("server: {}\n", encoding="utf-8")
+
+    with pytest.raises(DHCPConfigError) as error:
+        load_config(path, "yaml")
+
+    assert "unsupported configuration format 'yaml'" in str(error.value)
+    assert "use one of json, toml, ini" in str(error.value)
+
+
+def test_the_command_line_refuses_yaml_as_the_configuration_format(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "c.conf"
+    path.write_text("server: {}\n", encoding="utf-8")
+
+    status = main(
+        [
+            "server",
+            "--config",
+            str(path),
+            "--config-format",
+            "yaml",
+            "--listen",
+            "127.0.0.1:0",
+        ]
+    )
+
+    assert status == 2
+    assert "unsupported configuration format 'yaml'" in capsys.readouterr().err
 
 
 def _write_packet(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -134,8 +196,13 @@ def _write_packet(tmp_path: pathlib.Path) -> pathlib.Path:
 
 
 @pytest.mark.parametrize(
-    "fmt, blocked, extra",
-    [("yaml", ("yaml",), "yaml"), ("toml", ("tomli_w",), "toml")],
+    "fmt, blocked, line",
+    [
+        ("yaml", ("pktcap",), 'pip install "pydhcp[pktcap]"'),
+        ("ini", ("pktcap",), 'pip install "pydhcp[pktcap]"'),
+        ("yaml", ("yaml",), 'pip install "pktcap[yaml]"'),
+        ("toml", ("tomli_w",), 'pip install "pktcap[toml]"'),
+    ],
 )
 def test_a_packet_format_without_its_extra_is_one_line_and_status_1(
     tmp_path: pathlib.Path,
@@ -143,8 +210,10 @@ def test_a_packet_format_without_its_extra_is_one_line_and_status_1(
     capsys: pytest.CaptureFixture[str],
     fmt: str,
     blocked: "_ty.Tuple[str, ...]",
-    extra: str,
+    line: str,
 ) -> None:
+    if "pktcap" not in blocked:
+        pytest.importorskip("pktcap")
     path = _write_packet(tmp_path)
     _block(monkeypatch, *blocked)
 
@@ -155,7 +224,7 @@ def test_a_packet_format_without_its_extra_is_one_line_and_status_1(
     assert captured.out == ""
     lines = captured.err.splitlines()
     assert len(lines) == 1 and lines[0].startswith("pydhcp: error:")
-    assert _the_command_for(extra) in lines[0]
+    assert line in lines[0]
 
 
 def test_a_configuration_file_without_its_extra_is_a_wrong_invocation(
@@ -163,14 +232,14 @@ def test_a_configuration_file_without_its_extra_is_a_wrong_invocation(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    path = tmp_path / "c.yaml"
-    path.write_text("nosuchsection: {}\n", encoding="utf-8")
-    _block(monkeypatch, "yaml")
+    path = tmp_path / "c.toml"
+    path.write_text("[nosuchsection]\n", encoding="utf-8")
+    _block(monkeypatch, "tomllib", "tomli")
 
     status = main(["server", "--listen", "127.0.0.1:0", "--config", str(path)])
 
     assert status == 2
-    assert _the_command_for("yaml") in capsys.readouterr().err
+    assert _the_command_for("toml") in capsys.readouterr().err
 
 
 def test_the_command_line_without_duho_says_which_extra_and_returns_1(

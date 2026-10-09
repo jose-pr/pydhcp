@@ -9,7 +9,9 @@ from __future__ import annotations
 
 
 import pytest
-import yaml
+
+yaml = pytest.importorskip("yaml")  # a YAML document is the vehicle of some tests
+pytest.importorskip("pktcap")  # and pktcap reads it
 
 from pydhcp.packet import DHCPMessage
 

@@ -58,7 +58,7 @@ class Packet(_Command):
     packet_format: _ty.Annotated[
         str, Meta(choices=PACKET_FORMATS, env="PYDHCP_PACKET_FORMAT")
     ] = "json"
-    "Text format of the message: json, yaml, toml, ini or summary (summary is decode-only). Default: json"
+    "Text format of the message: json, yaml, toml, ini or summary (summary is decode-only; every format but json and summary needs the pktcap extra). Default: json"
     ("--format", "-f")
 
     def __call__(self) -> None:

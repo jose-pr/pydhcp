@@ -21,11 +21,10 @@ and are not importable from a public one.
 
 Install with `pip install pydhcp`; its one required dependency is `netimps`. Extras:
 `cli` (`pip install "pydhcp[cli]"`; `duho`, for the `pydhcp` command), `pktcap` (`pktcap`, for
-the capture functions and the `capture` and `replay` commands: without it they raise an
-`ImportError`, or print and end with status 1, `captures need the 'pktcap' extra: pip install
-"pydhcp[pktcap]"`), `yaml` (PyYAML: YAML packets and configuration files) and `toml`
-(`tomli-w`, and `tomli` before Python 3.11: TOML packets, capture files and configuration
-files). A missing one is named where it is used, with its `pip install "pydhcp[<extra>]"` line.
+the capture functions, the `capture` and `replay` commands and a message as YAML, TOML or INI
+text: without it they raise an `ImportError`, or print and end with status 1, `captures need the
+'pktcap' extra: pip install "pydhcp[pktcap]"`; pktcap's own extras `yaml` and `toml` hold the
+format libraries) and `toml` (`tomli` before Python 3.11: `.toml` configuration files). A missing one is named where it is used, with its `pip install "pydhcp[<extra>]"` line.
 Importing `pydhcp`, `pydhcp.capture` or `pydhcp.cli` never imports `pktcap`, `duho`, `yaml`,
 `tomllib`, `tomli` or `tomli_w`, nor `asyncio`: `AsyncDHCPListener`, `AsyncDHCPServer`,
 `AsyncDHCPClient` and `AsyncDHCPRelay` are bound when first accessed, under the same names and
@@ -360,7 +359,7 @@ is in `pydhcp/cli/AGENTS.md`. The ones that follow no such rule:
 | Variable | Sets |
 | --- | --- |
 | `PYDHCP_CONFIG` | the configuration file, as `--config`; `-` is standard input. Default: none |
-| `PYDHCP_CONFIG_FORMAT` | `json`, `yaml`, `toml` or `ini`, as `--config-format`. Default: from the file's extension |
+| `PYDHCP_CONFIG_FORMAT` | `json`, `toml` or `ini`, as `--config-format`. Default: from the file's extension |
 | `PYDHCP_TRACEBACK` | a boolean: when on, an error is raised with its traceback (status 1) instead of one `pydhcp: error:` line. Default: off; `0` is off |
 | `PYDHCP_MCP` | `stdio` serves `pydhcp.packet` and `pydhcp.interfaces` as MCP tools over standard input and output instead of running a command; any other value is a usage error (status 2). The other commands are not tools |
 | `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`, `PKTCAP_HOOK_FORMAT` | **set for a command hook** (pktcap's `PKTCAP_HOOK_<FIELD>`), not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the hook's standard input (`json` when the output is a capture file) |
