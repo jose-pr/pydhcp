@@ -11,8 +11,9 @@ import io
 import json
 import pathlib
 
-import pktcap
 import pytest
+
+pktcap = pytest.importorskip("pktcap")
 
 from capture_input import build, datagrams, short_datagram
 from hook_programs import python_hook

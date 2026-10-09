@@ -32,26 +32,35 @@ def _names(specs: "_ty.Iterable[str]") -> "_ty.Set[str]":
     return {Requirement(spec).name.lower() for spec in specs}
 
 
-def test_the_library_requires_only_what_the_wire_and_the_capture_writer_need() -> None:
-    assert _names(_project()["dependencies"]) == {"netimps", "pktcap"}
+def test_the_library_requires_only_what_the_wire_needs() -> None:
+    assert _names(_project()["dependencies"]) == {"netimps"}
 
 
 def test_each_capability_is_one_extra() -> None:
     extras = _project()["optional-dependencies"]
 
     assert _names(extras["cli"]) == {"duho"}
+    assert _names(extras["pktcap"]) == {"pktcap"}
     assert _names(extras["yaml"]) == {"pyyaml"}
     assert _names(extras["toml"]) == {"tomli-w", "tomli"}
 
 
 def test_dev_refers_to_the_extras_by_name_and_repeats_no_range() -> None:
     extras = _project()["optional-dependencies"]
-    capabilities = {"cli", "yaml", "toml"}
+    capabilities = {"cli", "pktcap", "yaml", "toml"}
 
     own = [Requirement(spec) for spec in extras["dev"] if spec.startswith("pydhcp")]
 
     assert len(own) == 1 and own[0].extras == capabilities
     assert not _names(extras["dev"]) & {"duho", "pyyaml", "tomli", "tomli-w"}
+
+
+def test_dev_installs_the_record_formats_pktcap_writes() -> None:
+    extras = _project()["optional-dependencies"]
+
+    own = [Requirement(spec) for spec in extras["dev"] if spec.startswith("pktcap")]
+
+    assert len(own) == 1 and own[0].extras == {"yaml", "toml"}
 
 
 def _floor(extra: str, environment: "_ty.Dict[str, str]") -> "_ty.List[str]":
@@ -139,7 +148,7 @@ def test_exactly_one_pyyaml_floor_applies_to_a_host(
 def test_every_runtime_dependency_has_a_ceiling_at_the_next_series() -> None:
     project = _project()
     specs = list(project["dependencies"])
-    for extra in ("cli", "yaml", "toml"):
+    for extra in ("cli", "pktcap", "yaml", "toml"):
         specs += project["optional-dependencies"][extra]
 
     unbounded = [

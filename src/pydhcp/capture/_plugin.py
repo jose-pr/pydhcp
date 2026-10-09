@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import typing as _ty
 
-import pktcap as _pktcap
 
+from .. import _extras
 from ..options._codecs._message_type import DHCPMessageType
 from ..options._codes import DHCPOptionCode
 from ..packet._enums import DHCPOpcode
@@ -27,6 +27,11 @@ from ._filter import (
     option_value_text,
     xid_matcher,
 )
+
+if _ty.TYPE_CHECKING:
+    import pktcap as _pktcap
+else:
+    _pktcap = _extras.lazy_pktcap
 
 LayerTest = _ty.Callable[[DHCPLayer], bool]
 

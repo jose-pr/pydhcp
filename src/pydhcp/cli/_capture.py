@@ -15,7 +15,7 @@ from ..capture._run import CaptureRun
 from ..capture._sync import DHCPCapture
 from ..capture._writer import MAX_CAPTURE_FILES, DHCPCaptureWriter
 from ._capture_hook import _load_capture_hook
-from ._common import CAPTURE_FORMATS, _arguments, _Failed, _Listening, closed_stdout
+from ._common import _arguments, _Failed, _Listening, closed_stdout
 
 
 def _probe(path: pathlib.Path) -> None:
@@ -49,7 +49,7 @@ class Capture(_Listening):
 
     packet_format: _ty.Annotated[
         _ty.Optional[str],
-        Meta(choices=CAPTURE_FORMATS, env="PYDHCP_CAPTURE_RECORD_FORMAT"),
+        Meta(choices=_pktcap.OUTPUT_FORMATS, env="PYDHCP_CAPTURE_RECORD_FORMAT"),
     ] = None
     "Output format: pcap or pcapng (the datagrams, readable by tcpdump and Wireshark), or json, yaml, toml, ini (one record for each message). Default: from the --output ending (.pcap, .cap, .pcapng, .json, .jsonl, .ndjson, .yaml, .yml, .toml, .ini), else json"
     ("--format", "-f")

@@ -16,6 +16,8 @@ from unittest.mock import Mock
 
 import pytest
 
+pytest.importorskip("pktcap")
+
 from helpers import CHADDR, build_request
 from driving import WAIT_SECONDS, driver_params, serve, wait_for
 from pydhcp import (

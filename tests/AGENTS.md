@@ -20,9 +20,9 @@ Run it on **3.9 (the floor) and on the latest Python**, each in its own venv nam
 what the host is (an emulated x64 CPython on an ARM64 host is `win-amd64`). Run one suite at
 a time on a machine: the tests share loopback and a second run's ports collide.
 
-`dev` is `pydhcp[cli,yaml,toml]` plus the tooling, so a development install runs every test
-that needs an extra; without them those tests skip (read `-rs`, a green run with the
-`yaml`, `toml` or `cli` tests skipped verifies nothing about them). A test of a missing
+`dev` is `pydhcp[cli,pktcap,yaml,toml]`, `pktcap[yaml,toml]` and the tooling, so a development
+install runs every test that needs an extra; without them those tests skip (read `-rs`, a green
+run with the `pktcap`, `yaml`, `toml` or `cli` tests skipped verifies nothing about them). A test of a missing
 extra hides the module inside the test (`sys.modules[name] = None`) and never uninstalls.
 `pyproject.toml` sets `pythonpath = ["src", "tests"]`, so a test imports helpers by name
 (`from helpers import ...`), `filterwarnings = ["error"]` with no exception, and
@@ -79,7 +79,7 @@ Unit modules by area:
 | the roles | `test_server_apipa_not_servable.py`, `test_server_customization.py`, `test_server_extension_contract.py`, `test_server_extension_point.py`, `test_server_malformed_input.py`, `test_server_non_committing_paths.py`, `test_server_offered_state.py`, `test_server_release_and_decline.py`, `test_server_renewal_times.py`, `test_server_reply_header.py`, `test_server_request_states.py`, `test_server_size_and_expiry.py`, `test_relay.py`, `test_role_cores.py`, `test_constructors.py` |
 | capture | `test_capture.py`, `test_capture_payload.py`, `test_capture_plugin.py`, `test_capture_writer.py`, `test_dissector.py` |
 | the command line and configuration | `test_cli_contract.py`, `test_cli_lease_file.py`, `test_config.py`, `test_extras.py` |
-| the package itself | `test_surface.py`, `test_import_structure.py`, `test_import_asyncio.py` (fresh interpreters: a blocking import and exchange load no `asyncio`), `test_type_hints.py`, `test_exceptions.py`, `test_error_messages.py`, `test_permissions.py`, `test_manifest.py`, `test_examples.py`, `test_readme.py`, `test_conformance_page.py`, `test_comments.py`, `test_shipped_headers.py`, `test_private_reach.py`, `test_network_guard.py` |
+| the package itself | `test_surface.py`, `test_import_structure.py`, `test_import_asyncio.py` (fresh interpreters: a blocking import and exchange load no `asyncio`), `test_pktcap_optional.py` (fresh interpreters in which importing `pktcap` raises: the package imports, serves and decodes, and each capture function and command gives the one line naming the extra), `test_type_hints.py`, `test_exceptions.py`, `test_error_messages.py`, `test_permissions.py`, `test_manifest.py`, `test_examples.py`, `test_readme.py`, `test_conformance_page.py`, `test_comments.py`, `test_shipped_headers.py`, `test_private_reach.py`, `test_network_guard.py` |
 | benchmarks | `test_benchmarks_options.py`, `test_benchmarks_parse.py`, `test_benchmarks_run.py` |
 
 `integration/`: `test_async.py`, `test_async_backlog.py`, `test_async_client.py`, `test_async_concurrency.py`, `test_async_relay_capture.py`, `test_benchmarks_suites.py`, `test_capture_command_hook.py`, `test_capture_drivers.py`, `test_capture_file.py`, `test_capture_file_output.py`, `test_capture_output.py`, `test_cli.py`, `test_cli_capture_bounds.py`, `test_cli_commands.py`, `test_cli_interrupt.py`, `test_cli_logging.py`, `test_cli_settings.py`, `test_cli_tools.py`, `test_client.py`, `test_documented_commands.py`, `test_dora.py`, `test_examples_run.py`, `test_listen_command.py`, `test_listen_interface.py`, `test_listener_binding.py`, `test_listener_lifecycle.py`, `test_listener_pktinfo_receive.py`, `test_listener_transport.py`, `test_relay_dora.py`, `test_relay_drivers.py`, `test_roles_run_clean.py`, `test_server_drivers.py`, `test_server_reply_ports.py` (as `integration/<name>`).

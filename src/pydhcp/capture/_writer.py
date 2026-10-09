@@ -9,10 +9,15 @@ import string as _string
 import typing as _ty
 from types import TracebackType
 
-import pktcap as _pktcap
 
+from .. import _extras
 from .._extras import missing as _missing
 from ._events import CaptureEvent, serialize_event
+
+if _ty.TYPE_CHECKING:
+    import pktcap as _pktcap
+else:
+    _pktcap = _extras.lazy_pktcap
 
 LOGGER = _logging.getLogger(__name__)
 
@@ -48,6 +53,7 @@ def _open(
     target: Target, format: _ty.Optional[str], per_capture: bool, max_files: int
 ) -> _pktcap.CaptureWriter:
     """The pktcap writer, with the refusals that name this library's terms."""
+    _extras.pktcap_module()
 
     def build(per_record: bool, append: bool = False) -> _pktcap.CaptureWriter:
         return _pktcap.CaptureWriter(
@@ -89,7 +95,7 @@ def _open(
         raise
 
 
-def _is_record(writer: _pktcap.CaptureWriter) -> bool:
+def _is_record(writer: "_pktcap.CaptureWriter") -> bool:
     return writer.format in _pktcap.RECORD_FORMATS
 
 

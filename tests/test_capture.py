@@ -5,8 +5,9 @@ import logging
 import socket
 from datetime import datetime, timezone
 
-import pktcap
 import pytest
+
+pktcap = pytest.importorskip("pktcap")
 
 from pydhcp import (
     AsyncDHCPCapture,

@@ -8,12 +8,17 @@ import datetime as _dt
 import json as _json
 import typing as _ty
 
-import pktcap as _pktcap
 
+from .. import _extras
 from .. import _network as _net
 from ..listener._receive import DHCPRequestContext
 from ..exceptions import NoClientIdentityError
 from ..packet._message import DHCPMessage
+
+if _ty.TYPE_CHECKING:
+    import pktcap as _pktcap
+else:
+    _pktcap = _extras.lazy_pktcap
 
 
 def message_type_text(message: DHCPMessage) -> str:

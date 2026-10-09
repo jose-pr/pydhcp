@@ -19,13 +19,15 @@ of another package, `MACAddress`, the object `netimps.MACAddress`, because
 (import it from there). `load_config` and the size constants are in private modules
 and are not importable from a public one.
 
-Install with `pip install pydhcp`; its required dependencies are `netimps` and `pktcap`.
-The `cli` extra (`pip install "pydhcp[cli]"`) adds `duho`, which the `pydhcp` command
-needs; the `yaml` extra adds PyYAML (YAML packets and configuration files) and the `toml`
-extra `tomli-w`, and `tomli` before Python 3.11 (TOML packets, capture files and
-configuration files). A missing one is named where it is used, with its
-`pip install "pydhcp[<extra>]"` line. Importing `pydhcp` or `pydhcp.cli` never imports
-`duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`. Nor does importing `pydhcp` or one of
+Install with `pip install pydhcp`; its one required dependency is `netimps`. The `cli`
+extra (`pip install "pydhcp[cli]"`) adds `duho`, which the `pydhcp` command needs; the
+`pktcap` extra adds `pktcap`, which every capture function and the `capture` and `replay`
+commands need (`captures need the 'pktcap' extra: pip install "pydhcp[pktcap]"` is the
+`ImportError`, and the command's line with status 1); the `yaml` extra adds PyYAML (YAML
+packets and configuration files) and the `toml` extra `tomli-w`, and `tomli` before Python
+3.11 (TOML packets, capture files and configuration files). A missing one is named where it
+is used, with its `pip install "pydhcp[<extra>]"` line. Importing `pydhcp`, `pydhcp.capture`
+or `pydhcp.cli` never imports `pktcap`, `duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`. Nor does importing `pydhcp` or one of
 its packages import `asyncio`: `AsyncDHCPListener`, `AsyncDHCPServer`, `AsyncDHCPClient`,
 `AsyncDHCPRelay` and `AsyncDHCPCapture` are bound when first accessed, under the same
 names and import paths. Python 3.9 or newer.

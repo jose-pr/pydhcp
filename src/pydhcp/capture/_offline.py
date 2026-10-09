@@ -6,14 +6,19 @@ import datetime as _dt
 import os as _os
 import typing as _ty
 
-import pktcap as _pktcap
 
+from .. import _extras
 from .. import _network as _net
 from ..packet._message import DHCPMessage
 from ..packet._enums import DHCPPort
 from ._dissector import DHCP_PORTS, DHCPLayer, dissect_dhcp
 from ._events import CaptureEvent, PacketFilterLike
 from ._filter import compile_capture_filter
+
+if _ty.TYPE_CHECKING:
+    import pktcap as _pktcap
+else:
+    _pktcap = _extras.lazy_pktcap
 
 _EPOCH = _dt.datetime(1970, 1, 1, tzinfo=_dt.timezone.utc)
 
@@ -87,6 +92,7 @@ def read_capture(
     the call; the file is read, and a damaged capture raises
     `pktcap.CaptureFormatError` after the events before the damage, while iterating.
     """
+    _extras.pktcap_module()
     wanted = frozenset(ports)
     test = (
         compile_capture_filter(packet_filter)

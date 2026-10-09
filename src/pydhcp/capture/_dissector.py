@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import typing as _ty
 
-import pktcap as _pktcap
+from .. import _extras
+
 
 from ..packet._message import DHCPMessage
 from ._events import client_id_text, message_type_text
+
+if _ty.TYPE_CHECKING:
+    import pktcap as _pktcap
+else:
+    _pktcap = _extras.lazy_pktcap
 
 #: The ports a DHCP message is sent to: a client sends to the server's, a server or
 #: relay replies to the client's, so between them they see every message.
@@ -31,7 +37,7 @@ class DHCPLayer(_ty.NamedTuple):
     message: _ty.Dict[str, _ty.Any]
 
 
-def dissect_dhcp(data: bytes) -> _pktcap.Dissected:
+def dissect_dhcp(data: bytes) -> "_pktcap.Dissected":
     """Read the DHCP message `data` holds: its `DHCPLayer`, and no payload after it.
 
     Raises `pktcap.DissectError` (a `ValueError`) for octets that are not a message;
@@ -53,7 +59,7 @@ def dissect_dhcp(data: bytes) -> _pktcap.Dissected:
 
 
 def register_dhcp_dissector(
-    registry: _ty.Optional[_pktcap.DissectorRegistry] = None,
+    registry: "_ty.Optional[_pktcap.DissectorRegistry]" = None,
 ) -> None:
     """Have `registry` (default: pktcap's process-wide one) dissect UDP ports 67 and 68.
 

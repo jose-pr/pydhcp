@@ -16,6 +16,7 @@ import sys
 import typing as _ty
 
 from .._extras import missing as _missing
+from .._extras import pktcap_module as _pktcap_module
 
 if _ty.TYPE_CHECKING:
     from ._app import App as App
@@ -65,6 +66,8 @@ def __getattr__(name: str) -> _ty.Any:
         raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
     if not _has_duho():
         raise ImportError(_NEEDS_CLI)
+    if name in ("Capture", "Replay"):
+        _pktcap_module()  # ImportError naming the pktcap extra
     value = getattr(_importlib.import_module(f".{module}", __name__), name)
     globals()[name] = value
     return value

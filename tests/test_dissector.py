@@ -10,8 +10,9 @@ import json
 import pathlib
 import typing as _ty
 
-import pktcap
 import pytest
+
+pktcap = pytest.importorskip("pktcap")
 
 from capture_input import build
 from pydhcp.capture import (

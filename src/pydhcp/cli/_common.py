@@ -8,17 +8,12 @@ import pathlib
 import sys as _sys
 import typing as _ty
 
-import pktcap as _pktcap
 from duho import Cmd, LoggingArgs, Meta
 
 from .._config import CONFIG_FORMATS
 from ._settings import CONFIG_ENV, CONFIG_FORMAT_ENV, listen_value
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
-
-
-#: What `capture --format` writes: the capture files and the record formats of pktcap.
-CAPTURE_FORMATS = _pktcap.OUTPUT_FORMATS
 
 
 @_contextlib.contextmanager

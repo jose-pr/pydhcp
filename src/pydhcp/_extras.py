@@ -15,6 +15,53 @@ def missing(what: str, extra: str) -> str:
     return f'{what} needs the {extra!r} extra: pip install "pydhcp[{extra}]"'
 
 
+#: What every capture function and command says when pktcap is not installed.
+PKTCAP_NEEDED = "captures need the 'pktcap' extra: pip install \"pydhcp[pktcap]\""
+
+
+def pktcap_module() -> _ty.Any:
+    """`pktcap`, from the `pktcap` extra; `ImportError` with `PKTCAP_NEEDED` when it is absent.
+
+    Only the module itself being absent is "not installed": a failure inside pktcap,
+    or in one of its own dependencies, is raised as it is.
+    """
+    try:
+        import pktcap
+    except ModuleNotFoundError as error:
+        if error.name != "pktcap":
+            raise
+        raise ImportError(PKTCAP_NEEDED) from error
+    return pktcap
+
+
+class _LazyPktcap:
+    """Stands for the `pktcap` module where a module of this package names it.
+
+    A name imported only for the type checker cannot be resolved by
+    `typing.get_type_hints`; this object can, because it imports pktcap when an
+    attribute is first read, and raises the `ImportError` of `pktcap_module`
+    when the extra is not installed.
+    """
+
+    __slots__ = ()
+
+    def __getattr__(self, name: str) -> _ty.Any:
+        return getattr(pktcap_module(), name)
+
+
+#: `pktcap` for a module that cannot import it at the top.
+lazy_pktcap: _ty.Any = _LazyPktcap()
+
+
+def has_pktcap() -> bool:
+    """Whether the `pktcap` extra is installed."""
+    try:
+        pktcap_module()
+    except ImportError:
+        return False
+    return True
+
+
 def yaml_module() -> _ty.Any:
     """PyYAML, from the `yaml` extra."""
     try:

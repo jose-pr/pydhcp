@@ -196,6 +196,14 @@ someone upgrading from 0.7.0.
 
 ### Changed
 
+- **pktcap is an optional dependency, the `pktcap` extra.** `pip install pydhcp` needs `netimps`
+  alone; importing `pydhcp`, `pydhcp.capture` and `pydhcp.cli` loads neither pktcap nor asyncio,
+  and a server, a relay, a client and `pydhcp packet --format json` run without it. A capture
+  function (`capture_dissector`, `dissect_dhcp`, `register_dhcp_dissector`, `compile_capture_filter`,
+  `read_capture`, `replay_capture`, `DHCPCaptureWriter`, `DHCPCapture`) raises an `ImportError`,
+  and `pydhcp capture` and `pydhcp replay` print and exit with status 1, with the one line
+  `captures need the 'pktcap' extra: pip install "pydhcp[pktcap]"`. `dev` installs
+  `pydhcp[cli,pktcap,yaml,toml]` and `pktcap[yaml,toml]`.
 - **A `PCPServerList` entry is a tuple of address texts**, where it was a list, so an entry
   cannot be changed past the checks: `servers[0].append(...)` put a 64th address or text that
   is no address into an option, which failed only when it was packed. Replace the entry

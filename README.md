@@ -36,20 +36,22 @@ permissions and platform-specific UDP behavior. The documentation is at
 pip install pydhcp
 ```
 
-The library (packets, options, server, client, relay, capture) needs nothing else. What
+The library (packets, options, server, client, relay) needs nothing else. What
 else you ask of it is an extra, one for each capability:
 
 | Extra | Adds | Needed for |
 | --- | --- | --- |
 | `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
+| `pktcap` | `pktcap` | captures: `pydhcp capture` and `pydhcp replay`, the DHCP dissector and its filter keys, `sniff_dhcp` |
 | `yaml` | `PyYAML` | YAML packets (`--format yaml`, `DHCPMessage.to_text("yaml")`) and `.yaml` configuration files |
 | `toml` | `tomli-w`, and `tomli` before Python 3.11 | TOML packets and capture files; `.toml` configuration files before Python 3.11 |
 
-For example `pip install "pydhcp[cli,yaml]"`. Without the `cli` extra the `pydhcp`
-command prints that it needs it and exits with status 1. JSON and INI need no extra.
-The required dependencies are [`netimps`](https://github.com/jose-pr/netimps), which has
-none of its own, and [`pktcap`](https://github.com/jose-pr/pktcap), which needs only
-`netimps`. Requires Python 3.9+.
+For example `pip install "pydhcp[cli,pktcap]"`. Without the `cli` extra the `pydhcp`
+command prints that it needs it and exits with status 1; without the `pktcap` extra
+`pydhcp capture` and `pydhcp replay` print that line and exit with status 1, and every other
+command runs. JSON and INI need no extra. The one required dependency is
+[`netimps`](https://github.com/jose-pr/netimps), which has none of its own. Requires
+Python 3.9+.
 
 ## Quick start
 

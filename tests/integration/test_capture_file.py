@@ -12,8 +12,9 @@ import subprocess
 import sys
 import typing as _ty
 
-import pktcap
 import pytest
+
+pktcap = pytest.importorskip("pktcap")
 
 from capture_input import build, datagrams
 from cli_process import environment, free_port, run_cli

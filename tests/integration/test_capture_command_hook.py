@@ -18,6 +18,8 @@ import time
 
 import pytest
 
+pytest.importorskip("pktcap")
+
 from hook_programs import capture_event, kill, python_hook, wait_until_dead
 from pydhcp import DHCPError, DHCPHookError, DHCPTimeoutError
 from pydhcp.capture import HOOK_TIMEOUT_SECONDS, command_hook

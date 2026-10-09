@@ -13,14 +13,19 @@ import ipaddress as _ipaddress
 import re as _re
 import typing as _ty
 
-import pktcap as _pktcap
 
+from .. import _extras
 from ..options._codecs._base import is_codec
 from ..options._codecs._message_type import DHCPMessageType
 from ..options._codes import DHCPOptionCode
 from ..packet._enums import DHCPOpcode
 from ..packet._message import DHCPMessage
 from ._events import CaptureEvent, CapturePredicate
+
+if _ty.TYPE_CHECKING:
+    import pktcap as _pktcap
+else:
+    _pktcap = _extras.lazy_pktcap
 
 #: The keys a clause may name, besides `option.NAME` and `option.NUMBER`.
 FILTER_KEYS: _ty.Final = (

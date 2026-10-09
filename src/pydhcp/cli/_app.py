@@ -9,14 +9,27 @@ import typing as _ty
 import duho
 from duho import AUTO, Cli, DefaultsFormatter
 
+from .. import _extras
 from . import _settings
-from ._capture import Capture
 from ._common import _Configured, _Failed
 from ._interfaces import Interfaces
 from ._packet import Packet
 from ._relay import Relay
-from ._replay import Replay
 from ._server import Server
+
+#: The commands that need the `pktcap` extra.
+_CAPTURE_COMMANDS = ("capture", "replay")
+
+
+def _commands() -> "_ty.List[_ty.Type[_ty.Any]]":
+    """Every command this installation has: the capture ones only with pktcap."""
+    found: "_ty.List[_ty.Type[_ty.Any]]" = [Interfaces, Server, Relay, Packet]
+    if _extras.has_pktcap():
+        from ._capture import Capture
+        from ._replay import Replay
+
+        found += [Capture, Replay]
+    return found
 
 
 class App(Cli):
@@ -30,7 +43,7 @@ class App(Cli):
     _logger_name_ = "pydhcp"
     _config_loader_ = staticmethod(_settings.load_layer)
     _help_formatter_ = DefaultsFormatter
-    _subcommands_ = [Interfaces, Server, Relay, Packet, Capture, Replay]
+    _subcommands_ = _commands()
 
 
 def _quiet_stdout() -> None:
@@ -46,6 +59,9 @@ def run(args: "_ty.List[str]") -> int:
     show_traceback = False
     try:
         show_traceback = _settings.traceback_requested()
+        if args and args[0] in _CAPTURE_COMMANDS and not _extras.has_pktcap():
+            print(f"pydhcp: error: {_extras.PKTCAP_NEEDED}", file=sys.stderr)
+            return 1
         sections = _settings.sections_of(
             command
             for command in App._subcommands_ or ()

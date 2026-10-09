@@ -16,6 +16,8 @@ import typing as _ty
 
 import pytest
 
+pytest.importorskip("pktcap")
+
 from pydhcp import DHCPMessage
 
 DATA = pathlib.Path(__file__).resolve().parents[1] / "data" / "capture_output"

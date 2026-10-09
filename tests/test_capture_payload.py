@@ -13,6 +13,8 @@ import typing as _ty
 
 import pytest
 
+pytest.importorskip("pktcap")
+
 from helpers import build_request
 from driving import driver_params, serve, wait_for
 from capture_input import short_datagram
