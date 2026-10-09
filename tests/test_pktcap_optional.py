@@ -56,7 +56,7 @@ def test_the_package_the_command_line_and_the_capture_package_import_without_pkt
         import pydhcp
         import pydhcp.capture
         import pydhcp.cli
-        from pydhcp import DHCPCapture, DHCPServer, compile_capture_filter
+        from pydhcp import DHCPServer
         from pydhcp.capture import DHCPLayer, pktcap_plugin
 
         assert "pktcap" not in sys.modules
@@ -154,11 +154,6 @@ def test_the_packet_command_decodes_to_json_without_pktcap(
         'pydhcp.capture.asniff_dhcp("127.0.0.1:0")',
         "pydhcp.capture.register_dhcp_dissector()",
         "pydhcp.capture.capture_dissector()",
-        'pydhcp.capture.compile_capture_filter("xid=1")',
-        'pydhcp.capture.read_capture("input.pcap")',
-        'pydhcp.capture.replay_capture("input.pcap", "127.0.0.1")',
-        'pydhcp.capture.DHCPCaptureWriter("out.json")',
-        'pydhcp.DHCPCapture(listen="127.0.0.1:0")',
     ],
 )
 def test_each_capture_function_gives_the_line_naming_the_extra(

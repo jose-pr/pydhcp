@@ -1,4 +1,4 @@
-"""Reading a capture file as events, and sending its requests again.
+"""Reading a capture file through the DHCP dissector, and the commands that read one.
 
 The input is the fixed set of `tests/data/capture_output/build.py`, written to a pcap
 with pktcap's own writer, so what a test expects is the octets it wrote.
@@ -18,9 +18,8 @@ pktcap = pytest.importorskip("pktcap")
 
 from capture_input import build, datagrams
 from cli_process import environment, free_port, run_cli
-from driving import serve, wait_for
-from pydhcp import CaptureEvent, DHCPCapture, DHCPMessage
-from pydhcp.capture import capture_dissector, read_capture, replay_capture
+from pydhcp import DHCPMessage
+from pydhcp.capture import DHCPLayer, capture_dissector
 
 CLIENT = ("10.0.0.2", 68)
 SERVER = ("10.0.0.1", 67)
@@ -58,57 +57,40 @@ def recorded(tmp_path: pathlib.Path) -> pathlib.Path:
     return tmp_path / "recorded.pcap"
 
 
-# -- read_capture --------------------------------------------------------------------
+# -- a capture file read through the dissector of the DHCP plugin --------------------
 
 
-def test_every_message_of_a_capture_is_an_event_in_file_order(
+def _frames(
+    source: _ty.Any, dissector: "pktcap.FrameDissector"
+) -> "list[pktcap.DissectedFrame]":
+    return list(pktcap.read_dissected(source, dissector=dissector))
+
+
+def test_every_message_of_a_capture_is_a_dhcp_frame_in_file_order(
     pcap: pathlib.Path,
 ) -> None:
     sent = datagrams()
 
-    events = list(read_capture(pcap))
+    frames = _frames(pcap, capture_dissector())
 
-    assert [e.payload for e in events] == sent
-    assert [e.message.xid for e in events] == [DHCPMessage.decode(d).xid for d in sent]
-    for number, event in enumerate(events):
-        assert event.context is None
-        assert event.captured_at.timestamp() == pytest.approx(START + number * 0.5)
+    assert [f.datagram().payload for f in frames] == sent  # type: ignore[union-attr]
+    for number, frame in enumerate(frames):
+        layer = frame.layers[-1]
+        assert isinstance(layer, DHCPLayer)
+        assert layer.xid == DHCPMessage.decode(sent[number]).xid
+        assert frame.time == pytest.approx(START + number * 0.5)
+        datagram = frame.datagram()
+        assert datagram is not None
         request = _is_request(sent[number])
-        assert (str(event.source.ip), event.source.port) == (
-            CLIENT if request else SERVER
-        )
-        assert (str(event.destination.ip), event.destination.port) == (
-            SERVER if request else CLIENT
-        )
+        assert datagram.source == (CLIENT if request else SERVER)
+        assert datagram.destination == (SERVER if request else CLIENT)
 
 
-def test_the_filter_selects_by_what_the_message_and_the_datagram_say(
-    pcap: pathlib.Path,
-) -> None:
-    sent = datagrams()
-    discovers = [
-        d for d in sent if DHCPMessage.decode(d).message_type.name == "DHCPDISCOVER"
-    ]
+def test_a_port_the_capture_does_not_use_reads_no_message(pcap: pathlib.Path) -> None:
+    frames = _frames(pcap, capture_dissector(ports=(6767,)))
 
-    found = [
-        e.payload for e in read_capture(pcap, packet_filter="msg_type=DHCPDISCOVER")
-    ]
-    replies = [e for e in read_capture(pcap, packet_filter="src_port=67")]
-
-    assert found == discovers
-    assert replies and all(e.source.port == 67 for e in replies)
-    assert list(read_capture(pcap, packet_filter=lambda event: False)) == []
-
-
-def test_the_interface_key_fails_for_an_event_that_heard_nothing(
-    pcap: pathlib.Path,
-) -> None:
-    assert list(read_capture(pcap, packet_filter="interface=eth0")) == []
-    assert len(list(read_capture(pcap, packet_filter="interface!=eth0"))) == 53
-
-
-def test_a_port_the_capture_does_not_use_selects_nothing(pcap: pathlib.Path) -> None:
-    assert list(read_capture(pcap, ports=(6767,))) == []
+    assert len(frames) == 53
+    assert all(f.layer(DHCPLayer) is None for f in frames)
 
 
 def test_what_could_not_be_read_is_the_dissectors_counters(
@@ -121,13 +103,14 @@ def test_what_could_not_be_read_is_the_dissectors_counters(
         writer.write(2.0, CLIENT, SERVER, b"not dhcp at all")
         writer.write(3.0, ("10.0.0.2", 4000), ("10.0.0.1", 9999), good)  # no DHCP port
         writer.write(4.0, CLIENT, SERVER, good[:100])
-    frames = capture_dissector()
+    reader = capture_dissector()
 
-    events = list(read_capture(target, dissector=frames))
+    frames = _frames(target, reader)
 
-    assert [e.payload for e in events] == [good]
-    assert frames.stats.frames == 4 and frames.stats.malformed == 2
-    assert frames.stats.failed == 0
+    messages = [f.datagram().payload for f in frames if isinstance(f.layers[-1], DHCPLayer)]  # type: ignore[union-attr]
+    assert messages == [good]
+    assert reader.stats.frames == 4 and reader.stats.malformed == 2
+    assert reader.stats.failed == 0
 
 
 def test_a_frame_of_a_link_type_nothing_reads_is_counted_not_hidden(
@@ -136,41 +119,34 @@ def test_a_frame_of_a_link_type_nothing_reads_is_counted_not_hidden(
     target = tmp_path / "odd.pcap"
     with pktcap.PcapWriter(target) as writer:
         writer.write_frame(pktcap.CapturedFrame(1.0, 105, b"\x00" * 40))
-    frames = capture_dissector()
+    reader = capture_dissector()
 
-    assert list(read_capture(target, dissector=frames)) == []
-    assert frames.unsupported_linktypes == {105: 1}
+    frames = _frames(target, reader)
+
+    assert all(f.layer(DHCPLayer) is None for f in frames)
+    assert reader.unsupported_linktypes == {105: 1}
 
 
-def test_a_capture_cut_in_the_middle_gives_the_events_before_the_cut_then_raises(
+def test_a_capture_cut_in_the_middle_gives_the_frames_before_the_cut_then_raises(
     pcap: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
     whole = pcap.read_bytes()
     cut = tmp_path / "cut.pcap"
     cut.write_bytes(whole[: len(whole) // 2])
-    seen: "list[CaptureEvent]" = []
+    seen: "list[pktcap.DissectedFrame]" = []
 
     with pytest.raises(pktcap.CaptureFormatError):
-        for event in read_capture(cut):
-            seen.append(event)
+        for frame in pktcap.read_dissected(cut, dissector=capture_dissector()):
+            seen.append(frame)
 
     assert 0 < len(seen) < 53
-    assert [e.payload for e in seen] == datagrams()[: len(seen)]
+    assert [f.datagram().payload for f in seen] == datagrams()[: len(seen)]  # type: ignore[union-attr]
 
 
 def test_a_stream_is_read_like_a_path(pcap: pathlib.Path) -> None:
-    events = list(read_capture(io.BytesIO(pcap.read_bytes())))
-    assert [e.payload for e in events] == datagrams()
+    frames = _frames(io.BytesIO(pcap.read_bytes()), capture_dissector())
 
-
-def test_a_time_that_is_no_time_is_the_epoch(tmp_path: pathlib.Path) -> None:
-    target = tmp_path / "t.pcap"
-    with pktcap.PcapWriter(target) as writer:
-        writer.write(0.0, CLIENT, SERVER, datagrams()[0])
-
-    (event,) = read_capture(target)
-
-    assert event.captured_at.timestamp() == 0.0
+    assert [f.datagram().payload for f in frames] == datagrams()  # type: ignore[union-attr]
 
 
 # -- the command ---------------------------------------------------------------------
@@ -378,115 +354,7 @@ def test_a_failing_hook_ends_the_read_under_fail_fast(
     assert b"refused" in done.stderr
 
 
-# -- replay --------------------------------------------------------------------------
-
-
-def _receive(count: int, send: "_ty.Callable[[int], object]") -> "list[bytes]":
-    """What a capture on a loopback port hears while `send(port)` runs."""
-    heard: "list[CaptureEvent]" = []
-    capture = DHCPCapture(listen=("127.0.0.1", 0), sink=heard.append)
-
-    def exercise(port: int) -> None:
-        send(port)
-        wait_for(lambda: len(heard) >= count, f"{count} datagrams to be heard")
-
-    serve(capture, exercise, None)
-    return [e.payload or b"" for e in heard]
-
-
-def test_a_replay_sends_the_requests_in_order_and_no_reply(
-    pcap: pathlib.Path,
-) -> None:
-    sent = datagrams()
-    requests = [d for d in sent if _is_request(d)]
-    assert 0 < len(requests) < len(sent)
-    results: "list[pktcap.ReplayResult]" = []
-
-    heard = _receive(
-        len(requests),
-        lambda port: results.append(
-            replay_capture(pcap, "127.0.0.1", port, speed=None)
-        ),
-    )
-
-    assert heard == requests
-    assert results[0].sent == len(requests) and results[0].partial == 0
-
-
-def test_the_addresses_in_the_capture_are_never_sent_to(tmp_path: pathlib.Path) -> None:
-    """The capture says 10.0.0.1, which a loopback test host cannot reach: what arrives
-    on the caller's address proves where the datagram went."""
-    target = tmp_path / "one.pcap"
-    _write(target, datagrams()[:1])
-    results: "list[pktcap.ReplayResult]" = []
-    heard = _receive(
-        1,
-        lambda port: results.append(
-            replay_capture(target, "127.0.0.1", port, speed=None)
-        ),
-    )
-
-    assert len(heard) == 1 and results[0].sent == 1
-
-
-def test_a_limit_ends_the_replay(pcap: pathlib.Path) -> None:
-    results: "list[pktcap.ReplayResult]" = []
-
-    heard = _receive(
-        2,
-        lambda port: results.append(
-            replay_capture(pcap, "127.0.0.1", port, speed=None, limit=2)
-        ),
-    )
-
-    assert len(heard) == 2 and results[0].sent == 2
-
-
-def test_the_recorded_waits_are_kept_unless_removed(tmp_path: pathlib.Path) -> None:
-    target = tmp_path / "slow.pcap"
-    with pktcap.PcapWriter(target) as writer:
-        for number in range(3):
-            writer.write(START + number, CLIENT, SERVER, datagrams()[0])
-    import time
-
-    results: "list[pktcap.ReplayResult]" = []
-    took: "list[float]" = []
-
-    def send(port: int) -> None:
-        began = time.monotonic()
-        results.append(replay_capture(target, "127.0.0.1", port, speed=10.0))
-        took.append(time.monotonic() - began)
-
-    _receive(3, send)
-
-    assert results[0].sent == 3 and 0.15 <= took[0] < 5
-
-
-def test_the_command_replays_and_prints_the_counts(pcap: pathlib.Path) -> None:
-    requests = [d for d in datagrams() if _is_request(d)]
-    heard: "list[CaptureEvent]" = []
-    capture = DHCPCapture(listen=("127.0.0.1", 0), sink=heard.append)
-    outcome: "list[_ty.Any]" = []
-
-    def exercise(port: int) -> None:
-        outcome.append(
-            run_cli(
-                "replay",
-                "--input",
-                str(pcap),
-                "--to",
-                f"127.0.0.1:{port}",
-                "--no-delay",
-            )
-        )
-        wait_for(lambda: len(heard) >= len(requests), "the requests to be heard")
-
-    serve(capture, exercise, None)
-
-    done = outcome[0]
-    assert done.returncode == 0, done.stderr
-    assert done.stdout.strip() == f"sent {len(requests)}, partial 0"
-    assert [e.payload for e in heard] == requests
+# -- replay ---------------------------------------------------------------------
 
 
 def test_the_command_needs_a_destination(pcap: pathlib.Path) -> None:

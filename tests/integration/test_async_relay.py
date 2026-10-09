@@ -1,8 +1,7 @@
-"""`AsyncDHCPRelay` / `AsyncDHCPCapture`: the parts a shared test cannot reach.
+"""`AsyncDHCPRelay`: the parts a shared test cannot reach.
 
-The forwarding, filter and hook *policy* is tested against both classes at once
-by the `relay_class` / `capture_class` fixtures in `tests/test_relay.py` and
-`tests/test_capture.py`. What is left, and lives here, is everything that needs
+The forwarding *policy* is tested against both classes at once by the `relay_class`
+fixture in `tests/test_relay.py`. What is left, and lives here, is everything that needs
 a real event loop and real sockets -- plus the structural guard that says the
 async halves are a mixin and not a copy.
 
@@ -27,9 +26,7 @@ import typing as _ty
 import pytest
 
 from pydhcp import (
-    AsyncDHCPCapture,
     AsyncDHCPRelay,
-    DHCPCapture,
     DHCPMessage,
     DHCPOptions,
     DHCPRelay,
@@ -123,7 +120,6 @@ _RECEIVE_PATH = (
 #: than restates.
 _CORE_MODULES = {
     "relay/_asyncio.py": ("relay/_core.py", "relay/_pending.py"),
-    "capture/_asyncio.py": ("capture/_core.py",),
 }
 
 #: The policy each async class inherits rather than restates.
@@ -143,10 +139,6 @@ _POLICY = {
         "_PendingClients._lookup_pending",
         "_PendingClients._expire_pending",
         "_PendingClients._pending_key",
-    ),
-    "capture/_asyncio.py": (
-        "_CaptureCore.handle",
-        "_CaptureCore._init_capture_state",
     ),
 }
 
@@ -184,7 +176,6 @@ def _shared_corpus(module: str) -> "set[str]":
     "module, async_class",
     [
         ("relay/_asyncio.py", "AsyncDHCPRelay"),
-        ("capture/_asyncio.py", "AsyncDHCPCapture"),
     ],
 )
 def test_the_async_class_copies_no_receive_path_or_policy_line(
@@ -206,7 +197,6 @@ def test_the_async_class_copies_no_receive_path_or_policy_line(
     "module, async_class",
     [
         ("relay/_asyncio.py", "AsyncDHCPRelay"),
-        ("capture/_asyncio.py", "AsyncDHCPCapture"),
     ],
 )
 def test_the_async_class_never_names_a_receive_path_helper(
@@ -231,7 +221,6 @@ def test_the_async_class_never_names_a_receive_path_helper(
     "module, async_class, state_init",
     [
         ("relay/_asyncio.py", "AsyncDHCPRelay", "_init_relay_state"),
-        ("capture/_asyncio.py", "AsyncDHCPCapture", "_init_capture_state"),
     ],
 )
 def test_the_async_class_is_only_a_constructor_and_a_handle(
@@ -271,7 +260,7 @@ def test_the_two_constructors_accept_the_same_arguments() -> None:
     """
     import inspect
 
-    for sync, asyncy in ((DHCPRelay, AsyncDHCPRelay), (DHCPCapture, AsyncDHCPCapture)):
+    for sync, asyncy in ((DHCPRelay, AsyncDHCPRelay),):
         expected = [
             name
             for name in inspect.signature(sync.__init__).parameters
@@ -289,7 +278,6 @@ def test_the_two_constructors_accept_the_same_arguments() -> None:
     "sync, asyncy, kwargs",
     [
         (DHCPRelay, AsyncDHCPRelay, {"server_addresses": ["192.0.2.1"]}),
-        (DHCPCapture, AsyncDHCPCapture, {}),
     ],
 )
 def test_the_async_class_holds_the_same_state_as_the_sync_one(
@@ -325,7 +313,6 @@ def test_the_async_relay_keeps_the_relays_ports_not_the_listeners() -> None:
     "asyncy, sync, kwargs",
     [
         (AsyncDHCPRelay, DHCPRelay, {"server_addresses": ["192.0.2.1"]}),
-        (AsyncDHCPCapture, DHCPCapture, {}),
     ],
 )
 def test_the_async_class_agrees_about_the_receive_path(
@@ -443,109 +430,6 @@ def test_async_relay_forwards_a_request_and_its_reply_over_real_sockets() -> Non
             client.close()
 
     asyncio.run(main())
-
-
-def test_async_capture_records_a_packet_off_the_wire() -> None:
-    events: list = []
-
-    async def main() -> None:
-        capture = AsyncDHCPCapture(
-            listen=("127.0.0.1", 0),
-            packet_filter="msg_type=DHCPDISCOVER",
-            sink=events.append,
-        )
-        await capture.start()
-        port = capture.bound_addresses[0].port
-        try:
-            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sender.sendto(_discover_bytes(), ("127.0.0.1", port))
-            sender.close()
-            for _ in range(200):
-                if events:
-                    break
-                await asyncio.sleep(0.02)
-        finally:
-            await capture.aclose()
-
-    asyncio.run(main())
-
-    assert len(events) == 1, "the datagram never reached the capture"
-    assert events[0].message_type == "DHCPDISCOVER"
-
-
-def test_async_capture_filter_rejects_on_the_wire_too() -> None:
-    """A filter that matches nothing must not be mistaken for a quiet segment."""
-    events: list = []
-    handled = threading.Event()
-
-    class Probe(AsyncDHCPCapture):
-        def handle(self, msg, context):
-            super().handle(msg, context)
-            handled.set()
-
-    async def main() -> None:
-        capture = Probe(
-            listen=("127.0.0.1", 0),
-            packet_filter="msg_type=DHCPREQUEST",
-            sink=events.append,
-        )
-        await capture.start()
-        port = capture.bound_addresses[0].port
-        try:
-            sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sender.sendto(_discover_bytes(), ("127.0.0.1", port))
-            sender.close()
-            for _ in range(200):
-                if handled.is_set():
-                    break
-                await asyncio.sleep(0.02)
-        finally:
-            await capture.aclose()
-
-    asyncio.run(main())
-
-    assert handled.is_set(), "the datagram never reached the capture"
-    assert events == []
-
-
-def test_async_capture_hook_fail_fast_actually_stops_the_loop() -> None:
-    """The path the plan singles out, on a live loop.
-
-    `hook_fail_fast` calls `shutdown()` from the handler *worker thread*, and
-    `Event.set()` finishes through `loop.call_soon`, which queues a callback
-    without waking the loop. Measured (a handler calling it on its worker):
-    Linux's selector loop never woke and `await wait_closed()` blocked forever,
-    while Windows' proactor loop returned in 7 ms. So the assertion is on the
-    *elapsed time*, not merely on `wait_closed()` returning -- `wait_for`'s own timer wakes the loop at the deadline
-    and makes a hang look like a pass.
-    """
-    elapsed: list = []
-
-    def bad_hook(event):
-        raise RuntimeError("boom")
-
-    async def main() -> None:
-        capture = AsyncDHCPCapture(
-            listen=("127.0.0.1", 0), hook=bad_hook, hook_fail_fast=True
-        )
-        await capture.start()
-        port = capture.bound_addresses[0].port
-        sender = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sender.sendto(_discover_bytes(), ("127.0.0.1", port))
-        sender.close()
-        started = time.monotonic()
-        assert await capture.wait_closed(10.0)
-        elapsed.append(time.monotonic() - started)
-        assert isinstance(capture.hook_error, RuntimeError)
-        await capture.aclose()
-        assert capture.bound_addresses == (), "the sockets are still open"
-
-    asyncio.run(main())
-
-    assert elapsed and elapsed[0] < 3.0, (
-        f"shutdown() from the handler worker took {elapsed[0]:.2f}s to reach the "
-        "loop -- it was not marshalled back onto it"
-    )
 
 
 def test_async_relay_state_is_only_touched_by_one_thread() -> None:

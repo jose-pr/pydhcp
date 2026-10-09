@@ -26,7 +26,6 @@ import pytest
 
 from helpers import LOOPBACK_ALIAS_BINDABLE, build_request, wait_bound, wait_until
 from driving import LOOPS, WAIT_SECONDS, threads_settle, wait_for
-from pydhcp.capture import AsyncDHCPCapture, DHCPCapture
 from pydhcp.client import AsyncDHCPClient, DHCPClient
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 from pydhcp.relay import AsyncDHCPRelay, DHCPRelay
@@ -34,12 +33,11 @@ from pydhcp.server import AsyncDHCPServer, DHCPServer
 
 LOCAL = ("127.0.0.1", 0)
 
-SYNC_CLASSES = [DHCPListener, DHCPServer, DHCPRelay, DHCPCapture, DHCPClient]
+SYNC_CLASSES = [DHCPListener, DHCPServer, DHCPRelay, DHCPClient]
 ASYNC_CLASSES = [
     AsyncDHCPListener,
     AsyncDHCPServer,
     AsyncDHCPRelay,
-    AsyncDHCPCapture,
     AsyncDHCPClient,
 ]
 

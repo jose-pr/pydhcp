@@ -12,21 +12,17 @@ import typing
 import pytest
 
 EXPECTED_ROOT = [
-    "AsyncDHCPCapture",
     "AsyncDHCPClient",
     "AsyncDHCPListener",
     "AsyncDHCPRelay",
     "AsyncDHCPServer",
-    "CaptureEvent",
     "ClasslessRoute",
     "ClientIdentifier",
-    "DHCPCapture",
     "DHCPClient",
     "DHCPConfigError",
     "DHCPDecodeError",
     "DHCPError",
     "DHCPFlags",
-    "DHCPHookError",
     "DHCPLease",
     "DHCPListener",
     "DHCPMessage",
@@ -70,7 +66,6 @@ EXPECTED_ROOT = [
     "UserClass",
     "VendorSpecificInformation",
     "__version__",
-    "compile_capture_filter",
 ]
 
 EXPECTED_CLI = [
@@ -88,7 +83,6 @@ EXPECTED_EXCEPTIONS = [
     "DHCPConfigError",
     "DHCPDecodeError",
     "DHCPError",
-    "DHCPHookError",
     "DHCPRefusedError",
     "DHCPTimeoutError",
     "DHCPValueError",
@@ -227,28 +221,12 @@ EXPECTED_RELAY = [
 ]
 
 EXPECTED_CAPTURE = [
-    "AsyncDHCPCapture",
-    "CaptureEvent",
-    "CaptureHook",
-    "CapturePredicate",
-    "CaptureSink",
-    "DHCPCapture",
-    "DHCPCaptureWriter",
     "DHCPLayer",
-    "FILENAME_FIELDS",
-    "HOOK_TIMEOUT_SECONDS",
-    "MAX_CAPTURE_FILES",
-    "PacketFilterLike",
-    "UNIQUE_FILENAME_FIELDS",
     "asniff_dhcp",
     "capture_dissector",
-    "command_hook",
-    "compile_capture_filter",
     "dissect_dhcp",
     "pktcap_plugin",
-    "read_capture",
     "register_dhcp_dissector",
-    "replay_capture",
     "sniff_dhcp",
 ]
 

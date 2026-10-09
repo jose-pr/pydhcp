@@ -19,7 +19,6 @@ import pytest
 
 from pydhcp import (
     AsyncDHCPListener,
-    DHCPCapture,
     DHCPClient,
     DHCPLease,
     DHCPListener,
@@ -962,26 +961,6 @@ def test_a_foreign_ack_is_limited_and_ignored(
         ),
     )
     assert taken == [None] * (INSIDE + 1)
-
-
-def test_a_hook_that_fails_every_time_is_limited(
-    caplog: pytest.LogCaptureFixture, clock: Clock
-) -> None:
-    def bad(_event: ty.Any) -> None:
-        raise RuntimeError("boom")
-
-    capture = DHCPCapture(listen=("127.0.0.1", 6767), hook=bad)
-    message = build_request()
-    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    _assert_bounded(
-        caplog,
-        clock,
-        "pydhcp.capture._core",
-        lambda: capture.handle(message, _context(clock)),
-    )
-    first = _written(caplog, "pydhcp.capture._core")[0]
-    assert first.exc_info is not None
-    assert not _written(caplog, "pydhcp.capture._core")[1].exc_info
 
 
 def test_every_listener_owns_its_own_limiter() -> None:

@@ -78,18 +78,6 @@ serve a private or vendor option space instead of the IANA registry above.
 
 ::: pydhcp.relay.DHCPRelay
 
-## DHCPCapture
-
-::: pydhcp.capture.DHCPCapture
-
-## CaptureEvent
-
-::: pydhcp.capture.CaptureEvent
-
-## DHCPCaptureWriter
-
-::: pydhcp.capture.DHCPCaptureWriter
-
 ## AsyncDHCPServer
 
 ::: pydhcp.server.AsyncDHCPServer
@@ -101,10 +89,6 @@ serve a private or vendor option space instead of the IANA registry above.
 ## AsyncDHCPRelay
 
 ::: pydhcp.relay.AsyncDHCPRelay
-
-## AsyncDHCPCapture
-
-::: pydhcp.capture.AsyncDHCPCapture
 
 ## DHCPListener
 
@@ -128,8 +112,8 @@ instance — counters are per-instance, not global, so running multiple listener
 
 ## pydhcp.capture
 
-`compile_capture_filter` below holds the grammar of the filter expression that
-`DHCPCapture(packet_filter=...)`, `read_capture` and `pydhcp capture --filter` take.
+`pktcap_plugin` below holds the filter keys of a DHCP message, which
+`pydhcp capture --filter` takes beside pktcap's own.
 
 ::: pydhcp.capture
 

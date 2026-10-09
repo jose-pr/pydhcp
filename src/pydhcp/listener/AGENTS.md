@@ -37,8 +37,9 @@ async AsyncDHCPListener.aclose() -> None
   I/O**: no socket is opened, no adapter listed and no file read until
   `.bind()` (the packet-info probe and the wildcard expansion included).
   `listen` is **a binding or a sequence of bindings**, read by one parser
-  (the constructors, `pydhcp server|relay|capture --listen` and the `listen`
-  key of a configuration file), which is netimps': the constructor calls
+  (the constructors, `pydhcp server|relay --listen` and the `listen`
+  key of a configuration file; `pydhcp capture --listen` and `sniff_dhcp` read it with
+  `netimps.parse_listen` the same way), which is netimps': the constructor calls
   `netimps.parse_listen(listen, DEFAULT_PORTS, family=socket.AF_INET)` and keeps
   the result in `._listen`. **The grammar is documented in netimps' header**,
   `netimps/_listen/AGENTS.md` inside the installed package, and is not repeated
@@ -131,7 +132,7 @@ async AsyncDHCPListener.aclose() -> None
     WARNING, never raised.
   - **`DEFAULT_PORTS`** (class attribute) — the ports a binding with no port
     of its own binds, the wildcard (`None`) included: `(67, 68)` on the two
-    listeners and on `DHCPCapture`/`AsyncDHCPCapture`, `(67,)` on the servers
+    listeners, `(67,)` on the servers
     and the relays, `(68,)` on the clients. A subclass sets its own.
   - **`.bind()`** — opens the sockets `self._listen` names, through
     `netimps.bind_listen`; raises
@@ -147,7 +148,7 @@ async AsyncDHCPListener.aclose() -> None
     error from an earlier reply does not surface on a later receive, and with
     `SO_BROADCAST`.
   - **Lifecycle** — one state machine on the thread-based listener and on every
-    role built on it (`DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient`):
+    role built on it (`DHCPServer`, `DHCPRelay`, `DHCPClient`):
     - **`.serve_forever()`** — binds, then receives on the **calling**
       thread until `.shutdown()`. Decodes each datagram, resolves the receiving
       `NetworkInterface`, builds a `DHCPRequestContext` and calls
@@ -207,8 +208,7 @@ async AsyncDHCPListener.aclose() -> None
   the same packet-info wildcard routing and the same `listen` forms as
   `DHCPListener`. Same `.handle()` override point and per-instance
   `self.metrics`. The lifecycle mirrors the thread-based one with coroutines
-  where it blocks, on `AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`
-  too:
+  where it blocks, on `AsyncDHCPServer` and `AsyncDHCPRelay` too:
   - **`await .serve_forever()`** — binds, then receives in the **calling**
     task until `.shutdown()`; the sockets stay open on return. `await .start()
     -> None` binds and receives in background tasks, one per socket, and returns
@@ -245,8 +245,7 @@ async AsyncDHCPListener.aclose() -> None
     per `BACKLOG_LOG_INTERVAL_SECONDS` (60), the report carrying the count.
     **Shutting down aborts, it does not drain**: queued datagrams are discarded,
     counted in the same counter and reported once at INFO; only the handler
-    already running finishes. `AsyncDHCPServer`, `AsyncDHCPRelay` and
-    `AsyncDHCPCapture` take the same `max_queued`.
+    already running finishes. `AsyncDHCPServer` and `AsyncDHCPRelay` take the same `max_queued`.
   - `.bound_addresses`, `.REUSE_ADDRESS`, `.bind()` and the handling of one
     datagram — as on `DHCPListener`, including the oversized-datagram drop; both
     listeners share one private base for them, and neither is a subclass of the
@@ -325,9 +324,9 @@ DHCPRequestContext(transport, interface, client, client_mac, ifindex=None, local
   - `payload` is the datagram as it arrived, one reference to the received
     `bytes` (no copy); `None` on a context built by hand. A decoded message cannot
     give it back: `encode` pads to 300 octets and a decode ignores what follows
-    the end option. A capture file is written from it.
+    the end option.
   - `received_at` and `received_monotonic`: the listener stamps both when the
-    datagram arrives, and the server, relay and capture read the time of an
+    datagram arrives, and the server and relay read the time of an
     exchange from them. A context built by hand has `None` for both and the hooks
     use the driver's clock instead.
   - `destination` is the address the datagram was **sent to**: `255.255.255.255`

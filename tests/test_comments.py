@@ -48,8 +48,6 @@ _ALLOWED = (
     ("`ttl` from now;", "'now' is the moment of the call, in a duration"),
     ("seconds from now, or", "'now' is the moment of the call, in a duration"),
     ("enumerates now, ", "'now' is the moment of the call"),
-    ("working directory *now*", "'now' is the moment the command is loaded"),
-    ("is found now (", "'now' is the moment the command is loaded"),
     ("is no longer listened on", "the state of a retired socket, not a change"),
     ("for this long and no longer", "'no longer' bounds a duration"),
     (

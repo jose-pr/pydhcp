@@ -31,6 +31,8 @@ def test_example_imports(path):
     importing exercises every import and class definition without binding a
     socket. An example that calls `SystemExit` on import is still fine.
     """
+    if path.name == "capture.py":
+        pytest.importorskip("pktcap")  # the example reads captures
     spec = importlib.util.spec_from_file_location(f"_example_{path.stem}", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)

@@ -1093,6 +1093,28 @@ Replace each name in the left column with the one beside it.
 
 ### Removed
 
+- **Everything pktcap does is out of `pydhcp.capture` and the root**, and pydhcp's own capture
+  classes, writer, filter and hook runner with it. Each name and what replaces it:
+  - `DHCPCapture`, `AsyncDHCPCapture`: `pydhcp.capture.sniff_dhcp(listen)` and `asniff_dhcp(listen)`
+    (pktcap frames), with `pktcap.copy_frames(frames, writer, select=..., each=...)`. A
+    `DHCPCapture` subclass overriding `handle` is an `AsyncDHCPListener` or `DHCPListener`
+    subclass overriding `handle`.
+  - `CaptureEvent`, `CaptureHook`, `CapturePredicate`, `CaptureSink`, `PacketFilterLike`:
+    `pktcap.DissectedFrame` with a `DHCPLayer`; the message object is
+    `DHCPMessage.decode(frame.datagram().payload)`.
+  - `compile_capture_filter(text)`: `pktcap.compile_capture_filter(text,
+    pktcap.frame_filter_for(capture_dissector().registry))`.
+  - `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`:
+    `pktcap.CaptureWriter(target, format, per_record=..., fields=("client_id", "msg_type", "xid"))`
+    (its `max_files` defaults to 1000).
+  - `command_hook`, `HOOK_TIMEOUT_SECONDS`, `DHCPHookError`: `pktcap.command_hook` (its `timeout`
+    defaults to 10 seconds) and `pktcap.CaptureHookError`.
+  - `read_capture(source, ...)`: `pktcap.read_dissected(source, dissector=capture_dissector())`.
+  - `replay_capture(source, server, port)`: `pktcap.replay_to(datagrams, server, port)` with the
+    datagrams to port 67, `d for d in pktcap.read_datagrams(source) if d.destination[1] == 67`.
+  - The `pydhcp` module no longer exports `CaptureEvent`, `DHCPCapture`, `AsyncDHCPCapture`,
+    `compile_capture_filter` or `DHCPHookError`.
+  The asynchronous capture is `asniff_dhcp`, an iterator and not a class with a sink.
 - **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
   `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
   `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is

@@ -553,8 +553,6 @@ def test_the_signatures_the_old_check_pinned_are_still_printed():
         "AsyncDHCPServer",
         "DHCPRelay",
         "AsyncDHCPRelay",
-        "DHCPCapture",
-        "AsyncDHCPCapture",
         "DHCPClient",
         "FileLeaseBackend",
         "SocketAddress",

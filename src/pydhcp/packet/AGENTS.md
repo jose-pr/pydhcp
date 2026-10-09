@@ -161,7 +161,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     53 as its member; `None` when there is no option 53 or its payload is not
     one octet. A number `DHCPMessageType` has no name for is an unnamed member
     carrying it (`.name` is `None`, `.label()` is `TYPE_<n>`), so a relay forwards
-    what it received. `DHCPServer`, `DHCPClient` and `CaptureEvent` read it here.
+    what it received. `DHCPServer`, `DHCPClient` and `DHCPLayer` read it here.
   - **`.broadcast -> bool`** (read-only property) — whether the broadcast bit of
     `flags` is set. `flags` holds all sixteen bits as they were received.
   - **`.get_client_id()`** — `CLIENT_IDENTIFIER` option if
@@ -170,7 +170,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     **`NoClientIdentityError`** (`pydhcp.exceptions`; a `ValueError`) when the message has
     none of those — `chaddr` is empty and there is no option 61 — rather
     than returning the hardware-type octet alone, which every such client
-    would share. `DHCPServer` drops such a message; `CaptureEvent.client_id`
+    would share. `DHCPServer` drops such a message; `DHCPLayer.client_id`
     reports `"UNKNOWN"`.
   - **`.summary()`** — human-readable multi-line summary
     (used by `.log_str()`/`.log()` and the CLI's `--format summary`); nothing
@@ -180,7 +180,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     anything else raises `ValueError`. `to_mapping()` / `from_mapping()` written
     out by `pydhcp.packet.structured` (below). `"yaml"` needs `pydhcp[yaml]`,
     `"toml"` `pydhcp[toml]` (reading it needs only Python 3.11+); a missing one is
-    an `ImportError` giving the `pip install "pydhcp[...]"` line. A file the capture command wrote loads with `from_text`.
+    an `ImportError` giving the `pip install "pydhcp[...]"` line. The `message` of a capture command's record loads with `from_mapping`.
   - **`DHCPMessage.from_hex()`** — decode a message
     written as hexadecimal text, the form `pydhcp packet --decode` reads: spaces,
     tabs, line ends and colons between the digits are ignored. `ValueError` for any

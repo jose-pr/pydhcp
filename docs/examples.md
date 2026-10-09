@@ -280,16 +280,16 @@ pydhcp capture --listen 127.0.0.1:6767 --output heard.pcapng --count 10
 A message put back together is not the packet that arrived (it is padded to 300 octets), so a
 capture file keeps the received octets; a command hook beside it is given the message as JSON.
 
-From Python, `DHCPCaptureWriter` is the sink:
+From Python, `sniff_dhcp` is the source and pktcap's `copy_frames` writes it:
 
 ```python
-from pydhcp.capture import DHCPCapture, DHCPCaptureWriter
+import pktcap
+from pydhcp.capture import capture_dissector, sniff_dhcp
 
-with DHCPCaptureWriter("captures.yaml") as writer:  # appended to; the ending names the format
-    DHCPCapture(listen="127.0.0.1:6767", sink=writer).serve_forever()
-
-with DHCPCaptureWriter("heard.pcap") as writer:  # the received datagrams, `CaptureEvent.payload`
-    DHCPCapture(listen="127.0.0.1:6767", sink=writer).serve_forever()
+reader = capture_dissector((67, 68, 6767))  # DHCP is read on the port listened on too
+frames = sniff_dhcp("127.0.0.1:6767", dissector=reader)
+with pktcap.CaptureWriter("heard.pcap") as writer:  # the ending names the format
+    pktcap.copy_frames(frames, writer, limit=10)
 ```
 
 Write one file per accepted packet:
@@ -331,8 +331,8 @@ for frame in pktcap.read_dissected("heard.pcap", dissector=dissector):
 
 pktcap's commands load the same registration, and the filter keys of `pydhcp capture --filter`
 (`op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`), when told to: name
-`pydhcp.capture` as a plugin. Nothing registers until pktcap loads it, and `pydhcp capture
---filter` is unaffected.
+`pydhcp.capture` as a plugin. Nothing registers until pktcap loads it; `pydhcp capture` and
+`pydhcp replay` load it themselves.
 
 ```bash
 PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"

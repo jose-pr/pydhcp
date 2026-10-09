@@ -17,7 +17,6 @@ __all__ = [
     "DHCPDecodeError",
     "DHCPValueError",
     "DHCPConfigError",
-    "DHCPHookError",
     "NoClientIdentityError",
     "DHCPTimeoutError",
     "DHCPRefusedError",
@@ -92,20 +91,11 @@ class NoClientIdentityError(DHCPError, ValueError):
 
 
 class DHCPTimeoutError(DHCPError, TimeoutError):
-    """A client exchange or a command hook ran out of time.
+    """A client exchange ran out of time.
 
     Raised by `DHCPClient` and `AsyncDHCPClient` when the retransmissions, or the
     `deadline` of the call, ran out before an acceptable DHCPOFFER or DHCPACK
-    arrived, and by a `command_hook` whose program ran past its `timeout` and was
-    killed. Also a `TimeoutError`.
-    """
-
-
-class DHCPHookError(DHCPError):
-    """A capture command hook exited with a non-zero status.
-
-    Raised by a `command_hook` created with `fail_fast=True`; the message names the
-    program, the status and the tail of its standard error.
+    arrived. Also a `TimeoutError`.
     """
 
 

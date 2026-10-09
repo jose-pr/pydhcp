@@ -13,11 +13,9 @@ import pytest
 
 import pydhcp
 from pydhcp import (
-    AsyncDHCPCapture,
     AsyncDHCPClient,
     AsyncDHCPRelay,
     AsyncDHCPServer,
-    DHCPCapture,
     DHCPClient,
     DHCPRelay,
     DHCPServer,
@@ -34,8 +32,6 @@ CORE_MODULES = [
     "server/_reply.py",
     "server/_handlers.py",
     "relay/_core.py",
-    "capture/_core.py",
-    "capture/_events.py",
     "client/_core.py",
 ]
 
@@ -108,7 +104,6 @@ def test_a_role_core_imports_no_driver(relative: str) -> None:
     [
         (DHCPServer, AsyncDHCPServer),
         (DHCPRelay, AsyncDHCPRelay),
-        (DHCPCapture, AsyncDHCPCapture),
         (DHCPClient, AsyncDHCPClient),
     ],
 )

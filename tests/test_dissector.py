@@ -17,7 +17,6 @@ pktcap = pytest.importorskip("pktcap")
 from capture_input import build
 from pydhcp.capture import (
     DHCPLayer,
-    compile_capture_filter,
     dissect_dhcp,
     register_dhcp_dissector,
 )

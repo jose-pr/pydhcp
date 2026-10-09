@@ -22,7 +22,6 @@ import pytest
 
 from helpers import build_request
 from pydhcp import AsyncDHCPServer
-from pydhcp.capture import AsyncDHCPCapture
 from pydhcp.listener import AsyncDHCPListener
 from pydhcp.relay import AsyncDHCPRelay
 
@@ -161,7 +160,6 @@ def test_the_bound_has_a_default_and_is_a_constructor_option() -> None:
         AsyncDHCPRelay(
             listen=("127.0.0.1", 0), server_addresses=["127.0.0.1"], max_queued=7
         ),
-        AsyncDHCPCapture(listen=("127.0.0.1", 0), max_queued=7),
     ):
         assert made._max_queued == 7
 

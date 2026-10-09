@@ -6,53 +6,25 @@ import logging
 import os
 import pathlib
 import sys
-import ipaddress
-from unittest.mock import MagicMock
 
 import netimps
 import pytest
-from datetime import datetime, timedelta, timezone
 
-from pydhcp import (
-    CaptureEvent,
-    DHCPMessage,
-    DHCPOptions,
-    NetworkInterface,
-    DHCPRequestContext,
-)
-from pydhcp.cli import App, Capture, Packet, Relay, main
-
-# the hook loader is not public
-from pydhcp.cli._capture_hook import _load_capture_hook
+from pydhcp import DHCPMessage
+from pydhcp.cli import App, Packet, Relay, main
 
 # the relay command's parser is not public
 from pydhcp.cli._relay import _parse_server_address
 
 # the loader behind the command line is not public
 from pydhcp._config import load_config
-from pydhcp.packet import DHCPMessageType, DHCPFlags, HardwareAddressType, DHCPOpcode
-from pydhcp.options import DHCPOptionCode
+from pydhcp.packet import DHCPMessageType
 from ipaddress import IPv4Address as IPv4
-from pydhcp import SocketAddress
 from helpers import build_request
 
 
 def _sample_packet() -> DHCPMessage:
     return build_request(DHCPMessageType.DHCPDISCOVER)
-
-
-def _capture_event() -> CaptureEvent:
-    return CaptureEvent(
-        message=_sample_packet(),
-        context=DHCPRequestContext(
-            transport=MagicMock(),
-            interface=NetworkInterface("lo", ipaddress.IPv4Interface("127.0.0.1/24")),
-            client=SocketAddress("127.0.0.1", 68),
-            client_mac=b"\x00\x11\x22\x33\x44\x55",
-            local_ip=IPv4("127.0.0.1"),
-        ),
-        captured_at=datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc),
-    )
 
 
 def test_cmd_packet_decode_from_stdin_json(capsys, monkeypatch) -> None:
@@ -118,152 +90,6 @@ def test_packet_cli_main_encode_from_stdin(monkeypatch, capsys) -> None:
 
     assert status == 0
     assert capsys.readouterr().out.strip() == packet.encode().hex()
-
-
-def test_load_capture_hook_python_function(tmp_path, monkeypatch) -> None:
-    module = tmp_path / "hooks.py"
-    module.write_text(
-        "seen = []\ndef on_capture(event):\n    seen.append(event.message_type)\n",
-        encoding="utf-8",
-    )
-    monkeypatch.syspath_prepend(str(tmp_path))
-
-    hook = _load_capture_hook("hooks:on_capture", "json", False)
-    assert hook is not None
-    hook(_capture_event())
-
-    assert sys.modules["hooks"].seen == ["DHCPDISCOVER"]
-
-
-def _write_hook(directory, name: str, label: str):
-    """A real program that records its stdin and a marker in `directory`.
-
-    A script is the program on POSIX and a `.cmd` file on Windows; either is
-    started the way the command hook starts it, by path, with no mock.
-    """
-    if os.name == "nt":
-        program = directory / (name + ".cmd")
-        text = (
-            "@echo off\r\n"
-            'findstr "^" > "%~dp0' + label + '.stdin"\r\n'
-            'echo %PYDHCP_CAPTURE_MSG_TYPE%> "%~dp0' + label + '.type"\r\n'
-        )
-    else:
-        program = directory / name
-        text = (
-            "#!/bin/sh\n"
-            'cat > "$(dirname "$0")/' + label + '.stdin"\n'
-            'echo "$PYDHCP_CAPTURE_MSG_TYPE" > "$(dirname "$0")/' + label + '.type"\n'
-        )
-    program.write_bytes(text.encode("utf-8"))
-    if os.name != "nt":
-        program.chmod(0o755)
-    return program
-
-
-def _suffix() -> str:
-    return ".cmd" if os.name == "nt" else ""
-
-
-def test_load_capture_hook_command_gets_stdin_and_env(tmp_path, monkeypatch) -> None:
-    _write_hook(tmp_path, "hook-command", "ran")
-    monkeypatch.chdir(tmp_path)
-
-    hook = _load_capture_hook("./hook-command" + _suffix(), "json", False)
-    assert hook is not None
-    hook(_capture_event())
-
-    assert json.loads((tmp_path / "ran.stdin").read_text())["xid"] == 0x12345678
-    assert (tmp_path / "ran.type").read_text().strip() == "DHCPDISCOVER"
-
-
-def test_a_relative_hook_path_is_fixed_when_the_hook_is_loaded(
-    tmp_path, monkeypatch
-) -> None:
-    """`./name` names the file in the working directory when it is loaded, and a
-    later change of directory does not move it."""
-    here = tmp_path / "here"
-    elsewhere = tmp_path / "elsewhere"
-    here.mkdir()
-    elsewhere.mkdir()
-    _write_hook(here, "hook", "ran")
-    monkeypatch.chdir(here)
-    hook = _load_capture_hook("./hook" + _suffix(), "json", False)
-    assert hook is not None
-
-    monkeypatch.chdir(elsewhere)
-    hook(_capture_event())
-
-    assert (here / "ran.type").read_text().strip() == "DHCPDISCOVER"
-
-
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="a bare name is searched in the working directory on Windows",
-)
-def test_a_relative_hook_path_does_not_start_the_program_of_that_name_on_path(
-    tmp_path, monkeypatch
-) -> None:
-    """`str(Path("./logger"))` is `logger`, and a name with no directory is looked
-    up on PATH on POSIX: `--hook ./logger` started /usr/bin/logger."""
-    on_path = tmp_path / "bin"
-    cwd = tmp_path / "cwd"
-    on_path.mkdir()
-    cwd.mkdir()
-    _write_hook(on_path, "hook", "from-path")
-    _write_hook(cwd, "hook", "from-cwd")
-    monkeypatch.setenv("PATH", str(on_path) + os.pathsep + os.environ["PATH"])
-    monkeypatch.chdir(cwd)
-
-    hook = _load_capture_hook("./hook", "json", False)
-    assert hook is not None
-    hook(_capture_event())
-
-    assert (cwd / "from-cwd.type").exists()
-    assert not (on_path / "from-path.type").exists()
-
-
-@pytest.mark.skipif(os.name == "nt", reason="PATH lookup of a script needs PATHEXT")
-def test_a_bare_hook_name_is_looked_up_on_path(tmp_path, monkeypatch) -> None:
-    on_path = tmp_path / "bin"
-    cwd = tmp_path / "cwd"
-    on_path.mkdir()
-    cwd.mkdir()
-    _write_hook(on_path, "pydhcp-test-hook", "from-path")
-    monkeypatch.setenv("PATH", str(on_path) + os.pathsep + os.environ["PATH"])
-    monkeypatch.chdir(cwd)
-
-    hook = _load_capture_hook("pydhcp-test-hook", "json", False)
-    assert hook is not None
-    hook(_capture_event())
-
-    assert (on_path / "from-path.type").exists()
-
-
-@pytest.mark.skipif(
-    os.name == "nt",
-    reason="a bare name is searched in the working directory on Windows",
-)
-def test_a_bare_name_that_is_only_in_the_working_directory_says_to_use_a_path(
-    tmp_path, monkeypatch
-) -> None:
-    _write_hook(tmp_path, "pydhcp-test-local-hook", "ran")
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(ValueError, match=r"\./pydhcp-test-local-hook"):
-        _load_capture_hook("pydhcp-test-local-hook", "json", False)
-
-
-@pytest.mark.skipif(os.name == "nt", reason="Windows has no executable bit")
-def test_a_hook_that_is_not_executable_is_refused_at_start(
-    tmp_path, monkeypatch
-) -> None:
-    program = _write_hook(tmp_path, "hook", "ran")
-    program.chmod(0o644)
-    monkeypatch.chdir(tmp_path)
-
-    with pytest.raises(ValueError, match="not executable"):
-        _load_capture_hook("./hook", "json", False)
 
 
 def test_capture_cli_main_help_lists_capture(capsys) -> None:
@@ -501,73 +327,6 @@ def test_missing_ini_config_is_an_error_like_every_other_format(tmp_path) -> Non
     for suffix in (".ini", ".json", ".yaml"):
         with pytest.raises((FileNotFoundError, OSError)):
             load_config(str(tmp_path / ("missing" + suffix)))
-
-
-def test_hook_module_is_importable_from_the_working_directory(tmp_path, monkeypatch):
-    """The documented `--hook myhooks:on_capture` form.
-
-    A console script's sys.path[0] is its own Scripts directory, so a module
-    next to the user was not importable and capture refused to start.
-    """
-    (tmp_path / "myhooks.py").write_text(
-        "seen = []\ndef on_capture(event):\n    seen.append(1)\n", encoding="utf-8"
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.delitem(sys.modules, "myhooks", raising=False)
-    # cwd is deliberately NOT on sys.path, as it is not for a console script
-    monkeypatch.setattr(
-        sys, "path", [p for p in sys.path if p not in ("", str(tmp_path))]
-    )
-
-    hook = _load_capture_hook("myhooks:on_capture", "json", False)
-
-    assert hook is not None
-    hook(_capture_event())
-    assert sys.modules["myhooks"].seen == [1]
-    # and the directory is not left on sys.path afterwards
-    assert str(tmp_path) not in sys.path
-
-
-def test_windows_drive_letter_hook_path_is_not_read_as_a_module() -> None:
-    r"""C:\hooks\export.exe has exactly one ':' and was reported as
-    "No module named 'C'"."""
-    with pytest.raises(ValueError, match="does not exist"):
-        _load_capture_hook(r"C:\hooks\does-not-exist.exe", "json", False)
-
-
-def test_capture_destination_port_is_the_port_received_on() -> None:
-    """dst_port is a documented filter key, but destination always had port 0,
-    so a filter using it silently matched nothing."""
-    import socket as _socket
-
-    from pydhcp.listener import UDPTransport
-
-    sock = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
-    sock.bind(("127.0.0.1", 0))
-    bound_port = sock.getsockname()[1]
-    try:
-        event = CaptureEvent(
-            message=_sample_packet(),
-            context=DHCPRequestContext(
-                transport=UDPTransport(sock),
-                interface=NetworkInterface(
-                    "lo", ipaddress.IPv4Interface("127.0.0.1/24")
-                ),
-                client=SocketAddress("127.0.0.1", 68),
-                client_mac=b"\x00\x11\x22\x33\x44\x55",
-                local_ip=IPv4("127.0.0.1"),
-            ),
-            captured_at=datetime(2026, 7, 14, 12, 0, tzinfo=timezone.utc),
-        )
-
-        assert event.destination.port == bound_port
-
-        from pydhcp.capture import compile_capture_filter
-
-        assert compile_capture_filter(f"dst_port={bound_port}")(event)
-        assert not compile_capture_filter("dst_port=1")(event)
-    finally:
-        sock.close()
 
 
 def test_user_errors_do_not_print_a_traceback(monkeypatch, capsys) -> None:

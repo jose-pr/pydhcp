@@ -113,6 +113,8 @@ def _on_loopback(code: str, server_port: int, client_port: int) -> str:
     code = re.sub(
         r"\b(DHCPServer|AsyncDHCPServer)\(\)", r'\1(listen="127.0.0.1:0")', code
     )
+    code = code.replace('sniff_dhcp("*"', 'sniff_dhcp("127.0.0.1:0"')
+    code = code.replace("monotonic() + 60", "monotonic() + 0.3")
     code = code.replace("[6767, 6768]", "[0, 0]")
     code = code.replace('("127.0.0.1", 6768)', '("127.0.0.1", %d)' % client_port)
     code = code.replace("port=6767", "port=%d" % server_port)
@@ -132,6 +134,8 @@ def test_there_are_python_blocks_to_run() -> None:
 def test_a_python_block_runs_as_written(
     page: pathlib.Path, number: int, code: str
 ) -> None:
+    if "sniff_dhcp" in code:
+        pytest.importorskip("pktcap")
     server_port, client_port = free_port(), free_port()
     ready = _on_loopback(code, server_port, client_port)
     left = [

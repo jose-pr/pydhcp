@@ -237,9 +237,8 @@ class DHCPListener(_ListenerCore):
                     self._drain_wake(wake)
                     continue
                 if self._stopping:
-                    # A handler can shut the listener down -- `DHCPCapture`'s
-                    # `--count` sink and `hook_fail_fast` both do -- and the
-                    # rest of the ready set must not be handled after that.
+                    # A handler can shut the listener down, and the rest of the ready
+                    # set must not be handled after that.
                     break
                 self._receive_one(sock)
 

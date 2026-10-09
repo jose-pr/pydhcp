@@ -10,7 +10,6 @@ import typing as _ty
 import pytest
 
 from pydhcp import AsyncDHCPClient, DHCPClient
-from pydhcp.capture import AsyncDHCPCapture, DHCPCapture
 from pydhcp.lease import FileLeaseBackend
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 from pydhcp.relay import AsyncDHCPRelay, DHCPRelay
@@ -24,8 +23,6 @@ POSITIONAL = {
     AsyncDHCPServer: 1,
     DHCPRelay: 2,
     AsyncDHCPRelay: 2,
-    DHCPCapture: 1,
-    AsyncDHCPCapture: 1,
     DHCPClient: 1,
     AsyncDHCPClient: 1,
     FileLeaseBackend: 1,

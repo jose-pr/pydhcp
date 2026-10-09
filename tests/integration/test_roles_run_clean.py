@@ -16,10 +16,11 @@ import typing as _ty
 
 import pytest
 
+from cli_process import free_port
 from helpers import CHADDR, FixedLeaseServer, build_request, running
 from driving import LOOPS, WAIT_SECONDS, wait_for
 from pydhcp import DHCPClient
-from pydhcp.capture import AsyncDHCPCapture, DHCPCapture
+from pydhcp.capture import asniff_dhcp, sniff_dhcp
 from pydhcp.options import DHCPOptionCode
 from pydhcp.packet import DHCPMessageType
 from pydhcp.relay import AsyncDHCPRelay, DHCPRelay
@@ -69,11 +70,16 @@ def test_sync_server_and_relay(caplog: pytest.LogCaptureFixture) -> None:
 
 
 def test_sync_capture(caplog: pytest.LogCaptureFixture) -> None:
-    seen: "list[_ty.Any]" = []
+    pytest.importorskip("pktcap")
+    port = free_port()
     with caplog.at_level(logging.DEBUG, logger="pydhcp"):
-        with running(DHCPCapture(listen=[LOCAL], sink=seen.append)) as capture:
-            _send_discover(capture.bound_addresses[0].port)
-            wait_for(lambda: seen, "the captured event")
+        frames = sniff_dhcp(f"127.0.0.1:{port}")
+        try:
+            _send_discover(port)
+            frame = next(frames)
+        finally:
+            frames.close()  # type: ignore[attr-defined]
+    assert frame.layers[-1].message_type == "DHCPDISCOVER"
     assert _loud(caplog) == []
 
 
@@ -89,6 +95,7 @@ def _send_discover(port: int) -> None:
 def test_async_server_relay_and_capture(
     loop_type: type, caplog: pytest.LogCaptureFixture
 ) -> None:
+    pytest.importorskip("pktcap")
     seen: "list[_ty.Any]" = []
 
     async def main() -> None:
@@ -102,14 +109,13 @@ def test_async_server_relay_and_capture(
                 await relay.start()
                 server.REPLY_TO_RELAY_PORT = relay.bound_addresses[0].port
                 await loop.run_in_executor(None, _dora, relay.bound_addresses[0].port)
-        async with AsyncDHCPCapture(listen=[LOCAL], sink=seen.append) as capture:
-            await capture.start()
-            await loop.run_in_executor(
-                None, _send_discover, capture.bound_addresses[0].port
-            )
-            deadline = loop.time() + WAIT_SECONDS
-            while not seen and loop.time() < deadline:
-                await asyncio.sleep(0.01)
+        port = free_port()
+        frames = asniff_dhcp(f"127.0.0.1:{port}")
+        try:
+            await loop.run_in_executor(None, _send_discover, port)
+            seen.append(await asyncio.wait_for(frames.__anext__(), WAIT_SECONDS))
+        finally:
+            await frames.aclose()  # type: ignore[attr-defined]
 
     with caplog.at_level(logging.DEBUG, logger="pydhcp"):
         loop = loop_type()

@@ -15,8 +15,8 @@ permissions and platform-specific UDP behavior.
 - **Relay agent**: `DHCPRelay` forwards client traffic to upstream servers per RFC 1542 /
   RFC 2131 §4.1, with hop-limit loop protection and optional RFC 3046 option-82 tagging.
 - **Packet client and capture**: `DHCPClient` builds and sends the client messages and runs a
-  DORA exchange; `DHCPCapture` and the `pydhcp capture` command record, filter, replay and
-  hand each packet to a hook.
+  DORA exchange; `sniff_dhcp` and the `pydhcp capture` command (pktcap's, with the `pktcap` extra) record,
+  filter, replay and hand each packet to a hook.
 
 ## Installation
 

@@ -9,7 +9,6 @@ console of an application that never configured logging.
 
 from __future__ import annotations
 
-import datetime as _dt
 import ipaddress
 import logging
 
@@ -18,11 +17,10 @@ import subprocess
 import sys
 from unittest.mock import MagicMock
 
-# The module that logs for the capture; a logger is named for its module.
-import pydhcp.capture._core as capture_module
+# A module that logs; a logger is named for its module.
+import pydhcp.listener._core as listener_module
 import pydhcp.cli as cli_module
-from pydhcp.capture import command_hook
-from pydhcp import CaptureEvent, NetworkInterface, DHCPRequestContext
+from pydhcp import NetworkInterface, DHCPRequestContext
 
 # the logging setup is not public
 from pydhcp._log import LOGGER
@@ -31,28 +29,22 @@ from pydhcp import SocketAddress
 from pydhcp.packet import DHCPMessageType
 
 from helpers import build_request
-from hook_programs import python_hook
 
 
-def _event() -> CaptureEvent:
-    context = DHCPRequestContext(
+def _context() -> DHCPRequestContext:
+    return DHCPRequestContext(
         transport=MagicMock(),
         interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
         client=SocketAddress(IPv4("10.0.0.50"), 68),
         client_mac=bytes.fromhex("001122334455"),
     )
-    return CaptureEvent(
-        build_request(DHCPMessageType.DHCPDISCOVER),
-        context,
-        _dt.datetime.now(tz=_dt.timezone.utc),
-    )
 
 
 def test_module_loggers_are_children_of_the_package_logger() -> None:
     # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    assert capture_module.LOGGER.name == "pydhcp.capture._core"
+    assert listener_module.LOGGER.name == "pydhcp.listener._core"
     assert cli_module.LOGGER.name == "pydhcp.cli"
-    for logger in (capture_module.LOGGER, cli_module.LOGGER):
+    for logger in (listener_module.LOGGER, cli_module.LOGGER):
         assert logger is not LOGGER
         assert logger.parent is LOGGER or logger.name.startswith("pydhcp.")
 
@@ -63,24 +55,24 @@ def test_a_module_logger_still_answers_to_the_package_level() -> None:
     previous = LOGGER.level
     try:
         LOGGER.setLevel(logging.DEBUG)
-        assert capture_module.LOGGER.isEnabledFor(logging.DEBUG)
+        assert listener_module.LOGGER.isEnabledFor(logging.DEBUG)
         LOGGER.setLevel(logging.ERROR)
-        assert not capture_module.LOGGER.isEnabledFor(logging.WARNING)
+        assert not listener_module.LOGGER.isEnabledFor(logging.WARNING)
     finally:
         LOGGER.setLevel(previous)
 
 
 def test_one_module_can_be_silenced_without_the_rest() -> None:
     """The thing a flat logger could not do at all."""
-    previous_package, previous_module = LOGGER.level, capture_module.LOGGER.level
+    previous_package, previous_module = LOGGER.level, listener_module.LOGGER.level
     try:
         LOGGER.setLevel(logging.DEBUG)
-        capture_module.LOGGER.setLevel(logging.CRITICAL)
-        assert not capture_module.LOGGER.isEnabledFor(logging.WARNING)
+        listener_module.LOGGER.setLevel(logging.CRITICAL)
+        assert not listener_module.LOGGER.isEnabledFor(logging.WARNING)
         assert cli_module.LOGGER.isEnabledFor(logging.WARNING)
     finally:
         LOGGER.setLevel(previous_package)
-        capture_module.LOGGER.setLevel(previous_module)
+        listener_module.LOGGER.setLevel(previous_module)
 
 
 def test_the_package_logger_carries_a_null_handler() -> None:
@@ -131,32 +123,6 @@ def test_a_configured_application_still_sees_the_records() -> None:
     assert "pydhcp.capture" in result.stderr
 
 
-def test_the_capture_hook_logs_through_the_module_logger(tmp_path, caplog) -> None:
-    """The command hook logs through its own module's logger, not one re-fetched by
-    name; the record naming `pydhcp.capture._command` is what says so."""
-    program = python_hook(
-        tmp_path,
-        "chatty",
-        'import sys\nsys.stdout.write("chatter")\nsys.stderr.write("boom")\nsys.exit(3)\n',
-    )
-    hook = command_hook(str(program))
-
-    previous = LOGGER.level
-    try:
-        LOGGER.setLevel(logging.DEBUG)
-        with caplog.at_level(logging.DEBUG, logger="pydhcp"):
-            hook(_event())
-    finally:
-        LOGGER.setLevel(previous)
-
-    by_message = {r.getMessage().split(":")[0]: r for r in caplog.records}
-    failure = by_message["Capture hook command failed (3)"]
-    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    assert failure.name == "pydhcp.capture._command"
-    output = [r for r in caplog.records if "wrote" in r.getMessage()]
-    assert output and output[0].name == "pydhcp.capture._command"
-
-
 def _pydhcp_modules() -> "list[str]":
     import pkgutil
 
@@ -202,7 +168,7 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     server = DHCPServer(listen=("127.0.0.1", 0))
 
     def emit() -> None:
-        server.handle(reply, _event().context)
+        server.handle(reply, _context())
         # private: the warning rule, called directly
         interfaces._warn_synthetic.cache_clear()
         interfaces._warn_synthetic("192.0.2.77")
@@ -226,21 +192,3 @@ def test_silencing_the_server_leaves_the_listener_audible(caplog) -> None:
     names = {record.name for record in caplog.records}
     assert "pydhcp.server._handlers" not in names
     assert "pydhcp.listener._interfaces" in names
-
-
-def test_a_command_hook_that_fails_every_time_is_logged_once_per_interval(
-    tmp_path, caplog
-) -> None:
-    program = python_hook(
-        tmp_path,
-        "boom",
-        'import sys\nsys.stderr.write("boom\\n" * 200)\nsys.exit(3)\n',
-    )
-    hook = command_hook(str(program))
-    with caplog.at_level(logging.ERROR, logger="pydhcp"):
-        for _ in range(5):
-            hook(_event())
-    failures = [r for r in caplog.records if "command failed" in r.getMessage()]
-    assert len(failures) == 1
-    assert "\n" not in failures[0].getMessage()
-    assert len(failures[0].getMessage()) < 600

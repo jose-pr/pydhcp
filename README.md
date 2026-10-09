@@ -24,9 +24,10 @@ permissions and platform-specific UDP behavior. The documentation is at
   optional RFC 3046 option-82 tagging, in both drivers.
 - **Packet client** — builders for the five client messages, a DORA exchange with the
   RFC 2131 retransmission schedule, in both drivers. It does not configure interfaces.
-- **Capture** — a tshark-like `capture` command and `DHCPCapture`, with a filter
-  expression, command hooks, JSON, YAML, TOML, INI, pcap and pcapng output, reading a
-  capture file back, and `replay`.
+- **Capture** — with the `pktcap` extra, DHCP as a layer of pktcap's dissection
+  (`sniff_dhcp`, `DHCPLayer`, filter keys), and the `capture` and `replay` commands: pktcap's,
+  with DHCP's defaults, writing JSON, YAML, TOML, INI, text, pcap and pcapng, with a filter
+  expression, command hooks and reading a capture file back.
 - **Command line** — `pydhcp` (`interfaces`, `server`, `relay`, `packet`, `capture`,
   `replay`), configurable by option, environment variable or file.
 
@@ -109,7 +110,7 @@ server.serve_forever()
 ### Asynchronous server
 
 Every listener has an asyncio counterpart -- `AsyncDHCPListener`,
-`AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture`. Each pair is two
+`AsyncDHCPServer` and `AsyncDHCPRelay`. Each pair is two
 sibling drivers over one private core that owns no socket, thread or clock, so a
 fix to the rules reaches both; neither is a subclass of the other, and a test
 fails if a receive-path line is duplicated between them.
@@ -145,15 +146,19 @@ with DHCPRelay(listen="*", server_addresses=["192.0.2.1"]) as relay:
 ### Capture
 
 ```python
-from pydhcp.capture import DHCPCapture
+import time
+
+from pydhcp.capture import DHCPLayer, sniff_dhcp
+
+deadline = time.monotonic() + 60  # listen for a minute
 
 
-def show(event):
-    print(event.message_type, event.client_id, event.source)
+def expired():
+    return time.monotonic() > deadline
 
 
-with DHCPCapture(listen="*", packet_filter="msg_type=DHCPDISCOVER", sink=show) as capture:
-    capture.serve_forever()
+for frame in sniff_dhcp("*", stop=expired):  # needs the pktcap extra
+    print(frame.layer(DHCPLayer).summary())
 ```
 
 pktcap's own commands filter DHCP with the same short keys when they are told to load the
@@ -303,7 +308,7 @@ serves `packet` and `interfaces` as tools over standard input and output; the ot
 | `pydhcp.lease` | `DHCPLease`, the `LeaseBackend` protocol, `InMemoryLeaseBackend`, `FileLeaseBackend` |
 | `pydhcp.client` | `DHCPClient`, `AsyncDHCPClient`: the message builders, `discover_offer`, `dora` |
 | `pydhcp.relay` | `DHCPRelay`, `AsyncDHCPRelay` |
-| `pydhcp.capture` | `DHCPCapture`, `AsyncDHCPCapture`, `CaptureEvent`, the filter expression, `DHCPCaptureWriter`, `command_hook`, `read_capture`, `replay_capture`, DHCP as a pktcap layer (`DHCPLayer`, `register_dhcp_dissector`, `pktcap_plugin`) |
+| `pydhcp.capture` | DHCP for pktcap (the `pktcap` extra): `sniff_dhcp`, `asniff_dhcp`, `DHCPLayer`, `capture_dissector`, `dissect_dhcp`, `register_dhcp_dissector`, `pktcap_plugin` |
 | `pydhcp.listener` | `DHCPListener`, `AsyncDHCPListener`, the `listen` forms, the transports, `DHCPRequestContext`, `DHCPMetrics` |
 | `pydhcp.packet` | `DHCPMessage` and its enums; `pydhcp.packet.structured` holds `loads` and `dumps` for the four formats |
 | `pydhcp.options` | `DHCPOptions`, `DHCPOptionCode`, every payload codec, the contract for writing one |

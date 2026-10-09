@@ -1,7 +1,7 @@
 """The loopback examples run, as a reader runs them, and do what their text says.
 
 `examples/capture.py` listens on 127.0.0.1:6767 and prints each DISCOVER it
-hears; `examples/client.py` sends one from 127.0.0.1:6768. The other two examples
+hears (it needs the `pktcap` extra); `examples/client.py` sends one from 127.0.0.1:6768. The other two examples
 serve the wildcard on the DHCP ports, which a test does not bind: they are
 imported by `tests/test_examples.py`.
 """
@@ -17,6 +17,8 @@ import threading
 import time
 
 import pytest
+
+pytest.importorskip("pktcap")
 
 from cli_process import environment
 
@@ -102,9 +104,10 @@ def test_the_client_example_sends_what_the_capture_example_prints() -> None:
 
         documents = _documents(heard)
         assert documents, heard
-        assert xid in [document["xid"] for document in documents], (xid, heard)
+        messages = [document["layers"][-1]["message"] for document in documents]
+        assert xid in [message["xid"] for message in messages], (xid, heard)
         assert all(
-            d["options"]["DHCP_MESSAGE_TYPE"] == "DHCPDISCOVER" for d in documents
+            m["options"]["DHCP_MESSAGE_TYPE"] == "DHCPDISCOVER" for m in messages
         )
         assert any(line.split(" ")[1:2] == ["DHCPDISCOVER"] for line in heard), heard
     finally:

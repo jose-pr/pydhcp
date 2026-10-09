@@ -9,7 +9,6 @@ from .exceptions import (
     DHCPDecodeError as DHCPDecodeError,
     DHCPValueError as DHCPValueError,
     DHCPConfigError as DHCPConfigError,
-    DHCPHookError as DHCPHookError,
     NoClientIdentityError as NoClientIdentityError,
     DHCPTimeoutError as DHCPTimeoutError,
     DHCPRefusedError as DHCPRefusedError,
@@ -63,11 +62,6 @@ from ._network import (
 from .server import DHCPServer as DHCPServer
 from .client import DHCPClient as DHCPClient
 from .relay import DHCPRelay as DHCPRelay
-from .capture import (
-    CaptureEvent as CaptureEvent,
-    DHCPCapture as DHCPCapture,
-    compile_capture_filter as compile_capture_filter,
-)
 from .lease import (
     DHCPLease as DHCPLease,
     LeaseBackend as LeaseBackend,
@@ -80,7 +74,6 @@ __version__ = _version("pydhcp")
 from ._lazy import bind as _bind
 
 if _ty.TYPE_CHECKING:
-    from .capture import AsyncDHCPCapture as AsyncDHCPCapture
     from .client import AsyncDHCPClient as AsyncDHCPClient
     from .listener import AsyncDHCPListener as AsyncDHCPListener
     from .relay import AsyncDHCPRelay as AsyncDHCPRelay
@@ -88,7 +81,6 @@ if _ty.TYPE_CHECKING:
 
 #: Bound on first use, each from its role package: their modules import asyncio.
 _ASYNCIO = {
-    "AsyncDHCPCapture": ".capture",
     "AsyncDHCPClient": ".client",
     "AsyncDHCPListener": ".listener",
     "AsyncDHCPRelay": ".relay",
@@ -101,7 +93,6 @@ __all__ = [
     "DHCPDecodeError",
     "DHCPValueError",
     "DHCPConfigError",
-    "DHCPHookError",
     "NoClientIdentityError",
     "DHCPTimeoutError",
     "DHCPRefusedError",
@@ -147,10 +138,6 @@ __all__ = [
     "AsyncDHCPClient",
     "DHCPRelay",
     "AsyncDHCPRelay",
-    "CaptureEvent",
-    "DHCPCapture",
-    "AsyncDHCPCapture",
-    "compile_capture_filter",
     "DHCPLease",
     "LeaseBackend",
     "InMemoryLeaseBackend",

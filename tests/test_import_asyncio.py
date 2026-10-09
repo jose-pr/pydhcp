@@ -17,7 +17,6 @@ TWINS = {
     "AsyncDHCPServer": "server",
     "AsyncDHCPClient": "client",
     "AsyncDHCPRelay": "relay",
-    "AsyncDHCPCapture": "capture",
 }
 
 
@@ -47,7 +46,7 @@ def loaded_after(statement: str) -> str:
         "import pydhcp.capture",
         "import pydhcp.packet, pydhcp.options, pydhcp.exceptions",
         "import pydhcp.cli",
-        "from pydhcp import DHCPServer, DHCPClient, DHCPRelay, DHCPCapture",
+        "from pydhcp import DHCPServer, DHCPClient, DHCPRelay",
     ],
 )
 def test_a_blocking_import_leaves_asyncio_alone(statement: str) -> None:

@@ -7,8 +7,8 @@ import typing as _ty
 from .. import _extras
 
 
+from ..exceptions import NoClientIdentityError
 from ..packet._message import DHCPMessage
-from ._events import client_id_text, message_type_text
 
 if _ty.TYPE_CHECKING:
     import pktcap as _pktcap
@@ -18,6 +18,22 @@ else:
 #: The ports a DHCP message is sent to: a client sends to the server's, a server or
 #: relay replies to the client's, so between them they see every message.
 DHCP_PORTS: _ty.Final = (67, 68)
+
+
+def message_type_text(message: DHCPMessage) -> str:
+    """The name of the message's type, `UNKNOWN` when it has no option 53."""
+    value = message.message_type
+    return "UNKNOWN" if value is None else value.label()
+
+
+def client_id_text(message: DHCPMessage) -> str:
+    """The client identifier as colon-separated upper-case hex, `UNKNOWN` when there is none to give."""
+    try:
+        return message.get_client_id()
+    except NoClientIdentityError:
+        # A capture reports what arrived; a client with no identity is
+        # exactly the sort of packet someone runs a capture to look at.
+        return "UNKNOWN"
 
 
 class DHCPLayer(_ty.NamedTuple):

@@ -19,23 +19,23 @@ of another package, `MACAddress`, the object `netimps.MACAddress`, because
 (import it from there). `load_config` and the size constants are in private modules
 and are not importable from a public one.
 
-Install with `pip install pydhcp`; its one required dependency is `netimps`. The `cli`
-extra (`pip install "pydhcp[cli]"`) adds `duho`, which the `pydhcp` command needs; the
-`pktcap` extra adds `pktcap`, which every capture function and the `capture` and `replay`
-commands need (`captures need the 'pktcap' extra: pip install "pydhcp[pktcap]"` is the
-`ImportError`, and the command's line with status 1); the `yaml` extra adds PyYAML (YAML
-packets and configuration files) and the `toml` extra `tomli-w`, and `tomli` before Python
-3.11 (TOML packets, capture files and configuration files). A missing one is named where it
-is used, with its `pip install "pydhcp[<extra>]"` line. Importing `pydhcp`, `pydhcp.capture`
-or `pydhcp.cli` never imports `pktcap`, `duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`. Nor does importing `pydhcp` or one of
-its packages import `asyncio`: `AsyncDHCPListener`, `AsyncDHCPServer`, `AsyncDHCPClient`,
-`AsyncDHCPRelay` and `AsyncDHCPCapture` are bound when first accessed, under the same
-names and import paths. Python 3.9 or newer.
+Install with `pip install pydhcp`; its one required dependency is `netimps`. Extras:
+`cli` (`pip install "pydhcp[cli]"`; `duho`, for the `pydhcp` command), `pktcap` (`pktcap`, for
+the capture functions and the `capture` and `replay` commands: without it they raise an
+`ImportError`, or print and end with status 1, `captures need the 'pktcap' extra: pip install
+"pydhcp[pktcap]"`), `yaml` (PyYAML: YAML packets and configuration files) and `toml`
+(`tomli-w`, and `tomli` before Python 3.11: TOML packets, capture files and configuration
+files). A missing one is named where it is used, with its `pip install "pydhcp[<extra>]"` line.
+Importing `pydhcp`, `pydhcp.capture` or `pydhcp.cli` never imports `pktcap`, `duho`, `yaml`,
+`tomllib`, `tomli` or `tomli_w`, nor `asyncio`: `AsyncDHCPListener`, `AsyncDHCPServer`,
+`AsyncDHCPClient` and `AsyncDHCPRelay` are bound when first accessed, under the same names and
+import paths. Python 3.9 or newer.
 
 `netimps` supplies the packet-info receive and reply sockets (`UDPEndpoint`), socket
 binding, host:port parsing, interface enumeration (`get_interface`, `iter_interfaces`,
 `Interface`, `MACAddress`), the retransmission schedule (`backoff_delays`) and bind-error
-hints; `pktcap` writes, reads, dissects and replays captures and parses the filter grammar.
+hints. With the `pktcap` extra, `pktcap` writes, reads, dissects and replays captures,
+parses the filter grammar and runs the commands `capture` and `replay` are built on.
 
 `pydhcp.__version__` — the installed distribution's version, read from its metadata.
 
@@ -49,7 +49,7 @@ those headers ship in the package, at the paths below (`importlib.resources.file
 | `pydhcp/server/AGENTS.md` | `DHCPServer`, `AsyncDHCPServer`, the hooks you override, and the leases: `DHCPLease`, `LeaseBackend` and the two backends |
 | `pydhcp/client/AGENTS.md` | `DHCPClient`, `AsyncDHCPClient`: the message builders, `discover_offer`, `dora` |
 | `pydhcp/relay/AGENTS.md` | `DHCPRelay`, `AsyncDHCPRelay` and the pending-client table |
-| `pydhcp/capture/AGENTS.md` | `DHCPCapture`, `AsyncDHCPCapture`, `CaptureEvent`, `DHCPCaptureWriter`, the filter expression, `command_hook`, reading and replaying a capture file, DHCP as a pktcap layer |
+| `pydhcp/capture/AGENTS.md` | DHCP for pktcap: `sniff_dhcp`, `asniff_dhcp`, `DHCPLayer`, `capture_dissector`, `dissect_dhcp`, `register_dhcp_dissector` and `pktcap_plugin` (the `pktcap` extra) |
 | `pydhcp/packet/AGENTS.md` | `DHCPMessage`, its enums, `HardwareAddressType`, `pydhcp.packet.structured` |
 | `pydhcp/options/AGENTS.md` | `DHCPOptions`, `DHCPOptionCode`, how to write a codec, the value laws |
 | `pydhcp/options/_codecs/AGENTS.md` | every payload codec: scalars, addresses and routes, domain names, vendor and TLV containers, MoS and CCC |
@@ -61,11 +61,11 @@ Every public module's `__all__`.
 
 | Module | Exports |
 | --- | --- |
-| `pydhcp` | `AsyncDHCPCapture`, `AsyncDHCPClient`, `AsyncDHCPListener`, `AsyncDHCPRelay`, `AsyncDHCPServer`, `CaptureEvent`, `ClasslessRoute`, `ClientIdentifier`, `DHCPCapture`, `DHCPClient`, `DHCPConfigError`, `DHCPDecodeError`, `DHCPError`, `DHCPFlags`, `DHCPHookError`, `DHCPLease`, `DHCPListener`, `DHCPMessage`, `DHCPMessageType`, `DHCPOpcode`, `DHCPOption`, `DHCPOptionCode`, `DHCPOptionCodes`, `DHCPOptionType`, `DHCPOptions`, `DHCPPort`, `DHCPRefusedError`, `DHCPRelay`, `DHCPRequestContext`, `DHCPServer`, `DHCPTimeoutError`, `DHCPTransport`, `DHCPValueError`, `DomainList`, `FileLeaseBackend`, `IPv4AddressLike`, `InMemoryLeaseBackend`, `LeaseBackend`, `MACAddress`, `NetworkInterface`, `NoClientIdentityError`, `OptionOverload`, `PktInfoUDPTransport`, `PolicyFilter`, `RDNSSSelection`, `RelayAgentInformation`, `SocketAddress`, `StaticRoute`, `TLVOption`, `U16`, `U32`, `U8`, `UDPTransport`, `URIList`, `UncompressedDomainList`, `UserClass`, `VendorSpecificInformation`, `__version__`, `compile_capture_filter` |
-| `pydhcp.capture` | `AsyncDHCPCapture`, `CaptureEvent`, `CaptureHook`, `CapturePredicate`, `CaptureSink`, `DHCPCapture`, `DHCPCaptureWriter`, `DHCPLayer`, `FILENAME_FIELDS`, `HOOK_TIMEOUT_SECONDS`, `MAX_CAPTURE_FILES`, `PacketFilterLike`, `UNIQUE_FILENAME_FIELDS`, `asniff_dhcp`, `capture_dissector`, `command_hook`, `compile_capture_filter`, `dissect_dhcp`, `pktcap_plugin`, `read_capture`, `register_dhcp_dissector`, `replay_capture`, `sniff_dhcp` |
+| `pydhcp` | `AsyncDHCPClient`, `AsyncDHCPListener`, `AsyncDHCPRelay`, `AsyncDHCPServer`, `ClasslessRoute`, `ClientIdentifier`, `DHCPClient`, `DHCPConfigError`, `DHCPDecodeError`, `DHCPError`, `DHCPFlags`, `DHCPLease`, `DHCPListener`, `DHCPMessage`, `DHCPMessageType`, `DHCPOpcode`, `DHCPOption`, `DHCPOptionCode`, `DHCPOptionCodes`, `DHCPOptionType`, `DHCPOptions`, `DHCPPort`, `DHCPRefusedError`, `DHCPRelay`, `DHCPRequestContext`, `DHCPServer`, `DHCPTimeoutError`, `DHCPTransport`, `DHCPValueError`, `DomainList`, `FileLeaseBackend`, `IPv4AddressLike`, `InMemoryLeaseBackend`, `LeaseBackend`, `MACAddress`, `NetworkInterface`, `NoClientIdentityError`, `OptionOverload`, `PktInfoUDPTransport`, `PolicyFilter`, `RDNSSSelection`, `RelayAgentInformation`, `SocketAddress`, `StaticRoute`, `TLVOption`, `U16`, `U32`, `U8`, `UDPTransport`, `URIList`, `UncompressedDomainList`, `UserClass`, `VendorSpecificInformation`, `__version__` |
+| `pydhcp.capture` | `DHCPLayer`, `asniff_dhcp`, `capture_dissector`, `dissect_dhcp`, `pktcap_plugin`, `register_dhcp_dissector`, `sniff_dhcp` |
 | `pydhcp.cli` | `App`, `Capture`, `Interfaces`, `Packet`, `Relay`, `Replay`, `Server`, `main` |
 | `pydhcp.client` | `AsyncDHCPClient`, `ClientIdentifierLike`, `DHCPClient` |
-| `pydhcp.exceptions` | `DHCPConfigError`, `DHCPDecodeError`, `DHCPError`, `DHCPHookError`, `DHCPRefusedError`, `DHCPTimeoutError`, `DHCPValueError`, `NoClientIdentityError` |
+| `pydhcp.exceptions` | `DHCPConfigError`, `DHCPDecodeError`, `DHCPError`, `DHCPRefusedError`, `DHCPTimeoutError`, `DHCPValueError`, `NoClientIdentityError` |
 | `pydhcp.lease` | `DHCPLease`, `FileLeaseBackend`, `InMemoryLeaseBackend`, `LeaseBackend` |
 | `pydhcp.listener` | `AsyncDHCPListener`, `BROADCAST_ADDRESS`, `DHCPListener`, `DHCPMetrics`, `DHCPRequestContext`, `DHCPTransport`, `ListenLike`, `PktInfoUDPTransport`, `UDPTransport` |
 | `pydhcp.options` | `BaseDHCPOptionCode`, `BaseFixedLengthInteger`, `Boolean`, `Bytes`, `CCCAPBackoffRetry`, `CCCAPBackoffRetrySubOption`, `CCCASBackoffRetry`, `CCCASBackoffRetrySubOption`, `CCCKDCServerAddressList`, `CCCKDCServerAddressSubOption`, `CCCKerberosRealmName`, `CCCKerberosRealmNameSubOption`, `CCCOption`, `CCCPrimaryDHCPServerAddress`, `CCCPrimaryDHCPServerAddressSubOption`, `CCCProvisioningServerAddress`, `CCCProvisioningServerAddressSubOption`, `CCCProvisioningServerFQDN`, `CCCProvisioningTimer`, `CCCProvisioningTimerSubOption`, `CCCSecondaryDHCPServerAddress`, `CCCSecondaryDHCPServerAddressSubOption`, `CCCSecurityTicketControl`, `CCCSecurityTicketControlSubOption`, `CCCSubOption`, `CCCTicketGrantingServerUtilization`, `CCCTicketGrantingServerUtilizationSubOption`, `ClasslessRoute`, `ClientFQDN`, `ClientIdentifier`, `DHCPOption`, `DHCPOptionCode`, `DHCPOptionCodes`, `DHCPOptionType`, `DHCPOptions`, `DomainList`, `DomainName`, `EncapsulatedOptions`, `FixedLengthInteger`, `Flag`, `I32`, `IPv4AddressOption`, `List`, `MAX_OPTION_CODE`, `MIN_OPTION_CODE`, `MoSFQDNList`, `MoSFQDNRecord`, `MoSIPv4AddressList`, `MoSIPv4AddressRecord`, `OctetString`, `OptionCode`, `OptionCodec`, `OptionOverload`, `PCPServerList`, `PolicyFilter`, `RDNSSSelection`, `RecordList`, `RelayAgentInformation`, `SIPServers`, `StaticRoute`, `StatusCode`, `String`, `TLVOption`, `U16`, `U32`, `U8`, `URIList`, `UncompressedDomainList`, `UserClass`, `VIVendorClass`, `VIVendorClassRecord`, `VIVendorSpecificInformation`, `VIVendorSpecificInformationRecord`, `VendorSpecificInformation` |
@@ -98,14 +98,6 @@ DHCPRelay(listen=None, server_addresses=(), *, max_hops=4, insert_relay_agent_in
 AsyncDHCPRelay(listen=None, server_addresses=(), *, max_hops=4, insert_relay_agent_info=False,
     circuit_id=None, remote_id=None, trust_client_relay_agent_info=False, max_packet_size=None,
     per_interface=None, reuse_address=None, receive_buffer_size=None, max_queued=None)
-DHCPCapture(listen=None, *, packet_filter=None, sink=None, hook=None, hook_fail_fast=False,
-    poll_interval=None, max_packet_size=None, per_interface=None, reuse_address=None,
-    receive_buffer_size=None)
-AsyncDHCPCapture(listen=None, *, packet_filter=None, sink=None, hook=None, hook_fail_fast=False,
-    max_packet_size=None, per_interface=None, reuse_address=None, receive_buffer_size=None,
-    max_queued=None)
-CaptureEvent(message, context, captured_at, datagram=None)
-compile_capture_filter(text)
 DHCPMessage(op, *, htype=HardwareAddressType.ETHERNET, hlen=None, hops=0, xid=0,
     secs=timedelta(0), flags=DHCPFlags.UNICAST, ciaddr=IPv4Address("0.0.0.0"),
     yiaddr=IPv4Address("0.0.0.0"), siaddr=IPv4Address("0.0.0.0"), giaddr=IPv4Address("0.0.0.0"),
@@ -129,9 +121,9 @@ DHCPRequestContext(transport, interface, client, client_mac, ifindex=None, local
   lease policy (`pydhcp/server/AGENTS.md`).
 - `DHCPClient` and `AsyncDHCPClient` — the packet-level client (`pydhcp/client/AGENTS.md`).
 - `DHCPRelay` and `AsyncDHCPRelay` — the RFC 1542 relay agent (`pydhcp/relay/AGENTS.md`).
-- `DHCPCapture` and `AsyncDHCPCapture` — the capture role; `CaptureEvent` is one message it
-  heard and `compile_capture_filter` turns a filter expression into a predicate
-  (`pydhcp/capture/AGENTS.md`).
+- `pydhcp.capture` — DHCP for pktcap: `sniff_dhcp` and `asniff_dhcp` read the messages that
+  reach sockets as `pktcap.DissectedFrame`, `DHCPLayer` is the layer, and `pktcap_plugin`
+  adds the DHCP filter keys to a pktcap registry (`pydhcp/capture/AGENTS.md`).
 - `DHCPMessage` — the DHCPv4 wire message, with `decode`, `encode` and the structured
   forms; `DHCPMessageType`, `DHCPOpcode`, `DHCPFlags` and `DHCPPort` are the enums a
   caller passes (`pydhcp/packet/AGENTS.md`).
@@ -150,7 +142,7 @@ DHCPRequestContext(transport, interface, client, client_mac, ifindex=None, local
   given with each message (`pydhcp/listener/AGENTS.md`).
 - `SocketAddress`, `NetworkInterface` and `IPv4AddressLike` — the network types, below; `MACAddress` — `netimps.MACAddress`, the type of `NetworkInterface.mac`.
 - The exceptions `DHCPError`, `DHCPDecodeError`, `DHCPValueError`, `DHCPConfigError`,
-  `NoClientIdentityError`, `DHCPTimeoutError`, `DHCPHookError` and `DHCPRefusedError` — below.
+  `NoClientIdentityError`, `DHCPTimeoutError` and `DHCPRefusedError` — below.
 - `__version__` — `pydhcp.__version__`, the installed distribution's version.
 
 ## Network types (`pydhcp`)
@@ -337,10 +329,7 @@ All of them are also exported by `pydhcp`.
   on a message with neither option 61 nor a hardware address.
 - **`DHCPTimeoutError(DHCPError, TimeoutError)`** — a client exchange (`dora()`,
   `discover_offer()`) ended with no usable reply: the retransmissions or the call's
-  `deadline` ran out; or a `command_hook` program ran past its `timeout` and was killed.
-- **`DHCPHookError(DHCPError)`** — a `command_hook` created with `fail_fast=True` whose
-  program exited non-zero; the message names the program, the status and the tail of its
-  standard error.
+  `deadline` ran out.
 - **`DHCPRefusedError`** (a `DHCPError`) — the server answered the DHCPREQUEST with a
   DHCPNAK. `.nak` is the DHCPNAK `DHCPMessage` (its `DHCP_MESSAGE` option, when
   present, says why); it copies and pickles with its NAK.

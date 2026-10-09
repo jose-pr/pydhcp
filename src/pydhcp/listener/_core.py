@@ -323,8 +323,8 @@ class _ListenerCore:
                 )
             self.handle(msg, context)
         except Exception as e:
-            # `DHCPCapture.hook_fail_fast` relies on this staying a catch rather
-            # than a propagate.
+            # A handler's error is counted and logged, never propagated: the receive
+            # loop goes on with the next datagram.
             self.metrics.packets_dropped_error += 1
             self._log_limit.log(
                 LOGGER,

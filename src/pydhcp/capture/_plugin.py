@@ -1,8 +1,8 @@
 """DHCP as a pktcap plugin: the layer's filter keys, and the hook that registers them.
 
 Nothing registers on import: the hook is handed the registry and changes only that one.
-Every key converts its value with the function this package's own capture filter uses,
-so the two filters cannot read a value differently.
+Every key converts its value with the functions of `_filter`, so a value no message could
+match is refused when the filter is compiled.
 """
 
 from __future__ import annotations
@@ -153,7 +153,8 @@ def pktcap_plugin(registry: "_pktcap.DissectorRegistry") -> None:
     """Declare :class:`DHCPLayer` and its filter keys in `registry`, then register the dissector.
 
     The keys are `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`,
-    each read as `compile_capture_filter` reads it, and the `DHCPLayer` fields as `dhcp.FIELD`.
+    each refusing at compile time a value no message could match, and the `DHCPLayer` fields
+    as `dhcp.FIELD`.
     A call that raises leaves `registry` as it found it: `ValueError` for a layer name or a
     port that is taken.
     """

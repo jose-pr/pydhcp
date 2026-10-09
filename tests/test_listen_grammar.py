@@ -16,7 +16,6 @@ import netimps
 import pytest
 
 from pydhcp import AsyncDHCPClient, DHCPClient
-from pydhcp.capture import AsyncDHCPCapture, DHCPCapture
 from pydhcp.listener import AsyncDHCPListener, DHCPListener
 from pydhcp.relay import AsyncDHCPRelay, DHCPRelay
 from pydhcp.server import AsyncDHCPServer, DHCPServer
@@ -25,8 +24,6 @@ from pydhcp.server import AsyncDHCPServer, DHCPServer
 DEFAULT_PORTS: "list[tuple[type, tuple[int, ...]]]" = [
     (DHCPListener, (67, 68)),
     (AsyncDHCPListener, (67, 68)),
-    (DHCPCapture, (67, 68)),
-    (AsyncDHCPCapture, (67, 68)),
     (DHCPServer, (67,)),
     (AsyncDHCPServer, (67,)),
     (DHCPRelay, (67,)),
