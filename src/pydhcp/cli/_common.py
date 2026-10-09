@@ -110,15 +110,23 @@ class _Listening(_Configured):
     "Bind one socket per interface address instead of the wildcard; on Linux such sockets hear no broadcast"
     ("--per-interface",)
 
+    #: The `Meta(conflicts=)` group `--listen` joins, for a command that has another
+    #: source (`--interface`, `--read`) it cannot be given with; `None` for none.
+    _listen_excludes_: _ty.ClassVar[_ty.Optional[str]] = None
+
     def __init_subclass__(cls, **kwargs: _ty.Any) -> None:
         super().__init_subclass__(**kwargs)
         command = str(getattr(cls, "_parsername_", "")).upper()
+        listen = Meta(env=f"PYDHCP_{command}_LISTEN", type=listen_value)
+        if cls._listen_excludes_ is not None:
+            listen = Meta(
+                env=f"PYDHCP_{command}_LISTEN",
+                type=listen_value,
+                conflicts=cls._listen_excludes_,
+            )
         cls.__annotations__ = {
             **cls.__dict__.get("__annotations__", {}),
-            "listen": _ty.Annotated[
-                _ty.Optional[str],
-                Meta(env=f"PYDHCP_{command}_LISTEN", type=listen_value),
-            ],
+            "listen": _ty.Annotated[_ty.Optional[str], listen],
             "per_interface": _ty.Annotated[
                 bool, Meta(env=f"PYDHCP_{command}_PER_INTERFACE")
             ],

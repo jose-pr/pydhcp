@@ -51,6 +51,13 @@ def pcap(tmp_path: pathlib.Path) -> pathlib.Path:
     return tmp_path / "all.pcap"
 
 
+@pytest.fixture
+def recorded(tmp_path: pathlib.Path) -> pathlib.Path:
+    """The capture file the recorded output was made from."""
+    build.capture_file(tmp_path / "recorded.pcap", datagrams())
+    return tmp_path / "recorded.pcap"
+
+
 # -- read_capture --------------------------------------------------------------------
 
 
@@ -169,26 +176,26 @@ def test_a_time_that_is_no_time_is_the_epoch(tmp_path: pathlib.Path) -> None:
 # -- the command ---------------------------------------------------------------------
 
 
-def _command(*argv: str) -> "subprocess.CompletedProcess[bytes]":
+def _command(
+    *argv: str, env: "_ty.Optional[_ty.Mapping[str, str]]" = None
+) -> "subprocess.CompletedProcess[bytes]":
     return subprocess.run(
         [sys.executable, "-m", "pydhcp", *argv],
         capture_output=True,
-        env=environment(),
+        env=environment(env),
         stdin=subprocess.DEVNULL,
         timeout=120,
     )
 
 
-def test_capture_read_prints_what_listening_printed_octet_for_octet(
-    pcap: pathlib.Path,
-) -> None:
+def test_capture_read_prints_the_recorded_octets(recorded: pathlib.Path) -> None:
     expected = (build.EXPECTED / "stdout_json.out").read_bytes()
 
-    done = _command("capture", "--read", str(pcap), "--format", "json")
+    done = _command("capture", "--read", str(recorded), "--format", "json")
 
     assert done.returncode == 0, done.stderr
     assert done.stdout == expected
-    assert done.stderr == b""
+    assert done.stderr.decode().splitlines() == ["53 frames read, 53 written"]
 
 
 def test_capture_read_writes_a_capture_file_with_the_same_datagrams(
@@ -207,7 +214,7 @@ def test_capture_read_writes_a_capture_file_with_the_same_datagrams(
 
 def test_capture_read_takes_the_filter_and_the_count(pcap: pathlib.Path) -> None:
     done = _command(
-        "capture", "--read", str(pcap), "--filter", "src_port=68", "--count", "3"
+        "capture", "--read", str(pcap), "--filter", "sport=68", "--count", "3"
     )
 
     assert done.returncode == 0, done.stderr
@@ -232,12 +239,13 @@ def test_capture_read_does_not_listen(pcap: pathlib.Path) -> None:
 
     assert done.returncode == 2
     assert "--read" in done.stderr and "--listen" in done.stderr
+    assert "not allowed" in done.stderr
 
 
 def test_a_capture_cut_in_the_middle_prints_the_records_before_it_and_exits_2(
-    pcap: pathlib.Path, tmp_path: pathlib.Path
+    recorded: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
-    whole = pcap.read_bytes()
+    whole = recorded.read_bytes()
     cut = tmp_path / "cut.pcap"
     cut.write_bytes(whole[: len(whole) // 2])
 
@@ -277,15 +285,18 @@ def test_a_read_that_missed_frames_says_so_in_one_line(tmp_path: pathlib.Path) -
     assert done.returncode == 0
     assert len(done.stdout.splitlines()) == 1
     (note,) = done.stderr.decode().splitlines()
-    assert "1 cut short or damaged" in note and "105" in note and str(target) in note
+    assert note == (
+        "3 frames read, 1 written, 2 skipped, 1 malformed, "
+        "1 of an unsupported link type (105)"
+    )
 
 
 def test_a_hook_runs_for_each_event_of_a_file(
     pcap: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
-    from hook_programs import python_hook
+    from hook_programs import cli_hook
 
-    hook = python_hook(
+    hook = cli_hook(
         tmp_path,
         "count",
         """
@@ -296,16 +307,25 @@ def test_a_hook_runs_for_each_event_of_a_file(
         """,
     )
 
-    done = _command("capture", "--read", str(pcap), "--hook", str(hook), "--count", "4")
+    done = _command(
+        "capture",
+        "--read",
+        str(pcap),
+        "--hook",
+        hook.command,
+        "--count",
+        "4",
+        env=hook.env,
+    )
 
     assert done.returncode == 0, done.stderr
     assert (tmp_path / "runs.txt").read_text() == "xxxx"
 
 
-def _failing_hook(directory: pathlib.Path) -> pathlib.Path:
-    from hook_programs import python_hook
+def _failing_hook(directory: pathlib.Path) -> "_ty.Any":
+    from hook_programs import cli_hook
 
-    return python_hook(
+    return cli_hook(
         directory,
         "fails",
         """
@@ -320,35 +340,42 @@ def _failing_hook(directory: pathlib.Path) -> pathlib.Path:
 def test_a_failing_hook_is_logged_and_the_read_goes_on(
     pcap: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
+    hook = _failing_hook(tmp_path)
+
     done = _command(
         "capture",
         "--read",
         str(pcap),
         "--hook",
-        str(_failing_hook(tmp_path)),
+        hook.command,
         "--count",
         "3",
+        env=hook.env,
     )
 
     assert done.returncode == 0, done.stderr
     assert len(done.stdout.splitlines()) == 3
+    assert b"3 hook failures" in done.stderr
 
 
 def test_a_failing_hook_ends_the_read_under_fail_fast(
     pcap: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
+    hook = _failing_hook(tmp_path)
+
     done = _command(
         "capture",
         "--read",
         str(pcap),
         "--hook",
-        str(_failing_hook(tmp_path)),
+        hook.command,
         "--hook-fail-fast",
+        env=hook.env,
     )
 
     assert done.returncode == 1
     assert len(done.stdout.splitlines()) == 1
-    assert b"hook failed" in done.stderr
+    assert b"refused" in done.stderr
 
 
 # -- replay --------------------------------------------------------------------------
@@ -447,7 +474,7 @@ def test_the_command_replays_and_prints_the_counts(pcap: pathlib.Path) -> None:
                 "replay",
                 "--input",
                 str(pcap),
-                "--server",
+                "--to",
                 f"127.0.0.1:{port}",
                 "--no-delay",
             )
@@ -458,24 +485,26 @@ def test_the_command_replays_and_prints_the_counts(pcap: pathlib.Path) -> None:
 
     done = outcome[0]
     assert done.returncode == 0, done.stderr
-    assert (
-        done.stdout.strip() == f"{len(requests)} datagrams sent, 0 partial passed over"
-    )
+    assert done.stdout.strip() == f"sent {len(requests)}, partial 0"
     assert [e.payload for e in heard] == requests
 
 
-def test_the_command_needs_a_server(pcap: pathlib.Path) -> None:
+def test_the_command_needs_a_destination(pcap: pathlib.Path) -> None:
     done = run_cli("replay", "--input", str(pcap))
 
-    assert done.returncode == 2 and "--server" in done.stderr
+    assert done.returncode == 2 and "--to" in done.stderr
+
+
+def test_the_command_needs_a_capture() -> None:
+    done = run_cli("replay", "--to", "127.0.0.1:6767")
+
+    assert done.returncode == 2 and "--input" in done.stderr
 
 
 def test_the_command_names_a_file_that_is_not_a_capture(tmp_path: pathlib.Path) -> None:
     junk = tmp_path / "junk.pcap"
     junk.write_bytes(b"this is not a capture file at all, not even a little")
 
-    done = run_cli(
-        "replay", "--input", str(junk), "--server", f"127.0.0.1:{free_port()}"
-    )
+    done = run_cli("replay", "--input", str(junk), "--to", f"127.0.0.1:{free_port()}")
 
     assert done.returncode == 2 and str(junk) in done.stderr

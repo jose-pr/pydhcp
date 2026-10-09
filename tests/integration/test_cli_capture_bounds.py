@@ -9,10 +9,8 @@ sends it real datagrams.
 
 from __future__ import annotations
 
-import os
 import pathlib
 import socket
-import stat
 
 import pytest
 
@@ -53,7 +51,7 @@ def test_a_long_client_identifier_is_recorded(tmp_path: pathlib.Path) -> None:
         "127.0.0.1:%d" % port,
         "--output",
         str(tmp_path / "{client_id}_{xid}.{format}"),
-        "--per-capture",
+        "--per-record",
         "--format",
         "json",
         "--count",
@@ -68,12 +66,13 @@ def test_a_long_client_identifier_is_recorded(tmp_path: pathlib.Path) -> None:
     assert all(len(name) < 100 for name in names), names
 
 
-# -- a full file budget ends the run -------------------------------------------------
+# -- a full file budget --------------------------------------------------------------
 
 
-def test_a_full_file_budget_ends_the_capture_with_status_one_and_says_so(
+def test_a_full_file_budget_is_counted_and_ends_the_capture_with_status_one(
     tmp_path: pathlib.Path,
 ) -> None:
+    """The capture goes on past the budget, so it is `--duration` that ends it."""
     port = free_port()
     command = Running(
         "capture",
@@ -82,11 +81,13 @@ def test_a_full_file_budget_ends_the_capture_with_status_one_and_says_so(
         "127.0.0.1:%d" % port,
         "--output",
         str(tmp_path / "{client_id}.{format}"),
-        "--per-capture",
+        "--per-record",
         "--format",
         "json",
         "--max-files",
         "2",
+        "--duration",
+        "3",
     )
     command.listening()
     _send(port, *(_discover(bytes([1, n]), n) for n in range(1, 5)))
@@ -94,18 +95,16 @@ def test_a_full_file_budget_ends_the_capture_with_status_one_and_says_so(
     assert command.finish() == 1, "\n".join(command.stderr)
     assert len(_files(tmp_path)) == 2
     last = command.stderr[-1]
-    assert last.startswith("pydhcp: error: capture stopped:")
-    assert "--max-files" in last and "2 files" in last
-    assert "refused" in last and "Traceback" not in "\n".join(command.stderr)
+    assert "4 frames read, 2 written" in last
+    assert "2 refused" in last and "--max-files" in last
+    assert "Traceback" not in "\n".join(command.stderr)
 
 
-def test_the_file_budget_defaults_to_the_documented_constant() -> None:
-    from pydhcp.capture import MAX_CAPTURE_FILES
+def test_the_file_budget_defaults_to_a_thousand() -> None:
     from pydhcp.cli import App
 
     parsed = App._parser_().parse_args(["capture"])
-    assert parsed.max_files is None
-    assert MAX_CAPTURE_FILES == 1000
+    assert parsed.max_files == 1000
 
 
 @pytest.mark.parametrize("value", ["0", "-1"])
@@ -114,23 +113,18 @@ def test_a_budget_that_is_not_positive_is_a_wrong_invocation(
 ) -> None:
     done = run_cli(
         "capture",
+        "--read",
+        str(tmp_path / "absent.pcap"),
         "--output",
         str(tmp_path / "{xid}.{format}"),
-        "--per-capture",
+        "--per-record",
+        "--format",
+        "json",
         "--max-files",
         value,
     )
     assert done.returncode == 2
-    assert "--max-files" in done.stderr
-
-
-def test_the_budget_only_applies_to_one_file_per_packet(tmp_path: pathlib.Path) -> None:
-    done = run_cli(
-        "capture", "--output", str(tmp_path / "all.json"), "--max-files", "5"
-    )
-
-    assert done.returncode == 2
-    assert "--max-files" in done.stderr and "per-capture" in done.stderr
+    assert "max_files" in done.stderr
 
 
 def test_the_help_names_the_limit() -> None:
@@ -142,47 +136,11 @@ def test_the_help_names_the_limit() -> None:
 # -- a target that cannot be written ---------------------------------------------------
 
 
-def test_an_output_that_is_a_directory_is_refused_before_binding(
-    tmp_path: pathlib.Path,
-) -> None:
-    target = tmp_path / "adir"
-    target.mkdir()
-
-    done = run_cli("capture", "-v", "--listen", "127.0.0.1:0", "--output", str(target))
-
-    assert done.returncode == 2
-    assert "Listening on" not in done.stderr
-    lines = done.stderr.splitlines()
-    assert len(lines) == 1 and "adir" in lines[0], done.stderr
-    assert "Traceback" not in done.stderr
-
-
-def test_an_output_that_is_a_read_only_file_is_refused_before_binding(
-    tmp_path: pathlib.Path,
-) -> None:
-    target = tmp_path / "locked.json"
-    target.write_text("", encoding="utf-8")
-    os.chmod(target, stat.S_IREAD)
-    try:
-        if os.access(target, os.W_OK):
-            pytest.skip("the file is writable anyway (running as root)")
-        done = run_cli(
-            "capture", "-v", "--listen", "127.0.0.1:0", "--output", str(target)
-        )
-    finally:
-        os.chmod(target, stat.S_IREAD | stat.S_IWRITE)
-
-    assert done.returncode == 2
-    assert "Listening on" not in done.stderr
-    assert "locked.json" in done.stderr and "Traceback" not in done.stderr
-
-
 def test_a_record_that_cannot_be_written_ends_the_capture_with_one_line(
     tmp_path: pathlib.Path,
 ) -> None:
     """The directory the pattern names is a file: the first record cannot be written,
-    and the run used to carry on forever, a traceback per packet, never reaching
-    `--count`."""
+    and the capture ends there with one line, not a traceback per packet."""
     (tmp_path / "blocked").write_text("a file, not a directory", encoding="utf-8")
     port = free_port()
     command = Running(
@@ -192,7 +150,7 @@ def test_a_record_that_cannot_be_written_ends_the_capture_with_one_line(
         "127.0.0.1:%d" % port,
         "--output",
         str(tmp_path / "blocked" / "{xid}.{format}"),
-        "--per-capture",
+        "--per-record",
         "--format",
         "json",
         "--count",
@@ -205,14 +163,13 @@ def test_a_record_that_cannot_be_written_ends_the_capture_with_one_line(
     text = "\n".join(command.stderr)
     assert "Traceback" not in text
     last = command.stderr[-1]
-    assert last.startswith("pydhcp: error: capture stopped: cannot write")
-    assert "blocked" in last
+    assert last.startswith("pydhcp: error:") and "blocked" in last
 
 
-def test_a_stream_to_a_closed_file_ends_the_capture_too(
+def test_an_output_that_is_a_directory_ends_the_capture_with_one_line(
     tmp_path: pathlib.Path,
 ) -> None:
-    """A single file that stops being writable after the probe is the same failure."""
+    """A single file that stops being writable is the same failure."""
     target = tmp_path / "all.json"
     port = free_port()
     command = Running(
@@ -226,12 +183,13 @@ def test_a_stream_to_a_closed_file_ends_the_capture_too(
         "3",
     )
     command.listening()
-    target.unlink()
     target.mkdir()
     _send(port, _discover(b"\x01\xbb", 1))
 
     assert command.finish() == 1, "\n".join(command.stderr)
-    assert command.stderr[-1].startswith("pydhcp: error: capture stopped: cannot write")
+    last = command.stderr[-1]
+    assert last.startswith("pydhcp: error:") and "all.json" in last
+    assert "Traceback" not in "\n".join(command.stderr)
 
 
 def test_a_capture_that_reaches_its_count_still_exits_zero(

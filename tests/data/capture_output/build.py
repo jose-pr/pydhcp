@@ -2,10 +2,12 @@
 
 `INPUT` is the 50 datagrams recorded under `tests/conformance/transcripts/`
 (transcript directories sorted by name, then index), the two messages in `tests/data/`, and
-one DISCOVER carrying a 255-octet client identifier. Each scenario starts
-`pydhcp capture` on a loopback port, sends the input from one socket in order
-and keeps what the command wrote: its standard output, the files and their
-names, its status.
+one DISCOVER carrying a 255-octet client identifier. A recorded scenario writes the
+input as a pcap file with fixed times and addresses (`capture_file`) and starts
+`pydhcp capture --read` on it, so a record holds the same octets on every run, and
+keeps what the command wrote: its standard output, the files and their names, its
+status. `run` is the live form for the tests that want a socket: it starts the command
+on a loopback port and sends the input from one socket in order.
 
 `expected/` holds what the command wrote, with a line feed ending every line on
 every platform. `python build.py write` rewrites it from the code in the tree.
@@ -38,7 +40,7 @@ if str(TESTS) not in sys.path:
 from cli_process import environment, free_port  # noqa: E402
 
 #: How `pydhcp capture` is told to write one file for each record.
-PER_CAPTURE: "tuple[str, ...]" = ("--per-capture",)
+PER_RECORD: "tuple[str, ...]" = ("--per-record",)
 
 #: The most a scenario waits for the command to end by itself.
 RUN_SECONDS = 120.0
@@ -106,7 +108,48 @@ class Done(_ty.NamedTuple):
     stderr: "list[str]"
 
 
-def run(argv: "_ty.Sequence[str]", sent: "_ty.Sequence[bytes]") -> Done:
+def capture_file(path: pathlib.Path, sent: "_ty.Sequence[bytes]") -> None:
+    """`sent` as a pcap file: a request goes to port 67 and a reply to port 68.
+
+    The times and the addresses are fixed (private ones), so what a command makes of
+    the file is the same on every run.
+    """
+    import pktcap
+
+    client = ("10.99.0.50", 68)
+    server = ("10.99.0.1", 67)
+    with pktcap.PcapWriter(path) as writer:
+        for number, data in enumerate(sent):
+            source, destination = (client, server) if data[0] == 1 else (server, client)
+            writer.write(1_700_000_000.0 + number * 0.25, source, destination, data)
+
+
+def run_file(
+    argv: "_ty.Sequence[str]", sent: "_ty.Sequence[bytes]", directory: pathlib.Path
+) -> Done:
+    """`pydhcp capture --read FILE argv`, with `sent` written to FILE under `directory`."""
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / "input.pcap"
+    capture_file(path, sent)
+    done = subprocess.run(
+        [sys.executable, "-m", "pydhcp", "capture", "--read", str(path), *argv],
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        env=environment(),
+        timeout=RUN_SECONDS,
+    )
+    return Done(
+        done.returncode,
+        done.stdout,
+        done.stderr.decode("utf-8", "replace").splitlines(),
+    )
+
+
+def run(
+    argv: "_ty.Sequence[str]",
+    sent: "_ty.Sequence[bytes]",
+    env: "_ty.Optional[_ty.Mapping[str, str]]" = None,
+) -> Done:
     """`pydhcp capture argv` on a free loopback port, fed `sent` in order."""
     port = free_port()
     process = subprocess.Popen(
@@ -123,7 +166,7 @@ def run(argv: "_ty.Sequence[str]", sent: "_ty.Sequence[bytes]") -> Done:
         stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=environment(),
+        env=environment(env),
     )
     assert process.stdout is not None and process.stderr is not None
     stdout: "list[bytes]" = []
@@ -185,65 +228,60 @@ def build(work: pathlib.Path) -> "dict[str, bytes]":
     half = len(sent) // 2
     files: "dict[str, bytes]" = {}
     statuses: "dict[str, int]" = {}
+    inputs = work / "inputs"
 
-    for name in ("json", "yaml"):
-        done = run(["--format", name, "--count", str(len(sent))], sent)
+    for name in ("json", "yaml", "text"):
+        done = run_file(["--format", name], sent, inputs / f"stdout_{name}")
         statuses[f"stdout_{name}"] = done.status
         files[f"stdout_{name}.out"] = done.stdout
 
     for name in ("json", "yaml"):
         target = work / f"growing_{name}" / "nested" / f"all.{name}"
         for number, part in enumerate((sent[:half], sent[half:]), 1):
-            done = run(["--output", str(target), "--count", str(len(part))], part)
+            done = run_file(
+                ["--output", str(target), "--append"],
+                part,
+                inputs / f"growing_{name}_{number}",
+            )
             statuses[f"growing_{name}_run{number}"] = done.status
         files[f"growing/all.{name}"] = target.read_bytes()
 
     for name in ("json", "yaml", "toml", "ini"):
         root = work / f"tree_{name}"
         pattern = str(root / "{client_id}" / "{xid}_{msg_type}.{format}")
-        done = run(
-            [
-                "--output",
-                pattern,
-                *PER_CAPTURE,
-                "--format",
-                name,
-                "--count",
-                str(len(sent)),
-            ],
+        done = run_file(
+            ["--output", pattern, *PER_RECORD, "--format", name],
             sent,
+            inputs / f"tree_{name}",
         )
         statuses[f"tree_{name}"] = done.status
         files.update(_tree(root, f"tree_{name}"))
 
     # No --format: the ending of the pattern names the format.
     root = work / "tree_ending"
-    done = run(
-        [
-            "--output",
-            str(root / "{xid}_{msg_type}.ini"),
-            *PER_CAPTURE,
-            "--count",
-            str(len(sent)),
-        ],
+    done = run_file(
+        ["--output", str(root / "{xid}_{msg_type}.ini"), *PER_RECORD],
         sent,
+        inputs / "tree_ending",
     )
     statuses["tree_ending"] = done.status
     files.update(_tree(root, "tree_ending"))
 
-    # A budget of three files and a fourth client: the run ends by itself.
+    # A budget of three files and a fourth client: the fourth is refused and counted,
+    # and the run ends with the file.
     root = work / "budget"
-    done = run(
+    done = run_file(
         [
             "--output",
             str(root / "{client_id}.{format}"),
-            *PER_CAPTURE,
+            *PER_RECORD,
             "--format",
             "json",
             "--max-files",
             "3",
         ],
         distinct_clients(4),
+        inputs / "budget",
     )
     files.update(_tree(root, "budget"))
     summary = {

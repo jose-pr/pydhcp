@@ -208,6 +208,43 @@ someone upgrading from 0.7.0.
 
 ### Changed
 
+- **`pydhcp capture` and `pydhcp replay` are pktcap's commands** (`pktcap.cli.Capture` and
+  `Replay`) with DHCP's defaults: `--filter` is ANDed with `proto=dhcp`, ports are 67 and 68,
+  `--listen` keeps pydhcp's grammar and binds with `netimps.bind_listen` (IPv4, broadcast allowed,
+  `--per-interface`), and with no source at all it listens on `*`. Their options, statuses, the
+  summary on stderr and the file budget are pktcap's (`pktcap --help` and pktcap's header have each
+  one), and `pydhcp capture` gains `--interface`, `--datagrams`, `--append`, `--duration`/`-d`,
+  `--hook-timeout`, `--load` and `--pktcap-config`, and `--format text`;
+  `pydhcp replay` gains `--filter`, `--source-port`, `--broadcast`, `--json` and `--load`.
+  - **A record is pktcap's record of the frame**: `time`, `linktype`, `length`, `layers`
+    (`ipv4`, `udp` and `dhcp`) and `payload`. The message the old line held is the `dhcp` layer's
+    `message`: `jq -c '.layers[-1].message'`. A record file is replaced unless `--append` is
+    given. `--format text` writes `DHCPLayer.summary()`, one line a person reads.
+  - **Renamed**: `--per-capture` is `--per-record`; `replay --server`/`-s` is `--to` and
+    `replay --input` is required; `capture -f` is `--filter` (`--format` has no short form) and
+    `-c` for `--count` is gone; the `[capture]` keys `packet_filter`, `packet_format` and
+    `per_capture` are `filter`, `format` and `per_record`; `PYDHCP_CAPTURE_RECORD_FORMAT`,
+    `PYDHCP_CAPTURE_PER_CAPTURE` and `PYDHCP_REPLAY_SERVER` are `PYDHCP_CAPTURE_FORMAT`,
+    `PYDHCP_CAPTURE_PER_RECORD` and `PYDHCP_REPLAY_TO`. An old option is refused by the parser, an
+    old settings key by name, and an old variable with the name to use (status 2). The filter keys
+    `src_port` and `dst_port` are `sport` and `dport`, `src` and `dst` take networks, and
+    `interface=` is gone (use `--listen NAME`). `--listen` with `--interface` or `--read` is status 2.
+  - **New variables and keys**: every option of the two commands has `PYDHCP_<COMMAND>_<FIELD>` and,
+    for `capture`, a settings key of that field's name. The plugin list (`--load`,
+    `--pktcap-config`) has neither: only the command line, `PKTCAP_LOAD`, `PKTCAP_CONFIG` and
+    pktcap's own file name a plugin.
+  - **Hooks are pktcap's**: a hook comes from `--hook`, `PYDHCP_CAPTURE_HOOK` and the settings
+    file the user named; it gets `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`
+    and `PKTCAP_HOOK_FORMAT` (not `PYDHCP_CAPTURE_*`) and the record on standard input; a failed
+    hook is counted and the capture goes on unless `--hook-fail-fast`; `--hook-timeout` bounds it
+    (10 seconds); a `module:function` hook is called with a `pktcap.DissectedFrame` and its module
+    must be on `PYTHONPATH` (the working directory is not added); on Windows a `.cmd` or `.bat`
+    file is refused, name a program.
+  - **Behaviours that differ**: a file budget spent (`--max-files`) is counted and the capture goes on,
+    ending with status 1 and the count in its summary line; an `--output` ending that names no format
+    is status 2 (it was JSON); the writability of `--output` is checked when the first record is
+    written, not before the sockets are bound; the warning for a pattern that names no unique field
+    is gone. The receive buffer of each socket is grown to 1 MiB, as the listeners do.
 - **pktcap is an optional dependency, the `pktcap` extra.** `pip install pydhcp` needs `netimps`
   alone; importing `pydhcp`, `pydhcp.capture` and `pydhcp.cli` loads neither pktcap nor asyncio,
   and a server, a relay, a client and `pydhcp packet --format json` run without it. A capture

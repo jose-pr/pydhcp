@@ -1,3 +1,35 @@
+time = 1700000008.25
+linktype = 101
+length = 352
+payload = ""
+
+[[layers]]
+layer = "ipv4"
+source = "10.99.0.1"
+destination = "10.99.0.50"
+protocol = 17
+ttl = 64
+identification = 34
+dont_fragment = false
+more_fragments = false
+fragment_offset = 0
+length = 352
+
+[[layers]]
+layer = "udp"
+source_port = 67
+destination_port = 68
+length = 332
+checksum = 46852
+
+[[layers]]
+layer = "dhcp"
+op = "BOOTREPLY"
+xid = 717089118
+message_type = "DHCPACK"
+client_id = "01:02:00:00:99:00:02"
+
+[layers.message]
 op = "BOOTREPLY"
 htype = "ETHERNET"
 hlen = 6
@@ -13,7 +45,7 @@ chaddr = "02:00:00:99:00:02"
 sname = ""
 file = ""
 
-[options]
+[layers.message.options]
 DHCP_MESSAGE_TYPE = "DHCPACK"
 SERVER_IDENTIFIER = "10.98.0.2"
 IP_ADDRESS_LEASE_TIME = 300

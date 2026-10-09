@@ -11,13 +11,14 @@ source. It ships inside the package and is self-contained; the top header is
 
 A package: `App` and `main()` are in `pydhcp.cli` itself, and each subcommand
 has its own private module (`cli._interfaces`, `cli._server`, `cli._relay`,
-`cli._packet`, `cli._capture`, `cli._replay`, with `cli._capture_hook` for `--hook`
-loading (a command is `capture.command_hook`) and `cli._common` for the shared
-bases: `server`, `relay` and `capture` declare `--listen` and `--per-interface` once,
-in a base class that also gives each its `PYDHCP_<COMMAND>_*` variables and ends
-the run on Ctrl-C). `pydhcp.cli` exports `App`, `main` and the six command
-classes `Interfaces`, `Server`, `Relay`, `Packet`, `Capture` and `Replay`, and nothing else: no limit or format list is reachable only from there
-(`pydhcp.capture.MAX_CAPTURE_FILES`, `pktcap.OUTPUT_FORMATS`).
+`cli._packet`, `cli._capture`, `cli._replay`, with `cli._packets` for what `capture` and
+`replay` share and `cli._common` for the shared bases: `server`, `relay` and `capture`
+declare `--listen` and `--per-interface` once, in a base class that also gives each its
+`PYDHCP_<COMMAND>_*` variables and ends the run on Ctrl-C). `capture` and `replay` are
+subclasses of the commands of `pktcap.cli`: their options, statuses and output are
+pktcap's, with the DHCP defaults below. `pydhcp.cli` exports `App`, `main` and the six
+command classes `Interfaces`, `Server`, `Relay`, `Packet`, `Capture` and `Replay`, and
+nothing else.
 
 Invoked as **`pydhcp`** (the console script) or **`python -m pydhcp`** — both
 reach `cli.main()` and exit with its status, and both report themselves as `pydhcp` in usage and error
@@ -31,7 +32,12 @@ the `pydhcp` logger every module logger is a child of (`logging.getLogger("pydhc
   installs: `pip install "pydhcp[cli]"`. `import pydhcp.cli` and `main` need nothing;
   `App` and the six command classes load on first use, and without `duho` that use
   is an `ImportError` naming the extra. Neither `import pydhcp` nor `import
-  pydhcp.cli` imports `duho`, `yaml`, `tomllib`, `tomli` or `tomli_w`.
+  pydhcp.cli` imports `duho`, `pktcap`, `yaml`, `tomllib`, `tomli` or `tomli_w`.
+- **The `pktcap` extra.** `capture` and `replay` need `pktcap`
+  (`pip install "pydhcp[pktcap]"`). Without it `pydhcp capture` and `pydhcp replay` print
+  `pydhcp: error: captures need the 'pktcap' extra: pip install "pydhcp[pktcap]"` and
+  end with status 1, before any option is parsed; the other commands run, and `Capture` and
+  `Replay` are an `ImportError` naming the extra.
 
 ```python
 main(argv: Sequence[str] | None = None) -> int
@@ -67,12 +73,7 @@ main(argv: Sequence[str] | None = None) -> int
   `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`), `packet`
   (`--decode`/`--encode` mutually exclusive+required, `--input`/`--output`
   accepting `-` for stdio, `--format json|yaml|toml|ini|summary`; `summary` is
-  decode-only, its first line is the op and XID), `capture` (`--listen`,
-  `--filter`, `--format`, `--output` file/pattern/`-`, `--per-capture`, `--read`,
-  `--max-files`, `--count`, `--hook` `module:function` or an
-  executable (a name with a directory is that file, resolved against the working
-  directory when the capture starts and run by its absolute path; a bare name is
-  looked up on `PATH`; a non-executable file is refused at start-up), `--hook-fail-fast`, `--per-interface`). Also gets
+  decode-only, its first line is the op and XID), `capture` and `replay` (below). Also gets
   `--version` (via `App._version_ = duho.AUTO`, resolved from installed
   package metadata) for free. Every option has one line of help, with its
   default.
@@ -86,8 +87,12 @@ main(argv: Sequence[str] | None = None) -> int
   daemon does not pick up a file nobody named. The file has one section per
   command, named for it, and its keys are the command's field names
   (`listen`, `per_interface`, `lease_file`; `server`, `max_hops`,
-  `insert_relay_agent_info`, `circuit_id`, `remote_id`; `packet_filter`,
-  `packet_format`, `output`, `per_capture`, `count`, `hook`, `hook_fail_fast`):
+  `insert_relay_agent_info`, `circuit_id`, `remote_id`; and for `capture` the fields of its
+  options: `filter`, `format`, `output`, `per_record`, `max_files`, `datagrams`, `append`,
+  `interface`, `read`, `count`, `duration`, `hook`, `hook_fail_fast`, `hook_timeout`).
+  `plugins` and `plugin_config` are not settings: a program's settings file is not the
+  user's, and a plugin is code that is imported, so only the command line, `PKTCAP_LOAD`
+  and pktcap's own file name one:
 
   ```yaml
   server:
@@ -112,60 +117,37 @@ main(argv: Sequence[str] | None = None) -> int
   IPv6 support: `relay._normalize_server_address` still calls `IPv4()` on
   whatever it receives, so an IPv6 upstream fails with a clear message.
 
-- **`capture --per-capture` validates its filename pattern before binding**:
-  `DHCPCaptureWriter` is built first, so an unknown placeholder is a startup
-  `ValueError` (status 2), and a pattern naming none of `{timestamp}`, `{xid}`
-  or `{index}` gets a warning that records will overwrite each other. Both are
-  invisible otherwise: the pattern is expanded per packet inside the receive
-  handler, where the listener logs the exception and carries on, so
-  `--output "cap_{mac}.json"` recorded nothing while logging once per packet.
-  The overwrite case is a **warning, not an error, deliberately**: rewriting one
-  file is also how a pattern the client cannot influence stays outside the file
-  budget.
-- **`--max-files N`** (default `MAX_CAPTURE_FILES`, 1000) is the writer's
-  `max_files`: how many *distinct* files one `--per-capture` run may create. **A
-  record that needs a file past the bound ends the capture**: status 1 and a last
-  line, `pydhcp: error: capture stopped: N files written, the limit of
-  --max-files; M records refused ...`. `--max-files` without `--per-capture`, or
-  below 1, is a wrong invocation (status 2). Each value interpolated into a
-  filename is at most 64 characters (see `DHCPCaptureWriter`).
-- **Where the records go**: `--output -` (the default) is standard output, as
-  UTF-8 with a line feed ending each line on every platform (Windows included),
-  flushed after each record; `--output FILE` is appended to, and `--output
-  PATTERN --per-capture` is one file per record. `--format` is `pcap`, `pcapng`,
-  `json`, `yaml`, `toml` or `ini`; without it the ending of `--output` names it
-  (`.pcap`, `.cap`, `.pcapng`, `.json`, `.jsonl`, `.ndjson`, `.yaml`, `.yml`,
-  `.toml`, `.ini`), and an ending that names none, and standard output, are `json`.
-  **`capture --read FILE`** (`-` is standard input; `PYDHCP_CAPTURE_READ`, `read` in
-  the configuration file) puts the DHCP messages of a pcap or pcapng capture
-  through the same `--filter`, `--format`, `--output`, `--count` and `--hook`, with
-  no socket bound, and ends when the file does; `--listen` with it is status 2. A
-  capture cut or damaged in the middle prints the records before the damage and
-  exits 2 with a line naming the file. When frames could not be read, one stderr line
-  says how many (`pydhcp: FILE: of N frames, 2 cut short or damaged; 1 of a link type
-  nothing here reads (105)`); the status is unchanged.
-  **`pydhcp replay --input FILE --server HOST[:PORT]`** (`-i`, `-s`; `--speed`,
-  `--no-delay`, `--max-delay`, `--limit`; `PYDHCP_REPLAY_*`) is `replay_capture`: it
-  sends the requests of the capture to the server named (port 67 by default),
-  prints `N datagrams sent, M partial passed over` and exits 0; a file that is
-  not a capture is status 2 naming it, a server that does not resolve is status 1.
-  **`--format pcap` and `--format pcapng` write the datagrams as the clients sent
-  them** (a file tcpdump and Wireshark open; to standard output the same octets, for
-  `| tcpdump -r -`), the file replaced, not appended to; a `--hook` is then given
-  JSON on standard input and `PYDHCP_CAPTURE_FORMAT` is `json`.
-- **A record that cannot be written ends the capture**: the first one that
-  fails (a directory the pattern names is a file, a full or read-only disk, a
-  path that is a directory) stops the capture with status 1 and one line,
-  `pydhcp: error: capture stopped: cannot write <path>: <reason>`, as
-  `--hook-fail-fast` does for a hook. A single output file is opened for append
-  **before anything is bound** (and created when absent), and a target that
-  cannot be written, such as a directory or a read-only file, is a wrong
-  invocation (status 2).
-
-- Capture's JSON output (`--format json`, to standard output or a growing
-  file) is compact JSON by design, one object per line; a `--per-capture` JSON
-  file holds the same one line. Use `message.to_text("json")` directly only for
-  single structured packet files where pretty JSON is acceptable.
+- **`pydhcp capture`** is `pktcap capture` with DHCP's defaults: `--listen`/`-l` (pydhcp's
+  grammar, ports 67 and 68, IPv4, broadcast allowed), `--per-interface`, `--interface NAME`
+  (frame capture, Linux, needs `CAP_NET_RAW`) and `--read FILE` (`-` is standard input) are
+  three sources that exclude each other (status 2); with none of them it listens on `*`.
+  `--filter`/`-f EXPR` keeps messages by `src`, `dst`, `host`, `sport`, `dport`, `port`,
+  `proto`, `linktype`, `LAYER.FIELD` and the DHCP keys `op`, `msg_type`, `xid`, `client_id`,
+  `chaddr` and `option.NAME`; it is ANDed with `proto=dhcp`. `--output`/`-o`, `--format`
+  (`pcap`, `pcapng`, `json`, `yaml`, `toml`, `ini`, `text`; from the ending of `--output`,
+  else `json` for `-`), `--per-record` (one file per record, `--output` the pattern with
+  `{client_id}`, `{msg_type}`, `{xid}`, `{timestamp}`, `{index}` and `{format}`),
+  `--max-files`, `--datagrams`, `--append`, `--count`, `--duration`/`-d`, `--hook`,
+  `--hook-fail-fast`, `--hook-timeout`, `--load` and `--pktcap-config` (pktcap's `--config`)
+  are pktcap's, and `pktcap/cli/AGENTS.md` has each one's contract. What it prints is
+  pktcap's record of the frame (`time`, `linktype`, `length`, `layers`: `ipv4`, `udp` and
+  `dhcp`, whose `message` is the mapping `pydhcp packet --decode` prints), and the one
+  summary line on stderr; `--format text` prints `DHCPLayer.summary()`. The message alone is
+  `jq -c '.layers[-1].message'`. A hook runs for each record written, with the record on
+  standard input and `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID` and
+  `PKTCAP_HOOK_FORMAT` in its environment; it comes from `--hook`, `PYDHCP_CAPTURE_HOOK` and
+  the settings file the user named, and from nowhere else. Status 0 is a finished capture
+  (Ctrl-C included), 1 a run that failed (a port taken, a file that cannot be written, a
+  hook that failed under `--hook-fail-fast`, a file budget spent), 2 a wrong invocation
+  (a bad filter or format, `--format toml` or `ini` without `--per-record`, a capture file
+  that is not one or is damaged). `Bound: ADDRESS` is logged (INFO) for each socket bound.
+- **`pydhcp replay --input FILE --to HOST[:PORT]`** is `pktcap replay`: it sends the payload
+  of the requests (`dport=67`, narrowed by `--filter`) to the destination named, port 67 by
+  default, in capture order and time (`--speed`, `--no-delay`, `--max-delay`, `--limit`),
+  from `--source-port` and with `--broadcast` allowed, and prints `sent N, partial M` (or
+  `{"sent": N, "partial": M}` with `--json`). The addresses in the capture are never sent
+  to. A file that is not a capture is status 2 naming it, a destination that does not
+  resolve is status 1.
 
 ## Configuration files (`pydhcp._config`)
 
@@ -203,7 +185,7 @@ that follow no such rule (`PYDHCP_CONFIG`, `PYDHCP_CONFIG_FORMAT`, `PYDHCP_TRACE
 | --- | --- |
 | `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE`, `PYDHCP_SERVER_LENIENT_REPLY_PORTS` | `server --listen`, `--per-interface`, `--lease-file`, `--lenient-reply-ports` |
 | `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |
-| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_CAPTURE`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_PER_INTERFACE`, `PYDHCP_CAPTURE_READ` | `capture --listen`, `--filter`, `--format`, `--output`, `--per-capture`, `--max-files`, `--count`, `--hook`, `--hook-fail-fast`, `--per-interface`, `--read` |
-| `PYDHCP_REPLAY_INPUT`, `PYDHCP_REPLAY_SERVER`, `PYDHCP_REPLAY_SPEED`, `PYDHCP_REPLAY_NO_DELAY`, `PYDHCP_REPLAY_MAX_DELAY`, `PYDHCP_REPLAY_LIMIT` | `replay --input`, `--server`, `--speed`, `--no-delay`, `--max-delay`, `--limit` |
+| `PYDHCP_CAPTURE_LISTEN`, `PYDHCP_CAPTURE_PER_INTERFACE`, `PYDHCP_CAPTURE_FILTER`, `PYDHCP_CAPTURE_FORMAT`, `PYDHCP_CAPTURE_OUTPUT`, `PYDHCP_CAPTURE_PER_RECORD`, `PYDHCP_CAPTURE_MAX_FILES`, `PYDHCP_CAPTURE_DATAGRAMS`, `PYDHCP_CAPTURE_APPEND`, `PYDHCP_CAPTURE_INTERFACE`, `PYDHCP_CAPTURE_READ`, `PYDHCP_CAPTURE_COUNT`, `PYDHCP_CAPTURE_DURATION`, `PYDHCP_CAPTURE_HOOK`, `PYDHCP_CAPTURE_HOOK_FAIL_FAST`, `PYDHCP_CAPTURE_HOOK_TIMEOUT` | `capture --listen`, `--per-interface`, `--filter`, `--format`, `--output`, `--per-record`, `--max-files`, `--datagrams`, `--append`, `--interface`, `--read`, `--count`, `--duration`, `--hook`, `--hook-fail-fast`, `--hook-timeout` |
+| `PYDHCP_REPLAY_INPUT`, `PYDHCP_REPLAY_TO`, `PYDHCP_REPLAY_FILTER`, `PYDHCP_REPLAY_SPEED`, `PYDHCP_REPLAY_NO_DELAY`, `PYDHCP_REPLAY_MAX_DELAY`, `PYDHCP_REPLAY_LIMIT`, `PYDHCP_REPLAY_SOURCE_PORT`, `PYDHCP_REPLAY_BROADCAST`, `PYDHCP_REPLAY_JSON_OUT` | `replay --input`, `--to`, `--filter`, `--speed`, `--no-delay`, `--max-delay`, `--limit`, `--source-port`, `--broadcast`, `--json` |
 | `PYDHCP_PACKET_INPUT`, `PYDHCP_PACKET_OUTPUT`, `PYDHCP_PACKET_FORMAT` | `packet --input`, `--output`, `--format` (`--decode` and `--encode` choose a mode and are not settings) |
 | `PYDHCP_INTERFACES_FORMAT` | `interfaces --format` |

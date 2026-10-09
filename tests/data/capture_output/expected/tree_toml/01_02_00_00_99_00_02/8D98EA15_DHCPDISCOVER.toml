@@ -1,3 +1,35 @@
+time = 1700000006.25
+linktype = 101
+length = 328
+payload = ""
+
+[[layers]]
+layer = "ipv4"
+source = "10.99.0.50"
+destination = "10.99.0.1"
+protocol = 17
+ttl = 64
+identification = 26
+dont_fragment = false
+more_fragments = false
+fragment_offset = 0
+length = 328
+
+[[layers]]
+layer = "udp"
+source_port = 68
+destination_port = 67
+length = 308
+checksum = 10781
+
+[[layers]]
+layer = "dhcp"
+op = "BOOTREQUEST"
+xid = 2375608853
+message_type = "DHCPDISCOVER"
+client_id = "01:02:00:00:99:00:02"
+
+[layers.message]
 op = "BOOTREQUEST"
 htype = "ETHERNET"
 hlen = 6
@@ -13,7 +45,7 @@ chaddr = "02:00:00:99:00:02"
 sname = ""
 file = ""
 
-[options]
+[layers.message.options]
 DHCP_MESSAGE_TYPE = "DHCPDISCOVER"
 HOSTNAME = "lab-client"
 PARAMETER_REQUEST_LIST = [

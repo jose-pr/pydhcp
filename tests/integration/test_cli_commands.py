@@ -280,7 +280,9 @@ def _capture(pattern: str, directory: pathlib.Path, *extra: str):
             "-v",
             "--listen",
             "127.0.0.1:0",
-            "--per-capture",
+            "--per-record",
+            "--format",
+            "json",
             "--output",
             str(directory / pattern),
             *extra,
@@ -292,17 +294,6 @@ def test_a_good_pattern_reaches_the_capture(tmp_path: pathlib.Path) -> None:
     ran = _capture("{xid}.{format}", tmp_path)
 
     assert ran.status == 0 and len(ran.bound) == 1
-    assert not any("only the last one is kept" in text for text in ran.records)
-
-
-def test_capture_warns_once_when_records_will_overwrite(tmp_path: pathlib.Path) -> None:
-    """A warning, deliberately, not an error: rewriting one file is also how a
-    fixed pattern stays outside the file budget."""
-    ran = _capture("{client_id}.{format}", tmp_path)
-
-    assert ran.status == 0 and len(ran.bound) == 1
-    warnings = [text for text in ran.records if "only the last one is kept" in text]
-    assert len(warnings) == 1, ran.records
 
 
 def test_capture_refuses_a_bad_pattern_before_binding(
@@ -312,7 +303,7 @@ def test_capture_refuses_a_bad_pattern_before_binding(
 
     assert ran.status == 2 and ran.bound == []
     err = capsys.readouterr().err
-    assert "{mac}" in err and "not a field" in err
+    assert "mac" in err, err
 
 
 def test_count_writes_that_many_records_and_then_stops(
@@ -348,8 +339,9 @@ def test_count_writes_that_many_records_and_then_stops(
 
     assert ran.status == 0 and "Stopped listening due to Ctrl-C" not in ran.records
     records = [json.loads(l) for l in capsys.readouterr().out.splitlines()]
-    assert [record["xid"] for record in records] == [0xAAAA0001, 0xAAAA0002]
-    assert [record["options"]["DHCP_MESSAGE_TYPE"] for record in records] == [
+    messages = [record["layers"][-1]["message"] for record in records]
+    assert [message["xid"] for message in messages] == [0xAAAA0001, 0xAAAA0002]
+    assert [message["options"]["DHCP_MESSAGE_TYPE"] for message in messages] == [
         "DHCPDISCOVER",
         "DHCPDISCOVER",
     ]

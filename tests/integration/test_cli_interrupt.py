@@ -1,4 +1,4 @@
-"""Ctrl-C ends the three serving commands cleanly.
+"""Ctrl-C ends the three listening commands cleanly.
 
 The library installs no signal handler, so the interrupt reaches the command as
 `KeyboardInterrupt` out of `serve_forever()` and the command closes what it
@@ -18,9 +18,9 @@ import typing as _ty
 
 import pytest
 
-# The listener waits for datagrams in `select.select`. The wrapper announces on the
-# first such wait, so the interrupt lands while the command is receiving and not
-# while it is still binding.
+# The listener waits for datagrams in `select.select`, and the capture in a receive on
+# its endpoint. The wrapper announces on the first such wait, so the interrupt lands
+# while the command is receiving and not while it is still binding.
 _WRAPPER = """
 import select
 import signal
@@ -38,6 +38,20 @@ def waiting(readers, writers, errors, timeout=None):
 
 
 select.select = waiting
+
+import netimps
+
+receive = netimps.UDPEndpoint.recv
+
+
+def receiving(self, *args, **options):
+    if not announced:
+        announced.append(True)
+        print("serving", flush=True)
+    return receive(self, *args, **options)
+
+
+netimps.UDPEndpoint.recv = receiving
 if sys.platform == "win32":
     signal.signal(signal.SIGBREAK, signal.default_int_handler)
 sys.argv[0] = "pydhcp"
@@ -50,6 +64,15 @@ COMMANDS = {
     "server": ["server", "-v", "--listen", "127.0.0.1:0"],
     "relay": ["relay", "-v", "-l", "127.0.0.1:0", "-s", "127.0.0.1:6767"],
     "capture": ["capture", "-v", "-l", "127.0.0.1:0"],
+}
+
+
+#: What each command says when it has been interrupted: the server and the relay log
+#: it, and a capture ends with its summary.
+ENDING = {
+    "server": "Stopped listening due to Ctrl-C",
+    "relay": "Stopped listening due to Ctrl-C",
+    "capture": "0 frames read, 0 written",
 }
 
 
@@ -107,4 +130,4 @@ def test_ctrl_c_stops_the_command_with_status_zero_and_no_traceback(
             proc.wait()
     assert proc.returncode == 0, (proc.returncode, stdout, stderr)
     assert "Traceback" not in stderr, stderr
-    assert "Stopped listening due to Ctrl-C" in stderr + stdout
+    assert ENDING[command] in stderr + stdout

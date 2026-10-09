@@ -16,7 +16,7 @@ import pytest
 pktcap = pytest.importorskip("pktcap")
 
 from capture_input import build, datagrams, short_datagram
-from hook_programs import python_hook
+from hook_programs import cli_hook
 from pydhcp import DHCPMessage
 
 
@@ -76,7 +76,7 @@ def test_a_file_for_each_datagram(tmp_path: pathlib.Path) -> None:
         [
             "--output",
             str(pattern),
-            *build.PER_CAPTURE,
+            *build.PER_RECORD,
             "--format",
             "pcap",
             "--count",
@@ -94,7 +94,7 @@ def test_a_file_for_each_datagram(tmp_path: pathlib.Path) -> None:
 
 
 def test_a_hook_is_given_json_and_told_so(tmp_path: pathlib.Path) -> None:
-    hook = python_hook(
+    hook = cli_hook(
         tmp_path,
         "keep",
         """
@@ -102,7 +102,7 @@ def test_a_hook_is_given_json_and_told_so(tmp_path: pathlib.Path) -> None:
         import sys
 
         (HERE / "stdin.txt").write_bytes(sys.stdin.buffer.read())
-        (HERE / "format.txt").write_text(os.environ["PYDHCP_CAPTURE_FORMAT"])
+        (HERE / "format.txt").write_text(os.environ["PKTCAP_HOOK_FORMAT"])
         """,
     )
     sent = _input()[:1]
@@ -114,14 +114,15 @@ def test_a_hook_is_given_json_and_told_so(tmp_path: pathlib.Path) -> None:
             "--output",
             str(tmp_path / "heard.pcap"),
             "--hook",
-            str(hook),
+            hook.command,
             "--count",
             "1",
         ],
         sent,
+        env=hook.env,
     )
 
     assert done.status == 0, done.stderr
     assert (tmp_path / "format.txt").read_text() == "json"
     record = json.loads((tmp_path / "stdin.txt").read_text(encoding="utf-8"))
-    assert record["xid"] == DHCPMessage.decode(sent[0]).xid
+    assert record["layers"][-1]["message"]["xid"] == DHCPMessage.decode(sent[0]).xid

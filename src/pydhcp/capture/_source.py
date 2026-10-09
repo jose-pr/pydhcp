@@ -20,17 +20,33 @@ else:
     _pktcap = _extras.lazy_pktcap
 
 
-def _bound(
+#: Octets of receive buffer asked for each socket: a segment powering up sends its
+#: DISCOVERs together, and a default buffer (64 KiB on Windows) holds about 220 of them.
+RECEIVE_BUFFER_SIZE: _ty.Final = 1 << 20
+
+
+def bound_endpoints(
     listen: "_netimps.ListenLike", per_interface: _ty.Optional[bool]
 ) -> "_ty.Tuple[_netimps.UDPEndpoint, ...]":
-    """The sockets `listen` names, bound; nothing is opened when any part is refused."""
-    return _netimps.bind_listen(
+    """The sockets `listen` names, bound; nothing is opened when any part is refused.
+
+    DHCP's defaults for `netimps.bind_listen`: ports 67 and 68, IPv4, broadcast
+    allowed. Each socket's receive buffer is grown to `RECEIVE_BUFFER_SIZE`; a socket
+    that refuses keeps the system's.
+    """
+    endpoints = _netimps.bind_listen(
         listen,
         DHCP_PORTS,
         family=_socket.AF_INET,
         per_address=True if per_interface else None,
         broadcast=True,
     )
+    for endpoint in endpoints:
+        try:
+            _netimps.set_buffer_size(endpoint.socket, receive=RECEIVE_BUFFER_SIZE)
+        except OSError:
+            pass
+    return endpoints
 
 
 def _reader(
@@ -72,7 +88,7 @@ def sniff_dhcp(
     `ImportError` naming the `pktcap` extra when it is not installed.
     """
     _extras.pktcap_module()
-    endpoints = _bound(listen, per_interface)
+    endpoints = bound_endpoints(listen, per_interface)
     try:
         reader = dissector if dissector is not None else _reader(endpoints)
         return _pktcap.sniff_udp(endpoints, stop=stop, dissector=reader)
@@ -95,7 +111,7 @@ def asniff_dhcp(
     `aclose()`, or cancel.
     """
     _extras.pktcap_module()
-    endpoints = _bound(listen, per_interface)
+    endpoints = bound_endpoints(listen, per_interface)
     try:
         reader = dissector if dissector is not None else _reader(endpoints)
         return _pktcap.asniff_udp(endpoints, dissector=reader)

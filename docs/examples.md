@@ -254,7 +254,7 @@ Capture filters are `key=value` or `key!=value` clauses joined by `and`; a comma
 does not exist, is refused when the capture starts.
 
 ```bash
-pydhcp capture --filter "op=BOOTREQUEST and src_port=68"
+pydhcp capture --filter "op=BOOTREQUEST and sport=68"
 pydhcp capture --filter "client_id=01:AA:BB:CC:DD:EE:FF"
 pydhcp capture --filter "option.DHCP_MESSAGE_TYPE=DHCPREQUEST"
 pydhcp capture --filter "msg_type=DHCPDISCOVER,DHCPREQUEST and src!=192.0.2.1"
@@ -295,23 +295,22 @@ with DHCPCaptureWriter("heard.pcap") as writer:  # the received datagrams, `Capt
 Write one file per accepted packet:
 
 ```bash
-pydhcp capture --listen 127.0.0.1:6767 --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-capture
+pydhcp capture --listen 127.0.0.1:6767 --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-record
 ```
 
 The filename pattern uses values the client chooses, so one run creates at most `--max-files`
-distinct files (1000 by default). The packet that needs one more ends the capture with status 1
-and a last line saying how many records were refused; raise the limit, or use a pattern without
-`{client_id}`. A value in a filename is cut at 64 characters and ends in a hash, so a long client
+distinct files (1000 by default). A packet that needs one more is not written and is counted: the
+capture goes on, and ends with status 1 and a summary line saying how many records were refused;
+raise the limit, or use a pattern without `{client_id}`. A value in a filename is cut at 64 characters and ends in a hash, so a long client
 identifier still gets its own file. A record that cannot be written (the directory is a file, the
-disk is full) ends the capture the same way, with one line naming the path, and a single output
-file that cannot be appended to is refused before the capture binds.
+disk is full) ends the capture with status 1 and one line that says why.
 
 Read a capture file back through the same filter, output and hook, with no socket bound, or send
 its requests again to a server you name (the addresses in the capture are never sent to):
 
 ```bash
 pydhcp capture --read heard.pcap --filter "msg_type=DHCPDISCOVER" --format yaml
-pydhcp replay --input heard.pcap --server 192.0.2.1 --no-delay
+pydhcp replay --input heard.pcap --to 192.0.2.1 --no-delay
 ```
 
 A capture file is also read with pktcap, with DHCP dissected as a layer. Register the dissector
@@ -339,15 +338,16 @@ pktcap's commands load the same registration, and the filter keys of `pydhcp cap
 PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"
 ```
 
-Hooks can be trusted Python callables or commands. Command hooks receive the serialized
-packet on stdin and metadata in `PYDHCP_CAPTURE_*` environment variables
-(`PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID` and
-`PYDHCP_CAPTURE_FORMAT`); they are started with no arguments and no shell, and killed, with any
-process they started, after `HOOK_TIMEOUT_SECONDS` (10 seconds). The same hook is available
-to a program as `pydhcp.capture.command_hook(...)`. A command with a
+Hooks can be trusted Python callables (`module:function`, called with each
+`pktcap.DissectedFrame`) or commands. A command hook receives the record of the frame on stdin
+and metadata in `PKTCAP_HOOK_*` environment variables (`PKTCAP_HOOK_CLIENT_ID`,
+`PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID` and `PKTCAP_HOOK_FORMAT`); it is started with no
+arguments and no shell, and killed, with any process it started, after `--hook-timeout`
+(10 seconds). It is pktcap's `command_hook`. A command with a
 directory in its name (`./on-dhcp-capture`, `/opt/hooks/export`) is that file, found relative
 to the working directory when the capture starts; a bare name (`export`) is looked up on
-`PATH`. A file in the working directory is therefore written `./name`.
+`PATH`, and nowhere else. A file in the working directory is therefore written `./name`, and
+a `module:function` hook is imported as written, so its module must be on `PYTHONPATH`.
 
 ```bash
 pydhcp capture --hook myhooks:on_capture

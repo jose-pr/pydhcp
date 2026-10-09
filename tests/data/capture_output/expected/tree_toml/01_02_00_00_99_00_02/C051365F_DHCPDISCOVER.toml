@@ -1,3 +1,35 @@
+time = 1700000010.5
+linktype = 101
+length = 346
+payload = ""
+
+[[layers]]
+layer = "ipv4"
+source = "10.99.0.50"
+destination = "10.99.0.1"
+protocol = 17
+ttl = 64
+identification = 43
+dont_fragment = false
+more_fragments = false
+fragment_offset = 0
+length = 346
+
+[[layers]]
+layer = "udp"
+source_port = 68
+destination_port = 67
+length = 326
+checksum = 24037
+
+[[layers]]
+layer = "dhcp"
+op = "BOOTREQUEST"
+xid = 3226547807
+message_type = "DHCPDISCOVER"
+client_id = "01:02:00:00:99:00:02"
+
+[layers.message]
 op = "BOOTREQUEST"
 htype = "ETHERNET"
 hlen = 6
@@ -13,7 +45,7 @@ chaddr = "02:00:00:99:00:02"
 sname = ""
 file = ""
 
-[options]
+[layers.message.options]
 DHCP_MESSAGE_TYPE = "DHCPDISCOVER"
 MAXIMUM_DHCP_MESSAGE_SIZE = 576
 PARAMETER_REQUEST_LIST = [

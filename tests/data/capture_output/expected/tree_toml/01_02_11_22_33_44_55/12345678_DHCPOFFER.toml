@@ -1,3 +1,35 @@
+time = 1700000012.75
+linktype = 101
+length = 328
+payload = ""
+
+[[layers]]
+layer = "ipv4"
+source = "10.99.0.1"
+destination = "10.99.0.50"
+protocol = 17
+ttl = 64
+identification = 52
+dont_fragment = false
+more_fragments = false
+fragment_offset = 0
+length = 328
+
+[[layers]]
+layer = "udp"
+source_port = 67
+destination_port = 68
+length = 308
+checksum = 18886
+
+[[layers]]
+layer = "dhcp"
+op = "BOOTREPLY"
+xid = 305419896
+message_type = "DHCPOFFER"
+client_id = "01:02:11:22:33:44:55"
+
+[layers.message]
 op = "BOOTREPLY"
 htype = "ETHERNET"
 hlen = 6
@@ -13,7 +45,7 @@ chaddr = "02:11:22:33:44:55"
 sname = "srv"
 file = "pxe/boot.img"
 
-[options]
+[layers.message.options]
 DHCP_MESSAGE_TYPE = "DHCPOFFER"
 SUBNET_MASK = "255.255.255.0"
 ROUTER = [

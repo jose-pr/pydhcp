@@ -168,6 +168,28 @@ def test_the_listen_specification_is_read_with_dhcp_ports_family_and_broadcast(
     assert second[1]["per_address"] is None
 
 
+def test_each_socket_gets_a_large_receive_buffer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A segment powering up sends its DISCOVERs together; the default buffer holds a few."""
+    import netimps
+
+    asked: "_ty.List[_ty.Tuple[_ty.Any, _ty.Any]]" = []
+    real = netimps.set_buffer_size
+
+    def record(sock: _ty.Any, **options: _ty.Any) -> _ty.Any:
+        asked.append((sock.getsockname()[1], options))
+        return real(sock, **options)
+
+    # patched where the source reads it
+    monkeypatch.setattr("pydhcp.capture._source._netimps.set_buffer_size", record)
+    first, second = free_port(), free_port()
+
+    sniff_dhcp(f"127.0.0.1:{first},127.0.0.1:{second}").close()  # type: ignore[attr-defined]
+
+    assert asked == [(first, {"receive": 1 << 20}), (second, {"receive": 1 << 20})]
+
+
 # -- the asynchronous twin ----------------------------------------------------------
 
 

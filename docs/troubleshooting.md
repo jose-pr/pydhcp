@@ -55,7 +55,7 @@ pydhcp capture --listen 127.0.0.1:6767 --filter "msg_type=DHCPDISCOVER" --output
 Useful filters include:
 
 ```bash
-pydhcp capture --filter "op=BOOTREQUEST and src_port=68"
+pydhcp capture --filter "op=BOOTREQUEST and sport=68"
 pydhcp capture --filter "client_id=01:AA:BB:CC:DD:EE:FF"
 pydhcp capture --filter "option.DHCP_MESSAGE_TYPE=DHCPREQUEST"
 ```
@@ -77,13 +77,14 @@ pydhcp capture --read client.pcap --filter "client_id=01:AA:BB:CC:DD:EE:FF"
 For long troubleshooting sessions, split captures into one file per packet.
 
 ```bash
-pydhcp capture --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-capture
+pydhcp capture --format json --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-record
 ```
 
-Hooks are trusted local code. A Python hook uses `module:function`; a command hook path is
-executed once per accepted packet with the structured packet on stdin. `./hook` is the file
-in the working directory when the capture starts; a bare `hook` is looked up on `PATH`, and
-a file that is not executable is refused at start-up.
+Hooks are trusted local code. A Python hook uses `module:function` and its module must be on
+`PYTHONPATH`; a command hook path is executed once per accepted packet with the record of the
+frame on stdin and `PKTCAP_HOOK_*` in its environment. `./hook` is the file in the working
+directory when the capture starts; a bare `hook` is looked up on `PATH` alone, and a file that
+is not executable is refused at start-up.
 
 ## Wildcard listening behaves differently on Windows and Linux
 

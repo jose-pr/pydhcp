@@ -374,8 +374,8 @@ is in `pydhcp/cli/AGENTS.md`. The ones that follow no such rule:
 | `PYDHCP_CONFIG_FORMAT` | `json`, `yaml`, `toml` or `ini`, as `--config-format`. Default: from the file's extension |
 | `PYDHCP_TRACEBACK` | a boolean: when on, an error is raised with its traceback (status 1) instead of one `pydhcp: error:` line. Default: off; `0` is off |
 | `PYDHCP_MCP` | `stdio` serves `pydhcp.packet` and `pydhcp.interfaces` as MCP tools over standard input and output instead of running a command; any other value is a usage error (status 2). The other commands are not tools |
-| `PYDHCP_CAPTURE_RECORD_FORMAT` | `capture --format`: `PYDHCP_CAPTURE_FORMAT` is one of the four a hook is given |
-| `PYDHCP_CAPTURE_CLIENT_ID`, `PYDHCP_CAPTURE_MSG_TYPE`, `PYDHCP_CAPTURE_XID`, `PYDHCP_CAPTURE_FORMAT` | **set for a command hook**, not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the packet the hook is given on standard input (`json` when the output is a capture file) |
+| `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`, `PKTCAP_HOOK_FORMAT` | **set for a command hook** (pktcap's `PKTCAP_HOOK_<FIELD>`), not read: the client identifier (colon-separated upper-case hex, or `UNKNOWN`), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the hook's standard input (`json` when the output is a capture file) |
+| `PKTCAP_LOAD`, `PKTCAP_CONFIG` | read by `capture` and `replay` as pktcap reads them: more pktcap plugins to load beside `pydhcp.capture`, and the file that may list them. Only the command line, these variables and pktcap's own file can name a plugin: never a settings file |
 
 ## Gotchas
 

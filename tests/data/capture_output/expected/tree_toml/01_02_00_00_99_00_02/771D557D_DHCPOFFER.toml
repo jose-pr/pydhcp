@@ -1,3 +1,35 @@
+time = 1700000004.25
+linktype = 101
+length = 348
+payload = ""
+
+[[layers]]
+layer = "ipv4"
+source = "10.99.0.1"
+destination = "10.99.0.50"
+protocol = 17
+ttl = 64
+identification = 18
+dont_fragment = false
+more_fragments = false
+fragment_offset = 0
+length = 348
+
+[[layers]]
+layer = "udp"
+source_port = 67
+destination_port = 68
+length = 328
+checksum = 4023
+
+[[layers]]
+layer = "dhcp"
+op = "BOOTREPLY"
+xid = 1998411133
+message_type = "DHCPOFFER"
+client_id = "01:02:00:00:99:00:02"
+
+[layers.message]
 op = "BOOTREPLY"
 htype = "ETHERNET"
 hlen = 6
@@ -13,7 +45,7 @@ chaddr = "02:00:00:99:00:02"
 sname = ""
 file = ""
 
-[options]
+[layers.message.options]
 DHCP_MESSAGE_TYPE = "DHCPOFFER"
 SUBNET_MASK = "255.255.255.0"
 BROADCAST_ADDRESS = "10.99.0.255"

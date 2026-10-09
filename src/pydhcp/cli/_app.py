@@ -67,8 +67,9 @@ def run(args: "_ty.List[str]") -> int:
             for command in App._subcommands_ or ()
             if issubclass(command, _Configured)
         )
-        _, token = _settings.begin(args, sections)
+        run_, token = _settings.begin(args, sections)
         try:
+            _settings.check_renamed_variables(run_.command)
             status = duho.main(App, args, config=_settings.config_path())
         finally:
             _settings.end(token)
@@ -88,7 +89,7 @@ def run(args: "_ty.List[str]") -> int:
             raise
         print(f"pydhcp: error: {error}", file=sys.stderr)
         return 2
-    except (OSError, NotImplementedError, _Failed) as error:
+    except (OSError, ImportError, NotImplementedError, _Failed) as error:
         if show_traceback:
             raise
         print(f"pydhcp: error: {error}", file=sys.stderr)

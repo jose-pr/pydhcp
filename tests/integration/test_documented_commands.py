@@ -24,6 +24,7 @@ import pytest
 
 from cli_process import Running, free_port, run_cli
 from helpers import build_request
+from hook_programs import CliHook, cli_hook
 from pydhcp.cli import App
 from pydhcp.options import DHCPOptionCode
 
@@ -117,23 +118,31 @@ def _prepare(directory: pathlib.Path, ports: "dict[str, int]") -> None:
     )
     with pktcap.PcapWriter(directory / "heard.pcap") as heard:
         heard.write(1.0, ("10.0.0.2", 68), ("10.0.0.1", 67), _discover())
-    marker = "hook-ran.txt"
-    if os.name == "nt":
-        (directory / "on-dhcp-capture.cmd").write_bytes(
-            f'@echo off\r\nfindstr "^" > {marker}\r\n'.encode()
-        )
-    else:
-        hook = directory / "on-dhcp-capture"
-        hook.write_bytes(f"#!/bin/sh\ncat > {marker}\n".encode())
-        hook.chmod(0o755)
+    # The hook leaves a marker in the working directory of the capture that ran it.
+    HOOKS[str(directory)] = cli_hook(
+        directory,
+        "on-dhcp-capture",
+        """
+        import sys
+
+        sys.stdin.buffer.read()
+        (pathlib.Path.cwd() / "hook-ran.txt").write_text("ran", encoding="ascii")
+        """,
+    )
 
 
-def _arguments(line: str, ports: "dict[str, int]") -> "list[str]":
+#: The hook `_prepare` made in each working directory.
+HOOKS: "dict[str, CliHook]" = {}
+
+
+def _arguments(
+    line: str, ports: "dict[str, int]", directory: pathlib.Path
+) -> "list[str]":
     """The line's arguments with the example ports pointed at free ones.
 
     Only substitutions: each `127.0.0.1:<port>` becomes a port nothing holds, and
-    on Windows the hook file the README calls `./on-dhcp-capture` is a `.cmd`
-    file, because Windows starts a program by its extension.
+    on Windows the hook the README calls `./on-dhcp-capture` is the program that
+    `cli_hook` made, because a launcher script cannot be started by path there.
     """
     text = line.split("pydhcp", 1)[1]
     seen: "dict[str, str]" = {}
@@ -146,7 +155,8 @@ def _arguments(line: str, ports: "dict[str, int]") -> "list[str]":
         ports[name] = int(value.rsplit(":", 1)[1])
     arguments = shlex.split(text, comments=True)
     if os.name == "nt":
-        arguments = [a + ".cmd" if a == "./on-dhcp-capture" else a for a in arguments]
+        command = HOOKS[str(directory)].command
+        arguments = [command if a == "./on-dhcp-capture" else a for a in arguments]
     return arguments
 
 
@@ -191,7 +201,8 @@ def test_a_readme_command_line_runs_as_written(
 ) -> None:
     ports: "dict[str, int]" = {"config": free_port()}
     _prepare(tmp_path, ports)
-    arguments = _arguments(line, ports)
+    arguments = _arguments(line, ports, tmp_path)
+    environment = HOOKS[str(tmp_path)].env
     if "--help" in arguments:
         pytest.skip("--help is not a run")
     verb = arguments[0]
@@ -199,7 +210,9 @@ def test_a_readme_command_line_runs_as_written(
 
     if verb not in SERVING or "--read" in arguments:
         stdin = _packet_hex() if "--decode" in arguments else ""
-        done = run_cli(*arguments, input=stdin, cwd=tmp_path, timeout=60)
+        done = run_cli(
+            *arguments, input=stdin, cwd=tmp_path, timeout=60, env=environment
+        )
         assert done.returncode == 0, done.stderr
         assert "Traceback" not in done.stderr and "error:" not in done.stderr
         if "--output" in arguments:
@@ -208,7 +221,7 @@ def test_a_readme_command_line_runs_as_written(
             assert done.stdout.strip(), "a decoded packet prints something"
         return
 
-    command = Running(*arguments, cwd=tmp_path)
+    command = Running(*arguments, cwd=tmp_path, env=environment)
     try:
         command.listening()
         assert command.process.poll() is None, "\n".join(command.stderr)
@@ -218,7 +231,7 @@ def test_a_readme_command_line_runs_as_written(
                 out.sendto(_discover(), ("127.0.0.1", port))
             if "--hook" in arguments:
                 assert _wait_for(lambda: (tmp_path / "hook-ran.txt").exists())
-            elif "--per-capture" in arguments:
+            elif "--per-record" in arguments:
                 assert _wait_for(
                     lambda: any(p.is_file() for p in (tmp_path / "output").rglob("*"))
                 )
@@ -229,7 +242,8 @@ def test_a_readme_command_line_runs_as_written(
                 )
             else:
                 assert _wait_for(lambda: any(l.startswith("{") for l in command.stdout))
-                assert json.loads(command.stdout[0])["xid"] == 0x1234ABCD
+                record = json.loads(command.stdout[0])
+                assert record["layers"][-1]["message"]["xid"] == 0x1234ABCD
         assert command.process.poll() is None, "\n".join(command.stderr)
     finally:
         command.kill()

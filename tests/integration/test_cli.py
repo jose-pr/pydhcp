@@ -441,26 +441,33 @@ def test_relay_id_misuse_is_reported_as_a_clean_cli_error(monkeypatch, capsys) -
 
 
 @pytest.mark.parametrize("fmt", ["toml", "ini"])
-def test_capture_rejects_toml_and_ini_for_multi_record_output(fmt, capsys) -> None:
+def test_capture_rejects_toml_and_ini_for_multi_record_output(
+    fmt, tmp_path, capsys
+) -> None:
     """Concatenated records are unreadable in both: TOML has no document
     separator and configparser raises DuplicateSectionError on a second
-    [message]. per-capture writes one record per file, which is valid.
+    section. One record per file is valid.
 
-    The rejection has to happen before binding. Without it this call does not
-    raise at all -- it opens sockets and captures until interrupted, which is
-    why this test is not run against the pre-fix tree.
+    The rejection happens when the writer is built, before anything is read or
+    bound: the capture file named here does not exist, and had the rejection come
+    later the status would be the missing file's, 1.
     """
     if fmt == "toml":
         pytest.importorskip("tomli_w")
-    command = Capture()
-    command.packet_format = fmt
-    command.output = pathlib.Path("caps." + fmt)
-    with pytest.raises(ValueError) as error:
-        command()
-    message = str(error.value)
-    assert "per-capture" in message and fmt in message
-    assert main(["capture", "--format", fmt, "--output", "caps." + fmt]) == 2
-    assert "per-capture" in capsys.readouterr().err
+    status = main(
+        [
+            "capture",
+            "--read",
+            str(tmp_path / "absent.pcap"),
+            "--format",
+            fmt,
+            "--output",
+            str(tmp_path / ("caps." + fmt)),
+        ]
+    )
+    err = capsys.readouterr().err
+    assert status == 2
+    assert err.startswith("pydhcp: error:") and fmt in err and "per_record" in err
 
 
 def test_verbosity_flags_reach_the_library_logger() -> None:

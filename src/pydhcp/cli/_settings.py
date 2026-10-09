@@ -27,10 +27,40 @@ TRACEBACK_ENV = "PYDHCP_TRACEBACK"
 _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
 
-#: The configuration keys that are not settings of a command.
+#: The configuration keys that are not settings of a command. `plugins` and
+#: `plugin_config` name code to import: pktcap takes them from the command line alone.
 _NOT_SETTINGS = frozenset(
-    {"config", "config_format", "verbose", "quiet", "loglevel", "loglevels"}
+    {
+        "config",
+        "config_format",
+        "verbose",
+        "quiet",
+        "loglevel",
+        "loglevels",
+        "plugins",
+        "plugin_config",
+    }
 )
+
+
+#: The variables a command reads under another name than it read before, by command.
+#: A value in one is refused with the name to use: it would otherwise change nothing.
+_RENAMED_VARIABLES: "_ty.Mapping[str, _ty.Mapping[str, str]]" = {
+    "capture": {
+        "PYDHCP_CAPTURE_RECORD_FORMAT": "PYDHCP_CAPTURE_FORMAT",
+        "PYDHCP_CAPTURE_PER_CAPTURE": "PYDHCP_CAPTURE_PER_RECORD",
+    },
+    "replay": {"PYDHCP_REPLAY_SERVER": "PYDHCP_REPLAY_TO"},
+}
+
+
+def check_renamed_variables(
+    command: _ty.Optional[str], environ: "_ty.Mapping[str, str]" = _os.environ
+) -> None:
+    """`ValueError` naming the variable to use when `command` finds one it does not read."""
+    for old, new in _RENAMED_VARIABLES.get(command or "", {}).items():
+        if environ.get(old):
+            raise ValueError(f"{old} is not read: the variable is {new}")
 
 
 def traceback_requested(environ: "_ty.Mapping[str, str]" = _os.environ) -> bool:

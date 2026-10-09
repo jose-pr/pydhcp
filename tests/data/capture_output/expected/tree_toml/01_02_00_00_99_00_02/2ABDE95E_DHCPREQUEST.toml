@@ -1,3 +1,35 @@
+time = 1700000008.0
+linktype = 101
+length = 337
+payload = ""
+
+[[layers]]
+layer = "ipv4"
+source = "10.99.0.50"
+destination = "10.99.0.1"
+protocol = 17
+ttl = 64
+identification = 33
+dont_fragment = false
+more_fragments = false
+fragment_offset = 0
+length = 337
+
+[[layers]]
+layer = "udp"
+source_port = 68
+destination_port = 67
+length = 317
+checksum = 57262
+
+[[layers]]
+layer = "dhcp"
+op = "BOOTREQUEST"
+xid = 717089118
+message_type = "DHCPREQUEST"
+client_id = "01:02:00:00:99:00:02"
+
+[layers.message]
 op = "BOOTREQUEST"
 htype = "ETHERNET"
 hlen = 6
@@ -13,7 +45,7 @@ chaddr = "02:00:00:99:00:02"
 sname = ""
 file = ""
 
-[options]
+[layers.message.options]
 DHCP_MESSAGE_TYPE = "DHCPREQUEST"
 SERVER_IDENTIFIER = "10.98.0.2"
 REQUESTED_IP = "10.99.0.146"
