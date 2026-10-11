@@ -227,9 +227,9 @@ someone upgrading from 0.7.0.
     `PYDHCP_CAPTURE_PER_RECORD` and `PYDHCP_REPLAY_TO`. An old option is refused by the parser, an
     old settings key by name, and an old variable with the name to use (status 2).
   - **New variables and keys**: every option of the two commands has `PYDHCP_<COMMAND>_<FIELD>` and,
-    for `capture`, a settings key of that field's name. The plugin list (`--load`,
-    `--pktcap-config`) has neither: only the command line, `PKTCAP_LOAD`, `PKTCAP_CONFIG` and
-    pktcap's own file name a plugin.
+    for `capture`, a settings key of that field's name. The plugin list is `--load`, with pktcap's
+    own `PKTCAP_LOAD` and the key `load`; `--pktcap-config` and `PKTCAP_CONFIG` are not read, since
+    pktcap's commands have no settings file of their own.
   - **Hooks are pktcap's**: a hook comes from `--hook`, `PYDHCP_CAPTURE_HOOK` and the settings
     file the user named; it gets `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`
     and `PKTCAP_HOOK_FORMAT` (not `PYDHCP_CAPTURE_*`) and the record on standard input, and the

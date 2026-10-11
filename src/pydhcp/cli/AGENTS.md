@@ -89,10 +89,9 @@ main(argv: Sequence[str] | None = None) -> int
   (`listen`, `per_interface`, `lease_file`; `server`, `max_hops`,
   `insert_relay_agent_info`, `circuit_id`, `remote_id`; and for `capture` the fields of its
   options: `filter`, `format`, `output`, `per_record`, `max_files`, `datagrams`, `append`,
-  `interface`, `read`, `count`, `duration`, `hook`, `hook_fail_fast`, `hook_timeout`).
-  `plugins` and `plugin_config` are not settings: a program's settings file is not the
-  user's, and a plugin is code that is imported, so only the command line, `PKTCAP_LOAD`
-  and pktcap's own file name one:
+  `interface`, `read`, `count`, `duration`, `hook`, `hook_fail_fast`, `hook_timeout`, and
+  `load`, the list of pktcap plugins to import beside `pydhcp.capture`: the file is one the
+  user named, so it may name code to load, as it may name a hook):
 
   ```toml
   [server]
@@ -128,8 +127,8 @@ main(argv: Sequence[str] | None = None) -> int
   else `json` for `-`), `--per-record` (one file per record, `--output` the pattern with
   `{client_id}`, `{msg_type}`, `{xid}`, `{timestamp}`, `{index}` and `{format}`),
   `--max-files`, `--datagrams`, `--append`, `--count`, `--duration`/`-d`, `--hook`,
-  `--hook-fail-fast`, `--hook-timeout`, `--load` and `--pktcap-config` (pktcap's `--config`)
-  are pktcap's, and `pktcap/cli/AGENTS.md` has each one's contract. What it prints is
+  `--hook-fail-fast`, `--hook-timeout` and `--load` (`PKTCAP_LOAD`; more plugins beside
+  `pydhcp.capture`) are pktcap's, and `pktcap/cli/AGENTS.md` has each one's contract. What it prints is
   pktcap's record of the frame (`time`, `linktype`, `length`, `layers`: `ipv4`, `udp` and
   `dhcp`, whose `message` is the mapping `pydhcp packet --decode` prints), and the one
   summary line on stderr; `--format text` prints `DHCPLayer.summary()`. The message alone is

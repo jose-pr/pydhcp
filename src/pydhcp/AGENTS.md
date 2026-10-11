@@ -363,7 +363,7 @@ is in `pydhcp/cli/AGENTS.md`. The ones that follow no such rule:
 | `PYDHCP_TRACEBACK` | a boolean: when on, an error is raised with its traceback (status 1) instead of one `pydhcp: error:` line. Default: off; `0` is off |
 | `PYDHCP_MCP` | `stdio` serves `pydhcp.packet` and `pydhcp.interfaces` as MCP tools over standard input and output instead of running a command; any other value is a usage error (status 2). The other commands are not tools |
 | `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`, `PKTCAP_HOOK_FORMAT` | **set for a command hook** (pktcap's `PKTCAP_HOOK_<FIELD>`), not read: the client identifier (upper-case hex with `_` between the octets, `01_02_00_00_99_00_02`, or `UNKNOWN`: pktcap cleans a value as it cleans one for a file name, and cuts it at 64 characters), the message type's name (`DHCPDISCOVER`), the transaction id (eight upper-case hex digits) and the record format of the hook's standard input (`json` when the output is a capture file) |
-| `PKTCAP_LOAD`, `PKTCAP_CONFIG` | read by `capture` and `replay` as pktcap reads them: more pktcap plugins to load beside `pydhcp.capture`, and the file that may list them. Only the command line, these variables and pktcap's own file can name a plugin: never a settings file |
+| `PKTCAP_LOAD` | read by `capture` and `replay` as pktcap reads it: more pktcap plugins to load beside `pydhcp.capture` (`--load`; the settings key is `load`). `PKTCAP_CONFIG` is pktcap's own program's and is not read here |
 
 ## Gotchas
 
