@@ -56,10 +56,11 @@ jobs:
         with:
           python-version: "3.14"
 
-      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Remove this step once 0.1.0 is published.
-      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
-        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+      # Temporary: pktcap 0.1.0, which the pktcap extra names, and netimps 0.4.1,
+      # which pyproject.toml requires, are not on PyPI yet. Remove this step once
+      # both are published.
+      - name: Install netimps 0.4.1 and pktcap 0.1.0 from their branches (until they are on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment" "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install package and test dependencies
         run: |
@@ -117,10 +118,11 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Remove this step once 0.1.0 is published.
-      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
-        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+      # Temporary: pktcap 0.1.0, which the pktcap extra names, and netimps 0.4.1,
+      # which pyproject.toml requires, are not on PyPI yet. Remove this step once
+      # both are published.
+      - name: Install netimps 0.4.1 and pktcap 0.1.0 from their branches (until they are on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment" "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install package and test dependencies
         run: |
@@ -174,18 +176,18 @@ jobs:
         with:
           python-version: "3.9"
 
-      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet, so it has no version to pin and comes from its branch. Remove this
-      # step once 0.1.0 is published (the pin below then covers it).
-      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
-        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+      # Temporary: pktcap 0.1.0 and netimps 0.4.1 are not on PyPI yet, so they
+      # have no version to pin and come from their branches. Remove this step
+      # once both are published (the pin below then covers them).
+      - name: Install netimps 0.4.1 and pktcap 0.1.0 from their branches (until they are on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment" "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       # The script reads the floors from pyproject.toml, evaluating each marker
       # for this runner, so a floor that differs by platform or Python is the one
-      # that applies here. The skipped name has no published version to pin;
-      # drop --skip once it is on PyPI.
+      # that applies here. The skipped names have no published version to pin;
+      # drop --skip once they are on PyPI.
       - name: Pin every declared dependency to its floor
-        run: python .github/pin_floors.py --skip pktcap
+        run: python .github/pin_floors.py --skip pktcap netimps
 
       - name: Install at the floors
         run: python -m pip install -c floors.txt -e ".[dev]"
@@ -195,8 +197,9 @@ jobs:
 
   # What a user gets from `pip install pydhcp` with no extra: the library imports
   # and loads no optional module, the command says it needs the `cli` extra, and
-  # a feature that needs the yaml or toml extra names it. Then the `cli` extra
-  # alone: the command runs. The test jobs above always have every extra.
+  # a feature that needs the pktcap extra names it. Then the `cli` extra alone:
+  # the command runs and a capture still names its extra. Then `cli` and
+  # `pktcap`: the capture command runs. The test jobs above always have every extra.
   bare:
     name: Bare install (py${{ matrix.python-version }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -216,10 +219,10 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Remove this step once 0.1.0 is published.
-      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
-        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+      # Temporary: netimps 0.4.1, which pyproject.toml requires, is not on PyPI
+      # yet. Remove this step once it is published.
+      - name: Install netimps 0.4.1 from its branch (until it is on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
 
       - name: Install with no extra
         run: python -m pip install .
@@ -234,10 +237,10 @@ jobs:
           import pydhcp
           import pydhcp.cli
 
-          optional = ("duho", "yaml", "tomli", "tomli_w", "tomllib")
+          optional = ("duho", "pktcap", "asyncio", "yaml", "tomli", "tomli_w", "tomllib")
           loaded = sorted(m for m in sys.modules if m.split(".")[0] in optional)
           assert loaded == [], loaded
-          for name in ("duho", "yaml", "tomli_w"):
+          for name in ("duho", "pktcap", "yaml", "tomli_w"):
               try:
                   __import__(name)
               except ImportError:
@@ -252,15 +255,24 @@ jobs:
                   "chaddr": "00:11:22:33:44:55", "sname": "", "file": "", "options": {},
               }
           )
-          assert message.to_text("json") and message.to_text("ini")
-          for fmt in ("yaml", "toml"):
+          assert message.to_text("json")
+          for fmt in ("yaml", "toml", "ini"):
               try:
                   message.to_text(fmt)
               except ImportError as error:
-                  assert 'pip install "pydhcp[%s]"' % fmt in str(error), error
+                  assert 'pip install "pydhcp[pktcap]"' in str(error), error
                   print(fmt, "without the extra says:", error)
               else:
-                  raise SystemExit(fmt + " was written without its extra")
+                  raise SystemExit(fmt + " was written without the pktcap extra")
+          from pydhcp.capture import sniff_dhcp
+
+          try:
+              for _ in sniff_dhcp("127.0.0.1:0"):
+                  break
+          except ImportError as error:
+              assert 'pip install "pydhcp[pktcap]"' in str(error), error
+          else:
+              raise SystemExit("a capture started without the pktcap extra")
           PY
           for run in "pydhcp --help" "python -m pydhcp --help"; do
             if $run > out.txt 2> err.txt; then
@@ -274,7 +286,7 @@ jobs:
       - name: Add the cli extra alone
         run: python -m pip install ".[cli]"
 
-      - name: The command runs, and the other extras are still named
+      - name: The command runs, and the pktcap extra is still named
         shell: bash
         working-directory: ${{ runner.temp }}
         run: |
@@ -292,7 +304,29 @@ jobs:
             echo "yaml decoded without its extra"; exit 1
           fi
           cat err.txt
-          grep -q 'pip install "pydhcp\[yaml\]"' err.txt
+          grep -q 'pip install "pydhcp\[pktcap\]"' err.txt
+          for command in capture replay; do
+            if pydhcp $command > out.txt 2> err.txt; then
+              echo "'pydhcp $command' ran without the pktcap extra"; exit 1
+            fi
+            cat err.txt
+            grep -q 'pip install "pydhcp\[pktcap\]"' err.txt
+          done
+
+      # Temporary: pktcap 0.1.0 is not on PyPI yet. Remove this step once it is
+      # published (the next step then installs it by its extra).
+      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
+        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+
+      - name: Add the pktcap extra
+        run: python -m pip install ".[cli,pktcap]"
+
+      - name: The capture commands run
+        shell: bash
+        working-directory: ${{ runner.temp }}
+        run: |
+          pydhcp capture --help > /dev/null
+          pydhcp replay --help > /dev/null
 
   # What a user installs is the built wheel, not the checkout: build it, install
   # it into a clean environment away from the source tree, run the console
@@ -321,17 +355,17 @@ jobs:
           python -m pip install build
           python -m build --wheel --outdir "${{ runner.temp }}/dist"
 
-      # Temporary: pktcap 0.1.0, which the wheel requires, is not on PyPI yet.
+      # Temporary: netimps 0.4.1, which the wheel requires, is not on PyPI yet.
       # Installed into the fresh environment first, from its branch, so the wheel
-      # install finds the requirement already met. Remove this step once it is
-      # published.
-      - name: Install pktcap from its branch (until it is on PyPI)
+      # install finds the requirement already met. Remove the install line once it
+      # is published; the environment is still made here.
+      - name: Make the environment, with netimps from its branch (until it is on PyPI)
         shell: bash
         working-directory: ${{ runner.temp }}
         run: |
           python -m venv wheel-env
           if [ -d wheel-env/Scripts ]; then BIN=wheel-env/Scripts; else BIN=wheel-env/bin; fi
-          "$BIN/python" -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+          "$BIN/python" -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment"
 
       - name: Install the wheel, away from the checkout, and run the command
         shell: bash
@@ -380,10 +414,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Remove this step once 0.1.0 is published.
-      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
-        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+      # Temporary: pktcap 0.1.0, which the pktcap extra names, and netimps 0.4.1,
+      # which pyproject.toml requires, are not on PyPI yet. Remove this step once
+      # both are published.
+      - name: Install netimps 0.4.1 and pktcap 0.1.0 from their branches (until they are on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment" "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install package and test dependencies
         run: |
@@ -478,10 +513,11 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Temporary: pktcap 0.1.0, which pyproject.toml requires, is not on PyPI
-      # yet. Remove this step once 0.1.0 is published.
-      - name: Install pktcap 0.1.0 from its branch (until it is on PyPI)
-        run: python -m pip install "pktcap @ git+https://github.com/jose-pr/pktcap@main"
+      # Temporary: pktcap 0.1.0, which the pktcap extra names, and netimps 0.4.1,
+      # which pyproject.toml requires, are not on PyPI yet. Remove this step once
+      # both are published.
+      - name: Install netimps 0.4.1 and pktcap 0.1.0 from their branches (until they are on PyPI)
+        run: python -m pip install "netimps @ git+https://github.com/jose-pr/netimps@standard-alignment" "pktcap @ git+https://github.com/jose-pr/pktcap@main"
 
       - name: Install benchmark dependencies
         run: |
