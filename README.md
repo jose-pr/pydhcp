@@ -239,7 +239,7 @@ pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_
 pydhcp capture --listen 127.0.0.1:6767 --hook ./on-dhcp-capture
 
 # Start the DHCP server from a JSON, TOML or INI configuration file
-pydhcp server --config config.json
+pydhcp --config config.json server
 
 # Listen on multiple explicit endpoints while debugging
 pydhcp server --listen 127.0.0.1:6767,127.0.0.1:6768

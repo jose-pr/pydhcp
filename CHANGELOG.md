@@ -208,8 +208,7 @@ someone upgrading from 0.7.0.
   a 1 MiB receive buffer, `--per-interface`), and with no source at all it listens on `*`. Their
   options, statuses, the summary on stderr and the file budget are pktcap's (`pktcap --help` and
   pktcap's header have each one), and `pydhcp capture` gains `--interface`, `--datagrams`,
-  `--append`, `--duration`/`-d`, `--hook-timeout`, `--load` and `--pktcap-config`, and
-  `--format text`.
+  `--append`, `--duration`/`-d`, `--hook-timeout` and `--load`, and `--format text`.
   - **A record is pktcap's record of the frame**: `time`, `linktype`, `length`, `layers`
     (`ipv4`, `udp` and `dhcp`) and `payload`. The message the old line held is the `dhcp` layer's
     `message`: `jq -c '.layers[-1].message'`. A record file is replaced unless `--append` is
@@ -275,10 +274,10 @@ someone upgrading from 0.7.0.
 - **A missing optional dependency is an error that names the extra, not
   `NotImplementedError`**: `DHCPMessage.to_text`/`from_text` and `pydhcp.packet.structured.dumps`/
   `loads` raise `ImportError` with `pip install "pydhcp[pktcap]"` for YAML, TOML and INI text (and
-  pktcap's own line for its `yaml` and `toml` extras); a `.toml` configuration file raises
-  `DHCPConfigError` with `pip install "pydhcp[toml]"`. The format stays a listed one. **Breaking**
-  for code that caught `NotImplementedError` there. No default needs an extra: `packet --format`
-  and the configuration format are JSON or come from the file's name.
+  pktcap's own line for its `yaml` and `toml` extras); a `.toml` or `.yaml` configuration file whose
+  reader is missing raises `DHCPConfigError` whose line is duho's, naming `duho[config]` or
+  `duho[yaml]`. **Breaking** for code that caught `NotImplementedError` there. No default needs an
+  extra: `packet --format` is JSON, and a settings file is JSON, INI or whatever its name says.
 - **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
   `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
 - **Dependency ranges are scoped to a series and their floors install**: `netimps>=0.4.1,<0.5`,
@@ -320,19 +319,37 @@ someone upgrading from 0.7.0.
 - **`PYDHCP_MCP=stdio` no longer serves every command as a tool**: `packet` and `interfaces`
   alone are served (see Added). `server`, `relay` and `capture` do not return until they are
   stopped, and `capture` and `replay` start a program per packet or send datagrams.
-- **Configuration errors are one line and status 2**: a malformed TOML, JSON or INI
+- **Configuration errors are one line and status 2**: a malformed JSON, TOML, YAML or INI
   file, a top level that is not a mapping, a misspelled section (`sever:`), another
-  command's section, a key the command does not have, an extension that is not one of the
-  three and `--config -` without `--config-format` each print
+  command's section, a key the command does not have and a file name that no format
+  claims each print
   `pydhcp: error: <file>:<line>:<col>: <problem>` with no text from the document. They were
   a traceback (YAML, INI), a bare parser message (JSON, TOML) or silently started a server
   on every interface (a misspelled section). An INI value is no longer interpolated, so a
   `%` in a path is text; a `.conf` file is no longer parsed as JSON.
+- **The settings file is the root's, and `duho.config` reads it** (**Breaking**):
+  - `pydhcp --config FILE COMMAND` (or `-c FILE`, or `PYDHCP_CONFIG`), where it was
+    `pydhcp COMMAND --config FILE`. After the command name the option is refused with the line
+    to use. `replay` reads the file too (a `[replay]` table); `packet` and `interfaces` do not.
+  - The format is the ending of the file's name: `.json`, `.toml`, `.yaml`, `.yml`, `.ini` or
+    `.cfg`. `.yaml` and `.yml` are read (they need `pip install "duho[yaml]"`), and so is `.cfg`;
+    a name that none of them claims is refused, not read as TOML.
+  - **INI is duho's dialect**: the keys of `[DEFAULT]` are top-level keys (and so refused as an
+    unknown section, since a command's keys go in its own section), sections do not inherit them,
+    and a key keeps its case (`Listen` is not `listen`).
+  - The text of a read error is duho's, with the same path, line and column; a settings file that
+    does not exist is status 2 from the parser when `--config` names it (it was 1), and status 1
+    when `PYDHCP_CONFIG` does.
+  - `pydhcp.exceptions.DHCPConfigError` keeps its fields and its one line; `load_config(source,
+    format=None)` calls `duho.config` and needs the `cli` extra (its `ImportError` names it).
+    `-` is a file name there, not standard input.
+  - The `[capture]` and `[replay]` tables may set every inherited option, `load` (the pktcap
+    plugins to import) among them.
 - **Settings follow one order for every command**: the option, then an environment
   variable (`PYDHCP_<COMMAND>_<OPTION>`, listed in the README and the shipped header), then
   the configuration file, then the default. `relay` and `capture` read the file too, and any
-  field of a command can be set from it. The file is explicit (`--config` or
-  `PYDHCP_CONFIG`; `--config -` reads standard input), with no default location.
+  field of a command can be set from it. The file is explicit (`--config FILE` before the
+  command name, or `PYDHCP_CONFIG`), with no default location.
 - **`PYDHCP_TRACEBACK` is a boolean**: `0`, `false`, `no` and `off` no longer enable
   tracebacks; any text that is neither a true nor a false word is an error naming the
   variable.
@@ -1083,12 +1100,13 @@ Replace each name in the left column with the one beside it.
 
 ### Removed
 
-- **No YAML in pydhcp's own code.** The `yaml` extra is gone (pktcap's `yaml` extra holds
-  PyYAML), and a configuration file is JSON, TOML or INI: `yaml` as a `--config-format`,
-  `PYDHCP_CONFIG_FORMAT` or `load_config` format, and the endings `.yaml` and `.yml`, are
-  refused as any unknown one is. Convert a settings file to TOML or JSON (`server:` with
-  `listen: "*"` is `[server]` with `listen = "*"`). The `toml` extra is the reader of a TOML
-  settings file alone (`tomli` before Python 3.11).
+- **No PyYAML requirement in pydhcp.** The `yaml` extra is gone: pktcap's `yaml` extra and duho's
+  hold PyYAML. A `.yaml` or `.yml` settings file is read through `duho[yaml]`.
+- **The settings file's own spellings**: `--config` and `--config-format` after a command name,
+  `--config-format`, `PYDHCP_CONFIG_FORMAT` (refused with the line to use), `--config -` and
+  `PYDHCP_CONFIG=-` (standard input), pydhcp's own JSON, TOML and INI readers, and the `toml`
+  extra (`pip install "duho[config]"` reads TOML below Python 3.11). `--pktcap-config` and
+  `PKTCAP_CONFIG` are not read (pktcap's commands have no settings file of their own).
 - **Everything pktcap does is out of `pydhcp.capture` and the root**, and pydhcp's own capture
   classes, writer, filter and hook runner with it. Each name and what replaces it:
   - `DHCPCapture`, `AsyncDHCPCapture`: `pydhcp.capture.sniff_dhcp(listen)` and `asniff_dhcp(listen)`

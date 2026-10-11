@@ -63,7 +63,7 @@ system network stack.
 
 ```bash
 pydhcp capture --listen 127.0.0.1:6767 --filter msg_type=DHCPDISCOVER --output -
-pydhcp server --config server.toml
+pydhcp --config server.toml server
 ```
 
 ## Learn more

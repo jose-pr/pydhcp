@@ -26,7 +26,7 @@ Description=pydhcp server
 After=network-online.target
 
 [Service]
-ExecStart=/opt/pydhcp/.venv/bin/pydhcp server --config /etc/pydhcp/server.toml
+ExecStart=/opt/pydhcp/.venv/bin/pydhcp --config /etc/pydhcp/server.toml server
 Restart=on-failure
 User=pydhcp
 Group=pydhcp

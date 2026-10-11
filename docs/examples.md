@@ -12,7 +12,7 @@ listen = "*"
 ```
 
 ```bash
-pydhcp server --config server.toml
+pydhcp --config server.toml server
 ```
 
 `listen` is text (`"127.0.0.1:6767,127.0.0.2:6768"`), an `[address, port]` pair
