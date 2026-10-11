@@ -18,8 +18,9 @@ import typing as _ty
 
 import pytest
 
-# The listener waits for datagrams in `select.select`, and the capture in a receive on
-# its endpoint. The wrapper announces on the first such wait, so the interrupt lands
+# The listener waits for datagrams in `select.select`, and the capture in the default
+# selector: `select.select` again on Windows, `epoll` or `kqueue` elsewhere, which
+# never call it. The wrapper announces on the first such wait, so the interrupt lands
 # while the command is receiving and not while it is still binding.
 _WRAPPER = """
 import select
@@ -39,19 +40,19 @@ def waiting(readers, writers, errors, timeout=None):
 
 select.select = waiting
 
-import netimps
+import selectors
 
-receive = netimps.UDPEndpoint.recv
+wait_for_readable = selectors.DefaultSelector.select
 
 
-def receiving(self, *args, **options):
+def selecting(self, *args, **options):
     if not announced:
         announced.append(True)
         print("serving", flush=True)
-    return receive(self, *args, **options)
+    return wait_for_readable(self, *args, **options)
 
 
-netimps.UDPEndpoint.recv = receiving
+selectors.DefaultSelector.select = selecting
 if sys.platform == "win32":
     signal.signal(signal.SIGBREAK, signal.default_int_handler)
 sys.argv[0] = "pydhcp"

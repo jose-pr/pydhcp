@@ -12,6 +12,7 @@ from __future__ import annotations
 import _thread
 import logging
 import select
+import selectors
 import threading
 import typing as _ty
 
@@ -64,20 +65,29 @@ def run_command(
     records are logged at all.
 
     The `Bound` record is the last thing the command logs before it receives.
-    The interrupt waits for the receive loop's first `select.select()` as well,
-    so it lands in a command that is receiving and not in the instructions of
-    start-up, where a Ctrl-C is handled too but is not what these tests are
-    about. A test that needs the command serving sends it a datagram in
-    `during` and waits for what that causes.
+    The interrupt waits for the receive loop's first wait as well: a call of
+    `select.select()` (the listener), or of the default selector's `select()`
+    (a capture, whose selector is `epoll` or `kqueue` off Windows and never
+    calls `select.select()`). So it lands in a command that is receiving and
+    not in the instructions of start-up, where a Ctrl-C is handled too but is
+    not what these tests are about. A test that needs the command serving sends
+    it a datagram in `during` and waits for what that causes.
     """
     ready = threading.Event()
     waiting = threading.Event()
     finished = threading.Event()
     real_select = select.select
+    real_selector = selectors.DefaultSelector.select
 
     def announcing_select(*args: _ty.Any, **kwargs: _ty.Any) -> _ty.Any:
         waiting.set()
         return real_select(*args, **kwargs)
+
+    def announcing_selector(
+        self: _ty.Any, *args: _ty.Any, **kwargs: _ty.Any
+    ) -> _ty.Any:
+        waiting.set()
+        return real_selector(self, *args, **kwargs)
 
     collector = _Collector(bound, ready)
     outcome: "dict[str, _ty.Any]" = {}
@@ -105,12 +115,14 @@ def run_command(
     logger = logging.getLogger("pydhcp")
     logger.addHandler(collector)
     select.select = announcing_select
+    selectors.DefaultSelector.select = announcing_selector  # type: ignore[method-assign]
     watcher.start()
     status = None
     try:
         status = main(list(argv))
     finally:
         select.select = real_select
+        selectors.DefaultSelector.select = real_selector  # type: ignore[method-assign]
         finished.set()
         # An interrupt already on its way lands here, not in the test.
         while True:
