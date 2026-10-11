@@ -22,6 +22,8 @@ from cli_process import SHOW_SETTINGS, run_cli
 
 from pydhcp.cli import main
 
+HAS_YAML = importlib.util.find_spec("yaml") is not None
+
 # the unit under test is not exported from a public module
 from pydhcp.cli._settings import traceback_requested
 
@@ -43,8 +45,6 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "per_interface": False,
             "lease_file": None,
             "lenient_reply_ports": False,
-            "config": None,
-            "config_format": None,
         },
         "file": {
             "listen": "127.0.0.1:2001",
@@ -352,7 +352,19 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "json_out": False,
             "load": None,
         },
-        "file": None,
+        "file": {
+            "input": "from-file.pcap",
+            "to": "192.0.2.1",
+            "speed": 1.5,
+            "no_delay": True,
+            "max_delay": 6.5,
+            "limit": 5,
+            "filter": "sport=67",
+            "source_port": 6767,
+            "broadcast": True,
+            "json_out": True,
+            "load": ["file_plugin"],
+        },
         "env": {
             "PKTCAP_LOAD": "env_plugin",
             "PYDHCP_REPLAY_INPUT": "from-env.pcap",
@@ -387,6 +399,19 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "arg_plugin",
         ],
         "after": {
+            "file": {
+                "input": "from-file.pcap",
+                "to": "192.0.2.1",
+                "speed": 1.5,
+                "no_delay": True,
+                "max_delay": 6.5,
+                "limit": 5,
+                "filter": "sport=67",
+                "source_port": 6767,
+                "broadcast": True,
+                "json_out": True,
+                "load": ["file_plugin"],
+            },
             "env": {
                 "load": ["env_plugin"],
                 "input": "from-env.pcap",
@@ -446,7 +471,7 @@ def _resolve(
 ) -> "dict[str, _ty.Any]":
     arguments = [command, *argv]
     if config is not None:
-        arguments += ["--config", str(config)]
+        arguments = ["--config", str(config), *arguments]
     done = run_cli(*arguments, env=env, program=program)
     assert done.returncode == 0, done.stderr
     assert done.stderr == ""
@@ -535,7 +560,6 @@ def test_the_configuration_file_can_be_named_by_the_environment(
     path = _file(tmp_path, "server")
     resolved = _resolve(program, "server", env={"PYDHCP_CONFIG": str(path)})
     assert resolved["listen"] == "127.0.0.1:2001"
-    assert resolved["config"] == str(path)
 
 
 def test_the_option_beats_the_variable_for_the_file_itself(
@@ -634,9 +658,17 @@ def _write(tmp_path: pathlib.Path, name: str, text: str) -> pathlib.Path:
     return path
 
 
-def _refused(capsys: pytest.CaptureFixture[str], *argv: str, status: int = 2) -> str:
+def _refused(
+    capsys: pytest.CaptureFixture[str],
+    *argv: str,
+    status: int = 2,
+    env: "_ty.Optional[_ty.Mapping[str, str]]" = None,
+) -> str:
     """Run `pydhcp argv...`: it must be refused with one line and no traceback."""
-    assert main(list(argv)) == status
+    with pytest.MonkeyPatch.context() as patch:
+        for name, value in (env or {}).items():
+            patch.setenv(name, value)
+        assert main(list(argv)) == status
     captured = capsys.readouterr()
     assert captured.out == ""
     lines = captured.err.splitlines()
@@ -660,6 +692,12 @@ MALFORMED = [
         id="toml",
         marks=pytest.mark.skipif(not HAS_TOML_READER, reason="no TOML reader"),
     ),
+    pytest.param(
+        "bad.yaml",
+        "server: [" + SECRET + "\n",
+        id="yaml",
+        marks=pytest.mark.skipif(not HAS_YAML, reason="no PyYAML"),
+    ),
 ]
 
 
@@ -669,7 +707,7 @@ def test_a_malformed_file_is_one_line_naming_the_file_and_where(
 ) -> None:
     path = _write(tmp_path, name, text)
 
-    line = _refused(capsys, "server", "--config", str(path))
+    line = _refused(capsys, "--config", str(path), "server")
 
     assert line.startswith(f"pydhcp: error: {path}:")
     rest = line[len(f"pydhcp: error: {path}:") :]
@@ -702,11 +740,12 @@ def test_a_malformed_file_is_one_line_naming_the_file_and_where(
             '{"relay": {"server": "192.0.2.1"}}',
             "section 'relay' belongs to another command",
         ),
-        ("c.yaml", "server: {}\n", "cannot tell the configuration format"),
-        ("c.yml", "server: {}\n", "cannot tell the configuration format"),
         ("c.json", '{"server": {"config": "x.json"}}', "unknown key 'config'"),
-        ("s.conf", "[server]\nlisten = 127.0.0.1:6767\n", "'.conf'"),
-        ("s", "{}", "cannot tell the configuration format"),
+        ("c.json", '{"config": "x.json"}', "unknown section 'config'"),
+        ("s.conf", "[server]\nlisten = 127.0.0.1:6767\n", "cannot tell the config"),
+        ("s", "{}", "cannot tell the config"),
+        ("d.ini", "[DEFAULT]\nlisten = 127.0.0.1:6767\n", "unknown section 'listen'"),
+        ("k.ini", "[server]\nListen = 127.0.0.1:6767\n", "unknown key 'Listen'"),
     ],
 )
 def test_a_file_that_names_what_the_command_does_not_have_is_refused_by_name(
@@ -718,7 +757,7 @@ def test_a_file_that_names_what_the_command_does_not_have_is_refused_by_name(
 ) -> None:
     path = _write(tmp_path, name, text)
 
-    line = _refused(capsys, "server", "--config", str(path))
+    line = _refused(capsys, "--config", str(path), "server")
 
     assert str(path) in line
     assert word in line
@@ -730,17 +769,28 @@ def test_a_file_that_is_not_utf8_is_refused(
     path = tmp_path / "latin.ini"
     path.write_bytes(b"[server]\nlisten = caf\xe9\n")
 
-    line = _refused(capsys, "server", "--config", str(path))
+    line = _refused(capsys, "--config", str(path), "server")
 
     assert "not valid UTF-8" in line and str(path) in line
 
 
-def test_a_missing_file_is_a_failed_run_naming_it(
+def test_a_missing_file_named_by_the_option_is_a_usage_error_naming_it(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     path = tmp_path / "absent.json"
 
-    line = _refused(capsys, "server", "--config", str(path), status=1)
+    assert main(["--config", str(path), "server"]) == 2
+
+    err = capsys.readouterr().err
+    assert "absent.json" in err and "no such file" in err
+
+
+def test_a_missing_file_named_by_the_variable_is_a_failed_run_naming_it(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = tmp_path / "absent.json"
+
+    line = _refused(capsys, "server", status=1, env={"PYDHCP_CONFIG": str(path)})
 
     assert "absent.json" in line
 
@@ -751,8 +801,8 @@ def test_a_duplicate_section_or_key_in_an_ini_file_is_refused(
     section = _write(tmp_path, "a.ini", "[server]\nlisten = a\n[server]\n")
     key = _write(tmp_path, "b.ini", "[server]\nlisten = a\nlisten = b\n")
 
-    assert "defined twice" in _refused(capsys, "server", "--config", str(section))
-    assert "defined twice" in _refused(capsys, "server", "--config", str(key))
+    assert "defined twice" in _refused(capsys, "--config", str(section), "server")
+    assert "defined twice" in _refused(capsys, "--config", str(key), "server")
 
 
 def test_a_percent_sign_in_an_ini_value_is_text(
@@ -787,61 +837,138 @@ def test_every_command_that_runs_reads_the_file(
     assert resolved["server"] == ["192.0.2.1"] and resolved["max_hops"] == 9
 
 
-def test_the_format_can_be_named_when_the_name_says_nothing(
+def test_a_file_is_read_in_the_format_its_ending_names(
     program: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:
-    path = _write(tmp_path, "server.conf", "[server]\nlisten = 127.0.0.1:2001\n")
+    """The four formats and `.cfg`, one file each; the section is the same in all."""
+    texts = {
+        "s.json": json.dumps({"server": {"listen": "127.0.0.1:2001"}}),
+        "s.toml": '[server]\nlisten = "127.0.0.1:2001"\n',
+        "s.ini": "[server]\nlisten = 127.0.0.1:2001\n",
+        "s.cfg": "[server]\nlisten = 127.0.0.1:2001\n",
+    }
+    if HAS_TOML_READER:
+        pass
+    else:
+        del texts["s.toml"]
+    if HAS_YAML:
+        texts["s.yaml"] = "server:\n  listen: 127.0.0.1:2001\n"
+        texts["s.yml"] = "server:\n  listen: 127.0.0.1:2001\n"
+    for name, text in texts.items():
+        path = _write(tmp_path, name, text)
+
+        assert _resolve(program, "server", config=path)["listen"] == "127.0.0.1:2001"
+
+
+def test_a_yaml_file_is_refused_with_the_extra_to_install_when_yaml_is_missing(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    path = _write(tmp_path, "s.yaml", "server:\n  listen: 127.0.0.1:2001\n")
+    monkeypatch.setitem(sys.modules, "yaml", None)
+
+    line = _refused(capsys, "--config", str(path), "server")
+
+    assert str(path) in line and "duho[yaml]" in line
+
+
+def test_a_key_under_default_in_an_ini_file_is_a_top_level_key(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path, "d.ini", "[DEFAULT]\nlease_file = x.json\n[server]\n")
+
+    line = _refused(capsys, "--config", str(path), "server")
+
+    assert "unknown section 'lease_file'" in line
+
+
+@pytest.mark.parametrize(
+    "arguments, word",
+    [
+        (["--config", "-", "server"], "standard input is not a settings file"),
+        (["--config=-", "server"], "standard input is not a settings file"),
+        (["-c", "-", "server"], "standard input is not a settings file"),
+        (["server", "--config", "x.json"], "--config FILE COMMAND"),
+        (["server", "--config=x.json"], "--config FILE COMMAND"),
+        (
+            ["--config", "x.json", "--config-format", "json", "server"],
+            "--config-format is not an option",
+        ),
+        (["server", "--config-format", "json"], "--config-format is not an option"),
+    ],
+)
+def test_the_spellings_without_an_option_are_refused_with_the_line_to_use(
+    capsys: pytest.CaptureFixture[str], arguments: "list[str]", word: str
+) -> None:
+    line = _refused(capsys, *arguments)
+
+    assert word in line
+
+
+def test_the_format_variable_is_refused_with_the_line_to_use(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    line = _refused(capsys, "interfaces", env={"PYDHCP_CONFIG_FORMAT": "json"})
+
+    assert "PYDHCP_CONFIG_FORMAT is not read" in line and "ending" in line
+
+
+def test_standard_input_named_by_the_variable_is_refused(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    line = _refused(capsys, "server", env={"PYDHCP_CONFIG": "-"})
+
+    assert "cannot tell the config" in line
+
+
+def test_the_file_goes_before_the_command_name(
+    program: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """duho's `--config` is the root's, and a `-c` is its short form."""
+    path = _file(tmp_path, "server")
+
+    for spelling in (["--config", str(path)], ["-c", str(path)], [f"--config={path}"]):
+        done = run_cli(*spelling, "server", program=program)
+        assert done.returncode == 0, done.stderr
+        assert json.loads(done.stdout)["listen"] == "127.0.0.1:2001"
+
+
+@pytest.mark.parametrize("command", ["packet", "interfaces"])
+def test_a_command_with_no_settings_has_no_section(
+    command: str, tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    path = _write(tmp_path, "s.json", json.dumps({command: {}}))
+
+    line = _refused(capsys, "--config", str(path), command)
+
+    assert f"unknown section '{command}'" in line
+
+
+def test_a_served_tree_is_given_no_file(tmp_path: pathlib.Path) -> None:
+    """`PYDHCP_MCP` serves `packet` and `interfaces`: the file the variable names is not read."""
+    path = _write(tmp_path, "s.json", "{ not json")
+    request = (
+        '{"jsonrpc":"2.0","id":1,"method":"initialize","params":'
+        '{"protocolVersion":"2024-11-05","capabilities":{},'
+        '"clientInfo":{"name":"t","version":"1"}}}\n'
+        '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n'
+    )
 
     done = run_cli(
-        "server", "--config", str(path), "--config-format", "ini", program=program
+        input=request, env={"PYDHCP_MCP": "stdio", "PYDHCP_CONFIG": str(path)}
     )
 
     assert done.returncode == 0, done.stderr
-    assert json.loads(done.stdout)["listen"] == "127.0.0.1:2001"
-
-
-def test_standard_input_is_the_file_when_it_is_named_dash(
-    program: pathlib.Path,
-) -> None:
-    text = json.dumps({"server": {"listen": "127.0.0.1:2001"}})
-
-    done = run_cli(
-        "server",
-        "--config",
-        "-",
-        "--config-format",
-        "json",
-        program=program,
-        input=text,
-    )
-
-    assert done.returncode == 0, done.stderr
-    assert json.loads(done.stdout)["listen"] == "127.0.0.1:2001"
-
-
-def test_standard_input_needs_a_format(capsys: pytest.CaptureFixture[str]) -> None:
-    line = _refused(capsys, "server", "--config", "-")
-
-    assert "standard input needs a format" in line and "<stdin>" in line
-
-
-def test_standard_input_is_checked_like_a_file(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.TextIOWrapper(io.BytesIO(("token: " + SECRET + "\n[").encode("utf-8"))),
-    )
-
-    line = _refused(capsys, "server", "--config", "-", "--config-format", "ini")
-
-    assert line.startswith("pydhcp: error: <stdin>:")
+    assert '"pydhcp.interfaces"' in done.stdout or '"interfaces"' in done.stdout
+    assert str(path) not in done.stderr
 
 
 def test_a_config_option_is_a_path(tmp_path: pathlib.Path) -> None:
     from pydhcp.cli import App
 
-    parsed = App._parser_().parse_args(["server", "--config", "x.toml"])
+    path = _write(tmp_path, "x.toml", "")
+    parsed = App._parser_().parse_args(["--config", str(path), "server"])
     assert isinstance(parsed.config, pathlib.Path)
     parsed = App._parser_().parse_args(["packet", "--decode", "-i", "a", "-o", "b"])
     assert isinstance(parsed.input, pathlib.Path)
@@ -855,9 +982,9 @@ def _every_variable() -> "set[str]":
     from pydhcp.cli import App
 
     # private: the unit under test is not re-exported from a public module
-    from pydhcp.cli._settings import CONFIG_ENV, CONFIG_FORMAT_ENV, TRACEBACK_ENV
+    from pydhcp.cli._settings import CONFIG_ENV, TRACEBACK_ENV
 
-    names = {CONFIG_ENV, CONFIG_FORMAT_ENV, TRACEBACK_ENV, "PYDHCP_MCP"}
+    names = {CONFIG_ENV, TRACEBACK_ENV, "PYDHCP_MCP"}
     for command in App._subcommands_ or ():
         names |= {b.env for b in command._getargs_() if b.env}
     # What a command hook is given: pktcap's, named for the fields `capture` supplies.
@@ -886,9 +1013,9 @@ def test_the_layer_table_names_every_variable_a_field_declares() -> None:
     from pydhcp.cli import App
 
     # private: the unit under test is not re-exported from a public module
-    from pydhcp.cli._settings import CONFIG_ENV, CONFIG_FORMAT_ENV
+    from pydhcp.cli._settings import CONFIG_ENV
 
     declared = {
         b.env for command in App._subcommands_ or () for b in command._getargs_()
-    } - {None, CONFIG_ENV, CONFIG_FORMAT_ENV}
+    } - {None, CONFIG_ENV}
     assert {name for spec in LAYERS.values() for name in spec["env"]} == declared

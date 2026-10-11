@@ -255,7 +255,7 @@ def test_a_configuration_file_listen_binds_what_the_table_says(
     ports = _ports()
     path = _write(tmp_path, name, _rewrite(text, ports))
 
-    ran = run_command(["server", "-v", "--config", path], bound=len(expected))
+    ran = run_command(["--config", path, "server", "-v"], bound=len(expected))
 
     assert ran.status == 0
     assert _matches(ran.bound, expected, ports), (ran.bound, expected)
@@ -268,7 +268,7 @@ def test_a_configuration_file_with_a_refused_listen_fails_before_binding(
     _skip_without_the_format(name)
     path = _write(tmp_path, name, text)
 
-    ran = run_command(["server", "-v", "--config", path])
+    ran = run_command(["--config", path, "server", "-v"])
 
     assert ran.status == 2
     assert ran.bound == []
@@ -287,7 +287,7 @@ def test_the_flag_beats_a_list_in_the_file(tmp_path: ty.Any) -> None:
     )
 
     ran = run_command(
-        ["server", "-v", "--listen", f"127.0.0.2:{ports[6768]}", "--config", path]
+        ["--config", path, "server", "-v", "--listen", f"127.0.0.2:{ports[6768]}"]
     )
 
     assert ran.bound == [f"127.0.0.2:{ports[6768]}"]

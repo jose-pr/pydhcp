@@ -4,14 +4,12 @@ from __future__ import annotations
 
 import contextlib as _contextlib
 import errno as _errno
-import pathlib
 import sys as _sys
 import typing as _ty
 
 from duho import Cmd, LoggingArgs, Meta
 
-from .._config import CONFIG_FORMATS
-from ._settings import CONFIG_ENV, CONFIG_FORMAT_ENV, listen_value
+from ._settings import listen_value
 
 PACKET_FORMATS = ("json", "yaml", "toml", "ini", "summary")
 
@@ -77,21 +75,12 @@ class _Command(LoggingArgs, Cmd):
 
 
 class _Configured(_Command):
-    """A command whose settings can also come from a configuration file.
+    """A command whose settings can also come from the root's settings file.
 
-    The file is explicit: `--config` or `PYDHCP_CONFIG`. A daemon does not pick
-    up a file nobody named, so there is no default location.
+    The file is explicit: `--config FILE` before the command name, or
+    `PYDHCP_CONFIG`. A daemon does not pick up a file nobody named, so there is no
+    default location. Its section is named for the command.
     """
-
-    config: _ty.Annotated[_ty.Optional[pathlib.Path], Meta(env=CONFIG_ENV)] = None
-    "Configuration file (JSON, TOML or INI) with a section named for this command; '-' reads standard input and needs --config-format. Default: none"
-    ("--config",)
-
-    config_format: _ty.Annotated[
-        _ty.Optional[str], Meta(choices=CONFIG_FORMATS, env=CONFIG_FORMAT_ENV)
-    ] = None
-    "Format of the configuration file. Default: from the file's extension"
-    ("--config-format",)
 
 
 class _Listening(_Configured):

@@ -318,7 +318,7 @@ def test_the_capture_section_of_a_settings_file_reaches_the_inherited_fields(
         encoding="utf-8",
     )
 
-    done = run_cli("capture", "--read", str(recorded), "--config", str(settings))
+    done = run_cli("--config", str(settings), "capture", "--read", str(recorded))
 
     assert done.returncode == 0, done.stderr
     records = [
@@ -335,7 +335,7 @@ def test_the_old_names_of_the_settings_keys_are_refused(tmp_path: pathlib.Path) 
         json.dumps({"capture": {"per_capture": True}}), encoding="utf-8"
     )
 
-    done = run_cli("capture", "--read", "x.pcap", "--config", str(settings))
+    done = run_cli("--config", str(settings), "capture", "--read", "x.pcap")
 
     assert done.returncode == 2
     assert "unknown key 'per_capture' in section 'capture'" in done.stderr
@@ -348,7 +348,7 @@ def test_the_old_names_of_the_plugin_settings_are_unknown_keys(
     settings = tmp_path / "pydhcp.json"
     settings.write_text(json.dumps({"capture": {key: "os"}}), encoding="utf-8")
 
-    done = run_cli("capture", "--read", "x.pcap", "--config", str(settings))
+    done = run_cli("--config", str(settings), "capture", "--read", "x.pcap")
 
     assert done.returncode == 2
     assert f"unknown key '{key}'" in done.stderr
@@ -385,7 +385,7 @@ def test_the_capture_table_may_name_the_plugins_to_load(
 
     settings = tmp_path / "pydhcp.json"
     settings.write_text(json.dumps({"capture": {"load": [name]}}), encoding="utf-8")
-    loaded = run_cli(*arguments, "--config", str(settings), env=environment)
+    loaded = run_cli("--config", str(settings), *arguments, env=environment)
 
     assert loaded.returncode == 0, loaded.stderr
     assert "frames read, 0 written" in loaded.stderr
@@ -456,13 +456,13 @@ def test_a_hook_comes_from_the_variable_and_from_the_file_the_user_named(
         json.dumps({"capture": {"hook": hook.command}}), encoding="utf-8"
     )
     from_file = run_cli(
+        "--config",
+        str(settings),
         "capture",
         "--read",
         str(recorded),
         "--count",
         "1",
-        "--config",
-        str(settings),
         env=hook.env,
     )
     assert from_file.returncode == 0, from_file.stderr

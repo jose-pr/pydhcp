@@ -1,10 +1,12 @@
 """Where the command's settings come from, beyond its arguments.
 
 The order is argument, environment variable, configuration file, field default,
-and duho applies it to every declared field of every command. This module reads
-the two things duho cannot know before it parses: which configuration file to
-load, and whether `PYDHCP_TRACEBACK` asks for tracebacks. Every environment
-variable the command reads is named here or on a field as `Meta(env=...)`.
+and duho applies it to every declared field of every command. The file is the
+root's `--config` or `PYDHCP_CONFIG`; this module is the loader duho calls for
+it, and reads the two things duho cannot know before it parses: which command
+runs, so that a file may be refused for naming another, and whether
+`PYDHCP_TRACEBACK` asks for tracebacks. Every environment variable the command
+reads is named here or on a field as `Meta(env=...)`.
 """
 
 from __future__ import annotations
@@ -15,12 +17,10 @@ import os as _os
 import pathlib as _pathlib
 import typing as _ty
 
-from .._config import STDIN_NAME, check_sections, load_config
+from .._config import check_sections, load_config
 
 #: The variable that names the configuration file (`--config` beats it).
 CONFIG_ENV = "PYDHCP_CONFIG"
-#: The variable that names a configuration file's format (`--config-format`).
-CONFIG_FORMAT_ENV = "PYDHCP_CONFIG_FORMAT"
 #: The variable that asks for a traceback on an error.
 TRACEBACK_ENV = "PYDHCP_TRACEBACK"
 
@@ -28,9 +28,7 @@ _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
 
 #: The configuration keys that are not settings of a command.
-_NOT_SETTINGS = frozenset(
-    {"config", "config_format", "verbose", "quiet", "loglevel", "loglevels"}
-)
+_NOT_SETTINGS = frozenset({"config", "verbose", "quiet", "loglevel", "loglevels"})
 
 
 #: The variables a command reads under another name than it read before, by command.
@@ -44,10 +42,20 @@ _RENAMED_VARIABLES: "_ty.Mapping[str, _ty.Mapping[str, str]]" = {
 }
 
 
+#: The variables no command reads any more, with what to do instead.
+_REMOVED_VARIABLES: "_ty.Mapping[str, str]" = {
+    "PYDHCP_CONFIG_FORMAT": "the ending of the file's name says its format "
+    "(.json, .toml, .yaml, .yml, .ini or .cfg)",
+}
+
+
 def check_renamed_variables(
     command: _ty.Optional[str], environ: "_ty.Mapping[str, str]" = _os.environ
 ) -> None:
-    """`ValueError` naming the variable to use when `command` finds one it does not read."""
+    """`ValueError` naming what to do when `command` finds a variable it does not read."""
+    for old, instead in _REMOVED_VARIABLES.items():
+        if environ.get(old):
+            raise ValueError(f"{old} is not read: {instead}")
     for old, new in _RENAMED_VARIABLES.get(command or "", {}).items():
         if environ.get(old):
             raise ValueError(f"{old} is not read: the variable is {new}")
@@ -93,8 +101,6 @@ class _Run:
     """What one `main` call knows before duho parses."""
 
     command: _ty.Optional[str] = None
-    config: _ty.Optional[str] = None
-    config_format: _ty.Optional[str] = None
     #: Each command's name mapped to the keys its section accepts.
     sections: "_ty.Mapping[str, _ty.Collection[str]]" = _dataclasses.field(
         default_factory=dict
@@ -105,45 +111,58 @@ _RUN: "_contextvars.ContextVar[_ty.Optional[_Run]]" = _contextvars.ContextVar(
     "pydhcp_cli_run", default=None
 )
 
+_FILE_FIRST = (
+    "--config goes before the command name and names a file: "
+    "pydhcp --config FILE COMMAND"
+)
+_NOT_STDIN = (
+    "--config - is not read: standard input is not a settings file, name a file"
+)
+
 
 def _prescan(argv: _ty.Sequence[str]) -> _Run:
-    """The command and the configuration options of `argv`, spelled out in full.
+    """The command `argv` names, and the refusal of a spelling that names no option.
 
-    The configuration file has to be read before duho parses, so its path comes
-    from here. The root takes no option of its own, so the command is the first
-    word when that is not an option.
+    The loader duho calls is given a path and nothing else, so the command is found
+    here: the first word that is not an option or the file `--config` names. The
+    root takes no other option with a value. `--config` after the command name,
+    `--config-format` and `--config -` (standard input) are refused with the line to
+    use, where the parser would only say the option is unknown.
     """
     run = _Run()
-    if argv and not argv[0].startswith("-"):
-        run.command = argv[0]
-    wanted = {"--config": "config", "--config-format": "config_format"}
     index = 0
     while index < len(argv):
         token = argv[index]
         index += 1
         if token == "--":
             break
-        name, equals, value = token.partition("=")
-        if name not in wanted:
+        name = token.partition("=")[0]
+        if name == "--config-format":
+            raise ValueError(
+                "--config-format is not an option: the ending of the file's name "
+                "says its format (.json, .toml, .yaml, .yml, .ini or .cfg)"
+            )
+        if run.command is not None:
+            if name == "--config":
+                raise ValueError(_FILE_FIRST)
             continue
-        if not equals:
-            if index >= len(argv):
-                break
-            value = argv[index]
-            index += 1
-        setattr(run, wanted[name], value)
-    environ = _os.environ
-    if run.config is None:
-        run.config = environ.get(CONFIG_ENV) or None
-    if run.config_format is None:
-        run.config_format = environ.get(CONFIG_FORMAT_ENV) or None
+        if name == "-c" or (len(name) > 2 and "--config".startswith(name)):
+            value = token.partition("=")[2] if "=" in token else None
+            if value is None:
+                value = argv[index] if index < len(argv) else None
+                index += 1
+            if value == "-":
+                raise ValueError(_NOT_STDIN)
+            continue
+        if not token.startswith("-"):
+            run.command = token
     return run
 
 
 def begin(
     argv: _ty.Sequence[str], sections: "_ty.Mapping[str, _ty.Collection[str]]"
 ) -> "tuple[_Run, _contextvars.Token[_ty.Optional[_Run]]]":
-    """Read what `argv` says about the configuration; `end` undoes it."""
+    """Read what `argv` says about the command; `end` undoes it."""
     run = _prescan(argv)
     run.sections = sections
     return run, _RUN.set(run)
@@ -153,21 +172,14 @@ def end(token: "_contextvars.Token[_ty.Optional[_Run]]") -> None:
     _RUN.reset(token)
 
 
-def config_path() -> _ty.Optional[_pathlib.Path]:
-    """The configuration file this run names, or `None`."""
-    run = _RUN.get()
-    return None if run is None or run.config is None else _pathlib.Path(run.config)
-
-
 def load_layer(path: _pathlib.Path) -> _ty.Dict[str, _ty.Any]:
     """duho's `_config_loader_`: the file as sections, checked against the commands."""
     run = _RUN.get()
     if run is None:  # pragma: no cover - duho only calls this inside `main`
         raise RuntimeError("the configuration is read inside main()")
     name = _os.fspath(path)
-    table = load_config(name, run.config_format)
-    shown = STDIN_NAME if name == "-" else name
-    check_sections(table, run.sections, shown, running=run.command)
+    table = load_config(name)
+    check_sections(table, run.sections, name, running=run.command)
     for body in table.values():
         if "listen" in body and not isinstance(body["listen"], str):
             body["listen"] = Listen(body["listen"])

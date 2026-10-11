@@ -105,7 +105,10 @@ def test_json_text_needs_no_extra(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.parametrize(
     "name, text, blocked, extra",
-    [("c.toml", "[server]\n", ("tomllib", "tomli"), "toml")],
+    [
+        ("c.toml", "[server]\n", ("tomllib", "tomli"), "duho[config]"),
+        ("c.yaml", "server: {}\n", ("yaml",), "duho[yaml]"),
+    ],
 )
 def test_a_file_that_needs_a_missing_extra_is_a_configuration_error(
     tmp_path: pathlib.Path,
@@ -115,6 +118,7 @@ def test_a_file_that_needs_a_missing_extra_is_a_configuration_error(
     blocked: "_ty.Tuple[str, ...]",
     extra: str,
 ) -> None:
+    """duho's own line names its extra, and pydhcp declares neither library."""
     path = tmp_path / name
     path.write_text(text, encoding="utf-8")
     _block(monkeypatch, *blocked)
@@ -122,15 +126,15 @@ def test_a_file_that_needs_a_missing_extra_is_a_configuration_error(
     with pytest.raises(DHCPConfigError) as error:
         load_config(path)
 
-    assert _the_command_for(extra) in str(error.value)
+    assert extra in str(error.value)
     assert error.value.path == str(path)
-    assert "unsupported" not in str(error.value)  # the format stays a listed one
+    assert error.value.__cause__ is None and error.value.__suppress_context__
 
 
-def test_a_json_or_ini_file_needs_no_extra(
+def test_a_json_or_ini_file_needs_no_format_extra(
     tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _block(monkeypatch, *OPTIONAL)
+    _block(monkeypatch, "yaml", "tomllib", "tomli", "tomli_w", "pktcap")
     (tmp_path / "c.json").write_text('{"server": {}}', encoding="utf-8")
     (tmp_path / "c.ini").write_text("[server]\n", encoding="utf-8")
 
@@ -138,55 +142,16 @@ def test_a_json_or_ini_file_needs_no_extra(
     assert load_config(tmp_path / "c.ini") == {"server": {}}
 
 
-@pytest.mark.parametrize("name", ["c.yaml", "c.yml", "C.YAML"])
-def test_a_yaml_configuration_file_is_an_unknown_format_like_any_other(
-    tmp_path: pathlib.Path, name: str
+def test_reading_a_settings_file_without_duho_names_the_cli_extra(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    path = tmp_path / name
-    path.write_text("server: {}\n", encoding="utf-8")
+    (tmp_path / "c.json").write_text('{"server": {}}', encoding="utf-8")
+    _block(monkeypatch, "duho")
 
-    with pytest.raises(
-        DHCPConfigError, match="cannot tell the configuration format"
-    ) as error:
-        load_config(path)
+    with pytest.raises(ImportError) as error:
+        load_config(tmp_path / "c.json")
 
-    assert error.value.path == str(path)
-    assert ".json, .toml, .ini" in str(error.value)
-
-
-def test_yaml_is_no_configuration_format_even_when_named(
-    tmp_path: pathlib.Path,
-) -> None:
-    path = tmp_path / "c.conf"
-    path.write_text("server: {}\n", encoding="utf-8")
-
-    with pytest.raises(DHCPConfigError) as error:
-        load_config(path, "yaml")
-
-    assert "unsupported configuration format 'yaml'" in str(error.value)
-    assert "use one of json, toml, ini" in str(error.value)
-
-
-def test_the_command_line_refuses_yaml_as_the_configuration_format(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    path = tmp_path / "c.conf"
-    path.write_text("server: {}\n", encoding="utf-8")
-
-    status = main(
-        [
-            "server",
-            "--config",
-            str(path),
-            "--config-format",
-            "yaml",
-            "--listen",
-            "127.0.0.1:0",
-        ]
-    )
-
-    assert status == 2
-    assert "unsupported configuration format 'yaml'" in capsys.readouterr().err
+    assert _the_command_for("cli") in str(error.value)
 
 
 def _write_packet(tmp_path: pathlib.Path) -> pathlib.Path:
@@ -227,19 +192,32 @@ def test_a_packet_format_without_its_extra_is_one_line_and_status_1(
     assert line in lines[0]
 
 
+@pytest.mark.parametrize(
+    "name, text, blocked, extra",
+    [
+        ("c.toml", "[nosuchsection]\n", ("tomllib", "tomli"), "duho[config]"),
+        ("c.yaml", "nosuchsection: {}\n", ("yaml",), "duho[yaml]"),
+    ],
+)
 def test_a_configuration_file_without_its_extra_is_a_wrong_invocation(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    name: str,
+    text: str,
+    blocked: "_ty.Tuple[str, ...]",
+    extra: str,
 ) -> None:
-    path = tmp_path / "c.toml"
-    path.write_text("[nosuchsection]\n", encoding="utf-8")
-    _block(monkeypatch, "tomllib", "tomli")
+    path = tmp_path / name
+    path.write_text(text, encoding="utf-8")
+    _block(monkeypatch, *blocked)
 
-    status = main(["server", "--listen", "127.0.0.1:0", "--config", str(path)])
+    status = main(["--config", str(path), "server", "--listen", "127.0.0.1:0"])
 
+    err = capsys.readouterr().err
     assert status == 2
-    assert _the_command_for("toml") in capsys.readouterr().err
+    assert extra in err and str(path) in err
+    assert len(err.splitlines()) == 1
 
 
 def test_the_command_line_without_duho_says_which_extra_and_returns_1(
@@ -390,3 +368,30 @@ def test_the_process_without_duho_prints_the_hint_and_exits_non_zero(
     assert result.stderr.splitlines() == [
         f"pydhcp: error: the command line needs the 'cli' extra: {_the_command_for('cli')}"
     ]
+
+
+def test_a_run_that_names_no_settings_file_loads_no_reader(
+    tmp_path: pathlib.Path,
+) -> None:
+    """`duho.config`, and with it every parser behind it, is imported when a file is read."""
+    program = _program(
+        tmp_path,
+        """
+        import json
+        import sys
+
+        from pydhcp.cli import main
+
+        before = sorted(n for n in sys.modules if n.startswith("duho.config"))
+        status = main(["packet", "--decode", "--input", sys.argv[1]])
+        after = sorted(n for n in sys.modules if n.startswith("duho.config"))
+        print(json.dumps([status, before, after]), file=sys.stderr)
+        """,
+    )
+    packet = tmp_path / "packet.hex"
+    packet.write_text(bytes(_message().encode()).hex(), encoding="ascii")
+
+    result = run_cli(str(packet), program=program)
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stderr.splitlines()[-1]) == [0, [], []]

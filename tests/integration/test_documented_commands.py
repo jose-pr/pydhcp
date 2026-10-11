@@ -57,22 +57,35 @@ DOCUMENTED = [
 ]
 
 
+def _verb(line: str) -> str:
+    """The command a line names: the first word that is not the root's `--config FILE`."""
+    words = shlex.split(line, comments=True)[1:]
+    if words and words[0] in ("--config", "-c"):
+        words = words[2:]
+    return words[0]
+
+
 def test_the_documents_have_command_lines_to_check() -> None:
     assert len(DOCUMENTED) >= 30
-    verbs = {
-        shlex.split(p.values[0], comments=True)[1]  # type: ignore[union-attr]
-        for p in DOCUMENTED
-    }
+    verbs = {_verb(p.values[0]) for p in DOCUMENTED}  # type: ignore[union-attr]
     assert {"interfaces", "packet", "server", "relay", "capture"} <= verbs
 
 
 @pytest.mark.parametrize("line", DOCUMENTED)
 def test_a_documented_command_line_is_accepted_by_the_parser(
-    line: str, capsys: pytest.CaptureFixture[str]
+    line: str,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     argv = shlex.split(line, comments=True)[1:]
     if "--help" in argv or "-h" in argv:
         pytest.skip("--help exits before the parser reports what it does not know")
+    # The root's settings file has to exist for the parser to take it.
+    monkeypatch.chdir(tmp_path)
+    for index, word in enumerate(argv[:-1]):
+        if word in ("--config", "-c"):
+            (tmp_path / argv[index + 1]).write_bytes(b"")
 
     try:
         App._parser_().parse_args(argv)
@@ -205,7 +218,7 @@ def test_a_readme_command_line_runs_as_written(
     environment = HOOKS[str(tmp_path)].env
     if "--help" in arguments:
         pytest.skip("--help is not a run")
-    verb = arguments[0]
+    verb = arguments[2] if arguments[0] in ("--config", "-c") else arguments[0]
     _clear_output(tmp_path, arguments)
 
     if verb not in SERVING or "--read" in arguments:

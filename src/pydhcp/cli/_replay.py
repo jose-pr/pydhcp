@@ -6,11 +6,11 @@ import typing as _ty
 
 import pktcap.cli as _cli
 
-from ._common import _Command, closed_stdout
+from ._common import _Configured, closed_stdout
 from ._packets import _DHCPPackets
 
 
-class Replay(_Command, _DHCPPackets, _cli.Replay):
+class Replay(_Configured, _DHCPPackets, _cli.Replay):
     """Send the DHCP requests of a capture file again, to the server --to names"""
 
     _parsername_ = "replay"

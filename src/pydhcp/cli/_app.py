@@ -7,9 +7,10 @@ import sys
 import typing as _ty
 
 import duho
-from duho import AUTO, Cli, DefaultsFormatter
+from duho import AUTO, Cli, ConfigArgs, DefaultsFormatter
 
 from .. import _extras
+from .._config import BACKENDS
 from . import _settings
 from ._common import _Configured, _Failed
 from ._interfaces import Interfaces
@@ -32,7 +33,7 @@ def _commands() -> "_ty.List[_ty.Type[_ty.Any]]":
     return found
 
 
-class App(Cli):
+class App(ConfigArgs, Cli):  # type: ignore[misc]
     """pydhcp CLI Interface"""
 
     # duho names the program after the class, so every usage line and every
@@ -41,6 +42,8 @@ class App(Cli):
     _parsername_ = "pydhcp"
     _version_ = AUTO
     _logger_name_ = "pydhcp"
+    _config_env_ = _settings.CONFIG_ENV
+    _config_backends_ = BACKENDS
     _config_loader_ = staticmethod(_settings.load_layer)
     _help_formatter_ = DefaultsFormatter
     _subcommands_ = _commands()
@@ -70,7 +73,7 @@ def run(args: "_ty.List[str]") -> int:
         run_, token = _settings.begin(args, sections)
         try:
             _settings.check_renamed_variables(run_.command)
-            status = duho.main(App, args, config=_settings.config_path())
+            status = duho.main(App, args)
         finally:
             _settings.end(token)
     except SystemExit as stop:

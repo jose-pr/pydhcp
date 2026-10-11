@@ -65,16 +65,12 @@ def has_pktcap() -> bool:
     return True
 
 
-def toml_reader() -> _ty.Any:
-    """`tomllib` (Python 3.11 and later), else `tomli` from the `toml` extra."""
+def duho_config() -> _ty.Any:
+    """`duho.config`, from the `cli` extra; `ImportError` naming the extra when `duho` is absent."""
     try:
-        import tomllib  # type: ignore[import-not-found]
-    except ImportError:
-        pass  # before Python 3.11 the reader is the extra's
-    else:
-        return tomllib
-    try:
-        import tomli
-    except ImportError as error:
-        raise ImportError(missing("Reading TOML", "toml")) from error
-    return tomli
+        import duho.config
+    except ModuleNotFoundError as error:
+        if error.name != "duho":
+            raise
+        raise ImportError(missing("Reading a settings file", "cli")) from error
+    return duho.config

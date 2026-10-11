@@ -109,7 +109,7 @@ def test_the_config_file_can_set_it_too(tmp_path: pathlib.Path) -> None:
     )
 
     ran = run_command(
-        ["server", "-v", "--config", str(config), "--listen", "127.0.0.1:0"],
+        ["--config", str(config), "server", "-v", "--listen", "127.0.0.1:0"],
         during=_ask(leases),
     )
 
@@ -128,10 +128,10 @@ def test_an_explicit_flag_beats_the_config_file(tmp_path: pathlib.Path) -> None:
 
     ran = run_command(
         [
-            "server",
-            "-v",
             "--config",
             str(config),
+            "server",
+            "-v",
             "--listen",
             "127.0.0.1:0",
             "--lease-file",
@@ -155,9 +155,9 @@ def test_an_explicit_listen_beats_the_config_file(tmp_path: pathlib.Path) -> Non
     )
 
     flag = run_command(
-        ["server", "-v", "--config", str(config), "--listen", "127.0.0.1:0"]
+        ["--config", str(config), "server", "-v", "--listen", "127.0.0.1:0"]
     )
-    without = run_command(["server", "-v", "--config", str(config)])
+    without = run_command(["--config", str(config), "server", "-v"])
 
     assert flag.status == 0 and _port(flag.bound[0]) != held
     assert without.status == 0 and without.bound == [f"127.0.0.1:{held}"]

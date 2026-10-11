@@ -16,7 +16,6 @@ from duho import Meta
 _UNNAMED = frozenset(
     {
         "config",
-        "config_format",
         "listen",
         "per_interface",
         "verbose",
