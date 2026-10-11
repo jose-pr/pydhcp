@@ -180,6 +180,7 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "hook_timeout": 10.0,
             "per_interface": False,
             "read": None,
+            "load": None,
         },
         "file": {
             "listen": "127.0.0.1:2001",
@@ -198,8 +199,10 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "hook_timeout": 3.5,
             "per_interface": True,
             "read": "from-file.pcap",
+            "load": ["file_plugin"],
         },
         "env": {
+            "PKTCAP_LOAD": "env_plugin",
             "PYDHCP_CAPTURE_LISTEN": "127.0.0.1:2002",
             "PYDHCP_CAPTURE_FILTER": "msg_type=DHCPREQUEST",
             "PYDHCP_CAPTURE_FORMAT": "json",
@@ -241,6 +244,8 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "--hook-timeout",
             "5.5",
             "--per-interface",
+            "--load",
+            "arg_plugin",
         ],
         "after": {
             "file": {
@@ -260,8 +265,10 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
                 "hook_timeout": 3.5,
                 "per_interface": True,
                 "read": "from-file.pcap",
+                "load": ["file_plugin"],
             },
             "env": {
+                "load": ["env_plugin"],
                 "listen": "127.0.0.1:2002",
                 "filter": "msg_type=DHCPREQUEST",
                 "format": "json",
@@ -294,6 +301,7 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
                 "hook_fail_fast": True,
                 "hook_timeout": 5.5,
                 "per_interface": True,
+                "load": ["arg_plugin"],
             },
         },
     },
@@ -342,9 +350,11 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "source_port": None,
             "broadcast": False,
             "json_out": False,
+            "load": None,
         },
         "file": None,
         "env": {
+            "PKTCAP_LOAD": "env_plugin",
             "PYDHCP_REPLAY_INPUT": "from-env.pcap",
             "PYDHCP_REPLAY_TO": "192.0.2.2",
             "PYDHCP_REPLAY_SPEED": "2.5",
@@ -373,9 +383,12 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
             "6869",
             "--broadcast",
             "--json",
+            "--load",
+            "arg_plugin",
         ],
         "after": {
             "env": {
+                "load": ["env_plugin"],
                 "input": "from-env.pcap",
                 "to": "192.0.2.2",
                 "speed": 2.5,
@@ -398,6 +411,7 @@ LAYERS: "dict[str, dict[str, _ty.Any]]" = {
                 "source_port": 6869,
                 "broadcast": True,
                 "json_out": True,
+                "load": ["arg_plugin"],
             },
         },
     },

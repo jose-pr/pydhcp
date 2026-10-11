@@ -8,18 +8,20 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import pathlib
 import socket
 import subprocess
 import sys
 import typing as _ty
+import uuid
 
 import pytest
 
 pktcap = pytest.importorskip("pktcap")
 
 from capture_input import build, datagrams
-from cli_process import Running, environment, free_port, run_cli
+from cli_process import SRC, Running, environment, free_port, run_cli
 from helpers import FixedLeaseServer, build_request, running
 from hook_programs import cli_hook
 from pydhcp import DHCPMessage
@@ -340,7 +342,9 @@ def test_the_old_names_of_the_settings_keys_are_refused(tmp_path: pathlib.Path) 
 
 
 @pytest.mark.parametrize("key", ["plugins", "plugin_config"])
-def test_a_settings_file_cannot_name_a_plugin(key: str, tmp_path: pathlib.Path) -> None:
+def test_the_old_names_of_the_plugin_settings_are_unknown_keys(
+    key: str, tmp_path: pathlib.Path
+) -> None:
     settings = tmp_path / "pydhcp.json"
     settings.write_text(json.dumps({"capture": {key: "os"}}), encoding="utf-8")
 
@@ -350,8 +354,60 @@ def test_a_settings_file_cannot_name_a_plugin(key: str, tmp_path: pathlib.Path) 
     assert f"unknown key '{key}'" in done.stderr
 
 
-def test_the_environment_cannot_name_a_plugin(recorded: pathlib.Path) -> None:
-    """There is no variable for the plugin list: whatever is set is read by nobody."""
+_KEY_PLUGIN = """
+from typing import NamedTuple
+
+
+class MarkerLayer(NamedTuple):
+    value: int
+
+
+def pktcap_plugin(registry):
+    registry.register_layer(
+        MarkerLayer, keys={"stamp": lambda clause: (lambda layer: True)}
+    )
+"""
+
+
+def test_the_capture_table_may_name_the_plugins_to_load(
+    recorded: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """`load` is a setting like any other: the file the user named may carry it."""
+    name = "marker_plugin_" + uuid.uuid4().hex[:10]
+    directory = tmp_path / "plugins"
+    directory.mkdir()
+    (directory / (name + ".py")).write_bytes(_KEY_PLUGIN.encode("utf-8"))
+    environment = {"PYTHONPATH": os.pathsep.join([SRC, str(directory)])}
+    arguments = ["capture", "--read", str(recorded), "--filter", "stamp=1"]
+
+    without = run_cli(*arguments, env=environment)
+    assert without.returncode == 2 and "stamp" in without.stderr
+
+    settings = tmp_path / "pydhcp.json"
+    settings.write_text(json.dumps({"capture": {"load": [name]}}), encoding="utf-8")
+    loaded = run_cli(*arguments, "--config", str(settings), env=environment)
+
+    assert loaded.returncode == 0, loaded.stderr
+    assert "frames read, 0 written" in loaded.stderr
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["capture", "--read", "x.pcap"],
+        ["replay", "--input", "x.pcap", "--to", "192.0.2.9"],
+    ],
+)
+def test_pktcap_config_is_not_an_option(command: "list[str]") -> None:
+    """pktcap's commands have no settings file of their own to name."""
+    done = run_cli(*command, "--pktcap-config", "none")
+
+    assert done.returncode == 2
+    assert "--pktcap-config" in done.stderr
+
+
+def test_the_plugin_list_has_no_pydhcp_variable(recorded: pathlib.Path) -> None:
+    """`PKTCAP_LOAD` is the list's variable: whatever else is set is read by nobody."""
     done = run_cli(
         "capture",
         "--read",

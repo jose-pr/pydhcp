@@ -27,19 +27,9 @@ TRACEBACK_ENV = "PYDHCP_TRACEBACK"
 _TRUE = ("1", "true", "yes", "on")
 _FALSE = ("0", "false", "no", "off")
 
-#: The configuration keys that are not settings of a command. `plugins` and
-#: `plugin_config` name code to import: pktcap takes them from the command line alone.
+#: The configuration keys that are not settings of a command.
 _NOT_SETTINGS = frozenset(
-    {
-        "config",
-        "config_format",
-        "verbose",
-        "quiet",
-        "loglevel",
-        "loglevels",
-        "plugins",
-        "plugin_config",
-    }
+    {"config", "config_format", "verbose", "quiet", "loglevel", "loglevels"}
 )
 
 

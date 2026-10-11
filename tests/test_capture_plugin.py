@@ -616,7 +616,11 @@ def _pktcap(
     arguments: "list[str]", environment: "dict[str, str]", cwd: pathlib.Path
 ) -> "subprocess.CompletedProcess[str]":
     env = {k: v for k, v in os.environ.items() if not k.startswith("PKTCAP_")}
-    env.update(environment, PKTCAP_CONFIG="none", PYTHONIOENCODING="utf-8")
+    # pktcap reads the user's own settings file under these; an empty directory has none.
+    home = str(cwd)
+    for name in ("APPDATA", "XDG_CONFIG_HOME", "HOME", "USERPROFILE"):
+        env[name] = home
+    env.update(environment, PYTHONIOENCODING="utf-8")
     return subprocess.run(
         [sys.executable, "-m", "pktcap", *arguments],
         capture_output=True,
