@@ -16,11 +16,12 @@ and a read of this list.
 - **Install.** `pip install pydhcp` is the library and needs `netimps>=0.4.1,<0.5` alone (0.3 is
   no longer supported). The `pydhcp` command needs `pip install "pydhcp[cli]"`; captures
   (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text need
-  `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries); a `.toml` settings file
-  needs `"pydhcp[toml]"` before Python 3.11; `import pydhcp` imports none of them. A missing one is
+  `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries); a settings file is read by duho,
+  and a `.toml` file before Python 3.11 needs `"duho[config]"` and a `.yaml` file `"duho[yaml]"`;
+  there is no `toml` extra; `import pydhcp` imports none of them. A missing one is
   an `ImportError` (or a `DHCPConfigError` for a configuration file) that names the extra, where it
-  was a `NotImplementedError`. pydhcp declares no PyYAML and reads no YAML settings file: a
-  `.yaml` file is refused, and is converted to TOML or JSON (the last row of the table below).
+  was a `NotImplementedError`. pydhcp declares no PyYAML; a `.yaml` settings file is read
+  through `duho[yaml]`.
 - **Names.** Acronyms are upper case and the generic names take the `DHCP` prefix: `DhcpServer` is
   `DHCPServer`, `DhcpOptionCode` is `DHCPOptionCode`, `Transport` is `DHCPTransport`, `OpCode` is
   `DHCPOpcode`, `UdpTransport` is `UDPTransport`, and the codecs follow (`CccOption` is
@@ -79,7 +80,12 @@ and a read of this list.
   | a hook gets `PYDHCP_CAPTURE_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the message on standard input | `PKTCAP_HOOK_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the record; the client identifier is written as in a file name, `01_02_00_00_99_00_02` where it was `01:02:00:00:99:00:02` |
   | a `module:function` hook gets a `CaptureEvent`, and is found in the working directory | it gets a `pktcap.DissectedFrame`, and its module must be on `PYTHONPATH` |
   | a command hook named by a bare name; a `.cmd` or `.bat` hook on Windows | `./name` for a file in the working directory (a bare name is looked up on `PATH` alone); a program (an `.exe`) |
-  | a settings file `server.yaml` (`server:` / `listen: "*"`) | `server.toml` (`[server]` / `listen = "*"`) or JSON |
+  | `pydhcp server --config FILE`, `-c FILE` | `pydhcp --config FILE server`: the option is the root's and goes before the command name; it is refused after it |
+  | `--config-format`, `PYDHCP_CONFIG_FORMAT`, `--config -` (standard input) | none: the ending of the file's name says the format (`.json`, `.toml`, `.yaml`, `.yml`, `.ini`, `.cfg`) and the file is named |
+  | `pip install "pydhcp[toml]"` | `pip install "duho[config]"` (TOML below Python 3.11); `"duho[yaml]"` for YAML |
+  | an INI file with `[DEFAULT]` keys copied into every section; keys lower-cased | the keys of `[DEFAULT]` are top-level keys (refused as an unknown section); a key keeps its case |
+  | the text of a settings file error | duho's text, with the same path, line and column; a `--config` file that does not exist is status 2 |
+  | `pydhcp capture --pktcap-config FILE`, `PKTCAP_CONFIG` | none: name the plugins with `--load`, `PKTCAP_LOAD` or `load` in the `[capture]` or `[replay]` table |
 
   A file budget spent (`--max-files`, 1000) is counted and the capture goes on, ending with status
   1; an `--output` ending that names no format is status 2, where it was JSON; and an INI message

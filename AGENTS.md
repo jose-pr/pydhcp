@@ -46,8 +46,8 @@ python -m pip install -e ".[dev,docs]"
 python -m pytest -q
 ```
 
-`dev` includes the `cli`, `pktcap` and `toml` extras and pktcap's own `yaml` and
-`toml`, so a development install runs every test that depends on one.
+`dev` includes the `cli` and `pktcap` extras, pktcap's own `yaml` and `toml`, and duho's
+`config` and `yaml`, so a development install runs every test that depends on one.
 
 ## Checks
 

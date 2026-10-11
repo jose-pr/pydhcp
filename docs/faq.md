@@ -14,4 +14,4 @@ Use `DHCPClient.dora()` — it broadcasts a DHCPDISCOVER, waits for a DHCPOFFER,
 
 ## Which config formats does the CLI accept?
 
-`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, TOML or INI, selected by file extension (`.json`, `.toml`, `.ini`) or by `--config-format`. TOML needs Python 3.11+ (stdlib `tomllib`) or the `toml` extra on older versions. See [Examples](examples.md#server-config-file).
+`pydhcp --config FILE server` (or `PYDHCP_CONFIG`) accepts JSON, TOML, YAML or INI, selected by the file's ending (`.json`, `.toml`, `.yaml`, `.yml`, `.ini`, `.cfg`). TOML needs Python 3.11+ (stdlib `tomllib`) or `duho[config]` on older versions, YAML `duho[yaml]`. See [Examples](examples.md#server-config-file).

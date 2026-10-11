@@ -266,7 +266,7 @@ someone upgrading from 0.7.0.
   `pip install "pydhcp[pktcap]"` the captures and a message as YAML, TOML or INI text.
   `import pydhcp` and `import pydhcp.cli` import neither, nor `tomllib` or `tomli`. **Breaking**
   for an install that relied on `pip install pydhcp` for the command, for a capture or for YAML.
-  The `dev` extra includes `cli`, `pktcap` and `toml`, and pktcap's `yaml` and `toml`.
+  The `dev` extra includes `cli` and `pktcap`, pktcap's `yaml` and `toml`, and duho's `config` and `yaml`.
 - **Without the `cli` extra the `pydhcp` command (and `python -m pydhcp`) prints one line,
   `pydhcp: error: the command line needs the 'cli' extra: pip install "pydhcp[cli]"`, and exits
   with status 1**; `pydhcp.cli.main` returns 1 the same way. `pydhcp.cli.App` and the six command
@@ -281,8 +281,8 @@ someone upgrading from 0.7.0.
 - **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
   `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
 - **Dependency ranges are scoped to a series and their floors install**: `netimps>=0.4.1,<0.5`,
-  `duho>=0.7.0,<0.8`, `pktcap>=0.1.0,<0.2` and `tomli>=2.0,<3` (below Python 3.11); they were
-  open-ended, with a `tomli` floor of 2.4.0 that no API in use needs.
+  `duho>=0.7.2,<0.8` and `pktcap>=0.1.0,<0.2`; they were
+  open-ended.
 - **Breaking: `pydhcp.cli` exports `App`, `main` and the six commands, and nothing else.**
   `PACKET_FORMATS` and `CAPTURE_FORMATS` are no longer re-exported from it (the capture formats are
   `pktcap.OUTPUT_FORMATS`). `server`, `relay` and `capture` declare `--listen` and `--per-interface`

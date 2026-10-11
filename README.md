@@ -44,7 +44,6 @@ else you ask of it is an extra, one for each capability:
 | --- | --- | --- |
 | `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
 | `pktcap` | `pktcap` | captures: `pydhcp capture` and `pydhcp replay`, the DHCP dissector and its filter keys, `sniff_dhcp`; a message as YAML, TOML or INI text (`--format`, `DHCPMessage.to_text`), which also needs `pktcap[yaml]` or `pktcap[toml]` |
-| `toml` | `tomli` before Python 3.11 | `.toml` configuration files before Python 3.11 (TOML packets and capture files need `pktcap[toml]`) |
 
 For example `pip install "pydhcp[cli,pktcap]"`. Without the `cli` extra the `pydhcp`
 command prints that it needs it and exits with status 1; without the `pktcap` extra
@@ -265,11 +264,13 @@ used). An error is one line on stderr, `pydhcp: error: ...`; results go to stdou
 
 ### Settings and environment variables
 
-Every option can also come from an environment variable, and `server`, `relay` and
-`capture` from a configuration file. The order is: the option, then the variable, then the
-file, then the default. The file is named, never searched for: `--config FILE` or
-`PYDHCP_CONFIG` (`-` reads standard input and needs `--config-format json|toml|ini`).
-It has one section per command and the keys are the field names:
+Every option can also come from an environment variable, and `server`, `relay`, `capture`
+and `replay` from a settings file. The order is: the option, then the variable, then the
+file, then the default. The file is named, never searched for: `--config FILE` before the
+command name, or `PYDHCP_CONFIG`. Its ending says its format (`.json`, `.toml`, `.yaml`,
+`.yml`, `.ini`, `.cfg`); `duho` reads it (`pip install "duho[yaml]"` for YAML, `"duho[config]"`
+for TOML before Python 3.11), and `duho/AGENTS.md` in the installed package says what each
+format holds. It has one section per command and the keys are the field names:
 
 ```toml
 # server.toml
@@ -281,13 +282,28 @@ lease_file = "/var/lib/pydhcp/leases.json"
 server = ["192.0.2.1", "192.0.2.2"]
 ```
 
+The same file in YAML:
+
+```yaml
+# server.yaml
+server:
+  listen: "127.0.0.1:6767"
+  lease_file: /var/lib/pydhcp/leases.json
+relay:
+  server: [192.0.2.1, 192.0.2.2]
+```
+
+```bash
+pydhcp --config server.toml server
+```
+
 A file that does not parse, a section or key the command does not have (a misspelled
 `[sever]`, another command's section) is refused by name with status 2, naming the file and
 the position; nothing starts on defaults by mistake.
 
 | Variable | Sets |
 | --- | --- |
-| `PYDHCP_CONFIG`, `PYDHCP_CONFIG_FORMAT` | `--config`, `--config-format` |
+| `PYDHCP_CONFIG` | `--config`, before the command name |
 | `PYDHCP_TRACEBACK` | `1`, `true`, `yes`, `on` (any case) print a traceback for an error; `0`, `false`, `no`, `off` or empty do not; any other text is an error |
 | `PYDHCP_SERVER_LISTEN`, `PYDHCP_SERVER_PER_INTERFACE`, `PYDHCP_SERVER_LEASE_FILE`, `PYDHCP_SERVER_LENIENT_REPLY_PORTS` | `server --listen`, `--per-interface`, `--lease-file`, `--lenient-reply-ports` |
 | `PYDHCP_RELAY_LISTEN`, `PYDHCP_RELAY_SERVER` (comma-separated), `PYDHCP_RELAY_MAX_HOPS`, `PYDHCP_RELAY_INSERT_RELAY_AGENT_INFO`, `PYDHCP_RELAY_CIRCUIT_ID`, `PYDHCP_RELAY_REMOTE_ID`, `PYDHCP_RELAY_PER_INTERFACE` | `relay --listen`, `--server`, `--max-hops`, `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`, `--per-interface` |

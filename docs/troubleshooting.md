@@ -41,8 +41,9 @@ pydhcp packet --decode --input - --format summary
 
 If a command reports that captures or YAML, TOML or INI text need the `pktcap` extra, that
 TOML needs an extra, or that the command line needs the `cli` extra, install it in the
-environment running the CLI: `pip install "pydhcp[pktcap]"`, `pip install "pydhcp[toml]"` or
-`pip install "pydhcp[cli]"`. YAML and TOML text also need pktcap's own extras: `pip install
+environment running the CLI: `pip install "pydhcp[pktcap]"` or `pip install "pydhcp[cli]"`. A settings file in TOML
+(before Python 3.11) or YAML names duho's extra: `pip install "duho[config]"` or
+`"duho[yaml]"`. YAML and TOML text also need pktcap's own extras: `pip install
 "pktcap[yaml,toml]"`.
 
 ## Capturing live DHCP traffic

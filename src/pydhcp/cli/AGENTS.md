@@ -67,7 +67,7 @@ main(argv: Sequence[str] | None = None) -> int
   Subcommands:
   `interfaces` (`--format text|json`: text is one tab-separated line per
   address, name, address, MAC or `-`, network; json is one array of objects
-  `name`, `ip`, `mac`, `network`), `server` (`--config`, `--listen`,
+  `name`, `ip`, `mac`, `network`), `server` (`--listen`,
   `--per-interface`, `--lease-file`, `--lenient-reply-ports`), `relay` (`--listen`,
   `--server` repeatable or comma-separated and **required**, `--max-hops`,
   `--insert-relay-agent-info`, `--circuit-id`, `--remote-id`), `packet`
@@ -81,9 +81,17 @@ main(argv: Sequence[str] | None = None) -> int
 - **Settings** come, highest first, from the option, the environment variable,
   the configuration file and the field's default, and duho applies that order
   to every field of every command (see "Environment variables" below for the
-  names). `server`, `relay` and `capture` take `--config FILE` (or
-  `PYDHCP_CONFIG`) and `--config-format json|toml|ini`; `FILE` is `-` for
-  standard input, which needs the format. **There is no default location**: a
+  names). The root takes `--config FILE`/`-c FILE` (or `PYDHCP_CONFIG`) **before the
+  command name**: `pydhcp --config pydhcp.toml server`. After it the option is refused with
+  the line to use, as are `--config-format`, `PYDHCP_CONFIG_FORMAT` and `--config -`: the
+  ending of the file's name says its format (`.json`, `.toml`, `.yaml`, `.yml`, `.ini`,
+  `.cfg`) and standard input is no file. duho's `ConfigArgs` takes the option and
+  `duho.config` reads the file; `duho/AGENTS.md` inside the installed package ("Config
+  backends") says what each format holds, among them that an INI file's `[DEFAULT]` keys are
+  the top level, which here is no command's section and so refused. TOML before Python 3.11
+  needs `pip install "duho[config]"` and YAML `"duho[yaml]"`; the error names it.
+  `server`, `relay`, `capture` and `replay` read the file; `packet` and `interfaces` have no
+  section. **There is no default location**: a
   daemon does not pick up a file nobody named. The file has one section per
   command, named for it, and its keys are the command's field names
   (`listen`, `per_interface`, `lease_file`; `server`, `max_hops`,
@@ -91,12 +99,30 @@ main(argv: Sequence[str] | None = None) -> int
   options: `filter`, `format`, `output`, `per_record`, `max_files`, `datagrams`, `append`,
   `interface`, `read`, `count`, `duration`, `hook`, `hook_fail_fast`, `hook_timeout`, and
   `load`, the list of pktcap plugins to import beside `pydhcp.capture`: the file is one the
-  user named, so it may name code to load, as it may name a hook):
+  user named, so it may name code to load, as it may name a hook; `replay` takes its
+  options the same way):
 
   ```toml
+  # pydhcp.toml
   [server]
   listen = "127.0.0.1:6767"
   lease_file = "/var/lib/pydhcp/leases.json"
+
+  [capture]
+  filter = "msg_type=DHCPDISCOVER"
+  load = ["my_plugin"]
+  ```
+
+  The same file in YAML (`duho[yaml]`):
+
+  ```yaml
+  # pydhcp.yaml
+  server:
+    listen: "127.0.0.1:6767"
+    lease_file: /var/lib/pydhcp/leases.json
+  capture:
+    filter: msg_type=DHCPDISCOVER
+    load: [my_plugin]
   ```
 
   A list is a list (`server = ["192.0.2.1", "192.0.2.2"]`); `listen` also takes
@@ -104,8 +130,10 @@ main(argv: Sequence[str] | None = None) -> int
   A file that does not parse, a top-level key that is not a command, a section
   that is not a mapping, a key the command does not have, and a section of
   *another* command than the one run are each refused by name, status 2, one
-  line with the file's path and, where the parser gives one, the position:
-  `pydhcp: error: server.toml:12:5: expected ',' or ']'`.
+  line with the file's path and, where the parser gives one, the position, in
+  duho's words: `pydhcp: error: server.toml:12:5: Expected ']' at the end of a table
+  declaration (at line 12, column 5)`. A `--config` file that does not exist is a usage
+  error (status 2); one that `PYDHCP_CONFIG` names is status 1.
 
 - Each `--server` value is split by **`netimps.split_host`**, the parser the
   `--listen` specs go through, and reaches `DHCPRelay` as a
@@ -155,17 +183,14 @@ load_config(source, format=None) -> dict[str, Any]
 ```
 
 - **`load_config`** — one configuration
-  file as a mapping of sections. `source` is a path or `-` (standard input,
-  which has no name and so needs `format`). The format is `format` (`json`,
-  `toml` or `ini`, any case) or else the file name's suffix (`.json`, `.toml`,
-  `.ini`, any case); any other suffix is refused (`.yaml` and `.yml` among them),
-  content is never sniffed. The text is UTF-8, with or without a byte-order
-  mark. INI values are read without interpolation (a `%` is text) and a duplicate
-  section or key is an error. `.toml` needs Python 3.11+ or the `toml` extra;
-  without it the `DHCPConfigError` says `pip install "pydhcp[toml]"`, and the
-  format stays a listed one.
+  file as a mapping, read by `duho.config` (the `cli` extra; without it the `ImportError`
+  names `pip install "pydhcp[cli]"`). `source` is a path (`-` is a file name). The format is
+  `format` (`json`, `toml`, `yaml` or `ini`, any case) or else the file name's ending
+  (`.json`, `.toml`, `.yaml`, `.yml`, `.ini`, `.cfg`, any case); any other name is refused,
+  content is never sniffed. Each format's rules are duho's. A reader that is not installed
+  (TOML before Python 3.11, YAML) is a `DHCPConfigError` whose text names duho's extra.
 - A file that cannot be read raises the `OSError`. A document that does not parse,
-  whose top level is not a mapping, or whose format cannot be told raises
+  whose top level is not a mapping, whose format cannot be told or whose reader is missing raises
   **`DHCPConfigError`** with `path`, `lineno` and `colno` (1-based, `None` when the
   parser gave none) and `msg`; the message and the exception chain carry no text from
   the document.
@@ -176,7 +201,7 @@ Read when the command starts, by the command line only: `import pydhcp` reads no
 them. A boolean accepts `1`, `true`, `yes`, `on` and `0`, `false`, `no`, `off`, in any
 case; empty counts as unset; any other text is an error naming the variable (status 2).
 Every option has the variable `PYDHCP_<COMMAND>_<OPTION>`, listed below; the variables
-that follow no such rule (`PYDHCP_CONFIG`, `PYDHCP_CONFIG_FORMAT`, `PYDHCP_TRACEBACK`,
+that follow no such rule (`PYDHCP_CONFIG`, `PYDHCP_TRACEBACK`,
 `PYDHCP_MCP` and the four a command hook is given) are in `pydhcp/AGENTS.md`.
 
 | Variable | Sets |

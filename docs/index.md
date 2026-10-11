@@ -31,7 +31,6 @@ else you ask of it is an extra, one for each capability:
 | --- | --- | --- |
 | `cli` | `duho` | the `pydhcp` command (`python -m pydhcp`) |
 | `pktcap` | `pktcap` | captures (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text (which also needs `pktcap[yaml]` or `pktcap[toml]`) |
-| `toml` | `tomli` before Python 3.11 | `.toml` configuration files before Python 3.11 |
 
 For example `pip install "pydhcp[cli,pktcap]"`. JSON needs no extra.
 

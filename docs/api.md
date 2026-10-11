@@ -130,7 +130,7 @@ A message as a mapping in one of four text formats; `DHCPMessage.to_text` and
 
 ## Configuration files
 
-The `server`, `relay` and `capture` commands read a named configuration file with
+The commands read the root's named settings file with
 `load_config`, which is not importable from a public module; its failures are
 `DHCPConfigError`.
 

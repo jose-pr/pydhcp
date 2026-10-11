@@ -4,7 +4,7 @@ This page collects a few short patterns that are useful when you start wiring `p
 
 ## Server config file
 
-`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, TOML or INI, selected by file extension (`--config-format` names it when the file name does not; `--config -` reads standard input). The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A TOML file:
+`pydhcp --config FILE server` (or `PYDHCP_CONFIG`) accepts JSON, TOML, YAML or INI, selected by the file's ending (`.json`, `.toml`, `.yaml`, `.yml`, `.ini`, `.cfg`). The option goes before the command name. The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A TOML file:
 
 ```toml
 [server]
@@ -15,13 +15,25 @@ listen = "*"
 pydhcp --config server.toml server
 ```
 
+The same file in YAML, named the same way:
+
+```yaml
+# server.yaml
+server:
+  listen: "*"
+```
+
+```bash
+pydhcp --config server.yaml server
+```
+
 `listen` is text (`"127.0.0.1:6767,127.0.0.2:6768"`), an `[address, port]` pair
 (`listen = ["127.0.0.1", 6767]`) or a list of either. `None`/`null` as the address is the
 wildcard; an empty value, a boolean or a bare number is an error. Text that is not an
 IPv4 address names an interface (see [Listening on one
 interface](#listening-on-one-interface)).
 
-TOML files need Python 3.11+ (stdlib `tomllib`) or the `toml` extra on older versions. A `.yaml` or `.yml` file is refused like any other ending that names no format.
+TOML files need Python 3.11+ (stdlib `tomllib`) or `pip install "duho[config]"` on older versions, and YAML files `pip install "duho[yaml]"`. What each format holds is in `duho/AGENTS.md` inside the installed package; an INI file's `[DEFAULT]` keys are top-level keys, which no command's section is.
 
 ## Custom lease backend
 
