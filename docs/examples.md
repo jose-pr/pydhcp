@@ -341,7 +341,8 @@ PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVE
 Hooks can be trusted Python callables (`module:function`, called with each
 `pktcap.DissectedFrame`) or commands. A command hook receives the record of the frame on stdin
 and metadata in `PKTCAP_HOOK_*` environment variables (`PKTCAP_HOOK_CLIENT_ID`,
-`PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID` and `PKTCAP_HOOK_FORMAT`); it is started with no
+`PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID` and `PKTCAP_HOOK_FORMAT`, each value cleaned as it
+is for a file name, so a client identifier reads `01_02_00_00_99_00_02`); it is started with no
 arguments and no shell, and killed, with any process it started, after `--hook-timeout`
 (10 seconds). It is pktcap's `command_hook`. A command with a
 directory in its name (`./on-dhcp-capture`, `/opt/hooks/export`) is that file, found relative

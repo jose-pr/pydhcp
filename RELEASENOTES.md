@@ -70,13 +70,13 @@ and a read of this list.
   | `CaptureEvent` (`.message`, `.message_type`, `.client_id`, `.xid`) | `pktcap.DissectedFrame`: `frame.layer(DHCPLayer)` has `message_type`, `client_id`, `xid` (an `int`) and `message` (the mapping); `DHCPMessage.decode(frame.datagram().payload)` is the message |
   | `compile_capture_filter(text)` | `pktcap.compile_capture_filter(text, pktcap.frame_filter_for(capture_dissector().registry))` |
   | `validate_filename_pattern`, `CaptureEvent.format_filename`, `FILENAME_FIELDS`, `pydhcp.cli.MAX_PER_CAPTURE_FILES` | `pktcap.CaptureWriter(target, format, per_record=True, fields=("client_id", "msg_type", "xid"))`, whose `max_files` is 1000 |
-  | `pydhcp.cli.HOOK_TIMEOUT_SECONDS` | `--hook-timeout` (10 seconds); `pktcap.command_hook(command, timeout=)`, which raises `pktcap.CaptureHookError` |
+  | `pydhcp.cli.HOOK_TIMEOUT_SECONDS` | `--hook-timeout` (10 seconds); `pktcap.command_hook(command, timeout=)`, which with `fail_fast=True` raises `pktcap.CaptureHookError` |
   | `pydhcp capture --output-mode per-capture` | `--per-record`; the other two modes need no option |
   | `pydhcp capture -f FORMAT`, `-c N` | `--format FORMAT` (`-f` is `--filter`), `--count N` |
   | filter keys `src_port`, `dst_port`, `interface` | `sport`, `dport`, and `--listen NAME` |
   | a record: the message mapping | pktcap's record of the frame (`time`, `linktype`, `length`, `layers`, `payload`); the old line is `jq -c '.layers[-1].message'` |
   | a record file is appended to | replaced, unless `--append` |
-  | a hook gets `PYDHCP_CAPTURE_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the message on standard input | `PKTCAP_HOOK_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the record |
+  | a hook gets `PYDHCP_CAPTURE_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the message on standard input | `PKTCAP_HOOK_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the record; the client identifier is written as in a file name, `01_02_00_00_99_00_02` where it was `01:02:00:00:99:00:02` |
   | a `module:function` hook gets a `CaptureEvent`, and is found in the working directory | it gets a `pktcap.DissectedFrame`, and its module must be on `PYTHONPATH` |
   | a command hook named by a bare name; a `.cmd` or `.bat` hook on Windows | `./name` for a file in the working directory (a bare name is looked up on `PATH` alone); a program (an `.exe`) |
   | a settings file `server.yaml` (`server:` / `listen: "*"`) | `server.toml` (`[server]` / `listen = "*"`) or JSON |

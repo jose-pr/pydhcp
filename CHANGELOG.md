@@ -232,7 +232,9 @@ someone upgrading from 0.7.0.
     pktcap's own file name a plugin.
   - **Hooks are pktcap's**: a hook comes from `--hook`, `PYDHCP_CAPTURE_HOOK` and the settings
     file the user named; it gets `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`
-    and `PKTCAP_HOOK_FORMAT` (not `PYDHCP_CAPTURE_*`) and the record on standard input; a failed
+    and `PKTCAP_HOOK_FORMAT` (not `PYDHCP_CAPTURE_*`) and the record on standard input, and the
+    client identifier is cleaned as a file name's is (`01_02_00_00_99_00_02`, where it was
+    `01:02:00:00:99:00:02`); a failed
     hook is counted and the capture goes on unless `--hook-fail-fast`; `--hook-timeout` bounds it
     (10 seconds); a `module:function` hook is called with a `pktcap.DissectedFrame` (it was a
     `CaptureEvent`) and its module must be on `PYTHONPATH` (the working directory is not added,
