@@ -26,16 +26,17 @@ someone upgrading from 0.7.0.
   (asynchronous) cancelled. They need the `pktcap` extra and use no `DHCPListener`.
 - **`DHCPLayer.summary()`**: one line (`DHCPOFFER xid=1A52B52E client=01:02:00:00:99:00:02
   yiaddr=10.99.0.100`), the text pktcap's `text` format shows for a frame whose innermost layer is
-  DHCP. `capture_dissector()` now also declares the layer and its filter keys, so
-  `pktcap.frame_filter_for(dissector.registry)` compiles `msg_type=DHCPOFFER`.
+  DHCP.
+- **`pydhcp.capture.capture_dissector(ports=(67, 68))`**: a `pktcap.FrameDissector` that reads DHCP
+  on `ports`, over a copy of pktcap's registry in which the layer and its filter keys are declared,
+  so `pktcap.frame_filter_for(dissector.registry)` compiles `msg_type=DHCPOFFER`.
 - **`pydhcp.capture.pktcap_plugin(registry)`**: the hook pktcap loads by name, so
   `PKTCAP_LOAD=pydhcp.capture pktcap convert -i heard.pcap -f "msg_type=DHCPDISCOVER"` filters DHCP
-  with the keys `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`, each read as
-  `compile_capture_filter` reads it (the same converters), so a value one refuses the other refuses when the
-  filter is compiled. It declares `DHCPLayer` in the registry and calls
+  with the keys `op`, `msg_type`, `xid`, `client_id`, `chaddr` and `option.NAME_OR_CODE`, each refusing
+  when the filter is compiled a value no message could match. It declares `DHCPLayer` in the registry and calls
   `register_dhcp_dissector(registry)`; when that raises, nothing is registered. `src`, `dst`, `sport`
   and `dport` stay pktcap's own, and `interface` is not a key of a frame. Importing `pydhcp.capture`
-  still registers nothing, and `pydhcp capture --filter` is unchanged.
+  registers nothing; `pydhcp capture` and `pydhcp replay` load the plugin themselves.
 - **`PYDHCP_MCP=stdio` serves `pydhcp.packet` and `pydhcp.interfaces` as MCP tools** (needs the `cli`
   extra), over standard input and output instead of running a command. `server`, `relay`, `capture`
   and `replay` are not tools. A tool call has no standard input, so `packet` without `input` fails
@@ -61,46 +62,28 @@ someone upgrading from 0.7.0.
 - **`DHCPMessage.from_hex(text)`**: decode a message written as hexadecimal text (spaces, line
   ends and colons between the digits are ignored), the reader `pydhcp packet --decode` used to
   keep to itself.
-- **`pydhcp capture --read FILE`** and **`pydhcp.capture.read_capture(source, *, packet_filter=None,
-  ports=(67, 68), dissector=None)`**: the DHCP messages of a pcap or pcapng capture, through the
-  same filter, output formats and hook as a live capture, with no socket bound. An event read from a
-  file has `context=None` and a new field `CaptureEvent.datagram` (`pktcap.CapturedDatagram`); its
-  addresses, time and `payload` come from it, and the `interface` filter key fails its clause. A
-  capture cut in the middle prints the records before the cut and exits 2 naming the file; frames
-  nothing could read are counted by the dissector (`capture_dissector()`) and said in one stderr
-  line. `PYDHCP_CAPTURE_READ`, and `read` in a configuration file.
-- **`pydhcp replay --input FILE --server HOST[:PORT]`** and **`pydhcp.capture.replay_capture(source,
-  server, port=67, *, endpoint=None, speed=1.0, max_delay=5.0, limit=None)`**: send again the
-  datagrams a capture shows going to port 67, to the server you name and never to an address from the
-  capture, with the recorded waits unless `--no-delay`/`speed=None`. `PYDHCP_REPLAY_*`.
+- **`pydhcp capture --read FILE`**: the DHCP messages of a pcap or pcapng capture (`-` is standard
+  input), through the same filter, output formats and hook as a live capture, with no socket bound.
+  A capture cut in the middle writes the records before the cut and exits 2 naming the file; frames
+  nothing could read are counted in the summary line. `PYDHCP_CAPTURE_READ`, and `read` in a
+  configuration file.
+- **`pydhcp replay --input FILE --to HOST[:PORT]`**: send again the requests a capture shows going to
+  port 67, to the destination you name and never to an address from the capture, with the recorded
+  waits unless `--no-delay` (`--speed`, `--max-delay`, `--limit`, `--filter`, `--source-port`,
+  `--broadcast`, `--json`, `--load`). It is pktcap's `replay` with `dport=67` as its own filter.
+  `PYDHCP_REPLAY_*`.
 - **`pydhcp.capture.dissect_dhcp`, `DHCPLayer` and `register_dhcp_dissector(registry=None)`**:
   DHCP as a pktcap dissector on UDP ports 67 and 68, so a pcap or pcapng capture read with
   `pktcap.read_dissected` carries a `DHCPLayer` (`op`, `xid`, `message_type`, `client_id`, and
   `message`, the `to_mapping()` of the message) on each frame that holds a message, and
   `proto=dhcp` selects them. Nothing registers on import. Octets that are not a message are a
   `pktcap.DissectError` with a fixed text that quotes none of them.
-- **`pydhcp capture --format pcap|pcapng`** and `DHCPCaptureWriter` with a `pcap` or `pcapng`
-  format: the datagrams a capture heard, as the clients sent them, in a file tcpdump and
-  Wireshark open (and `pktcap.read_datagrams` reads back octet for octet). The ending of `--output`
-  names it (`.pcap`, `.cap`, `.pcapng`); a capture file is replaced, not appended to, and
-  `--output -` writes it to standard output. A command hook beside it is given JSON on standard
-  input, and `PYDHCP_CAPTURE_FORMAT` says `json`. Each datagram is written under the event's two
-  addresses and its time. `DHCPRequestContext` gains a last field `payload: bytes | None = None`,
-  the datagram as it arrived (the listener keeps one reference to the received `bytes`, no copy), and
-  `CaptureEvent.payload` reads it; a capture file refuses an event with none (`ValueError`), since a
-  message encoded again is padded to 300 octets and is not the packet that arrived.
-- **`pydhcp.capture.DHCPCaptureWriter(target, format=None, *, per_capture=False, max_files=1000)`**
-  and **`MAX_CAPTURE_FILES`**: the record writer, no longer reachable only from `pydhcp capture`.
-  Called with a `CaptureEvent` it writes one record, so it is a `sink=`; it writes to a path
-  (appended to), a binary stream or, with `per_capture`, one file per record under a filename
-  pattern, and counts `written` and `refused`. It is built on pktcap, which pydhcp now requires.
-  `FILENAME_FIELDS` and `UNIQUE_FILENAME_FIELDS` gain `{index}`, a count from 0 the writer fills in.
-  Without `--format`, the ending of `--output` names the format: `.jsonl` and `.ndjson` join
-  `.json`, `.yaml`, `.yml`, `.toml` and `.ini`.
-- **`pydhcp.capture.command_hook(command, *, packet_format, timeout, fail_fast)` and
-  `HOOK_TIMEOUT_SECONDS`** (10 seconds): the command hook is a library function, no longer
-  reachable only from `pydhcp capture --hook`. **`DHCPHookError`** (`pydhcp.exceptions`,
-  re-exported at the root) is what a failing hook raises under `fail_fast`.
+- **`pydhcp capture --format pcap|pcapng`**: the datagrams a capture heard in a file tcpdump and
+  Wireshark open (and `pktcap.read_datagrams` reads back octet for octet), or as the frames pktcap
+  builds for them with `--datagrams` left out; the ending of `--output` names the format (`.pcap`,
+  `.cap`, `.pcapng`, and `.jsonl` and `.ndjson` beside `.json`, `.yaml`, `.yml`, `.toml`, `.ini`,
+  `.txt`, `.log`). `DHCPRequestContext` gains a last field `payload: bytes | None = None`, the
+  datagram as it arrived (the listener keeps one reference to the received `bytes`, no copy).
 - **`DHCPConfigError`** (`pydhcp.exceptions`, re-exported at the root): a configuration
   file that cannot be used. It carries `path`, `lineno`, `colno` and `msg`, is also a
   `ValueError`, and `str()` is one line, `path:line:col: msg`, with no text from the
@@ -198,7 +181,7 @@ someone upgrading from 0.7.0.
   variables and the gotchas; a test checks every name and every printed signature against the live object.
   The README follows the standard layout and its Python examples run under test; the site has a changelog
   page, `pydhcp.packet.structured`, `load_config` and the exceptions on the API page, the capture filter
-  grammar in `compile_capture_filter`'s docstring, and a table of every named option code with its codec,
+  grammar in `pktcap_plugin`'s header, and a table of every named option code with its codec,
   RFC and departures, generated from the registry (`docs/options.md`); `tests/AGENTS.md` describes the suite.
 - Conformance: the server and the relay are compared with dnsmasq 2.92 and the client with ISC
   dhclient 4.4.3-P1, over 25 recorded exchanges (`tests/conformance/`) that replay on every platform with no
@@ -222,24 +205,27 @@ someone upgrading from 0.7.0.
 - **`pydhcp capture` and `pydhcp replay` are pktcap's commands** (`pktcap.cli.Capture` and
   `Replay`) with DHCP's defaults: `--filter` is ANDed with `proto=dhcp`, ports are 67 and 68,
   `--listen` keeps pydhcp's grammar and binds with `netimps.bind_listen` (IPv4, broadcast allowed,
-  `--per-interface`), and with no source at all it listens on `*`. Their options, statuses, the
-  summary on stderr and the file budget are pktcap's (`pktcap --help` and pktcap's header have each
-  one), and `pydhcp capture` gains `--interface`, `--datagrams`, `--append`, `--duration`/`-d`,
-  `--hook-timeout`, `--load` and `--pktcap-config`, and `--format text`;
-  `pydhcp replay` gains `--filter`, `--source-port`, `--broadcast`, `--json` and `--load`.
+  a 1 MiB receive buffer, `--per-interface`), and with no source at all it listens on `*`. Their
+  options, statuses, the summary on stderr and the file budget are pktcap's (`pktcap --help` and
+  pktcap's header have each one), and `pydhcp capture` gains `--interface`, `--datagrams`,
+  `--append`, `--duration`/`-d`, `--hook-timeout`, `--load` and `--pktcap-config`, and
+  `--format text`.
   - **A record is pktcap's record of the frame**: `time`, `linktype`, `length`, `layers`
     (`ipv4`, `udp` and `dhcp`) and `payload`. The message the old line held is the `dhcp` layer's
     `message`: `jq -c '.layers[-1].message'`. A record file is replaced unless `--append` is
-    given. `--format text` writes `DHCPLayer.summary()`, one line a person reads.
-  - **Renamed**: `--per-capture` is `--per-record`; `replay --server`/`-s` is `--to` and
-    `replay --input` is required; `capture -f` is `--filter` (`--format` has no short form) and
-    `-c` for `--count` is gone; the `[capture]` keys `packet_filter`, `packet_format` and
-    `per_capture` are `filter`, `format` and `per_record`; `PYDHCP_CAPTURE_RECORD_FORMAT`,
+    given (it was appended to). `--format text` writes `DHCPLayer.summary()`, one line a person
+    reads.
+  - **Renamed**: `--output-mode per-capture` is `--per-record` (see Removed); `capture -f` is
+    `--filter` (`--format` has no short form) and `-c` for `--count` is gone; the filter keys
+    `src_port` and `dst_port` are `sport` and `dport`, `src` and `dst` take networks, and
+    `interface=` is gone (use `--listen NAME`). `--listen` with `--interface` or `--read` is
+    status 2. The spellings added after 0.7.0, which no release had, are renamed too:
+    `--per-capture` is `--per-record`; `replay --server`/`-s` is `--to` and `replay --input` is
+    required; the `[capture]` keys `packet_filter`, `packet_format` and `per_capture` are
+    `filter`, `format` and `per_record`; `PYDHCP_CAPTURE_RECORD_FORMAT`,
     `PYDHCP_CAPTURE_PER_CAPTURE` and `PYDHCP_REPLAY_SERVER` are `PYDHCP_CAPTURE_FORMAT`,
     `PYDHCP_CAPTURE_PER_RECORD` and `PYDHCP_REPLAY_TO`. An old option is refused by the parser, an
-    old settings key by name, and an old variable with the name to use (status 2). The filter keys
-    `src_port` and `dst_port` are `sport` and `dport`, `src` and `dst` take networks, and
-    `interface=` is gone (use `--listen NAME`). `--listen` with `--interface` or `--read` is status 2.
+    old settings key by name, and an old variable with the name to use (status 2).
   - **New variables and keys**: every option of the two commands has `PYDHCP_<COMMAND>_<FIELD>` and,
     for `capture`, a settings key of that field's name. The plugin list (`--load`,
     `--pktcap-config`) has neither: only the command line, `PKTCAP_LOAD`, `PKTCAP_CONFIG` and
@@ -248,22 +234,20 @@ someone upgrading from 0.7.0.
     file the user named; it gets `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`
     and `PKTCAP_HOOK_FORMAT` (not `PYDHCP_CAPTURE_*`) and the record on standard input; a failed
     hook is counted and the capture goes on unless `--hook-fail-fast`; `--hook-timeout` bounds it
-    (10 seconds); a `module:function` hook is called with a `pktcap.DissectedFrame` and its module
-    must be on `PYTHONPATH` (the working directory is not added); on Windows a `.cmd` or `.bat`
-    file is refused, name a program.
-  - **Behaviours that differ**: a file budget spent (`--max-files`) is counted and the capture goes on,
-    ending with status 1 and the count in its summary line; an `--output` ending that names no format
-    is status 2 (it was JSON); the writability of `--output` is checked when the first record is
-    written, not before the sockets are bound; the warning for a pattern that names no unique field
-    is gone. The receive buffer of each socket is grown to 1 MiB, as the listeners do.
+    (10 seconds); a `module:function` hook is called with a `pktcap.DissectedFrame` (it was a
+    `CaptureEvent`) and its module must be on `PYTHONPATH` (the working directory is not added,
+    where it was); on Windows a `.cmd` or `.bat` file is refused, name a program.
+  - **Behaviours that differ**: an `--output` ending that names no format is status 2 (it was
+    JSON), and the warning for a pattern that names no unique field is gone. The file budget is
+    below, under "`pydhcp capture` has a file budget".
 - **pktcap is an optional dependency, the `pktcap` extra.** `pip install pydhcp` needs `netimps`
   alone; importing `pydhcp`, `pydhcp.capture` and `pydhcp.cli` loads neither pktcap nor asyncio,
   and a server, a relay, a client and `pydhcp packet --format json` run without it. A capture
-  function (`capture_dissector`, `dissect_dhcp`, `register_dhcp_dissector`, `compile_capture_filter`,
-  `read_capture`, `replay_capture`, `DHCPCaptureWriter`, `DHCPCapture`) raises an `ImportError`,
+  function (`sniff_dhcp`, `asniff_dhcp`, `capture_dissector`, `dissect_dhcp`,
+  `register_dhcp_dissector`, `pktcap_plugin`) raises an `ImportError`,
   and `pydhcp capture` and `pydhcp replay` print and exit with status 1, with the one line
   `captures need the 'pktcap' extra: pip install "pydhcp[pktcap]"`. `dev` installs
-  `pydhcp[cli,pktcap,yaml,toml]` and `pktcap[yaml,toml]`.
+  `pydhcp[cli,pktcap,toml]` and `pktcap[yaml,toml]`.
 - **A `PCPServerList` entry is a tuple of address texts**, where it was a list, so an entry
   cannot be changed past the checks: `servers[0].append(...)` put a 64th address or text that
   is no address into an option, which failed only when it was packed. Replace the entry
@@ -273,51 +257,49 @@ someone upgrading from 0.7.0.
   `>=0.6.0,<0.7`. The `pydhcp` command, its options, its environment variables and its output are
   the same.
 - **Importing the package does not import `asyncio`.** `AsyncDHCPListener`,
-  `AsyncDHCPServer`, `AsyncDHCPClient`, `AsyncDHCPRelay` and `AsyncDHCPCapture` are bound
+  `AsyncDHCPServer`, `AsyncDHCPClient` and `AsyncDHCPRelay` are bound
   when first accessed, from `pydhcp` and from their own packages; their names and import
   paths are unchanged, and a program that uses only the blocking classes never loads it.
-- **`duho` and PyYAML are extras, `cli` and `yaml`, and no longer installed with the package**:
+- **`duho` and pktcap are extras, `cli` and `pktcap`, and no longer installed with the package**:
   `pip install pydhcp` gives the library, and `pip install "pydhcp[cli]"` the `pydhcp` command,
-  `pip install "pydhcp[yaml]"` YAML packets and `.yaml` configuration files. `import pydhcp`
-  and `import pydhcp.cli` import neither, nor `tomllib`, `tomli` or `tomli_w`. **Breaking** for an
-  install that relied on `pip install pydhcp` for the command or for YAML. The `dev` extra
-  includes `cli`, `yaml` and `toml`.
+  `pip install "pydhcp[pktcap]"` the captures and a message as YAML, TOML or INI text.
+  `import pydhcp` and `import pydhcp.cli` import neither, nor `tomllib` or `tomli`. **Breaking**
+  for an install that relied on `pip install pydhcp` for the command, for a capture or for YAML.
+  The `dev` extra includes `cli`, `pktcap` and `toml`, and pktcap's `yaml` and `toml`.
 - **Without the `cli` extra the `pydhcp` command (and `python -m pydhcp`) prints one line,
   `pydhcp: error: the command line needs the 'cli' extra: pip install "pydhcp[cli]"`, and exits
   with status 1**; `pydhcp.cli.main` returns 1 the same way. `pydhcp.cli.App` and the six command
   classes load on first use and are an `ImportError` naming the extra without `duho`.
-- **A missing YAML or TOML dependency is an error that names the extra, not
+- **A missing optional dependency is an error that names the extra, not
   `NotImplementedError`**: `DHCPMessage.to_text`/`from_text` and `pydhcp.packet.structured.dumps`/
-  `loads` raise `ImportError` with `pip install "pydhcp[yaml]"` or `"pydhcp[toml]"`; a `.yaml` or
-  `.toml` configuration file raises `DHCPConfigError` with the same line; `pydhcp capture --format
-  yaml` names `pydhcp[yaml]` where it named `pktcap[yaml]`. The format stays a listed one. **Breaking**
-  for code that caught `NotImplementedError` there. No default needs an extra: `packet --format`,
-  the `capture` format without an ending and the configuration format are JSON or come from the
-  file's name.
+  `loads` raise `ImportError` with `pip install "pydhcp[pktcap]"` for YAML, TOML and INI text (and
+  pktcap's own line for its `yaml` and `toml` extras); a `.toml` configuration file raises
+  `DHCPConfigError` with `pip install "pydhcp[toml]"`. The format stays a listed one. **Breaking**
+  for code that caught `NotImplementedError` there. No default needs an extra: `packet --format`
+  and the configuration format are JSON or come from the file's name.
 - **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
   `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
-- **Dependency ranges are scoped to a series and their floors install**: `PyYAML>=6.0,<7` (the floor
-  is 6.0.1 on Windows on ARM64 and from Python 3.12, where 6.0 has no wheel and does not build),
-  `tomli>=2.0,<3` (below Python 3.11), `tomli-w>=1.0,<2`; they were open-ended, with floors of
-  `tomli-w` 1.2.0 and `tomli` 2.4.0 that no API in use needs. The suite passes with each at its floor.
+- **Dependency ranges are scoped to a series and their floors install**: `netimps>=0.4.1,<0.5`,
+  `duho>=0.7.0,<0.8`, `pktcap>=0.1.0,<0.2` and `tomli>=2.0,<3` (below Python 3.11); they were
+  open-ended, with a `tomli` floor of 2.4.0 that no API in use needs.
 - **Breaking: `pydhcp.cli` exports `App`, `main` and the six commands, and nothing else.**
   `PACKET_FORMATS` and `CAPTURE_FORMATS` are no longer re-exported from it (the capture formats are
   `pktcap.OUTPUT_FORMATS`). `server`, `relay` and `capture` declare `--listen` and `--per-interface`
-  once, in a shared base; their options, variables and help text are unchanged. `pydhcp packet
-  --decode` reads its hex text through `DHCPMessage.from_hex`.
+  once, in a shared base; those two options, their variables and their help text are unchanged.
+  `pydhcp packet --decode` reads its hex text through `DHCPMessage.from_hex`.
 - **A capture writes a line feed at the end of every line on every platform.** On Windows a record
   file, and standard output, ended each line with CR LF; they no longer do. Standard output is
-  UTF-8 on every platform. Nothing changes on Linux or macOS, and a record's other octets are the
-  same in all four formats.
-- **The capture filter's grammar is pktcap's, which pydhcp now requires** (`pktcap>=0.1.0,<0.2`): what
-  each key means stays in pydhcp. A malformed or unusable expression raises `pktcap.CaptureFilterError`
-  (a `ValueError`), whose message names the clause. These expressions mean something new:
+  UTF-8 on every platform.
+- **The capture filter's grammar is pktcap's**: what each DHCP key means stays in pydhcp
+  (`pktcap_plugin`). A malformed or unusable expression is status 2 with one line that names the
+  clause (`pktcap.CaptureFilterError`, a `ValueError`). These expressions mean something new:
   `msg_type!=DHCPOFFER` and every `key!=value` select what the clause does not (it was refused as an
   unsupported key `msg_type!`); a comma means "any of" for every key but `option.NAME`, so
   `msg_type=DHCPDISCOVER,DHCPREQUEST` selects both (it compared the whole text and matched nothing);
   `op` and `msg_type` take a member's name in any letter case or a number; an expression that
   ends in `and`, or in `and` and nothing, is refused (`option.12=x and` compiled, with the word in the
-  value). A filter that compiled and could match before is unchanged.
+  value). The renamed keys aside (`src_port`, `dst_port` and `interface`, above), a filter that
+  compiled and could match before selects what it did.
 - **`pydhcp.cli.main(argv=None) -> int`** takes the argument vector and returns the exit
   status instead of reading `sys.argv` and exiting; `python -m pydhcp` and the console
   script exit with it. **Breaking** for a caller that relied on `SystemExit`. The status
@@ -333,13 +315,13 @@ someone upgrading from 0.7.0.
   **`pydhcp packet --format summary`** opens with `OP XID=...` and no longer prints a
   `Src: capture Dst: decoded` that was never true. A packet that cannot be read or decoded
   is reported as `pydhcp: error: cannot process the packet: ...`.
-- **`PYDHCP_MCP=stdio` no longer serves the commands as tools**: the root sets
-  `_mcp_ = False`, so the variable is not read. `server`, `relay` and `capture` never
-  return, which makes them poor tools.
-- **Configuration errors are one line and status 2**: a malformed YAML, TOML, JSON or INI
+- **`PYDHCP_MCP=stdio` no longer serves every command as a tool**: `packet` and `interfaces`
+  alone are served (see Added). `server`, `relay` and `capture` do not return until they are
+  stopped, and `capture` and `replay` start a program per packet or send datagrams.
+- **Configuration errors are one line and status 2**: a malformed TOML, JSON or INI
   file, a top level that is not a mapping, a misspelled section (`sever:`), another
   command's section, a key the command does not have, an extension that is not one of the
-  four and `--config -` without `--config-format` each print
+  three and `--config -` without `--config-format` each print
   `pydhcp: error: <file>:<line>:<col>: <problem>` with no text from the document. They were
   a traceback (YAML, INI), a bare parser message (JSON, TOML) or silently started a server
   on every interface (a misspelled section). An INI value is no longer interpolated, so a
@@ -352,22 +334,23 @@ someone upgrading from 0.7.0.
 - **`PYDHCP_TRACEBACK` is a boolean**: `0`, `false`, `no` and `off` no longer enable
   tracebacks; any text that is neither a true nor a false word is an error naming the
   variable.
-- **`pydhcp capture` ends, with status 1 and a last line, when it cannot keep a record**: a
-  record that needs a file past `--max-files` (new, default 1000, the old `MAX_PER_CAPTURE_FILES`)
-  says how many records were refused, and a record that cannot be written (a directory the pattern
-  names is a file, a full disk) says which path and why. Both used to leave the capture running,
-  recording nothing and exiting 0 or never exiting, with a traceback per packet. A single output
-  file that is a directory or read-only is refused before the capture binds, status 2.
+- **`pydhcp capture` has a file budget, and ends when it cannot write a record**: with
+  `--per-record`, a record that needs a file past `--max-files` (new, default 1000, the old
+  `MAX_PER_CAPTURE_FILES`) is counted as refused and the capture goes on, ending with status 1 and
+  the count in its summary line; a record that cannot be written (a directory the pattern names is
+  a file, a full disk) ends the capture with status 1 and one line that names the path and says
+  why. Both used to leave the capture running, recording nothing and exiting 0 or never exiting,
+  with a traceback per packet.
 - **A value interpolated into a capture filename is at most 64 characters**: a longer one (a client
   identifier is up to 255 octets, 765 characters as text) is cut and ends in a hash of the whole,
   so two long values still name two files. It used to make every write fail.
-- **The command hook follows the subprocess rules**: its output is decoded as UTF-8 with
-  replacement (a program printing other bytes was a decode error, or a mis-decode on
-  Windows), the program **and the processes it started** are killed on the time limit (only the
-  program was), the limit is an argument with `HOOK_TIMEOUT_SECONDS` as its default and a timeout
-  raises `DHCPTimeoutError` (a `TimeoutError`; it was a `RuntimeError`), and only the sizes of its
-  output are logged, never its contents. **Breaking**: `pydhcp.cli.HOOK_TIMEOUT_SECONDS` is now
-  `pydhcp.capture.HOOK_TIMEOUT_SECONDS`, and `pydhcp.cli` no longer exports it.
+- **The command hook is bounded, and quiet about what the program prints**: the program **and the
+  processes it started** are killed on the time limit (only the program was), which
+  `--hook-timeout` sets (10 seconds); a hook that fails or is killed is counted and logged with a
+  bounded, escaped tail of its error output, and nothing else it prints is logged (its output was
+  decoded with the locale's encoding and logged whole, so a program printing other bytes was a
+  decode error, or a mis-decode on Windows). **Breaking**: `pydhcp.cli.HOOK_TIMEOUT_SECONDS` is
+  gone.
 - **Every option has a help line**: `packet --decode`, `--encode` and `capture --format`
   had none, and `capture --filter` showed the field name `PACKET_FILTER`.
 - **The relay follows RFC 3046 section 2.1 on the request side.** It adds option 82 only to
@@ -433,7 +416,7 @@ someone upgrading from 0.7.0.
   something else.** `("127.0.0.1", "6767")` bound ports 6 and 7 and
   `("127.0.0.1", True)` bound port 1; both, and any bare number or `bool` as an
   address or a port, are now refused (`TypeError`) before anything is bound. A
-  pair may be a list, so the `["127.0.0.1", 6767]` a JSON, YAML or TOML file
+  pair may be a list, so the `["127.0.0.1", 6767]` a JSON or TOML file
   delivers is one binding (it was two, the second `0.0.26.111`), and its port
   may be digit text. A pair is read by `netimps.split_host`: a port outside
   0-65535 and a port written twice that disagrees (`("*:67", 68)` bound 68) are
@@ -492,15 +475,10 @@ someone upgrading from 0.7.0.
   pending table ages on the monotonic time stamped on each context, and
   `pydhcp.relay` is now a package (same import path and names; `PendingClient`
   is private); the relay's records are logged by `pydhcp.relay._core`.
-- **Breaking: `AsyncDHCPCapture` is no longer a subclass of `DHCPCapture`**, on the
-  same terms as the server and the relay: one private core holds the filter, sink
-  and hook rules (`hook_fail_fast` included), and the two captures are sibling
-  drivers over it. `isinstance(capture, DHCPCapture)` is false for an asynchronous
-  capture, and `CaptureEvent.captured_at` is the time stamped on the context when the
-  datagram arrived. `pydhcp.capture` is now a package (same import path and
-  names); its hook-failure record is logged by `pydhcp.capture._core`.
+- **`pydhcp.capture` is a package** (same import path), and its capture classes are gone (see
+  Removed).
 - **Breaking: one lifecycle vocabulary on every listener and role**
-  (`DHCPListener`, `DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient` and their
+  (`DHCPListener`, `DHCPServer`, `DHCPRelay`, `DHCPClient` and their
   asyncio counterparts). `listen()` is `serve_forever()`, `stop()` is `shutdown()`,
   `wait()` is `wait_closed(timeout=None)` (it returns `False` when the timeout passed
   first), and `start()` returns `None` and takes no cancellation token; no alias is
@@ -522,12 +500,12 @@ someone upgrading from 0.7.0.
   nothing. `shutdown()` ends the wait at once instead of after the poll interval.
 - **The library installs no signal handler.** `DHCPListener.start()` no longer
   claims `SIGINT` for the process, and `close()` no longer gives it back. Ctrl-C
-  reaches `serve_forever()` as `KeyboardInterrupt`; the `pydhcp server`, `relay`
-  and `capture` commands catch it, log the same line and exit with status 0, as
-  before.
+  reaches `serve_forever()` as `KeyboardInterrupt`; the `pydhcp server` and `relay`
+  commands catch it, log the same line and exit with status 0, as before, and
+  `pydhcp capture` ends with its summary line and status 0.
 - **Breaking: constructors take `listen` (and, for the relays, `server_addresses`)
   positionally and every other option by keyword.** This applies to `DHCPListener`,
-  `DHCPServer`, `DHCPRelay`, `DHCPCapture`, `DHCPClient` and the asyncio
+  `DHCPServer`, `DHCPRelay`, `DHCPClient` and the asyncio
   counterparts; a seventh positional argument is a `TypeError`. The same position
   meant different things on the two drivers (`select_timeout` against
   `max_packet_size`), and the shipped header's `DHCPRelay` signature omitted
@@ -645,17 +623,16 @@ someone upgrading from 0.7.0.
   module under it with a leading underscore; the `pydhcp.listener` modules (`sync`,
   `aio`, `binding`, `interfaces`, `receive`, `spec`, `transport`) are `_sync`,
   `_asyncio`, `_binding`, `_interfaces`, `_receive`, `_spec` and `_transport`; the
-  `pydhcp.cli` command modules are `_capture`, `_capture_hook`, `_interfaces`,
-  `_packet`, `_relay` and `_server`. `pydhcp._utils` is split into `_generic` and
+  `pydhcp.cli` command modules are `_capture`, `_interfaces`,
+  `_packet`, `_relay` and `_server` (`capture_hook` is gone). `pydhcp._utils` is split into `_generic` and
   `_missing`. No module is left behind to re-export from its old path. Import a name
   from `pydhcp`, `pydhcp.packet`, `pydhcp.options`, `pydhcp.listener` or the other
   public modules; `pydhcp.log.LOGGER` is `logging.getLogger("pydhcp")`.
 - **A module's logger is named for its module,** so the records of a moved module
   change name: `pydhcp.log`, `pydhcp.config` and `pydhcp.metrics` become
   `pydhcp._log`, `pydhcp._config` and `pydhcp._metrics`, `pydhcp.listener.binding`
-  and the other listener modules `pydhcp.listener._binding` and so on, and
-  `pydhcp.cli.capture_hook` and the other command modules `pydhcp.cli._capture_hook`
-  and so on. A `--loglevel` or a filter naming one of them follows; one naming
+  and the other listener modules `pydhcp.listener._binding` and so on.
+  A `--loglevel` or a filter naming one of them follows; one naming
   `pydhcp` or `pydhcp.listener` is unaffected.
 - **Breaking: the root exports the packet enums and no longer exports the address
   aliases or the specialised codec families.** `pydhcp.DHCPMessageType`,
@@ -759,8 +736,8 @@ someone upgrading from 0.7.0.
     `message.to_text(format)`. `pydhcp.packet.structured` holds `loads(text,
     format)` and `dumps(data, format)` for a mapping; `load_message`,
     `dump_message`, `load_mapping` and `dump_mapping` are gone, from
-    `pydhcp.packet` as well. The four formats are the same: a file the capture
-    command wrote with an earlier version loads unchanged.
+    `pydhcp.packet` as well. A document an earlier version wrote, by the capture
+    command included, still loads.
   - `DHCPMessage.encode()` returns `bytes`, not `bytearray`, and `bytes(message)`
     works. Write `bytearray(message.encode())` to patch an octet.
   - `DHCPOptions.decode(data)` is a classmethod that returns the options; it no
@@ -815,13 +792,12 @@ someone upgrading from 0.7.0.
 - **`DHCPMessage.message_type`** is option 53 read once: the
   `DHCPMessageType` member, or `None` when there is no option 53 or its payload is
   not one octet. The server, the client's reply matching and
-  `CaptureEvent.message_type` read it there.
+  `DHCPLayer` read it there.
 - **Named aliases for what a function accepts**, exported and listed in the
   headers: `IPv4AddressLike` (`pydhcp`), `ListenLike` (`pydhcp.listener`, was
-  `ListenSpec`), `ServerAddressLike` (`pydhcp.relay`, was `ServerAddress`),
-  `ClientIdentifierLike` (`pydhcp.client`) and `PacketFilterLike`
-  (`pydhcp.capture`). `ListenAddress`, `ListenBinding` and `ListenPort` are no
-  longer exported.
+  `ListenSpec`), `ServerAddressLike` (`pydhcp.relay`, was `ServerAddress`) and
+  `ClientIdentifierLike` (`pydhcp.client`). `ListenAddress`, `ListenBinding` and
+  `ListenPort` are no longer exported.
 - **Codecs read what real peers send.** Each reading is an RFC allowance, and
   what is written is as strict as before.
   - Option 120 (`SIPServers`) reads compressed names (RFC 3361 section 3.1:
@@ -844,8 +820,9 @@ someone upgrading from 0.7.0.
   type: `DHCPMessageType(99)` has no `.name`, `.label()` is `TYPE_99`, and
   `DHCPMessage.message_type` returns it, so a relay forwards what it received.
   `message_type` is `None` only for an option 53 that is not one octet.
-  `CaptureEvent.message_type` is `TYPE_<n>` for one, where it was `UNKNOWN`, and
-  the server logs that name. A number over 255 still raises `ValueError`.
+  A capture names such a type `TYPE_<n>` (`DHCPLayer.message_type`, the `msg_type`
+  filter key and file-name field), where it was `UNKNOWN`, and the server logs that
+  name. A number over 255 still raises `ValueError`.
 - **The `flags` field keeps its reserved bits.** `DHCPFlags` is an `IntFlag`; a
   decoded message holds the sixteen bits it received and `encode` writes them
   back, where a decode cleared the fifteen reserved ones (a relay changed the
@@ -1006,8 +983,8 @@ Replace each name in the left column with the one beside it.
 | `DhcpClient` | `DHCPClient` |
 | `DhcpRelay` | `DHCPRelay` |
 | `AsyncDhcpRelay` | `AsyncDHCPRelay` |
-| `DhcpCapture` | `DHCPCapture` |
-| `AsyncDhcpCapture` | `AsyncDHCPCapture` |
+| `DhcpCapture` | `removed; pydhcp.capture.sniff_dhcp (see Removed)` |
+| `AsyncDhcpCapture` | `removed; pydhcp.capture.asniff_dhcp (see Removed)` |
 | `DhcpMessage` | `DHCPMessage` |
 | `DhcpOptions` | `DHCPOptions` |
 | `DhcpOption` | `DHCPOption` |
@@ -1070,7 +1047,7 @@ Replace each name in the left column with the one beside it.
 | `ListenSpec` | `ListenLike` |
 | `ListenAddress, ListenBinding, ListenPort` | `private, or documented in a header` |
 | `ServerAddress` | `ServerAddressLike` |
-| `IPv4 \| str (13 annotations)` | `IPv4AddressLike` (`Union[IPv4Address, str]`), with `ClientIdentifierLike` (`pydhcp.client`), `PacketFilterLike` (`pydhcp.capture`), `ListenLike` and `ServerAddressLike` |
+| `IPv4 \| str (13 annotations)` | `IPv4AddressLike` (`Union[IPv4Address, str]`), with `ClientIdentifierLike` (`pydhcp.client`), `ListenLike` and `ServerAddressLike` |
 | `pydhcp.network.IPv4, IPv6, IP, IPNetwork and the other aliases of netimps or ipaddress objects` | `removed; callers import IPv4Address, IPv6Address, IPAddress, IPNetwork from netimps or ipaddress` |
 | `.listen()` | `.serve_forever()` |
 | `.stop()` | `.shutdown()` |
@@ -1131,17 +1108,20 @@ Replace each name in the left column with the one beside it.
     datagrams to port 67, `d for d in pktcap.read_datagrams(source) if d.destination[1] == 67`.
   - The `pydhcp` module no longer exports `CaptureEvent`, `DHCPCapture`, `AsyncDHCPCapture`,
     `compile_capture_filter` or `DHCPHookError`.
-  The asynchronous capture is `asniff_dhcp`, an iterator and not a class with a sink.
-- **`pydhcp capture --output-mode` is gone, and `--per-capture` replaces it**: the mode
+  The asynchronous capture is `asniff_dhcp`, an iterator and not a class with a sink. Of these
+  names 0.7.0 had the capture classes (as `DhcpCapture` and `AsyncDhcpCapture`), `CaptureEvent`,
+  the three aliases beside it, `compile_capture_filter`, `FILENAME_FIELDS`,
+  `UNIQUE_FILENAME_FIELDS` and, in `pydhcp.cli`, `HOOK_TIMEOUT_SECONDS`; the others were added
+  after it and are in no release.
+- **`pydhcp capture --output-mode` is gone, and `--per-record` replaces it**: the mode
   `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
-  `-`, so the only choice left is one file per record. `PYDHCP_CAPTURE_OUTPUT_MODE` is
-  `PYDHCP_CAPTURE_PER_CAPTURE` (a boolean) and the configuration key `output_mode` is `per_capture`.
-  **Breaking** for a command line, a variable or a file that said `--output-mode`.
+  `-`, so the only choice left is one file per record, and `--output-mode per-capture` is
+  `--per-record`. **Breaking** for a command line that said `--output-mode`.
 - **Breaking: `pydhcp.capture.validate_filename_pattern`, `CaptureEvent.format_filename` and
-  `pydhcp.cli.MAX_PER_CAPTURE_FILES` are gone.** Building a `DHCPCaptureWriter` makes the same
-  checks of the pattern and raises `ValueError` (the message names the field and lists the fields);
-  `pydhcp.capture.MAX_CAPTURE_FILES` is the default budget. The cleaning of a filename value
-  is pktcap's, the same rule: a name that Windows opens as a device (`NUL`) now gets a leading `_`.
+  `pydhcp.cli.MAX_PER_CAPTURE_FILES` are gone.** `pktcap.CaptureWriter` makes the same checks of
+  a file-name pattern and raises `ValueError` (the message names the field and lists the fields),
+  and its `max_files` (1000) is the budget. The cleaning of a file-name value is pktcap's, the
+  same rule: a name that Windows opens as a device (`NUL`) gets a leading `_`.
 - **Breaking: `pydhcp.network` holds only pydhcp's own types** (`HardwareAddressType`,
   `NetworkInterface`, `SocketAddress`, `host_ip_interfaces`). `IPv4`, `IPv6`, `IP`,
   `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `LINK_LOCAL_V4` and
@@ -1191,8 +1171,8 @@ Replace each name in the left column with the one beside it.
 - **The README's `--loglevel pydhcp=DEBUG` example is `--loglevel pydhcp:DEBUG`**: the option
   takes `[NAME:]LEVEL`, and the line shown was rejected by the parser. Every command line in the README,
   the docs and the shipped headers is now fed to the real parser by a test, and the README's lines run as
-  processes against loopback. The README says a hook is a program with an extension on Windows
-  (`./on-dhcp-capture.cmd`).
+  processes against loopback. The README says what a command hook is on Windows: a program
+  (an `.exe`), not a `.cmd` file.
 - **A lease backend that is falsy when empty is no longer replaced.** `lease_backend`
   was tested for truthiness, so a backend defining `__len__` was discarded while
   empty and the server used a private store; it is now tested with `is None`.
@@ -1280,7 +1260,7 @@ Replace each name in the left column with the one beside it.
 - **Each module logs on its own logger.** Records from the listener, server, relay,
   client, lease store and the rest were emitted on `pydhcp` itself, so a level set
   on `pydhcp.server` silenced nothing. A record is now named for its module
-  (`pydhcp.server.handlers`, `pydhcp.listener.receive`, `pydhcp.cli.capture_hook`);
+  (`pydhcp.server._handlers`, `pydhcp.listener._receive`);
   a handler or level on `pydhcp` still sees all of them, since children propagate.
 - **`pydhcp capture --hook ./name` runs the file it names.** The command was started by
   the name with its `./` dropped, which POSIX looks up on `PATH` only: the hook was not
@@ -1288,8 +1268,8 @@ Replace each name in the left column with the one beside it.
   The hook is now resolved to an absolute path when the capture starts, so `./name` is the
   file in the working directory on every platform and survives a later change of
   directory, and a bare `name` is looked up on `PATH` (a bare name that is only a file in
-  the working directory is refused, naming `./name`). A command hook that is not
-  executable is refused at start-up on POSIX. The help text says which is which.
+  the working directory is refused, naming `./name`). A command hook that does not exist,
+  or is not executable on POSIX, is refused at start-up (status 2).
 - **Address-bound listening is documented as it behaves, and warns.** A socket bound to
   an address (`per_interface=True`, or a `listen` that names one) hears no broadcast on
   Linux (measured: 0 of 3 limited and 0 of 3 subnet broadcasts, against 3 of 3 for the
@@ -1302,8 +1282,8 @@ Replace each name in the left column with the one beside it.
 - **The async listener's queue behind its handler is bounded.** Every
   datagram was queued for the one worker thread with no limit, so a slow
   handler (a lease-file write) let a flood grow memory by tens of MiB a
-  second. `AsyncDHCPListener`, `AsyncDHCPServer`, `AsyncDHCPRelay` and
-  `AsyncDHCPCapture` take `max_queued` (default 1024 datagrams): the
+  second. `AsyncDHCPListener`, `AsyncDHCPServer` and `AsyncDHCPRelay`
+  take `max_queued` (default 1024 datagrams): the
   datagram that finds the backlog full is dropped, counted in the new
   `metrics.packets_dropped_backlog` and reported at WARNING at most once a
   minute. `stop()` discards what is still queued, counted in the same

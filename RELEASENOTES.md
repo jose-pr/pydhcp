@@ -13,12 +13,14 @@ its new one, "Removed" lists what is gone and "Changed" has the detail of each b
 name is kept as an alias and there is no deprecation period, so an upgrade is a search and replace
 and a read of this list.
 
-- **Install.** `pip install pydhcp` is the library. The `pydhcp` command needs `pip install
-  "pydhcp[cli]"`, YAML packets and `.yaml` configuration files need `"pydhcp[yaml]"`, and TOML
-  needs `"pydhcp[toml]"`; `import pydhcp` imports none of them. A missing one is an `ImportError`
-  (or a `DHCPConfigError` for a configuration file) that names the extra, where it was a
-  `NotImplementedError`. `netimps>=0.4.1,<0.5` (0.3 is no longer supported) and `pktcap>=0.1.0,<0.2`
-  are required.
+- **Install.** `pip install pydhcp` is the library and needs `netimps>=0.4.1,<0.5` alone (0.3 is
+  no longer supported). The `pydhcp` command needs `pip install "pydhcp[cli]"`; captures
+  (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text need
+  `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries); a `.toml` settings file
+  needs `"pydhcp[toml]"` before Python 3.11; `import pydhcp` imports none of them. A missing one is
+  an `ImportError` (or a `DHCPConfigError` for a configuration file) that names the extra, where it
+  was a `NotImplementedError`. pydhcp declares no PyYAML and reads no YAML settings file: a
+  `.yaml` file is refused, and is converted to TOML or JSON (the last row of the table below).
 - **Names.** Acronyms are upper case and the generic names take the `DHCP` prefix: `DhcpServer` is
   `DHCPServer`, `DhcpOptionCode` is `DHCPOptionCode`, `Transport` is `DHCPTransport`, `OpCode` is
   `DHCPOpcode`, `UdpTransport` is `UDPTransport`, and the codecs follow (`CccOption` is
@@ -35,7 +37,7 @@ and a read of this list.
   raises what the bind raised), `serve_forever()`, `shutdown()`, `wait_closed(timeout=None)`,
   `close()` and `with` (`await aclose()` and `async with` on the asyncio classes). `listen()`,
   `stop()` and `wait()` are gone. Closed is final: using a closed role raises `RuntimeError`.
-  `AsyncDHCPServer`, `AsyncDHCPRelay` and `AsyncDHCPCapture` are no longer subclasses of the
+  `AsyncDHCPServer` and `AsyncDHCPRelay` are no longer subclasses of the
   synchronous ones. Constructors take `listen` (and `server_addresses` on the relays)
   positionally, the rest as keywords, and open nothing.
 - **Exceptions.** `pydhcp.exceptions` holds `DHCPError` and its subclasses. A decoder raises
@@ -55,14 +57,52 @@ and a read of this list.
   needs the six `LeaseBackend` methods, or the server refuses it.
 - **Command line.** `pydhcp.cli.main(argv=None)` returns the status instead of exiting: 0 on
   success, 1 for a failed run, 2 for a wrong invocation (a configuration error included).
-  `pydhcp capture --output-mode` is `--per-capture`, `pydhcp relay --server` is required,
-  `PYDHCP_TRACEBACK` reads a boolean, `PYDHCP_MCP=stdio` no longer serves the commands as tools,
-  and the settings follow one order for every command (the option, then its environment variable,
-  then the configuration file, then the default). The capture filter's grammar is pktcap's.
-- **New.** `pydhcp capture --format pcap|pcapng` and `--read FILE`, `pydhcp replay`, the
-  capture dissector for pktcap, `AsyncDHCPClient`, `deadline=` on the client's exchanges,
-  `listen` on an interface by name, and the `Bound:` log record. The options page of the
-  documentation lists every named option code with its codec and RFC.
+  `pydhcp relay --server` is required, `PYDHCP_TRACEBACK` reads a boolean, `PYDHCP_MCP=stdio`
+  serves `packet` and `interfaces` as tools, and the settings follow one order for every command
+  (the option, then its environment variable, then the configuration file, then the default).
+- **Captures are pktcap's.** `pydhcp capture` is pktcap's `capture` command with DHCP's defaults,
+  and pydhcp's own capture classes, filter, file-name pattern and hook runner are gone. What
+  moved, from 0.7.0:
+
+  | 0.7.0 | now |
+  | --- | --- |
+  | `DhcpCapture(listen, packet_filter, sink, hook)`, `AsyncDhcpCapture` | `for frame in sniff_dhcp(listen)` and `async for frame in asniff_dhcp(listen)`, written with `pktcap.copy_frames(frames, writer, select=, each=)` |
+  | `CaptureEvent` (`.message`, `.message_type`, `.client_id`, `.xid`) | `pktcap.DissectedFrame`: `frame.layer(DHCPLayer)` has `message_type`, `client_id`, `xid` (an `int`) and `message` (the mapping); `DHCPMessage.decode(frame.datagram().payload)` is the message |
+  | `compile_capture_filter(text)` | `pktcap.compile_capture_filter(text, pktcap.frame_filter_for(capture_dissector().registry))` |
+  | `validate_filename_pattern`, `CaptureEvent.format_filename`, `FILENAME_FIELDS`, `pydhcp.cli.MAX_PER_CAPTURE_FILES` | `pktcap.CaptureWriter(target, format, per_record=True, fields=("client_id", "msg_type", "xid"))`, whose `max_files` is 1000 |
+  | `pydhcp.cli.HOOK_TIMEOUT_SECONDS` | `--hook-timeout` (10 seconds); `pktcap.command_hook(command, timeout=)`, which raises `pktcap.CaptureHookError` |
+  | `pydhcp capture --output-mode per-capture` | `--per-record`; the other two modes need no option |
+  | `pydhcp capture -f FORMAT`, `-c N` | `--format FORMAT` (`-f` is `--filter`), `--count N` |
+  | filter keys `src_port`, `dst_port`, `interface` | `sport`, `dport`, and `--listen NAME` |
+  | a record: the message mapping | pktcap's record of the frame (`time`, `linktype`, `length`, `layers`, `payload`); the old line is `jq -c '.layers[-1].message'` |
+  | a record file is appended to | replaced, unless `--append` |
+  | a hook gets `PYDHCP_CAPTURE_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the message on standard input | `PKTCAP_HOOK_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the record |
+  | a `module:function` hook gets a `CaptureEvent`, and is found in the working directory | it gets a `pktcap.DissectedFrame`, and its module must be on `PYTHONPATH` |
+  | a command hook named by a bare name; a `.cmd` or `.bat` hook on Windows | `./name` for a file in the working directory (a bare name is looked up on `PATH` alone); a program (an `.exe`) |
+  | a settings file `server.yaml` (`server:` / `listen: "*"`) | `server.toml` (`[server]` / `listen = "*"`) or JSON |
+
+  A file budget spent (`--max-files`, 1000) is counted and the capture goes on, ending with status
+  1; an `--output` ending that names no format is status 2, where it was JSON; and an INI message
+  has a `[record]` section where it had `[message]` (the old one is still read). A removed option
+  or filter key is refused by name.
+
+  The development tree had more names after 0.7.0 that no release shipped, and they are gone or
+  renamed too: `DHCPCaptureWriter` and `MAX_CAPTURE_FILES` (`pktcap.CaptureWriter`),
+  `pydhcp.capture.command_hook` and `DHCPHookError` (`pktcap.command_hook`,
+  `pktcap.CaptureHookError`), `read_capture(source)` (`pktcap.read_dissected(source,
+  dissector=capture_dissector())`), `replay_capture(source, server)` (`pktcap.replay_to(datagrams,
+  server, 67)`), `--per-capture` (`--per-record`), `replay --server` (`--to`), the `[capture]`
+  keys `packet_filter`, `packet_format` and `per_capture` (`filter`, `format`, `per_record`) and
+  the variables `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_PER_CAPTURE` and
+  `PYDHCP_REPLAY_SERVER` (`PYDHCP_CAPTURE_FORMAT`, `PYDHCP_CAPTURE_PER_RECORD`,
+  `PYDHCP_REPLAY_TO`). An option, a key or a variable among them is refused, status 2.
+- **New.** `pydhcp replay`, which sends the requests of a capture file to a server you name;
+  `pydhcp capture --read FILE`, `--format pcap|pcapng|text`, `--max-files`, `--interface`,
+  `--datagrams`, `--append`, `--duration` and `--hook-timeout`; `sniff_dhcp` and `asniff_dhcp`,
+  `DHCPLayer.summary()` and the DHCP dissector and filter keys for pktcap (`pktcap_plugin`);
+  `AsyncDHCPClient`, `deadline=` on the client's exchanges, `listen` on an interface by name, and
+  the `Bound:` log record. The options page of the documentation lists every named option code
+  with its codec and RFC.
 
 The version in development is 0.8.0; the number of the release is chosen when it is cut.
 
