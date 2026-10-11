@@ -126,6 +126,9 @@ def _prepare(directory: pathlib.Path, ports: "dict[str, int]") -> None:
         json.dumps({"server": {"listen": "127.0.0.1:%d" % ports["config"]}}),
         encoding="utf-8",
     )
+    (directory / "server.toml").write_text(
+        '[server]\nlisten = "127.0.0.1:%d"\n' % ports["config"], encoding="utf-8"
+    )
     (directory / "packet.json").write_text(
         build_request(xid=0x1234ABCD).to_text("json"), encoding="utf-8"
     )

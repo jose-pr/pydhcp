@@ -41,18 +41,17 @@ def test_each_capability_is_one_extra() -> None:
 
     assert _names(extras["cli"]) == {"duho"}
     assert _names(extras["pktcap"]) == {"pktcap"}
-    assert "yaml" not in extras
-    assert _names(extras["toml"]) == {"tomli"}
+    assert "yaml" not in extras and "toml" not in extras
 
 
 def test_dev_refers_to_the_extras_by_name_and_repeats_no_range() -> None:
     extras = _project()["optional-dependencies"]
-    capabilities = {"cli", "pktcap", "toml"}
+    capabilities = {"cli", "pktcap"}
 
     own = [Requirement(spec) for spec in extras["dev"] if spec.startswith("pydhcp")]
 
     assert len(own) == 1 and own[0].extras == capabilities
-    assert not _names(extras["dev"]) & {"duho", "pyyaml", "tomli", "tomli-w"}
+    assert not _names(extras["dev"]) & {"pyyaml", "tomli", "tomli-w"}
 
 
 def test_dev_installs_the_record_formats_pktcap_writes() -> None:
@@ -63,10 +62,27 @@ def test_dev_installs_the_record_formats_pktcap_writes() -> None:
     assert len(own) == 1 and own[0].extras == {"yaml", "toml"}
 
 
+def test_dev_installs_the_settings_formats_duho_reads() -> None:
+    extras = _project()["optional-dependencies"]
+
+    own = [Requirement(spec) for spec in extras["dev"] if spec.startswith("duho")]
+
+    assert len(own) == 1 and own[0].extras == {"config", "yaml"}
+    assert not own[0].specifier
+
+
+def test_the_cli_extra_needs_the_duho_that_reads_a_settings_file() -> None:
+    extras = _project()["optional-dependencies"]
+
+    (spec,) = [Requirement(s) for s in extras["cli"]]
+
+    assert spec.specifier.contains("0.7.2") and not spec.specifier.contains("0.7.1")
+
+
 def test_every_runtime_dependency_has_a_ceiling_at_the_next_series() -> None:
     project = _project()
     specs = list(project["dependencies"])
-    for extra in ("cli", "pktcap", "toml"):
+    for extra in ("cli", "pktcap"):
         specs += project["optional-dependencies"][extra]
 
     unbounded = [
