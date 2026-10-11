@@ -194,7 +194,7 @@ DHCPMetrics.snapshot()
 ```
 
 - **`DHCPMetrics`** — plain counters, one instance per listener/server/
-  client/relay/capture (`self.metrics`), never a module-level singleton.
+  client/relay (`self.metrics`), never a module-level singleton.
   `.reset() -> None` zeroes all counters; `.snapshot() -> dict[str, int]`
   returns a plain dict copy.
   - **`DHCPMetrics.FIELDS`** (class var) — the counter names, in snapshot
@@ -246,7 +246,7 @@ DHCPMetrics.snapshot()
   touching the others; they all propagate to `pydhcp`.
 - **A line a sender can provoke is rate-limited.** For every such reason (an
   undecodable or oversized datagram, a receive or handler error, a message a
-  role drops or ignores, a failing pin, a failing hook) the first occurrence is
+  role drops or ignores, a failing pin) the first occurrence is
   written, then at most one line per 60 s for that reason, carrying the running
   count (`[N occurrences so far; ...]`). The listener owns the limiter; the
   table of reasons is capped (128, then one entry shared by the rest) and the

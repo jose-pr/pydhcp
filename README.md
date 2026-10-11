@@ -49,9 +49,9 @@ else you ask of it is an extra, one for each capability:
 For example `pip install "pydhcp[cli,pktcap]"`. Without the `cli` extra the `pydhcp`
 command prints that it needs it and exits with status 1; without the `pktcap` extra
 `pydhcp capture` and `pydhcp replay` print that line and exit with status 1, and every other
-command runs. JSON and INI need no extra. The one required dependency is
-[`netimps`](https://github.com/jose-pr/netimps), which has none of its own. Requires
-Python 3.9+.
+command runs. A message as JSON, and a JSON or INI configuration file, need no extra. The one
+required dependency is [`netimps`](https://github.com/jose-pr/netimps), which has none of its
+own. Requires Python 3.9+.
 
 ## Quick start
 
@@ -230,8 +230,8 @@ pydhcp capture --listen 127.0.0.1:6767 --output heard.pcap
 pydhcp capture --read heard.pcap --filter msg_type=DHCPDISCOVER
 pydhcp replay --input heard.pcap --to 192.0.2.1 --no-delay
 
-# Write one structured file per capture (at most --max-files files, 1000 by default:
-# the capture then ends with status 1 and says how many records it refused)
+# Write one structured file per record (at most --max-files files, 1000 by default:
+# the records past them are counted, and the capture ends with status 1 and says how many)
 pydhcp capture --listen 127.0.0.1:6767 --output "output/{client_id}/{timestamp}_{msg_type}.{format}" --per-record --format json
 
 # Invoke a trusted local command hook with each captured packet on stdin
@@ -282,7 +282,7 @@ server = ["192.0.2.1", "192.0.2.2"]
 ```
 
 A file that does not parse, a section or key the command does not have (a misspelled
-`sever:`, another command's section) is refused by name with status 2, naming the file and
+`[sever]`, another command's section) is refused by name with status 2, naming the file and
 the position; nothing starts on defaults by mistake.
 
 | Variable | Sets |

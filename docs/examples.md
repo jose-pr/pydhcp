@@ -4,7 +4,7 @@ This page collects a few short patterns that are useful when you start wiring `p
 
 ## Server config file
 
-`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, TOML or INI, selected by file extension (`--config-format` names it when the file name does not; `--config -` reads standard input). The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A YAML config:
+`pydhcp server --config` (or `PYDHCP_CONFIG`) accepts JSON, TOML or INI, selected by file extension (`--config-format` names it when the file name does not; `--config -` reads standard input). The file holds a section named for the command, `server`, whose keys are the command's field names (`listen`, `per_interface`, `lease_file`); `relay` and `capture` have sections of their own. A section or key the command does not have is an error. A TOML file:
 
 ```toml
 [server]
@@ -278,7 +278,7 @@ pydhcp capture --listen 127.0.0.1:6767 --output heard.pcapng --count 10
 `tcpdump -r heard.pcap -n` reads the first back.
 
 A message put back together is not the packet that arrived (it is padded to 300 octets), so a
-capture file keeps the received octets; a command hook beside it is given the message as JSON.
+capture file keeps the received octets; a command hook beside it is given the record as JSON.
 
 From Python, `sniff_dhcp` is the source and pktcap's `copy_frames` writes it:
 

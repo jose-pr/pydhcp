@@ -117,8 +117,9 @@ def dumps(data: dict[str, _ty.Any], format: str) -> str:
     (`ImportError` naming `pip install "pktcap[yaml]"` or `"pktcap[toml]"`). A value
     the format cannot hold is a `TypeError` or `ValueError` from pktcap that does not
     quote the record, and so is a message whose options TOML would write in another
-    order (an option held as a table before a plain one). The INI form is `[record]` with the header fields and one section
-    for `options`, each value one line of JSON, and keeps the case of every name.
+    order (an option held as a table before a plain one). The INI form is `[record]`
+    with the header fields and one section for `options`, each value one line of JSON,
+    and keeps the case of every name.
     """
     normalized = _normalize_format(format)
     if normalized == "json":

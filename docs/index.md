@@ -24,7 +24,7 @@ permissions and platform-specific UDP behavior.
 pip install pydhcp
 ```
 
-The library (packets, options, server, client, relay, capture) needs nothing else. What
+The library (packets, options, server, client, relay) needs nothing else. What
 else you ask of it is an extra, one for each capability:
 
 | Extra | Adds | Needed for |

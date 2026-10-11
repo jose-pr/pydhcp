@@ -254,7 +254,7 @@ dumps(data: dict[str, Any], format: str) -> str
   is read too. A list or text subclass in the mapping is written as the builtin. `DHCPMessage.from_text` / `.to_text` are these
   two around `from_mapping` / `to_mapping`.
 
-**Gotcha**: the INI loader/dumper sets `ConfigParser.optionxform = str`
-before parsing — any code that builds its own `ConfigParser` for packet or
-option data must do the same, or option/field names get silently
-lowercased and structured packet round-tripping breaks.
+**Gotcha**: the INI form keeps the case of every name (pktcap reads and
+writes it with `ConfigParser.optionxform = str`) — any code that builds its
+own `ConfigParser` for packet or option data must do the same, or option/field
+names get silently lowercased and structured packet round-tripping breaks.

@@ -1,6 +1,6 @@
 # pydhcp — contributor orientation
 
-A DHCPv4 library, server, client, relay and capture tool. This file is for
+A DHCPv4 library, server, client and relay, with captures through pktcap. This file is for
 someone working *on* the repository; it is not the API reference. Each header
 below describes its own directory and points to the ones nested in it.
 
@@ -21,8 +21,11 @@ src/pydhcp/        the package (src layout: an editable install or PYTHONPATH is
   options/         DHCPOptions, DHCPOptionCode (_codes.py), _codecs/ payload codecs
   _network/        hardware-type, interface and socket-address types (private)
   listener/        listeners and transports, one private module per responsibility
-  server/ client/ relay/ capture/   each role: _core.py under _sync.py and _asyncio.py drivers
-  cli/             the `pydhcp` command: App in __init__, one private module per subcommand
+  server/ client/ relay/   each role: _core.py under _sync.py and _asyncio.py drivers
+  capture/         DHCP for pktcap (the `pktcap` extra): the dissector, the plugin with the
+                   filter keys, and the socket source (sniff_dhcp, asniff_dhcp)
+  cli/             the `pydhcp` command: one private module per subcommand; `capture` and
+                   `replay` subclass pktcap's commands
 tests/             pytest suite (tests/AGENTS.md)
 examples/          runnable examples; tests/test_examples.py imports each one
 benchmarks/        run.py plus per-suite scripts, JSON output for comparison
@@ -43,8 +46,8 @@ python -m pip install -e ".[dev,docs]"
 python -m pytest -q
 ```
 
-`dev` includes the `cli`, `yaml` and `toml` extras, so a development install
-runs every test that depends on one.
+`dev` includes the `cli`, `pktcap` and `toml` extras and pktcap's own `yaml` and
+`toml`, so a development install runs every test that depends on one.
 
 ## Checks
 
@@ -93,6 +96,12 @@ runs the real-peer tests (`tests/AGENTS.md`).
 - **Anything an unauthenticated client controls needs a bound** — the lease
   store, the relay's pending map, the number of capture files. And any warning
   on such a path needs a rate limit, or the log becomes the second target.
+- **pktcap is an extra, and no module imports it at the top** but the three the
+  capture commands load (`cli/_capture.py`, `_replay.py`, `_packets.py`): the
+  rest reach it through `_extras.py` (`pktcap_module()`, or `lazy_pktcap` where an
+  annotation names it), so `import pydhcp` loads neither pktcap nor asyncio and a
+  capture function without the extra raises the one line that names it.
+  `tests/test_pktcap_optional.py` pins it in an interpreter where the import fails.
 - **The command line is `duho`'s, and only `cli/` imports it**; `cli.main()`
   imports it inside the function. No command module is over 200 lines
   (`tests/test_cli_contract.py`); a test patches a name where the command module

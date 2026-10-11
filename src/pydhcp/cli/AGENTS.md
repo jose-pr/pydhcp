@@ -100,8 +100,8 @@ main(argv: Sequence[str] | None = None) -> int
   lease_file = "/var/lib/pydhcp/leases.json"
   ```
 
-  A list is a list (`server: [192.0.2.1, 192.0.2.2]`); `listen` also takes
-  the listener's pair, list and null-host forms (`listen: [127.0.0.1, 6767]`).
+  A list is a list (`server = ["192.0.2.1", "192.0.2.2"]`); `listen` also takes
+  the listener's pair, list and null-host forms (`listen = ["127.0.0.1", 6767]`).
   A file that does not parse, a top-level key that is not a command, a section
   that is not a mapping, a key the command does not have, and a section of
   *another* command than the one run are each refused by name, status 2, one
