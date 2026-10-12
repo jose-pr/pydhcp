@@ -293,7 +293,7 @@ def test_capture_rejects_toml_and_ini_for_multi_record_output(
     )
     err = capsys.readouterr().err
     assert status == 2
-    assert err.startswith("pydhcp: error:") and fmt in err and "per_record" in err
+    assert err.startswith("pydhcp: error:") and fmt in err and "--per-record" in err
 
 
 def test_verbosity_flags_reach_the_library_logger() -> None:

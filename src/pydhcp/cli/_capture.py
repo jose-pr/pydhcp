@@ -36,6 +36,9 @@ class Capture(_Listening, _DHCPPackets, _cli.Capture):
     # user named, and from nowhere else.
     _hook_from_ = ("argument", "environment", "file")
     _listen_excludes_ = "source"
+    # With neither --listen nor --interface: every address, ports 67 and 68.
+    _listen_ = "*"
+    _env_prefix_ = "PYDHCP_CAPTURE_"
 
     listen: _ty.Optional[str] = None  # type: ignore[assignment]
     "Listen address/port spec, for example '*', '127.0.0.1:6767,127.0.0.1:6768' or an interface ('eth1', 'eth1:67', 'aa-bb-cc-dd-ee-ff'). Default: every address, ports 67 and 68. Excludes --interface and --read"
@@ -43,25 +46,21 @@ class Capture(_Listening, _DHCPPackets, _cli.Capture):
 
     interface: _ty.Annotated[
         _ty.Optional[str],
-        Meta(conflicts="source", env="PYDHCP_CAPTURE_INTERFACE"),
+        Meta(conflicts="source"),
     ] = None
     "Capture the frames of this interface instead of listening on sockets (Linux, needs CAP_NET_RAW), by name, address or MAC. Excludes --listen and --read"
     ("--interface",)
 
     read: _ty.Annotated[
         _ty.Optional[pathlib.Path],
-        Meta(conflicts="source", env="PYDHCP_CAPTURE_READ"),
+        Meta(conflicts="source"),
     ] = None
     "Read the DHCP messages of this pcap or pcapng capture file ('-' is standard input) instead of listening, through the same filter, output and hook. Excludes --listen and --interface"
     ("--read",)
 
-    filter: _ty.Annotated[
-        _ty.Optional[str], Meta(metavar="EXPRESSION", env="PYDHCP_CAPTURE_FILTER")
-    ] = None
+    filter: _ty.Annotated[_ty.Optional[str], Meta(metavar="EXPRESSION")] = None
     "Keep only what matches key=value clauses joined by 'and': src, dst, host, sport, dport, port, proto, linktype, LAYER.FIELD and the DHCP keys op, msg_type, xid, client_id, chaddr and option.NAME, for example 'msg_type=DHCPDISCOVER and xid=0x1a2b'. Default: every DHCP message"
     ("--filter", "-f")
-
-    _dissected: _ty.Optional[_pktcap.FrameDissector] = None
 
     def _names(self, frame: _pktcap.DissectedFrame) -> _ty.Mapping[str, object]:
         layer = frame.layer(DHCPLayer)
@@ -77,12 +76,8 @@ class Capture(_Listening, _DHCPPackets, _cli.Capture):
     ) -> _ty.Iterator[_pktcap.DissectedFrame]:
         if self.read is not None:
             return self._file(dissector)
-        if self.interface is None:
-            if self.listen is None:
-                self.listen = "*"
-        elif not _pktcap.has_live_capture():
+        if self.interface is not None and not _pktcap.has_live_capture():
             raise _pktcap.LiveCaptureError(_NOT_LINUX)
-        self._dissected = dissector
         return super()._frames(dissector)
 
     def _file(
@@ -95,18 +90,17 @@ class Capture(_Listening, _DHCPPackets, _cli.Capture):
         except _pktcap.CaptureFormatError as error:
             raise ValueError(f"{name}: {error}") from None
 
-    def _endpoints(self) -> _ty.Tuple[_netimps.UDPEndpoint, ...]:
-        endpoints = bound_endpoints(self.listen, self.per_interface)
+    def _endpoints(
+        self, dissector: _pktcap.FrameDissector
+    ) -> _ty.Tuple[_netimps.UDPEndpoint, ...]:
+        endpoints = bound_endpoints(self.listen or self._listen_, self.per_interface)
         for endpoint in endpoints:
             self._logger_.info(
                 "Bound: %s", _net.SocketAddress.from_socket(endpoint.socket)
             )
-            if self._dissected is not None:
-                # DHCP is read on the port a socket is bound to, whichever it is.
-                port = int(endpoint.socket.getsockname()[1])
-                self._dissected.registry.register(
-                    "udp", port, dissect_dhcp, replace=True
-                )
+            # DHCP is read on the port a socket is bound to, whichever it is.
+            port = int(endpoint.socket.getsockname()[1])
+            dissector.registry.register("udp", port, dissect_dhcp, replace=True)
         return endpoints
 
     def __call__(self) -> _ty.Optional[int]:

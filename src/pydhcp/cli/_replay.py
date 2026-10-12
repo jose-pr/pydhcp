@@ -18,6 +18,7 @@ class Replay(_Configured, _DHCPPackets, _cli.Replay):
     _mcp_ = False
     _filter_ = "dport=67"
     _default_port_ = 67
+    _env_prefix_ = "PYDHCP_REPLAY_"
 
     def _report(self, result: _ty.Any) -> _ty.Optional[int]:
         try:

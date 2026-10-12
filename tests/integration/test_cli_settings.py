@@ -554,6 +554,33 @@ def test_every_declared_field_of_every_command_has_a_variable() -> None:
         assert len(spec["env"]) == len(fields), command
 
 
+#: The variables `capture` and `replay` read, and nothing else: each option the
+#: command has, under the command's prefix, but for the logging options (none) and
+#: `--load` (pktcap's own `PKTCAP_LOAD`).
+CAPTURE_VARIABLES = {
+    f"PYDHCP_CAPTURE_{name}"
+    for name in (
+        "FILTER OUTPUT FORMAT PER_RECORD MAX_FILES DATAGRAMS APPEND INTERFACE LISTEN "
+        "COUNT DURATION HOOK HOOK_FAIL_FAST HOOK_TIMEOUT PER_INTERFACE READ"
+    ).split()
+} | {"PKTCAP_LOAD"}
+REPLAY_VARIABLES = {
+    f"PYDHCP_REPLAY_{name}"
+    for name in (
+        "FILTER INPUT TO SPEED NO_DELAY MAX_DELAY LIMIT SOURCE_PORT BROADCAST JSON_OUT"
+    ).split()
+} | {"PKTCAP_LOAD"}
+
+
+def test_the_capture_commands_read_exactly_these_variables() -> None:
+    pytest.importorskip("pktcap")
+    from pydhcp.cli import Capture, Replay
+
+    for command, expected in ((Capture, CAPTURE_VARIABLES), (Replay, REPLAY_VARIABLES)):
+        read = {b.env for b in command._getargs_() if b.env is not None}
+        assert read == expected, command
+
+
 def test_the_configuration_file_can_be_named_by_the_environment(
     program: pathlib.Path, tmp_path: pathlib.Path
 ) -> None:

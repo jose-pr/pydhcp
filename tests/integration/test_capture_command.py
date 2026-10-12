@@ -489,18 +489,29 @@ def test_a_settings_file_nobody_named_is_never_read(
     assert not (tmp_path / "marker.txt").exists()
 
 
-def test_a_hook_cannot_be_named_by_a_tool_call(
-    recorded: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_hook_cannot_be_named_by_a_tool_call(recorded: pathlib.Path) -> None:
     """Listing the layers a hook may come from does not open it to a tool call."""
+    from duho import Cli
+    from duho import mcp as duho_mcp
+
     from pydhcp.cli import Capture
 
-    command = Capture(read=recorded, hook="echo", count=1)
-    # a tool call replaces standard output with a text stream, which has no buffer
-    monkeypatch.setattr(sys, "stdout", io.StringIO())
+    class Served(Capture):
+        _parsername_ = "capture"
+        _mcp_ = True
 
-    with pytest.raises(ValueError, match="tool call cannot name a hook"):
-        command()
+    class Root(Cli):
+        _parsername_ = "pydhcp"
+        _subcommands_ = [Served]
+
+    result = duho_mcp.call_tool(
+        Root,
+        "pydhcp.capture",
+        {"read": str(recorded), "count": 1, "hook": "echo"},
+    )
+
+    assert result["isError"] is True
+    assert "cannot name a hook" in result["content"][0]["text"]
     assert Capture._mcp_ is False
 
 
