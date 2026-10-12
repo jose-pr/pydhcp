@@ -14,14 +14,17 @@ name is kept as an alias and there is no deprecation period, so an upgrade is a 
 and a read of this list.
 
 - **Install.** `pip install pydhcp` is the library and needs `netimps>=0.4.1,<0.5` alone (0.3 is
-  no longer supported). The `pydhcp` command needs `pip install "pydhcp[cli]"`; captures
-  (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text need
-  `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries); a settings file is read by duho (`duho>=0.7.3`; an empty `--config ""` or `PYDHCP_CONFIG` names no file),
-  and a `.toml` file before Python 3.11 needs `"duho[config]"` and a `.yaml` file `"duho[yaml]"`;
-  there is no `toml` extra; `import pydhcp` imports none of them. A missing one is
-  an `ImportError` (or a `DHCPConfigError` for a configuration file) that names the extra, where it
-  was a `NotImplementedError`. pydhcp declares no PyYAML; a `.yaml` settings file is read
-  through `duho[yaml]`.
+  no longer supported). The `pydhcp` command needs `pip install "pydhcp[cli]"` (`duho>=0.7.3,<0.8`);
+  captures (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text
+  need `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries). `import pydhcp`
+  imports none of them. A missing one is an `ImportError` (or a `DHCPConfigError` for a
+  configuration file) that names the extra, where it was a `NotImplementedError`. pydhcp declares
+  no PyYAML and has no `toml` extra.
+- **Settings file.** `pydhcp --config FILE COMMAND` (or `-c FILE`, or `PYDHCP_CONFIG`): the option
+  is the root's and goes before the command name; it is refused after it. duho reads the file, by
+  the ending of its name: JSON, TOML (`.toml`), YAML (`.yaml`, `.yml`) and INI (`.ini`, `.cfg`);
+  TOML below Python 3.11 needs `"duho[config]"` and YAML `"duho[yaml]"`. An empty path
+  (`--config ""`, or `PYDHCP_CONFIG` set empty) names no file. There is no default location.
 - **Names.** Acronyms are upper case and the generic names take the `DHCP` prefix: `DhcpServer` is
   `DHCPServer`, `DhcpOptionCode` is `DHCPOptionCode`, `Transport` is `DHCPTransport`, `OpCode` is
   `DHCPOpcode`, `UdpTransport` is `UDPTransport`, and the codecs follow (`CccOption` is
@@ -96,6 +99,28 @@ and a read of this list.
   `AsyncDHCPClient`, `deadline=` on the client's exchanges, `listen` on an interface by name, and
   the `Bound:` log record. The options page of the documentation lists every named option code
   with its codec and RFC.
+
+### How it was checked
+
+Against netimps 0.4.1, pktcap 0.1.0 and duho 0.7.3:
+
+- **Windows:** 4,739 passed and 45 skipped, on Python 3.14 (x64) and on Python 3.9 (ARM64).
+- **Linux** (Fedora 44 under WSL2), Python 3.14 and 3.9: 4,693 passed and 40 skipped without
+  privilege. As root, the 32 real-peer tests also ran and passed: network namespaces, against
+  dnsmasq (server and relay) and ISC dhclient (client), as `tests/AGENTS.md` describes them.
+- **macOS and FreeBSD:** Intel macOS 15.7 on Python 3.9: 4,672 passed and 58 skipped. FreeBSD
+  16.0 on Python 3.11, an unprivileged account: 4,672 passed and 58 skipped. The hosted macOS
+  runners: 4,686 passed and 47 skipped.
+- **The hosted matrix:** 25 jobs passed: formatting and the dependency audit; the suite on Ubuntu
+  for Python 3.9 to 3.14 and on Windows and macOS for 3.9 and 3.14, with `mypy --strict` and the
+  strict docs build; the suite with every dependency at its declared floor; the bare install, and
+  the `cli` and `pktcap` extras added in turn, and the built wheel with its console script, each
+  on three operating systems and two Pythons; and the real-peer tests. The benchmark job did not
+  run: it runs only when asked.
+- **Conformance:** 25 recorded cases, kept in `tests/conformance/`, replay on every platform with
+  no peer installed: dnsmasq 2.92 for the server and the relay, ISC dhclient 4.4.3-P1 for the
+  client. Ten differences are on purpose and each is asserted by the suite; none is open. BusyBox
+  udhcpc is an interoperability peer only.
 
 The version in development is 0.8.0; the number of the release is chosen when it is cut.
 
