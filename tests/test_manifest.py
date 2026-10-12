@@ -76,7 +76,7 @@ def test_the_cli_extra_needs_the_duho_that_reads_a_settings_file() -> None:
 
     (spec,) = [Requirement(s) for s in extras["cli"]]
 
-    assert spec.specifier.contains("0.7.2") and not spec.specifier.contains("0.7.1")
+    assert spec.specifier.contains("0.7.3") and not spec.specifier.contains("0.7.2")
 
 
 def test_every_runtime_dependency_has_a_ceiling_at_the_next_series() -> None:
