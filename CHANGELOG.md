@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.8.0] - 2026-10-12
+
 This release breaks the documented API: names, public module paths, constructor signatures, the
 lifecycle of every role, the extras and what malformed input raises. Old names are not kept as
 aliases. "Added" lists what is new, "Changed" has the detail of each behaviour that differs,
@@ -1799,7 +1803,8 @@ convention: a name that still resolves is a name nobody migrates off.
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/jose-pr/pydhcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jose-pr/pydhcp/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/jose-pr/pydhcp/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/jose-pr/pydhcp/compare/v0.5.2...v0.6.0

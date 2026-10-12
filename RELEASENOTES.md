@@ -4,7 +4,7 @@ The companion to [CHANGELOG.md](CHANGELOG.md): what a user upgrading needs to re
 release, in a few lines. The changelog has the detail of every change. No performance statement is
 made here that is not a result in `benchmarks/results/` recorded by CI.
 
-## [Unreleased]
+## [0.8.0] - 2026-10-12
 
 ### Upgrading from 0.7.0
 
@@ -102,7 +102,7 @@ and a read of this list.
 
 ### How it was checked
 
-Against netimps 0.4.1, pktcap 0.1.0 and duho 0.7.3:
+Measured on 2026-10-12 against netimps 0.4.1, pktcap 0.1.0 and duho 0.7.3:
 
 - **Windows:** 4,739 passed and 45 skipped, on Python 3.14 (x64) and on Python 3.9 (ARM64).
 - **Linux** (Fedora 44 under WSL2), Python 3.14 and 3.9: 4,693 passed and 40 skipped without
@@ -121,8 +121,6 @@ Against netimps 0.4.1, pktcap 0.1.0 and duho 0.7.3:
   no peer installed: dnsmasq 2.92 for the server and the relay, ISC dhclient 4.4.3-P1 for the
   client. Ten differences are on purpose and each is asserted by the suite; none is open. BusyBox
   udhcpc is an interoperability peer only.
-
-The version in development is 0.8.0; the number of the release is chosen when it is cut.
 
 ## [0.7.0] - 2026-10-03
 
