@@ -8,6 +8,8 @@ count.
 from __future__ import annotations
 
 import asyncio
+import importlib
+import logging
 import socket
 import threading
 import time
@@ -246,90 +248,104 @@ def test_the_wildcard_beside_an_interface_hears_every_interface() -> None:
 # -- binding the socket to the device ----------------------------------------------
 
 
-_READ_BY_NETIMPS = "netimps._listen._binding."
+def _bound_device(sock: socket.socket) -> str:
+    """The device the kernel bound `sock` to: `""` for none, and on a platform with
+    no such option, where no socket is bound to one."""
+    option = getattr(socket, "SO_BINDTODEVICE", None)
+    if option is None:
+        return ""
+    return sock.getsockopt(socket.SOL_SOCKET, option, 16).split(b"\0", 1)[0].decode()
+
+
+needs_device_binding = pytest.mark.skipif(
+    not netimps.has_device_binding(),
+    reason="this platform has no socket-to-device binding (netimps.has_device_binding() "
+    "is false; Linux has it)",
+)
 
 
 class _Netimps:
-    """Stands in for the `bind` that `netimps.bind_listen` calls: records `device=`
-    and passes the call on. `refuse` is raised in place of a bind that names a
-    device."""
+    """Stands in for the two names `netimps.bind_listen` reads to bind a socket to a
+    device: its `bind`, which records `device=`, passes the call on and raises `refuse`
+    for a call that names one, and `has_device_binding`, which says yes.
 
-    def __init__(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-        *,
-        refuse: ty.Any = None,
-        always: bool = False,
-    ):
+    No platform refuses a device bind it was asked to make where it has one, and
+    `bind_listen` asks for none where it has none, so a refusal is not shown by the
+    host. The names are private to netimps: each is read before it is replaced, so
+    one that has moved is an `AttributeError`, and `verify()` fails the test that
+    left them uncalled, so a stand-in that nothing reaches is not a pass.
+    """
+
+    # private: the module `bind_listen` reads these two names from; a refusal is not shown by any host
+    MODULE = "netimps._listen._binding"
+
+    def __init__(self, monkeypatch: pytest.MonkeyPatch, *, refuse: OSError):
+        module = importlib.import_module(self.MODULE)
+        self._bind = getattr(module, "bind")
+        getattr(module, "has_device_binding")
         self.devices: list = []
         self.calls = 0
-        self.resolved = 0
+        self.asked = 0
         self._refuse = refuse
-        self._always = always
-        self._bind = netimps.bind
-        self._iter = netimps.iter_interfaces
         # private: the name is looked up in the module that reads it, so the host can be stood for
-        monkeypatch.setattr(_READ_BY_NETIMPS + "bind", self.bind)
+        monkeypatch.setattr(module, "bind", self.bind)
         # private: the name is looked up in the module that reads it, so the host can be stood for
-        monkeypatch.setattr(_READ_BY_NETIMPS + "iter_interfaces", self.iter_interfaces)
-        # private: the name is looked up in the module that reads it, so the host can be stood for
-        monkeypatch.setattr(_READ_BY_NETIMPS + "has_device_binding", lambda: True)
+        monkeypatch.setattr(module, "has_device_binding", self.has_device_binding)
+
+    def has_device_binding(self) -> bool:
+        self.asked += 1
+        return True
 
     def bind(self, *args: ty.Any, **kwargs: ty.Any) -> socket.socket:
         self.calls += 1
         device = kwargs.pop("device", None)
         self.devices.append(device)
-        if self._refuse is not None and (device is not None or self._always):
+        if device is not None:
             raise self._refuse
         return self._bind(*args, **kwargs)
 
-    def iter_interfaces(self, *args: ty.Any, **kwargs: ty.Any) -> ty.Any:
-        self.resolved += 1
-        return self._iter(*args, **kwargs)
+    def verify(self) -> None:
+        assert self.asked, f"{self.MODULE}.has_device_binding was never asked"
+        assert self.calls, f"{self.MODULE}.bind was never called"
 
 
+@pytest.mark.skipif(
+    netimps.has_device_binding(),
+    reason="this platform binds a socket to a device; the tests of the device bind "
+    "show the other half",
+)
 def test_nothing_is_bound_to_a_device_where_the_host_has_no_such_binding(
-    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    seen: list = []
-    real = netimps.bind
-
-    def spy(*args: ty.Any, **kwargs: ty.Any) -> socket.socket:
-        seen.append(kwargs)
-        return real(*args, **kwargs)
-
-    # private: the name is looked up in the module that reads it, so the host can be stood for
-    monkeypatch.setattr(_READ_BY_NETIMPS + "bind", spy)
-    # private: the name is looked up in the module that reads it, so the host can be stood for
-    monkeypatch.setattr(_READ_BY_NETIMPS + "has_device_binding", lambda: False)
+    """Where the host has no device binding the listener limits one adapter by the
+    filter alone: the bind succeeds, no device bind is tried and so none is refused
+    (a refused one is a WARNING on netimps' listen logger)."""
     listener = DHCPListener(listen=(_loopback(), 0))
-    listener.bind()
+    with caplog.at_level(logging.INFO):
+        listener.bind()
     try:
-        assert seen and all(kwargs.get("device") is None for kwargs in seen)
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
         # private: the endpoint a socket is received through: no public view
         endpoint = listener._endpoints[sock]
         assert [i.index for i in endpoint.interfaces] == [_loopback().index]
+        assert _bound_device(sock) == ""
+        said = [r.getMessage() for r in caplog.records if r.name == "netimps._listen"]
+        assert said == []
     finally:
         listener.close()
 
 
+@needs_device_binding
 @pytest.mark.parametrize("driver", [DHCPListener, AsyncDHCPListener])
-def test_a_socket_is_bound_to_the_adapter_the_grammar_resolved(
-    driver: type, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    fake = _Netimps(monkeypatch)
+def test_a_socket_is_bound_to_the_adapter_the_grammar_resolved(driver: type) -> None:
     listener = driver(listen=(_loopback(), 0))
     listener.bind()
     try:
-        (device,) = fake.devices
-        assert isinstance(device, netimps.Interface)
-        assert device.index == _loopback().index
-        # The adapter was looked up once, for the allow-list and the device alike.
-        assert fake.resolved == 1
-        # The allow-list stays as a second check.
+        # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        assert _bound_device(sock) == _loopback().name
+        # The allow-list stays as a second check.
         # private: the receive path's admission check, driven without a socket
         assert not listener._admits(_arrival(_loopback().index + 100), sock)
         assert listener.metrics.packets_dropped_other_interface == 1
@@ -340,46 +356,43 @@ def test_a_socket_is_bound_to_the_adapter_the_grammar_resolved(
             asyncio.run(listener.aclose())
 
 
-def test_the_class_attribute_forces_the_filter_alone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    fake = _Netimps(monkeypatch)
-
+@needs_device_binding
+def test_the_class_attribute_forces_the_filter_alone() -> None:
     class Filtering(DHCPListener):
         USE_DEVICE_BINDING = False
 
     listener = Filtering(listen=(_loopback(), 0))
     listener.bind()
     try:
-        assert fake.devices == [None]
+        # private: the OS socket: its options and closed state have no public view
+        (sock,) = listener._sockets
+        assert _bound_device(sock) == ""
+        # private: the receive path's admission check, driven without a socket
+        assert not listener._admits(_arrival(_loopback().index + 100), sock)
     finally:
         listener.close()
 
 
-def test_a_socket_serving_several_adapters_is_not_bound_to_one_of_them(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    fake = _Netimps(monkeypatch)
+def test_a_socket_serving_several_adapters_is_not_bound_to_one_of_them() -> None:
     listener = DHCPListener(listen=[(_loopback(), 0), (_another_adapter(), 0)])
     listener.bind()
     try:
-        assert fake.devices == [None]
         # private: the OS socket: its options and closed state have no public view
         (sock,) = listener._sockets
+        assert _bound_device(sock) == ""
         # private: the endpoint a socket is received through: no public view
         assert len(listener._endpoints[sock].interfaces) == 2
     finally:
         listener.close()
 
 
-def test_a_plain_wildcard_and_an_address_are_not_bound_to_a_device(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    fake = _Netimps(monkeypatch)
+def test_a_plain_wildcard_and_an_address_are_not_bound_to_a_device() -> None:
     listener = DHCPListener(listen=["*:0", "127.0.0.1:0"])
     listener.bind()
     try:
-        assert fake.devices and all(device is None for device in fake.devices)
+        # private: the OS socket: its options and closed state have no public view
+        assert len(listener._sockets) == 2
+        assert [_bound_device(sock) for sock in listener._sockets] == ["", ""]
     finally:
         listener.close()
 
@@ -398,13 +411,12 @@ def test_a_refused_device_binding_falls_back_to_the_filter_and_says_so_once(
     """Refused: the same socket is bound without the device, so it hears what the
     allow-list admits and the filter does the rest. Failing the bind would leave
     a listener that hears nothing it was asked to hear."""
-    import logging
-
     fake = _Netimps(monkeypatch, refuse=refusal)
     listener = DHCPListener(listen=(_loopback(), 0))
     with caplog.at_level(logging.INFO):
         listener.bind()
     try:
+        fake.verify()
         assert len(fake.devices) == 2 and fake.devices[0] is not None
         assert fake.devices[1] is None
         # private: the OS socket: its options and closed state have no public view
@@ -426,14 +438,22 @@ def test_a_refused_device_binding_falls_back_to_the_filter_and_says_so_once(
 
 
 def test_a_bind_that_fails_for_another_reason_is_not_mistaken_for_a_refused_device(
-    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    taken = netimps.AddressInUseError(98, "Address already in use")
-    fake = _Netimps(monkeypatch, refuse=taken, always=True)
-    listener = DHCPListener(listen=(_loopback(), 0))
-    with pytest.raises(netimps.AddressInUseError):
-        listener.bind()
-    # private: the OS socket: its options and closed state have no public view
-    assert listener._sockets == [] and listener.bound_addresses == ()
-    # Not a refusal of the device: no second attempt, the error is the caller's.
-    assert len(fake.devices) == 1 and fake.calls == 1
+    """A port another socket holds: the error is the caller's, nothing stays
+    bound, and no fall-back is announced."""
+    holder = DHCPListener(listen=("*", 0))
+    holder.bind()
+    try:
+        port = holder.bound_addresses[0].port
+        listener = DHCPListener(listen=(_loopback(), port))
+        with caplog.at_level(logging.INFO):
+            with pytest.raises(netimps.AddressInUseError):
+                listener.bind()
+        # private: the OS socket: its options and closed state have no public view
+        assert listener._sockets == [] and listener.bound_addresses == ()
+        assert [
+            r.getMessage() for r in caplog.records if "device" in r.getMessage()
+        ] == []
+    finally:
+        holder.close()

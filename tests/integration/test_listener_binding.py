@@ -104,33 +104,20 @@ def test_a_second_bind_opens_nothing_closes_nothing_and_asks_the_host_nothing(
         listener.close()
 
 
-def test_one_socket_per_address_binds_the_link_local_addresses_too(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A listener that binds one socket per address binds every address the host
-    holds, 169.254/16 included: the address is stood for by a fake adapter and
-    the bind is redirected to loopback, so only the address asked for is seen."""
-    adapter = netimps.Interface(
-        "fake0", 99, mac=None, ips=[ipaddress.IPv4Interface("169.254.7.7/16")]
-    )
-    asked: "list[str]" = []
-    real = netimps.bind
-
-    def bind(host: str, port: int, **options: ty.Any) -> socket.socket:
-        asked.append(host)
-        return real("127.0.0.1", 0, **options)
-
-    # private: the name is looked up in the module that reads it, so the host can be stood for
-    monkeypatch.setattr(
-        "netimps._listen._binding.iter_addresses",
-        lambda **_: iter([(adapter, adapter.ips[0])]),
-    )
-    # private: the name is looked up in the module that reads it, so the host can be stood for
-    monkeypatch.setattr("netimps._listen._binding.bind", bind)
+def test_one_socket_per_address_binds_every_address_the_host_holds() -> None:
+    """A listener that binds one socket per address binds every IPv4 address the
+    host holds: loopback and link-local (169.254/16, a disconnected adapter's)
+    among them, none left out. The host's own addresses are the expectation."""
+    held = {
+        interface.ip for _, interface in netimps.iter_addresses(family=socket.AF_INET)
+    }
+    assert held, "the host holds no IPv4 address"
     listener = DHCPListener(listen="*:0", per_interface=True)
     listener.bind()
     try:
-        assert asked == ["169.254.7.7"]
+        bound = {address.ip for address in listener.bound_addresses}
+        assert bound == held
+        assert len(listener.bound_addresses) == len(held)
     finally:
         listener.close()
 
