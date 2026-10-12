@@ -155,10 +155,11 @@ reads. Use `run.py --save` for anything that will be compared.
 | `pydhcp-0.6.1-ci.json` | the `v0.6.1` tag | that tag's own `benchmarks/run.py` |
 | `pydhcp-0.7.0-ci.json` | the `v0.7.0` tag | that tag's own `benchmarks/run.py` |
 | `pydhcp-0.8.0-candidate-ci.json` | the tree in development as 0.8.0 | this directory's |
+| `pydhcp-0.8.0-ci.json` | the `v0.8.0` tag | that tag's own `benchmarks/run.py` |
 
 The record starts at 0.6.1, the first release whose `run.py` writes sampled
 results. A release is measured by its own script, because the scripts here use
-names the older releases do not have; the three files share the seven `parse.*`
+names the older releases do not have; the files share the seven `parse.*`
 and `options.*` metrics those scripts have in common, and `parse.encode_reply`,
 `listener.*` and `server.*` exist from the candidate on. The runners differ in
 their patch release of Python (the `python` field), which `compare-bench`
