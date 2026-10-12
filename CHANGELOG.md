@@ -246,9 +246,6 @@ someone upgrading from 0.7.0.
   is no address into an option, which failed only when it was packed. Replace the entry
   (`servers[0] = [...]`) or append a new one. A decoded option compares equal to a list of
   tuples; the display text and `to_json()` are the same.
-- **The `cli` extra needs `duho` 0.7.3**: `duho>=0.7.3,<0.8`, where the requirement was
-  `>=0.6.0,<0.7`. The `pydhcp` command, its options, its environment variables and its output are
-  the same.
 - **Importing the package does not import `asyncio`.** `AsyncDHCPListener`,
   `AsyncDHCPServer`, `AsyncDHCPClient` and `AsyncDHCPRelay` are bound
   when first accessed, from `pydhcp` and from their own packages; their names and import
@@ -311,11 +308,11 @@ someone upgrading from 0.7.0.
 - **`PYDHCP_MCP=stdio` no longer serves every command as a tool**: `packet` and `interfaces`
   alone are served (see Added). `server`, `relay` and `capture` do not return until they are
   stopped, and `capture` and `replay` start a program per packet or send datagrams.
-- **Configuration errors are one line and status 2**: a malformed JSON, TOML, YAML or INI
-  file, a top level that is not a mapping, a misspelled section (`sever:`), another
-  command's section, a key the command does not have and a file name that no format
-  claims each print
-  `pydhcp: error: <file>:<line>:<col>: <problem>` with no text from the document. They were
+- **Configuration errors are status 2 and end in one line**: a malformed JSON, TOML, YAML or INI
+  file, a top level that is not a mapping and a file name that no format claims each print
+  `pydhcp: error: <file>:<line>:<col>: <problem>` with no text from the document; a misspelled
+  section (`sever:`), another command's section and a key the command does not have print duho's
+  usage lines and then one line that names the file and the section or key. They were
   a traceback (YAML, INI), a bare parser message (JSON, TOML) or silently started a server
   on every interface (a misspelled section). An INI value is no longer interpolated, so a
   `%` in a path is text; a `.conf` file is no longer parsed as JSON.
