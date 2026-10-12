@@ -92,7 +92,8 @@ main(argv: Sequence[str] | None = None) -> int
   needs `pip install "duho[config]"` and YAML `"duho[yaml]"`; the error names it.
   `server`, `relay`, `capture` and `replay` read the file; `packet` and `interfaces` have no
   section. **There is no default location**: a
-  daemon does not pick up a file nobody named. The file has one section per
+  daemon does not pick up a file nobody named, and **an empty path (`--config ""`, or
+  `PYDHCP_CONFIG` set empty) means no file**, the variable's included. The file has one section per
   command, named for it, and its keys are the command's field names
   (`listen`, `per_interface`, `lease_file`; `server`, `max_hops`,
   `insert_relay_agent_info`, `circuit_id`, `remote_id`; and for `capture` the fields of its
@@ -127,13 +128,16 @@ main(argv: Sequence[str] | None = None) -> int
 
   A list is a list (`server = ["192.0.2.1", "192.0.2.2"]`); `listen` also takes
   the listener's pair, list and null-host forms (`listen = ["127.0.0.1", 6767]`).
-  A file that does not parse, a top-level key that is not a command, a section
-  that is not a mapping, a key the command does not have, and a section of
-  *another* command than the one run are each refused by name, status 2, one
-  line with the file's path and, where the parser gives one, the position, in
-  duho's words: `pydhcp: error: server.toml:12:5: Expected ']' at the end of a table
-  declaration (at line 12, column 5)`. A `--config` file that does not exist is a usage
-  error (status 2); one that `PYDHCP_CONFIG` names is status 1.
+  A file that does not parse is refused, status 2, in one line with the file's path and,
+  where the parser gives one, the position, in duho's words: `pydhcp: error:
+  server.toml:12:5: Expected ']' at the end of a table declaration (at line 12, column
+  5)`. A top-level key that is not a command, a section that is not a mapping, a key the
+  command does not have and a section of *another* command than the one run are refused
+  once the arguments are parsed, status 2, by duho's usage lines and then one line that
+  names the file and the key, never a value: `pydhcp: error: duho: config file
+  server.toml: unknown key 'lisen' in section 'server'; it accepts ...`. A `--config` file
+  that does not exist is a usage error (status 2); one that `PYDHCP_CONFIG` names is
+  status 1.
 
 - Each `--server` value is split by **`netimps.split_host`**, the parser the
   `--listen` specs go through, and reaches `DHCPRelay` as a

@@ -267,7 +267,7 @@ used). An error is one line on stderr, `pydhcp: error: ...`; results go to stdou
 Every option can also come from an environment variable, and `server`, `relay`, `capture`
 and `replay` from a settings file. The order is: the option, then the variable, then the
 file, then the default. The file is named, never searched for: `--config FILE` before the
-command name, or `PYDHCP_CONFIG`. Its ending says its format (`.json`, `.toml`, `.yaml`,
+command name, or `PYDHCP_CONFIG` (an empty path means no file). Its ending says its format (`.json`, `.toml`, `.yaml`,
 `.yml`, `.ini`, `.cfg`); `duho` reads it (`pip install "duho[yaml]"` for YAML, `"duho[config]"`
 for TOML before Python 3.11), and `duho/AGENTS.md` in the installed package says what each
 format holds. It has one section per command and the keys are the field names:

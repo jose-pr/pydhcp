@@ -16,7 +16,7 @@ and a read of this list.
 - **Install.** `pip install pydhcp` is the library and needs `netimps>=0.4.1,<0.5` alone (0.3 is
   no longer supported). The `pydhcp` command needs `pip install "pydhcp[cli]"`; captures
   (`pydhcp capture`, `pydhcp replay`, `sniff_dhcp`) and a message as YAML, TOML or INI text need
-  `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries); a settings file is read by duho,
+  `"pydhcp[pktcap]"` (and `"pktcap[yaml,toml]"` for the format libraries); a settings file is read by duho (`duho>=0.7.3`; an empty `--config ""` or `PYDHCP_CONFIG` names no file),
   and a `.toml` file before Python 3.11 needs `"duho[config]"` and a `.yaml` file `"duho[yaml]"`;
   there is no `toml` extra; `import pydhcp` imports none of them. A missing one is
   an `ImportError` (or a `DHCPConfigError` for a configuration file) that names the extra, where it
@@ -83,7 +83,7 @@ and a read of this list.
   | `pydhcp server --config FILE` | `pydhcp --config FILE server`: the option is the root's and goes before the command name; it is refused after it |
   | `pip install "pydhcp[toml]"` | `pip install "duho[config]"` (TOML below Python 3.11); `"duho[yaml]"` for YAML |
   | an INI file with `[DEFAULT]` keys copied into every section; keys lower-cased | the keys of `[DEFAULT]` are top-level keys (refused as an unknown section); a key keeps its case |
-  | the text of a settings file error | duho's text, with the same path, line and column; a `--config` file that does not exist is status 2 |
+  | the text of a settings file error | duho's text, with the same path, line and column; a `--config` file that does not exist is status 2; a section or key the command lacks is duho's usage lines and then one line naming the file and the key |
 
   A file budget spent (`--max-files`, 1000) is counted and the capture goes on, ending with status
   1; an `--output` ending that names no format is status 2, where it was JSON; and an INI message
