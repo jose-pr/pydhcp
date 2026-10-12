@@ -44,7 +44,7 @@ A run is verified against these counts; the tests that decide at run time say so
 
 | Platform | Skipped | Which |
 | --- | --- | --- |
-| Windows, either interpreter | 44, or 46 | 32 of `interop/` (network namespaces need Linux), 4 of `test_lease_durability.py` (no `time.tzset`), 3 of `integration/test_documented_commands.py` (`--help` exits before the parser reports an unknown option), 2 of `test_value_laws.py`, 3 of `integration/test_listen_interface.py` (the socket-to-device bind, which Windows has not); the 2 more are `integration/test_listener_transport.py` pin tests, skipped when this Windows build refuses a source pin from the unassigned `127.0.0.2` |
+| Windows, either interpreter | 45, or 47 | 32 of `interop/` (network namespaces need Linux), 1 of `test_permissions.py` (Windows has no privileged ports), 4 of `test_lease_durability.py` (no `time.tzset`), 3 of `integration/test_documented_commands.py` (`--help` exits before the parser reports an unknown option), 2 of `test_value_laws.py`, 3 of `integration/test_listen_interface.py` (the socket-to-device bind, which Windows has not); the 2 more are `integration/test_listener_transport.py` pin tests, skipped when this Windows build refuses a source pin from the unassigned `127.0.0.2` |
 | Linux without root | 8, plus `interop/` | 3 documented commands, 2 value laws, 2 of `integration/test_listener_binding.py` (Windows-only socket options), 1 of `integration/test_listen_interface.py` (the host binds sockets to a device, so the case without that is not shown) |
 | macOS runner with the loopback aliases CI adds | 47 | |
 | macOS without them (an Intel host) | 57 | |

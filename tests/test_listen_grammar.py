@@ -171,16 +171,27 @@ def test_a_pair_binds_one_socket_on_that_port(spec: ty.Any) -> None:
 
 
 def test_a_refused_spec_binds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
-    bound: "list[object]" = []
-    # private: the name is looked up in the module that reads it, so the host or the clock can be stood for
-    monkeypatch.setattr(
-        "netimps._listen._binding.bind",
-        lambda *a, **k: bound.append(a),
-    )
+    made: "list[object]" = []
+    real = socket.socket
+
+    class Counting(real):
+        def __init__(self, *args: ty.Any, **kwargs: ty.Any) -> None:
+            made.append(args)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(socket, "socket", Counting)
+    # A spec that is accepted opens a socket through the counter, so a count of
+    # none below is the specs' doing and not a counter that nothing reaches.
+    accepted = DHCPListener(listen="127.0.0.1:0")
+    accepted.bind()
+    accepted.close()
+    assert made
+    made.clear()
+
     for spec in [("127.0.0.1", True), "", ["127.0.0.1", 6767.5]]:
         with pytest.raises((TypeError, ValueError)):
             DHCPListener(listen=spec).bind()
-    assert bound == []
+    assert made == []
 
 
 # -- an interface ----------------------------------------------------------------
