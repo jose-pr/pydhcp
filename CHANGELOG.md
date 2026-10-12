@@ -246,7 +246,7 @@ someone upgrading from 0.7.0.
   is no address into an option, which failed only when it was packed. Replace the entry
   (`servers[0] = [...]`) or append a new one. A decoded option compares equal to a list of
   tuples; the display text and `to_json()` are the same.
-- **The `cli` extra needs `duho` 0.7**: `duho>=0.7.2,<0.8`, where the requirement was
+- **The `cli` extra needs `duho` 0.7.3**: `duho>=0.7.3,<0.8`, where the requirement was
   `>=0.6.0,<0.7`. The `pydhcp` command, its options, its environment variables and its output are
   the same.
 - **Importing the package does not import `asyncio`.** `AsyncDHCPListener`,
@@ -274,7 +274,7 @@ someone upgrading from 0.7.0.
 - **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
   `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
 - **Dependency ranges are scoped to a series and their floors install**: `netimps>=0.4.1,<0.5`,
-  `duho>=0.7.2,<0.8` and `pktcap>=0.1.0,<0.2`.
+  `duho>=0.7.3,<0.8` and `pktcap>=0.1.0,<0.2`.
 - **Breaking: `pydhcp.cli` exports `App`, `main` and the six commands, and nothing else.**
   `PACKET_FORMATS` and `CAPTURE_FORMATS` are no longer re-exported from it (the capture formats are
   `pktcap.OUTPUT_FORMATS`). `server`, `relay` and `capture` declare `--listen` and `--per-interface`
@@ -323,6 +323,10 @@ someone upgrading from 0.7.0.
   - `pydhcp --config FILE COMMAND` (or `-c FILE`, or `PYDHCP_CONFIG`), where it was
     `pydhcp COMMAND --config FILE`. After the command name the option is refused with the line
     to use. `replay` reads the file too (a `[replay]` table); `packet` and `interfaces` do not.
+    An empty path (`--config ""`, or `PYDHCP_CONFIG` set empty) means no file is read.
+  - A file that names a section or a key the command does not have is refused once the
+    arguments are parsed, with duho's usage lines before the line that names the file and the
+    key; a file that cannot be read is still the one line.
   - The format is the ending of the file's name: `.json`, `.toml`, `.yaml`, `.yml`, `.ini` or
     `.cfg`. `.yaml` and `.yml` are read (they need `pip install "duho[yaml]"`), and so is `.cfg`;
     a name that none of them claims is refused.

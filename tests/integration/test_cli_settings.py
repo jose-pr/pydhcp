@@ -541,7 +541,7 @@ def test_every_declared_field_of_every_command_has_a_variable() -> None:
     from pydhcp.cli import App
 
     # private: the unit under test is not re-exported from a public module; the unit under test is not exported from a public module
-    from pydhcp.cli._settings import _NOT_SETTINGS
+    from pydhcp.cli._sections import _NOT_SETTINGS
 
     for command in App._subcommands_ or ():
         spec = LAYERS[str(command._parsername_)]
@@ -602,6 +602,27 @@ def test_the_option_beats_the_variable_for_the_file_itself(
         env={"PYDHCP_CONFIG": str(named)},
     )
     assert resolved["listen"] == "127.0.0.1:2009"
+
+
+def test_an_empty_path_for_the_option_means_no_file(
+    program: pathlib.Path, tmp_path: pathlib.Path
+) -> None:
+    """`--config ""` reads nothing, whatever the variable names."""
+    missing = tmp_path / "absent.json"
+
+    done = run_cli(
+        "--config", "", "server", env={"PYDHCP_CONFIG": str(missing)}, program=program
+    )
+
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout)["listen"] is None
+
+
+def test_an_empty_variable_means_no_file(program: pathlib.Path) -> None:
+    done = run_cli("server", env={"PYDHCP_CONFIG": ""}, program=program)
+
+    assert done.returncode == 0, done.stderr
+    assert json.loads(done.stdout)["listen"] is None
 
 
 def test_there_is_no_default_location_for_the_file(
@@ -706,6 +727,25 @@ def _refused(
     return lines[0]
 
 
+def _refused_by_the_check(
+    capsys: pytest.CaptureFixture[str], path: pathlib.Path, *argv: str
+) -> str:
+    """Run `pydhcp --config path argv...`: duho refuses a file once it is parsed.
+
+    The refusal is duho's usage error: its usage lines, then one line naming the
+    file; no value of the file is in it.
+    """
+    assert main(["--config", str(path), *argv]) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    *usage, line = captured.err.splitlines()
+    assert usage and usage[0].startswith("usage: pydhcp"), captured.err
+    assert line.startswith(f"pydhcp: error: duho: config file {path}: "), line
+    assert "Traceback" not in captured.err
+    assert SECRET not in captured.err
+    return line
+
+
 MALFORMED = [
     pytest.param(
         "bad.json",
@@ -744,7 +784,6 @@ def test_a_malformed_file_is_one_line_naming_the_file_and_where(
 @pytest.mark.parametrize(
     "name, text, word",
     [
-        ("l.json", "[1, 2]", "mapping"),
         ("s.json", '{"server": "127.0.0.1:6767"}', "'server' must be a mapping"),
         ("n.json", '{"server": 5}', "'server' must be a mapping"),
         (
@@ -769,13 +808,33 @@ def test_a_malformed_file_is_one_line_naming_the_file_and_where(
         ),
         ("c.json", '{"server": {"config": "x.json"}}', "unknown key 'config'"),
         ("c.json", '{"config": "x.json"}', "unknown section 'config'"),
-        ("s.conf", "[server]\nlisten = 127.0.0.1:6767\n", "cannot tell the config"),
-        ("s", "{}", "cannot tell the config"),
         ("d.ini", "[DEFAULT]\nlisten = 127.0.0.1:6767\n", "unknown section 'listen'"),
         ("k.ini", "[server]\nListen = 127.0.0.1:6767\n", "unknown key 'Listen'"),
     ],
 )
 def test_a_file_that_names_what_the_command_does_not_have_is_refused_by_name(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    name: str,
+    text: str,
+    word: str,
+) -> None:
+    path = _write(tmp_path, name, text)
+
+    line = _refused_by_the_check(capsys, path, "server")
+
+    assert word in line
+
+
+@pytest.mark.parametrize(
+    "name, text, word",
+    [
+        ("l.json", "[1, 2]", "mapping"),
+        ("s.conf", "[server]\nlisten = 127.0.0.1:6767\n", "cannot tell the config"),
+        ("s", "{}", "cannot tell the config"),
+    ],
+)
+def test_a_file_the_reader_refuses_is_one_line_naming_the_file(
     tmp_path: pathlib.Path,
     capsys: pytest.CaptureFixture[str],
     name: str,
@@ -905,7 +964,7 @@ def test_a_key_under_default_in_an_ini_file_is_a_top_level_key(
 ) -> None:
     path = _write(tmp_path, "d.ini", "[DEFAULT]\nlease_file = x.json\n[server]\n")
 
-    line = _refused(capsys, "--config", str(path), "server")
+    line = _refused_by_the_check(capsys, path, "server")
 
     assert "unknown section 'lease_file'" in line
 
@@ -967,7 +1026,9 @@ def test_a_command_with_no_settings_has_no_section(
 ) -> None:
     path = _write(tmp_path, "s.json", json.dumps({command: {}}))
 
-    line = _refused(capsys, "--config", str(path), command)
+    needed = ["--decode"] if command == "packet" else []
+
+    line = _refused_by_the_check(capsys, path, command, *needed)
 
     assert f"unknown section '{command}'" in line
 
@@ -1046,3 +1107,15 @@ def test_the_layer_table_names_every_variable_a_field_declares() -> None:
         b.env for command in App._subcommands_ or () for b in command._getargs_()
     } - {None, CONFIG_ENV}
     assert {name for spec in LAYERS.values() for name in spec["env"]} == declared
+
+
+def test_an_unknown_key_is_named_bounded_and_without_its_value(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    key = "k" * 200
+    path = _write(tmp_path, "v.json", json.dumps({"server": {key: SECRET}}))
+
+    line = _refused_by_the_check(capsys, path, "server")
+
+    assert f"unknown key '{'k' * 77}...'" in line
+    assert SECRET not in line

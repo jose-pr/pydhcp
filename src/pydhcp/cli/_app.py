@@ -11,7 +11,7 @@ from duho import AUTO, Cli, ConfigArgs, DefaultsFormatter
 
 from .. import _extras
 from .._config import BACKENDS
-from . import _settings
+from . import _sections, _settings
 from ._common import _Configured, _Failed
 from ._interfaces import Interfaces
 from ._packet import Packet
@@ -33,7 +33,15 @@ def _commands() -> "_ty.List[_ty.Type[_ty.Any]]":
     return found
 
 
-class App(ConfigArgs, Cli):  # type: ignore[misc]
+def _validate(
+    command: _ty.Any, table: "_ty.Mapping[str, _ty.Any]", unknown: "_ty.Tuple[str, ...]"
+) -> None:
+    """duho's `_config_validate_`: the file names only what the commands have."""
+    configured = [c for c in App._subcommands_ or () if issubclass(c, _Configured)]
+    _sections.check_file(command, table, unknown, configured)
+
+
+class App(ConfigArgs, Cli):
     """pydhcp CLI Interface"""
 
     # duho names the program after the class, so every usage line and every
@@ -45,6 +53,7 @@ class App(ConfigArgs, Cli):  # type: ignore[misc]
     _config_env_ = _settings.CONFIG_ENV
     _config_backends_ = BACKENDS
     _config_loader_ = staticmethod(_settings.load_layer)
+    _config_validate_ = staticmethod(_validate)
     _help_formatter_ = DefaultsFormatter
     _subcommands_ = _commands()
 
@@ -65,17 +74,8 @@ def run(args: "_ty.List[str]") -> int:
         if args and args[0] in _CAPTURE_COMMANDS and not _extras.has_pktcap():
             print(f"pydhcp: error: {_extras.PKTCAP_NEEDED}", file=sys.stderr)
             return 1
-        sections = _settings.sections_of(
-            command
-            for command in App._subcommands_ or ()
-            if issubclass(command, _Configured)
-        )
-        run_, token = _settings.begin(args, sections)
-        try:
-            _settings.check_renamed_variables(run_.command)
-            status = duho.main(App, args)
-        finally:
-            _settings.end(token)
+        _settings.check_renamed_variables(_settings.command_of(args))
+        status = duho.main(App, args)
     except SystemExit as stop:
         code = stop.code
         if code is None:
