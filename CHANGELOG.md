@@ -47,8 +47,8 @@ someone upgrading from 0.7.0.
   changed and the others carried over; the lease itself stays a frozen value. A given field is
   checked as the constructor checks it, and `expires=None` is a lease that never ends.
 - **`DHCPServer.STRICT_REPLY_PORTS` and `pydhcp server --lenient-reply-ports`** (`PYDHCP_SERVER_LENIENT_REPLY_PORTS`,
-  the `lenient_reply_ports` key). The default, `True`, is the RFC 1542 rule the server already
-  followed: a reply goes to port 67 for a relay and 68 for a client. `False` answers the port the
+  the `lenient_reply_ports` key). The default, `True`, is the RFC 1542 rule (see Changed): a
+  reply goes to port 67 for a relay and 68 for a client. `False` answers the port the
   request came from (`giaddr` at that port, at 67 when it is 68), which lets a sender choose where
   its reply goes.
 - **`DHCPServer.RENEWAL_TIMES`** (class attribute, `True`): an OFFER and an ACK carry the renewal
@@ -116,7 +116,7 @@ someone upgrading from 0.7.0.
   whose `giaddr` is one of the relay's own addresses), `packets_dropped_unknown_giaddr`
   (a reply whose `giaddr` is not) and `packets_dropped_reused_transaction` (a request
   that reuses the transaction of a pending one from another source address).
-  `relay_info_omitted` now also counts a request the relay forwarded without option 82
+  `relay_info_omitted` also counts a request the relay forwarded without option 82
   because it would not fit.
 - **`AsyncDHCPClient`** (`pydhcp` and `pydhcp.client`): `DHCPClient` on an event
   loop. `send`, `discover_offer` and `dora` are coroutines taking the same
@@ -127,8 +127,7 @@ someone upgrading from 0.7.0.
   `await wait_closed()`, `await aclose()`, `async with`). Cancelling a pending
   exchange abandons it and leaves no task, socket or accepted transaction behind,
   and several exchanges may be pending on one client. Its `on_reply` hook runs on
-  the event loop, not on a worker thread. `import pydhcp` imports `asyncio` as it
-  did before.
+  the event loop, not on a worker thread.
 - **`DHCPRequestContext.destination` and `.is_unicast`** (appended, with
   defaults, so a context built by hand keeps working): the address the datagram
   was sent to, and whether it names one host. A broadcast DISCOVER shows
@@ -218,17 +217,10 @@ someone upgrading from 0.7.0.
     `--filter` (`--format` has no short form) and `-c` for `--count` is gone; the filter keys
     `src_port` and `dst_port` are `sport` and `dport`, `src` and `dst` take networks, and
     `interface=` is gone (use `--listen NAME`). `--listen` with `--interface` or `--read` is
-    status 2. The spellings added after 0.7.0, which no release had, are renamed too:
-    `--per-capture` is `--per-record`; `replay --server`/`-s` is `--to` and `replay --input` is
-    required; the `[capture]` keys `packet_filter`, `packet_format` and `per_capture` are
-    `filter`, `format` and `per_record`; `PYDHCP_CAPTURE_RECORD_FORMAT`,
-    `PYDHCP_CAPTURE_PER_CAPTURE` and `PYDHCP_REPLAY_SERVER` are `PYDHCP_CAPTURE_FORMAT`,
-    `PYDHCP_CAPTURE_PER_RECORD` and `PYDHCP_REPLAY_TO`. An old option is refused by the parser, an
-    old settings key by name, and an old variable with the name to use (status 2).
+    status 2. An option of 0.7.0 that is gone is refused by the parser (status 2).
   - **New variables and keys**: every option of the two commands has `PYDHCP_<COMMAND>_<FIELD>` and,
     for `capture`, a settings key of that field's name. The plugin list is `--load`, with pktcap's
-    own `PKTCAP_LOAD` and the key `load`; `--pktcap-config` and `PKTCAP_CONFIG` are not read, since
-    pktcap's commands have no settings file of their own.
+    own `PKTCAP_LOAD` and the key `load`.
   - **Hooks are pktcap's**: a hook comes from `--hook`, `PYDHCP_CAPTURE_HOOK` and the settings
     file the user named; it gets `PKTCAP_HOOK_CLIENT_ID`, `PKTCAP_HOOK_MSG_TYPE`, `PKTCAP_HOOK_XID`
     and `PKTCAP_HOOK_FORMAT` (not `PYDHCP_CAPTURE_*`) and the record on standard input, and the
@@ -248,25 +240,26 @@ someone upgrading from 0.7.0.
   `register_dhcp_dissector`, `pktcap_plugin`) raises an `ImportError`,
   and `pydhcp capture` and `pydhcp replay` print and exit with status 1, with the one line
   `captures need the 'pktcap' extra: pip install "pydhcp[pktcap]"`. `dev` installs
-  `pydhcp[cli,pktcap,toml]` and `pktcap[yaml,toml]`.
+  `pydhcp[cli,pktcap]`, `pktcap[yaml,toml]` and `duho[config,yaml]`.
 - **A `PCPServerList` entry is a tuple of address texts**, where it was a list, so an entry
   cannot be changed past the checks: `servers[0].append(...)` put a 64th address or text that
   is no address into an option, which failed only when it was packed. Replace the entry
   (`servers[0] = [...]`) or append a new one. A decoded option compares equal to a list of
   tuples; the display text and `to_json()` are the same.
-- **The `cli` extra needs `duho` 0.7**: `duho>=0.7.0,<0.8`, where the requirement was
+- **The `cli` extra needs `duho` 0.7**: `duho>=0.7.2,<0.8`, where the requirement was
   `>=0.6.0,<0.7`. The `pydhcp` command, its options, its environment variables and its output are
   the same.
 - **Importing the package does not import `asyncio`.** `AsyncDHCPListener`,
   `AsyncDHCPServer`, `AsyncDHCPClient` and `AsyncDHCPRelay` are bound
   when first accessed, from `pydhcp` and from their own packages; their names and import
   paths are unchanged, and a program that uses only the blocking classes never loads it.
-- **`duho` and pktcap are extras, `cli` and `pktcap`, and no longer installed with the package**:
-  `pip install pydhcp` gives the library, and `pip install "pydhcp[cli]"` the `pydhcp` command,
-  `pip install "pydhcp[pktcap]"` the captures and a message as YAML, TOML or INI text.
-  `import pydhcp` and `import pydhcp.cli` import neither, nor `tomllib` or `tomli`. **Breaking**
-  for an install that relied on `pip install pydhcp` for the command, for a capture or for YAML.
-  The `dev` extra includes `cli` and `pktcap`, pktcap's `yaml` and `toml`, and duho's `config` and `yaml`.
+- **`duho` is the `cli` extra, and pktcap is the `pktcap` extra; neither is installed with the package**
+  (0.7.0 installed `duho` and `PyYAML`): `pip install pydhcp` gives the library, and
+  `pip install "pydhcp[cli]"` the `pydhcp` command, `pip install "pydhcp[pktcap]"` the captures and a
+  message as YAML, TOML or INI text. `import pydhcp` and `import pydhcp.cli` import neither, nor
+  `tomllib` or `tomli`. **Breaking** for an install that relied on `pip install pydhcp` for the
+  command or for YAML. The `dev` extra includes `cli` and `pktcap`, pktcap's `yaml` and `toml`, and
+  duho's `config` and `yaml`.
 - **Without the `cli` extra the `pydhcp` command (and `python -m pydhcp`) prints one line,
   `pydhcp: error: the command line needs the 'cli' extra: pip install "pydhcp[cli]"`, and exits
   with status 1**; `pydhcp.cli.main` returns 1 the same way. `pydhcp.cli.App` and the six command
@@ -281,8 +274,7 @@ someone upgrading from 0.7.0.
 - **The sdist no longer holds the repository's `AGENTS.md` or `benchmarks/`**, and leaves out `CLAUDE*` and
   `*.local.*` whatever tree it is built from; the build requires hatchling 1.27 or later.
 - **Dependency ranges are scoped to a series and their floors install**: `netimps>=0.4.1,<0.5`,
-  `duho>=0.7.2,<0.8` and `pktcap>=0.1.0,<0.2`; they were
-  open-ended.
+  `duho>=0.7.2,<0.8` and `pktcap>=0.1.0,<0.2`.
 - **Breaking: `pydhcp.cli` exports `App`, `main` and the six commands, and nothing else.**
   `PACKET_FORMATS` and `CAPTURE_FORMATS` are no longer re-exported from it (the capture formats are
   `pktcap.OUTPUT_FORMATS`). `server`, `relay` and `capture` declare `--listen` and `--per-interface`
@@ -333,7 +325,7 @@ someone upgrading from 0.7.0.
     to use. `replay` reads the file too (a `[replay]` table); `packet` and `interfaces` do not.
   - The format is the ending of the file's name: `.json`, `.toml`, `.yaml`, `.yml`, `.ini` or
     `.cfg`. `.yaml` and `.yml` are read (they need `pip install "duho[yaml]"`), and so is `.cfg`;
-    a name that none of them claims is refused, not read as TOML.
+    a name that none of them claims is refused.
   - **INI is duho's dialect**: the keys of `[DEFAULT]` are top-level keys (and so refused as an
     unknown section, since a command's keys go in its own section), sections do not inherit them,
     and a key keeps its case (`Listen` is not `listen`).
@@ -342,7 +334,6 @@ someone upgrading from 0.7.0.
     when `PYDHCP_CONFIG` does.
   - `pydhcp.exceptions.DHCPConfigError` keeps its fields and its one line; `load_config(source,
     format=None)` calls `duho.config` and needs the `cli` extra (its `ImportError` names it).
-    `-` is a file name there, not standard input.
   - The `[capture]` and `[replay]` tables may set every inherited option, `load` (the pktcap
     plugins to import) among them.
 - **Settings follow one order for every command**: the option, then an environment
@@ -585,8 +576,6 @@ someone upgrading from 0.7.0.
     report no packet info) binds every IPv4 address the host holds, the link-local ones
     (169.254/16) among them, where it left those out. Name the addresses in `listen` to hear
     fewer.
-  - A device binding the kernel refuses is one WARNING for each `bind()` on the logger
-    `netimps._listen`, where it was pydhcp's rate-limited record on `pydhcp.listener._core`.
   - The message of a refused `listen` is netimps' (`listen names no address: []`, where it was
     `... it is empty`).
   - An error that was a plain `ValueError` (an empty specification, a bad port, a port written
@@ -640,8 +629,9 @@ someone upgrading from 0.7.0.
   `pydhcp.options.code`, `.registry` and `.type` are `pydhcp.options._codes`,
   `._registry` and `._codecs` (and `options/base.py` joined `_codes.py`), each codec
   module under it with a leading underscore; the `pydhcp.listener` modules (`sync`,
-  `aio`, `binding`, `interfaces`, `receive`, `spec`, `transport`) are `_sync`,
-  `_asyncio`, `_binding`, `_interfaces`, `_receive`, `_spec` and `_transport`; the
+  `aio`, `interfaces`, `receive`, `transport`) are `_sync`, `_asyncio`, `_interfaces`,
+  `_receive` and `_transport`, and `binding` and `spec` are gone (netimps owns the `listen`
+  grammar and the binding); the
   `pydhcp.cli` command modules are `_capture`, `_interfaces`,
   `_packet`, `_relay` and `_server` (`capture_hook` is gone). `pydhcp._utils` is split into `_generic` and
   `_missing`. No module is left behind to re-export from its old path. Import a name
@@ -649,8 +639,8 @@ someone upgrading from 0.7.0.
   public modules; `pydhcp.log.LOGGER` is `logging.getLogger("pydhcp")`.
 - **A module's logger is named for its module,** so the records of a moved module
   change name: `pydhcp.log`, `pydhcp.config` and `pydhcp.metrics` become
-  `pydhcp._log`, `pydhcp._config` and `pydhcp._metrics`, `pydhcp.listener.binding`
-  and the other listener modules `pydhcp.listener._binding` and so on.
+  `pydhcp._log`, `pydhcp._config` and `pydhcp._metrics`, `pydhcp.listener.sync`
+  and the other listener modules `pydhcp.listener._sync` and so on.
   A `--loglevel` or a filter naming one of them follows; one naming
   `pydhcp` or `pydhcp.listener` is unaffected.
 - **Breaking: the root exports the packet enums and no longer exports the address
@@ -664,40 +654,39 @@ someone upgrading from 0.7.0.
 | `pydhcp.IPv4` | `ipaddress.IPv4Address` |
 | `pydhcp.IPv4Interface` | `ipaddress.IPv4Interface` |
 | `pydhcp.IPv4Network` | `ipaddress.IPv4Network` |
-| `pydhcp.CCCOption` | `pydhcp.options.CCCOption` |
-| `pydhcp.CCCSubOption` | `pydhcp.options.CCCSubOption` |
-| `pydhcp.CCCPrimaryDHCPServerAddress` | `pydhcp.options.CCCPrimaryDHCPServerAddress` |
-| `pydhcp.CCCSecondaryDHCPServerAddress` | `pydhcp.options.CCCSecondaryDHCPServerAddress` |
-| `pydhcp.CCCProvisioningServerAddress` | `pydhcp.options.CCCProvisioningServerAddress` |
-| `pydhcp.CCCProvisioningServerFQDN` | `pydhcp.options.CCCProvisioningServerFQDN` |
-| `pydhcp.CCCKerberosRealmName` | `pydhcp.options.CCCKerberosRealmName` |
-| `pydhcp.CCCASBackoffRetry` | `pydhcp.options.CCCASBackoffRetry` |
-| `pydhcp.CCCAPBackoffRetry` | `pydhcp.options.CCCAPBackoffRetry` |
-| `pydhcp.CCCTicketGrantingServerUtilization` | `pydhcp.options.CCCTicketGrantingServerUtilization` |
-| `pydhcp.CCCProvisioningTimer` | `pydhcp.options.CCCProvisioningTimer` |
-| `pydhcp.CCCSecurityTicketControl` | `pydhcp.options.CCCSecurityTicketControl` |
-| `pydhcp.CCCKDCServerAddressList` | `pydhcp.options.CCCKDCServerAddressList` |
-| `pydhcp.CCCPrimaryDHCPServerAddressSubOption` | `pydhcp.options.CCCPrimaryDHCPServerAddressSubOption` |
-| `pydhcp.CCCSecondaryDHCPServerAddressSubOption` | `pydhcp.options.CCCSecondaryDHCPServerAddressSubOption` |
-| `pydhcp.CCCProvisioningServerAddressSubOption` | `pydhcp.options.CCCProvisioningServerAddressSubOption` |
-| `pydhcp.CCCASBackoffRetrySubOption` | `pydhcp.options.CCCASBackoffRetrySubOption` |
-| `pydhcp.CCCAPBackoffRetrySubOption` | `pydhcp.options.CCCAPBackoffRetrySubOption` |
-| `pydhcp.CCCKerberosRealmNameSubOption` | `pydhcp.options.CCCKerberosRealmNameSubOption` |
-| `pydhcp.CCCTicketGrantingServerUtilizationSubOption` | `pydhcp.options.CCCTicketGrantingServerUtilizationSubOption` |
-| `pydhcp.CCCProvisioningTimerSubOption` | `pydhcp.options.CCCProvisioningTimerSubOption` |
-| `pydhcp.CCCSecurityTicketControlSubOption` | `pydhcp.options.CCCSecurityTicketControlSubOption` |
-| `pydhcp.CCCKDCServerAddressSubOption` | `pydhcp.options.CCCKDCServerAddressSubOption` |
-| `pydhcp.VIVendorSpecificInformationRecord` | `pydhcp.options.VIVendorSpecificInformationRecord` |
-| `pydhcp.VIVendorSpecificInformation` | `pydhcp.options.VIVendorSpecificInformation` |
-| `pydhcp.VIVendorClassRecord` | `pydhcp.options.VIVendorClassRecord` |
-| `pydhcp.VIVendorClass` | `pydhcp.options.VIVendorClass` |
-| `pydhcp.MoSIPv4AddressRecord` | `pydhcp.options.MoSIPv4AddressRecord` |
-| `pydhcp.MoSFQDNRecord` | `pydhcp.options.MoSFQDNRecord` |
-| `pydhcp.MoSIPv4AddressList` | `pydhcp.options.MoSIPv4AddressList` |
-| `pydhcp.MoSFQDNList` | `pydhcp.options.MoSFQDNList` |
+| `pydhcp.CccOption` | `pydhcp.options.CCCOption` |
+| `pydhcp.CccSubOption` | `pydhcp.options.CCCSubOption` |
+| `pydhcp.CccPrimaryDhcpServerAddress` | `pydhcp.options.CCCPrimaryDHCPServerAddress` |
+| `pydhcp.CccSecondaryDhcpServerAddress` | `pydhcp.options.CCCSecondaryDHCPServerAddress` |
+| `pydhcp.CccProvisioningServerAddress` | `pydhcp.options.CCCProvisioningServerAddress` |
+| `pydhcp.CccProvisioningServerFqdn` | `pydhcp.options.CCCProvisioningServerFQDN` |
+| `pydhcp.CccKerberosRealmName` | `pydhcp.options.CCCKerberosRealmName` |
+| `pydhcp.CccAsReqAsRepBackoffRetry` | `pydhcp.options.CCCASBackoffRetry` |
+| `pydhcp.CccApReqApRepBackoffRetry` | `pydhcp.options.CCCAPBackoffRetry` |
+| `pydhcp.CccTicketGrantingServerUtilization` | `pydhcp.options.CCCTicketGrantingServerUtilization` |
+| `pydhcp.CccProvisioningTimer` | `pydhcp.options.CCCProvisioningTimer` |
+| `pydhcp.CccSecurityTicketControl` | `pydhcp.options.CCCSecurityTicketControl` |
+| `pydhcp.CccKdcServerAddressList` | `pydhcp.options.CCCKDCServerAddressList` |
+| `pydhcp.CccPrimaryDhcpServerAddressSubOption` | `pydhcp.options.CCCPrimaryDHCPServerAddressSubOption` |
+| `pydhcp.CccSecondaryDhcpServerAddressSubOption` | `pydhcp.options.CCCSecondaryDHCPServerAddressSubOption` |
+| `pydhcp.CccProvisioningServerAddressSubOption` | `pydhcp.options.CCCProvisioningServerAddressSubOption` |
+| `pydhcp.CccAsReqAsRepBackoffRetrySubOption` | `pydhcp.options.CCCASBackoffRetrySubOption` |
+| `pydhcp.CccApReqApRepBackoffRetrySubOption` | `pydhcp.options.CCCAPBackoffRetrySubOption` |
+| `pydhcp.CccKerberosRealmNameSubOption` | `pydhcp.options.CCCKerberosRealmNameSubOption` |
+| `pydhcp.CccTicketGrantingServerUtilizationSubOption` | `pydhcp.options.CCCTicketGrantingServerUtilizationSubOption` |
+| `pydhcp.CccProvisioningTimerSubOption` | `pydhcp.options.CCCProvisioningTimerSubOption` |
+| `pydhcp.CccSecurityTicketControlSubOption` | `pydhcp.options.CCCSecurityTicketControlSubOption` |
+| `pydhcp.CccKdcServerAddressSubOption` | `pydhcp.options.CCCKDCServerAddressSubOption` |
+| `pydhcp.ViVendorSpecificInformationRecord` | `pydhcp.options.VIVendorSpecificInformationRecord` |
+| `pydhcp.ViVendorSpecificInformation` | `pydhcp.options.VIVendorSpecificInformation` |
+| `pydhcp.ViVendorClassRecord` | `pydhcp.options.VIVendorClassRecord` |
+| `pydhcp.ViVendorClass` | `pydhcp.options.VIVendorClass` |
+| `pydhcp.MoSIpv4AddressRecord` | `pydhcp.options.MoSIPv4AddressRecord` |
+| `pydhcp.MoSFqdnRecord` | `pydhcp.options.MoSFQDNRecord` |
+| `pydhcp.MoSIpv4AddressList` | `pydhcp.options.MoSIPv4AddressList` |
+| `pydhcp.MoSFqdnList` | `pydhcp.options.MoSFQDNList` |
 - **Every public module declares `__all__`.** `pydhcp.options`, `.client`, `.relay`,
-  `.capture`, `.lease`, `.packet.structured` and `.server.handlers`, `.policy` and
-  `.reply` (the last three export nothing) gained one; a name outside it is not API.
+  `.capture`, `.lease` and `.packet.structured` gained one; a name outside it is not API.
   No `__all__` lists a type variable, a logger or an underscore name: `pydhcp.cli.LOGGER`
   leaves `pydhcp.cli.__all__`, and `pydhcp.options.T` and `.C` (type variables that
   `from pydhcp.options import *` used to bring in) are gone.
@@ -706,7 +695,7 @@ someone upgrading from 0.7.0.
   `_load_capture_hook`, `_write_capture_record` and the rest). They are in the private
   modules that define them.
 - **`DHCPMetrics` is `pydhcp.listener.DHCPMetrics`**, where it was
-  `pydhcp.metrics.DHCPMetrics` and then a private module's. `pydhcp.options` exports
+  `pydhcp.metrics.DhcpMetrics`. `pydhcp.options` exports
   `MIN_OPTION_CODE`, `MAX_OPTION_CODE` and every option codec in one list, and
   `from pydhcp.server import DHCPLease` is not API (it is `pydhcp.lease.DHCPLease`).
 - **Option codecs are values.** The record codecs (`ClasslessRoute`,
@@ -1089,8 +1078,8 @@ Replace each name in the left column with the one beside it.
 | `DhcpServer.lease_seconds(msg)` | `DHCPServer.get_lease_seconds(msg)` |
 | `Transport.send, DhcpClient.send: dest, destination` | `DHCPTransport.send(data, dst, *, port, client_mac)` and `DHCPClient.send(message, *, dst, port)`; `discover_offer` and `dora` keep `destination=` |
 | `Bytes: src` | `value` |
-| `listener/{sync,aio,binding,interfaces,receive,spec,transport}.py` | `listener/{_sync,_asyncio,_binding,_interfaces,_receive,_spec,_transport}.py` |
-| `server/{handlers,policy,reply}.py` | `server/_core.py (policy and replies, no sockets), server/_sync.py, server/_asyncio.py` |
+| `listener/{sync,aio,binding,interfaces,receive,spec,transport}.py` | `listener/{_sync,_asyncio,_interfaces,_receive,_transport}.py`; `binding` and `spec` are netimps' |
+| `server/{handlers,policy,reply}.py` | `server/{_handlers,_policy,_reply}.py`, with the drivers in `server/{_core,_sync,_asyncio}.py` |
 | `options/{base,code,registry}.py` | `options/{_codes,_registry}.py; no base.py` |
 | `options/type/ and its ten modules` | `options/_codecs/...; the name type stops shadowing the builtin` |
 | `packet/{enums,message}.py` | `packet/{_enums,_message}.py; packet/structured.py stays public if loads and dumps live there` |
@@ -1100,39 +1089,28 @@ Replace each name in the left column with the one beside it.
 
 ### Removed
 
-- **No PyYAML requirement in pydhcp.** The `yaml` extra is gone: pktcap's `yaml` extra and duho's
-  hold PyYAML. A `.yaml` or `.yml` settings file is read through `duho[yaml]`.
-- **The settings file's own spellings**: `--config` and `--config-format` after a command name,
-  `--config-format`, `PYDHCP_CONFIG_FORMAT` (refused with the line to use), `--config -` and
-  `PYDHCP_CONFIG=-` (standard input), pydhcp's own JSON, TOML and INI readers, and the `toml`
-  extra (`pip install "duho[config]"` reads TOML below Python 3.11). `--pktcap-config` and
-  `PKTCAP_CONFIG` are not read (pktcap's commands have no settings file of their own).
+- **No PyYAML requirement in pydhcp.** 0.7.0 installed it with the package; pktcap's `yaml` extra
+  and duho's hold it now. A `.yaml` or `.yml` settings file is read through `duho[yaml]`.
+- **The settings file's own spellings**: `--config` after a command name (refused with the line to
+  use), pydhcp's own JSON, TOML and INI readers, and the `toml` extra
+  (`pip install "duho[config]"` reads TOML below Python 3.11).
 - **Everything pktcap does is out of `pydhcp.capture` and the root**, and pydhcp's own capture
-  classes, writer, filter and hook runner with it. Each name and what replaces it:
-  - `DHCPCapture`, `AsyncDHCPCapture`: `pydhcp.capture.sniff_dhcp(listen)` and `asniff_dhcp(listen)`
+  classes, filter and hook runner with it. Each name of 0.7.0 and what replaces it:
+  - `DhcpCapture`, `AsyncDhcpCapture`: `pydhcp.capture.sniff_dhcp(listen)` and `asniff_dhcp(listen)`
     (pktcap frames), with `pktcap.copy_frames(frames, writer, select=..., each=...)`. A
-    `DHCPCapture` subclass overriding `handle` is an `AsyncDHCPListener` or `DHCPListener`
+    `DhcpCapture` subclass overriding `handle` is an `AsyncDHCPListener` or `DHCPListener`
     subclass overriding `handle`.
-  - `CaptureEvent`, `CaptureHook`, `CapturePredicate`, `CaptureSink`, `PacketFilterLike`:
-    `pktcap.DissectedFrame` with a `DHCPLayer`; the message object is
-    `DHCPMessage.decode(frame.datagram().payload)`.
+  - `CaptureEvent`, `CaptureHook`, `CapturePredicate`, `CaptureSink`: `pktcap.DissectedFrame` with a
+    `DHCPLayer`; the message object is `DHCPMessage.decode(frame.datagram().payload)`.
   - `compile_capture_filter(text)`: `pktcap.compile_capture_filter(text,
     pktcap.frame_filter_for(capture_dissector().registry))`.
-  - `DHCPCaptureWriter`, `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`, `MAX_CAPTURE_FILES`:
-    `pktcap.CaptureWriter(target, format, per_record=..., fields=("client_id", "msg_type", "xid"))`
-    (its `max_files` defaults to 1000).
-  - `command_hook`, `HOOK_TIMEOUT_SECONDS`, `DHCPHookError`: `pktcap.command_hook` (its `timeout`
-    defaults to 10 seconds) and `pktcap.CaptureHookError`.
-  - `read_capture(source, ...)`: `pktcap.read_dissected(source, dissector=capture_dissector())`.
-  - `replay_capture(source, server, port)`: `pktcap.replay_to(datagrams, server, port)` with the
-    datagrams to port 67, `d for d in pktcap.read_datagrams(source) if d.destination[1] == 67`.
-  - The `pydhcp` module no longer exports `CaptureEvent`, `DHCPCapture`, `AsyncDHCPCapture`,
-    `compile_capture_filter` or `DHCPHookError`.
-  The asynchronous capture is `asniff_dhcp`, an iterator and not a class with a sink. Of these
-  names 0.7.0 had the capture classes (as `DhcpCapture` and `AsyncDhcpCapture`), `CaptureEvent`,
-  the three aliases beside it, `compile_capture_filter`, `FILENAME_FIELDS`,
-  `UNIQUE_FILENAME_FIELDS` and, in `pydhcp.cli`, `HOOK_TIMEOUT_SECONDS`; the others were added
-  after it and are in no release.
+  - `FILENAME_FIELDS`, `UNIQUE_FILENAME_FIELDS`: `pktcap.CaptureWriter(target, format,
+    per_record=..., fields=("client_id", "msg_type", "xid"))` (its `max_files` defaults to 1000).
+  - `pydhcp.cli.HOOK_TIMEOUT_SECONDS`: `pktcap.command_hook` (its `timeout` defaults to 10 seconds)
+    and `pktcap.CaptureHookError`.
+  The `pydhcp` module no longer exports `CaptureEvent`, `DhcpCapture`, `AsyncDhcpCapture` or
+  `compile_capture_filter`. The asynchronous capture is `asniff_dhcp`, an iterator and not a class
+  with a sink.
 - **`pydhcp capture --output-mode` is gone, and `--per-record` replaces it**: the mode
   `stream` and the mode `single` ran one code path, told apart only by whether `--output` was
   `-`, so the only choice left is one file per record, and `--output-mode per-capture` is
@@ -1142,11 +1120,11 @@ Replace each name in the left column with the one beside it.
   a file-name pattern and raises `ValueError` (the message names the field and lists the fields),
   and its `max_files` (1000) is the budget. The cleaning of a file-name value is pktcap's, the
   same rule: a name that Windows opens as a device (`NUL`) gets a leading `_`.
-- **Breaking: `pydhcp.network` holds only pydhcp's own types** (`HardwareAddressType`,
-  `NetworkInterface`, `SocketAddress`, `host_ip_interfaces`). `IPv4`, `IPv6`, `IP`,
-  `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `LINK_LOCAL_V4` and
+- **Breaking: `pydhcp._network` (was `pydhcp.network`) holds only pydhcp's own types**
+  (`HardwareAddressType`, `NetworkInterface`, `SocketAddress`, `host_ip_interfaces`). `IPv4`,
+  `IPv6`, `IP`, `IPv4Network`, `IPv6Network`, `IPNetwork`, `IPv4Interface`, `APIPA` and
   `SocketOption` are gone from it: import `ipaddress.IPv4Address` and the others from
-  `ipaddress`, and `LINK_LOCAL_V4` and `SocketOption` from `netimps`. `WILDCARD_V4` is
+  `ipaddress`, and `LINK_LOCAL_V4` (for `APIPA`) and `SocketOption` from `netimps`. `WILDCARD_V4` is
   not public: write `ipaddress.IPv4Address("0.0.0.0")`. No alias is kept.
 - **Breaking: `SocketAddress.listen()` is gone.** The listener calls `netimps.bind()`
   directly with the arguments it always passed (`broadcast=True`, `connreset=False`, an

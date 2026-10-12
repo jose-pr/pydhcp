@@ -80,28 +80,15 @@ and a read of this list.
   | a hook gets `PYDHCP_CAPTURE_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the message on standard input | `PKTCAP_HOOK_CLIENT_ID`, `_MSG_TYPE`, `_XID`, `_FORMAT` and the record; the client identifier is written as in a file name, `01_02_00_00_99_00_02` where it was `01:02:00:00:99:00:02` |
   | a `module:function` hook gets a `CaptureEvent`, and is found in the working directory | it gets a `pktcap.DissectedFrame`, and its module must be on `PYTHONPATH` |
   | a command hook named by a bare name; a `.cmd` or `.bat` hook on Windows | `./name` for a file in the working directory (a bare name is looked up on `PATH` alone); a program (an `.exe`) |
-  | `pydhcp server --config FILE`, `-c FILE` | `pydhcp --config FILE server`: the option is the root's and goes before the command name; it is refused after it |
-  | `--config-format`, `PYDHCP_CONFIG_FORMAT`, `--config -` (standard input) | none: the ending of the file's name says the format (`.json`, `.toml`, `.yaml`, `.yml`, `.ini`, `.cfg`) and the file is named |
+  | `pydhcp server --config FILE` | `pydhcp --config FILE server`: the option is the root's and goes before the command name; it is refused after it |
   | `pip install "pydhcp[toml]"` | `pip install "duho[config]"` (TOML below Python 3.11); `"duho[yaml]"` for YAML |
   | an INI file with `[DEFAULT]` keys copied into every section; keys lower-cased | the keys of `[DEFAULT]` are top-level keys (refused as an unknown section); a key keeps its case |
   | the text of a settings file error | duho's text, with the same path, line and column; a `--config` file that does not exist is status 2 |
-  | `pydhcp capture --pktcap-config FILE`, `PKTCAP_CONFIG` | none: name the plugins with `--load`, `PKTCAP_LOAD` or `load` in the `[capture]` or `[replay]` table |
 
   A file budget spent (`--max-files`, 1000) is counted and the capture goes on, ending with status
   1; an `--output` ending that names no format is status 2, where it was JSON; and an INI message
   has a `[record]` section where it had `[message]` (the old one is still read). A removed option
   or filter key is refused by name.
-
-  The development tree had more names after 0.7.0 that no release shipped, and they are gone or
-  renamed too: `DHCPCaptureWriter` and `MAX_CAPTURE_FILES` (`pktcap.CaptureWriter`),
-  `pydhcp.capture.command_hook` and `DHCPHookError` (`pktcap.command_hook`,
-  `pktcap.CaptureHookError`), `read_capture(source)` (`pktcap.read_dissected(source,
-  dissector=capture_dissector())`), `replay_capture(source, server)` (`pktcap.replay_to(datagrams,
-  server, 67)`), `--per-capture` (`--per-record`), `replay --server` (`--to`), the `[capture]`
-  keys `packet_filter`, `packet_format` and `per_capture` (`filter`, `format`, `per_record`) and
-  the variables `PYDHCP_CAPTURE_RECORD_FORMAT`, `PYDHCP_CAPTURE_PER_CAPTURE` and
-  `PYDHCP_REPLAY_SERVER` (`PYDHCP_CAPTURE_FORMAT`, `PYDHCP_CAPTURE_PER_RECORD`,
-  `PYDHCP_REPLAY_TO`). An option, a key or a variable among them is refused, status 2.
 - **New.** `pydhcp replay`, which sends the requests of a capture file to a server you name;
   `pydhcp capture --read FILE`, `--format pcap|pcapng|text`, `--max-files`, `--interface`,
   `--datagrams`, `--append`, `--duration` and `--hook-timeout`; `sniff_dhcp` and `asniff_dhcp`,
