@@ -133,8 +133,8 @@ main(argv: Sequence[str] | None = None) -> int
   server.toml:12:5: Expected ']' at the end of a table declaration (at line 12, column
   5)`. A top-level key that is not a command, a section that is not a mapping, a key the
   command does not have and a section of *another* command than the one run are refused
-  once the arguments are parsed, status 2, by duho's usage lines and then one line that
-  names the file and the key, never a value: `pydhcp: error: duho: config file
+  once the arguments are parsed, status 2, in one line that names the file and the key,
+  never a value: `pydhcp: error: duho: config file
   server.toml: unknown key 'lisen' in section 'server'; it accepts ...`. A `--config` file
   that does not exist is a usage error (status 2); one that `PYDHCP_CONFIG` names is
   status 1.

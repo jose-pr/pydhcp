@@ -71,12 +71,12 @@ def test_dev_installs_the_settings_formats_duho_reads() -> None:
     assert not own[0].specifier
 
 
-def test_the_cli_extra_needs_the_duho_that_reads_a_settings_file() -> None:
+def test_the_cli_extra_needs_the_duho_of_the_one_line_settings_error() -> None:
     extras = _project()["optional-dependencies"]
 
     (spec,) = [Requirement(s) for s in extras["cli"]]
 
-    assert spec.specifier.contains("0.7.3") and not spec.specifier.contains("0.7.2")
+    assert spec.specifier.contains("0.7.4") and not spec.specifier.contains("0.7.3")
 
 
 def test_every_runtime_dependency_has_a_ceiling_at_the_next_series() -> None:

@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- **A settings file that names a section or a key the command does not have is refused in one
+  line.** A misspelled section, another command's section and an unknown key print
+  `pydhcp: error: duho: config file <file>: <problem>` and exit with status 2, as before; duho's
+  usage lines no longer come before that line. Every error of the settings file is now one line.
+- **The `cli` extra requires `duho>=0.7.4,<0.8`**, the release of duho that reports a settings
+  file error that way (0.7.3 printed the usage lines).
 
 ## [0.8.0] - 2026-10-12
 

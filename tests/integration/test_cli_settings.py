@@ -732,14 +732,15 @@ def _refused_by_the_check(
 ) -> str:
     """Run `pydhcp --config path argv...`: duho refuses a file once it is parsed.
 
-    The refusal is duho's usage error: its usage lines, then one line naming the
-    file; no value of the file is in it.
+    The refusal is one line naming the file, with no usage lines before it; no
+    value of the file is in it.
     """
     assert main(["--config", str(path), *argv]) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
-    *usage, line = captured.err.splitlines()
-    assert usage and usage[0].startswith("usage: pydhcp"), captured.err
+    lines = captured.err.splitlines()
+    assert len(lines) == 1, captured.err
+    (line,) = lines
     assert line.startswith(f"pydhcp: error: duho: config file {path}: "), line
     assert "Traceback" not in captured.err
     assert SECRET not in captured.err
