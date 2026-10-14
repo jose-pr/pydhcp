@@ -4,6 +4,24 @@ The companion to [CHANGELOG.md](CHANGELOG.md): what a user upgrading needs to re
 release, in a few lines. The changelog has the detail of every change. No performance statement is
 made here that is not a result in `benchmarks/results/` recorded by CI.
 
+## [0.8.1] - 2026-10-14
+
+A dependency release: the `cli` extra requires `duho>=0.7.4,<0.8`. With it a settings file that
+names a section or a key the command does not have is refused in one line, as every other error of
+the file already was; the line, and status 2, are unchanged. Nothing else differs from 0.8.0.
+
+### How it was checked
+
+Measured on 2026-10-14 at commit `eba39ff`, against netimps 0.4.1, pktcap 0.1.1 and duho 0.7.4, each
+as published:
+
+- **Windows:** 4,739 passed and 45 skipped, on Python 3.14 (x64) and on Python 3.9 (ARM64).
+- **Linux** (Fedora 44 under WSL2), Python 3.14 and 3.9: 4,693 passed and 40 skipped without
+  privilege; as root the 32 real-peer tests against dnsmasq and ISC dhclient ran and passed.
+- **macOS and FreeBSD:** Intel macOS 15.7 on Python 3.9 and FreeBSD 16.0 on Python 3.11 (an
+  unprivileged account): 4,672 passed and 58 skipped on each.
+- **The hosted matrix:** the same 25 jobs as for 0.8.0 passed; the benchmark job runs only when asked.
+
 ## [0.8.0] - 2026-10-12
 
 ### Upgrading from 0.7.0

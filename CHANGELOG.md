@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.8.1] - 2026-10-14
+
 ### Changed
 
 - **A settings file that names a section or a key the command does not have is refused in one
@@ -1810,7 +1814,8 @@ convention: a name that still resolves is a name nobody migrates off.
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/jose-pr/pydhcp/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jose-pr/pydhcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jose-pr/pydhcp/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/jose-pr/pydhcp/compare/v0.6.0...v0.6.1
