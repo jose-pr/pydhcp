@@ -3,7 +3,8 @@ import typing as _ty
 
 
 from ...exceptions import DHCPDecodeError, DHCPValueError
-from ._base import DHCPOptionType, RecordList, _NormalizedList, _Record, _set, frozen
+from ._base import DHCPOptionType, _NormalizedList, _Record, _set, frozen
+from ._lists import RecordList
 from ._scalar import Bytes, _octets
 
 _LengthPrefixedOpaqueListT = _ty.TypeVar(
@@ -66,6 +67,15 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
 
     def to_json(self) -> list[str]:
         return [item.to_json() for item in self]
+
+    @classmethod
+    def from_json(
+        cls: type[_LengthPrefixedOpaqueListT], data: _ty.Any
+    ) -> _LengthPrefixedOpaqueListT:
+        """Each entry from the hex text `to_json` wrote it as."""
+        if not isinstance(data, list):
+            return cls(data)
+        return cls([Bytes.from_json(item) for item in data])
 
 
 class UserClass(_LengthPrefixedOpaqueList):

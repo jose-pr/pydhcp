@@ -3,6 +3,8 @@ from __future__ import annotations
 from ._base import (
     DHCPOptionType as DHCPOptionType,
     OptionCodec as OptionCodec,
+)
+from ._lists import (
     List as List,
     RecordList as RecordList,
     DHCPOptionCodes as DHCPOptionCodes,

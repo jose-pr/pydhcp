@@ -45,11 +45,15 @@ def coerce_enum_value(enum_type: type[_ty.Any], value: _ty.Any) -> _ty.Any:
 def _coerce_option_value(
     option_type: type[_codecs.OptionCodec], value: _ty.Any
 ) -> _ty.Any:
+    """`value` as the codec reads its `to_json` form; octets are stored as they are."""
+    if isinstance(value, (bytes, bytearray, memoryview)):
+        return value
+    from_json = getattr(option_type, "from_json", None)
+    if from_json is not None:
+        return from_json(value)
+    # A codec that only satisfies `OptionCodec` has no `from_json`.
     if isinstance(value, str) and issubclass(option_type, _enum.Enum):
         return coerce_enum_value(option_type, value)
-    if isinstance(value, str) and issubclass(option_type, _codecs.Bytes):
-        # A document writes octets as hex text; `Bytes` itself is built from bytes.
-        return option_type.parse(value)
     return value
 
 

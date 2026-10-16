@@ -8,13 +8,12 @@ from ...exceptions import DHCPDecodeError, DHCPValueError
 from ._base import (
     DHCPOptionType,
     OptionCodec,
-    List,
-    RecordList,
     _Record,
     _set,
     display_of,
     frozen,
 )
+from ._lists import List, RecordList
 from ._domain import decode_domain_name, encode_domain_name
 from ._addresses import IPv4AddressOption
 from ._scalar import Boolean, Bytes, U8, _octets

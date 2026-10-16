@@ -5,13 +5,12 @@ import typing as _ty
 from ...exceptions import DHCPDecodeError, DHCPValueError
 from ._base import (
     DHCPOptionType,
-    List,
-    RecordList,
     _NormalizedList,
     _Record,
     _set,
     frozen,
 )
+from ._lists import List, RecordList
 from ._domain import decode_domain_name, encode_domain_name
 from ._addresses import IPv4AddressOption
 from ._scalar import Bytes, _octets

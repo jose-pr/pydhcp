@@ -7,7 +7,7 @@ from ._codecs._addresses import (
     PolicyFilter,
     StaticRoute,
 )
-from ._codecs._base import DHCPOptionCodes, List
+from ._codecs._lists import DHCPOptionCodes, List
 from ._codecs._ccc import CCCOption
 from ._codecs._domains import DomainList, DomainName, UncompressedDomainList
 from ._codecs._fqdn import ClientFQDN

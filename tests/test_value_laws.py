@@ -202,6 +202,18 @@ def test_a_value_pickles_to_an_equal_value_of_the_same_class(
 
 
 @pytest.mark.parametrize("cls", ALL, ids=label)
+def test_from_json_reads_back_what_to_json_wrote(cls: type) -> None:
+    """The codec law of the options header, through a real JSON document."""
+    import json
+
+    value = make(cls)
+    document = json.loads(json.dumps(value.to_json()))
+    again = cls.from_json(document)
+    assert again == value
+    assert type(again) is type(value)
+
+
+@pytest.mark.parametrize("cls", ALL, ids=label)
 def test_a_value_copies_to_an_equal_value_of_the_same_class(cls: type) -> None:
     value = make(cls)
     for twin in (copy.copy(value), copy.deepcopy(value)):

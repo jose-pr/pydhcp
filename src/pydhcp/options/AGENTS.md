@@ -214,6 +214,7 @@ DHCPOptionType.unpack_from(option) -> tuple[DHCPOptionType, int]
 DHCPOptionType.pack_into(buffer) -> int
 DHCPOptionType.fixed_size() -> int | None
 DHCPOptionType.to_json() -> Any
+DHCPOptionType.from_json(data) -> DHCPOptionType
 DHCPOptionType.display_text() -> str
 DHCPOptionType.unpack(option) -> DHCPOptionType
 DHCPOptionType.pack() -> bytes
@@ -240,8 +241,17 @@ and may override these, each with a default:
   of every value; `unpack` refuses any other length. Default `None`.
 - **`to_json()`** — the value as plain data (`str`, `int`, `bool`,
   `list`, `dict`) for a JSON, YAML, TOML or INI document. Default: the value
-  itself. `Codec(value.to_json())` must equal `value`: `from_text` and
-  `from_mapping` rebuild a value that way.
+  itself. **`Codec.from_json(value.to_json())` must equal `value`**:
+  `from_mapping` and `from_text` rebuild a value that way, and a test holds
+  every built-in codec to it through a real JSON document.
+- **`from_json(data)`** (classmethod) — the value `to_json` wrote. Default:
+  `Codec(data)`, and an enum codec also by member name (`"DHCPACK"`); a record
+  whose constructor takes several fields reads a list as those fields; `List[T]`
+  reads each item with `T.from_json`. Override it when the constructor does not
+  take the `to_json` form: **`Bytes`** reads hex text here, while `Bytes("0102")`
+  still raises `TypeError`, so text assigned to an opaque option is never read
+  as hex by accident. A class that only satisfies `OptionCodec` and has no
+  `from_json` is given the document value as it is.
 - **`display_text()`** — what `message.summary()`, the log and the
   capture formats show. Default: `repr(value)`.
 

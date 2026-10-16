@@ -64,6 +64,15 @@ class Bytes(DHCPOptionType, _TextForm, bytes):
     def to_json(self) -> str:
         return self.hex()
 
+    @classmethod
+    def from_json(cls: type[_BytesT], data: _ty.Any) -> _BytesT:
+        """Hex text, as `to_json` writes it; bytes-like as the constructor takes it.
+
+        The constructor itself refuses text, so a `str` assigned to an opaque
+        option is never silently read as hex.
+        """
+        return cls.parse(data) if isinstance(data, str) else cls(data)
+
 
 def _octets(value: _ty.Any) -> Bytes:
     """`value` as octets: bytes-like as is, hex text read as a document holds it.

@@ -46,8 +46,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   document with no `ip` that way, and the server treats an address-less lease returned by
   `acquire_lease` as no lease.
 
+- **`DHCPOptionType.from_json(data)`**, the inverse of `to_json()`: the documented codec law is
+  now `Codec.from_json(value.to_json()) == value`, and a test holds every built-in codec to it.
+  `Bytes.from_json` reads hex text; records with several fields read their `to_json` list;
+  `List[T]` reads each item with `T.from_json`. `from_mapping` uses it.
+
 ### Fixed
 
+- **The codec law `Codec(value.to_json()) == value` was false for 19 codecs**: `Bytes` refuses
+  text, `UserClass` refuses its own hex entries, and every record with several fields (`TLVOption`,
+  the `VI*`, `MoS*` and `CCC*` records, `CCCASBackoffRetry`) takes them as separate arguments. The
+  law now names `from_json`, which all of them satisfy.
 - **`DHCPMessage(op=2)` built a message whose `to_mapping()` raised `AttributeError`.** The
   constructor kept the number; it now stores `op`, `htype` and `flags` as their enums, the
   addresses as `IPv4Address` and `secs` as a `timedelta`, and refuses a value that is none of
