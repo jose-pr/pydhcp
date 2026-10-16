@@ -12,6 +12,10 @@ source. It ships inside the package and is self-contained; the top header is
 ```python
 DHCPLease(ip, expires=None, options=None, *, offered=False)
 DHCPLease.replace(*, ip=..., expires=..., options=..., offered=...) -> DHCPLease
+DHCPLease.to_mapping() -> dict[str, Any]
+DHCPLease.from_mapping(data: Mapping[str, Any], *, codemap=None) -> DHCPLease
+DHCPLease.to_text(format: str) -> str
+DHCPLease.from_text(text: str, format: str, *, codemap=None) -> DHCPLease
 LeaseBackend.offer(client_id, ip, hold_seconds, options=None) -> DHCPLease | None
 LeaseBackend.commit(client_id, ttl) -> DHCPLease | None
 LeaseBackend.lookup(client_id) -> DHCPLease | None
@@ -46,6 +50,24 @@ FileLeaseBackend.close()
     the named fields changed and the rest carried over (`options` as the same
     object); a given field is checked as the constructor checks it, and
     `expires=None` is a lease that never ends. The original is unchanged.
+  - **`.to_mapping()`** / **`DHCPLease.from_mapping()`** — the lease as plain
+    data and back, to an equal lease: `{"ip": "10.0.0.5", "expires":
+    "2100-01-01T12:00:00+00:00", "offered": false, "options": {"ROUTER":
+    ["10.0.0.1"]}}`. `expires` is ISO 8601 in UTC and is **left out** for a
+    lease that never ends (TOML has no null); `options` is
+    `DHCPOptions.to_mapping`'s form, named with the lease's code map, so pass
+    the same `codemap` to read it back. Reading is lenient: **only `ip` is
+    required** (a missing one is a `ValueError` naming it; it has no default,
+    since a lease always has an address); `expires` missing or null never
+    ends, `offered` defaults to `False`, `options` to none, other keys are
+    ignored. `expires` takes ISO 8601 text with an offset, `Z` included, or an
+    aware `datetime`; `offered` must be a bool (`TypeError`). Every value is
+    then checked as the constructor checks it.
+  - **`.to_text(format)`** / **`DHCPLease.from_text(text, format)`** — the
+    same written by `pydhcp.packet.structured` as `"json"`, `"yaml"`, `"toml"`
+    or `"ini"`, with that module's extras and errors (in TOML an option held
+    as `{"hex": ...}` or a record must come after the plain ones).
+    `FileLeaseBackend` keeps its own file format; this is not it.
   - Copies, deep-copies and pickles to an equal lease, across a process
     boundary too, so a `LeaseBackend` kept in another process can return one.
 

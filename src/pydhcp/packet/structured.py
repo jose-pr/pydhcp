@@ -102,7 +102,7 @@ def loads(text: str, format: str) -> dict[str, _ty.Any]:
     normalized = _normalize_format(format)
     if normalized == "json":
         return _ensure_mapping(_json.loads(text))
-    pktcap = pktcap_module("a message as YAML, TOML or INI text")
+    pktcap = pktcap_module("a message or a lease as YAML, TOML or INI text")
     data = _ensure_mapping(pktcap.loads_record(text, normalized))
     return _from_the_old_ini(data) if normalized == "ini" else data
 
@@ -124,7 +124,7 @@ def dumps(data: dict[str, _ty.Any], format: str) -> str:
     normalized = _normalize_format(format)
     if normalized == "json":
         return _json.dumps(data, indent=2) + "\n"
-    pktcap = pktcap_module("a message as YAML, TOML or INI text")
+    pktcap = pktcap_module("a message or a lease as YAML, TOML or INI text")
     if normalized == "toml":
         _refuse_a_reordering(data)
     return _ty.cast(str, pktcap.dumps_record(_plain(data), normalized))

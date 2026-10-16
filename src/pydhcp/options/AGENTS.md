@@ -21,6 +21,8 @@ DHCPOptions.partial_encode(maxsize, word_size=1) -> tuple[bytearray, DHCPOptions
 DHCPOptions.copy(*options, **overrides) -> DHCPOptions
 DHCPOptions.update(*options, **overrides) -> None
 DHCPOptions.retain(codes) -> None
+DHCPOptions.to_mapping() -> dict[str, Any]
+DHCPOptions.from_mapping(data: Mapping | None, *, codemap=None) -> DHCPOptions
 ```
 
 - **`DHCPOptions`** (`MutableMapping[int, bytearray]`) — the
@@ -114,6 +116,21 @@ DHCPOptions.retain(codes) -> None
   - **`.retain()`** — keep only the options whose code is in `codes`
     (any iterable of integers or option codes), in their present order; the
     rest are deleted. A read-only bag raises `TypeError`, even when nothing would go.
+  - **`.to_mapping()`** / **`DHCPOptions.from_mapping()`** — the bag as
+    plain data and back, in order: each key is the code's name in the bag's
+    codemap, or its number as a string for a code with no name (every unnamed
+    code shares the label `"UNKNOWN"`); each value is the codec's `to_json()`
+    form, an enum by its name. The round trip is **byte-exact**: an option is
+    loaded back as it is written, and one whose readable form would give other
+    octets (text that is not UTF-8, a payload the codec normalises) is
+    **`{"hex": "..."}`** instead, which every option takes on reading. Reading
+    takes a key by name in `codemap` (default `DHCPOptionCode`) or by number,
+    and a value as its codec takes it; octets only as `{"hex": ...}` or as hex
+    text for an option whose codec is opaque bytes. A value the codec refuses
+    raises as `options[code] = value` does, naming the option. `None` is an
+    empty bag; anything else that is not a mapping is a `TypeError`. A
+    read-only bag's `from_mapping` returns a read-only bag. `DHCPMessage` and
+    `DHCPLease` write their `options` this way.
 
 - The `MISSING` sentinel this module uses to tell "no default given" from
   "default is `None`" lives in `pydhcp._generic`, not in `pydhcp._constants` — it

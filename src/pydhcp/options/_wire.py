@@ -10,6 +10,36 @@ from .. import _leniency
 
 LOGGER = _logging.getLogger(__name__)
 
+#: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
+#: markers rather than options -- see `check_code`.
+MIN_OPTION_CODE = 1
+MAX_OPTION_CODE = 254
+
+
+def check_code(key: _ty.Any) -> int:
+    """Return `key` as a storable option code, or raise.
+
+    Code 0 stored as an option would be read back as padding and code 255 as the
+    end of the options, so a store refuses both and anything outside 1 to 254.
+    `decode_into` does not come through here: receive is liberal and treats 0
+    and 255 as the framing they are.
+    """
+    if isinstance(key, bool) or not isinstance(key, int):
+        raise TypeError(f"option code must be an int, not {type(key).__name__}")
+    code = int(key)
+    if code == 0:
+        raise ValueError("option code 0 is PAD, a padding marker, not an option")
+    if code == 255:
+        raise ValueError(
+            "option code 255 is END, the end-of-options marker, not an option"
+        )
+    if not MIN_OPTION_CODE <= code <= MAX_OPTION_CODE:
+        raise ValueError(
+            f"option code must be in range "
+            f"{MIN_OPTION_CODE}-{MAX_OPTION_CODE}, got {code}"
+        )
+    return code
+
 
 def decode_into(
     store: _ty.MutableMapping[int, bytearray],

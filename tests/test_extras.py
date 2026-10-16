@@ -47,7 +47,7 @@ def _message() -> DHCPMessage:
 
 
 PKTCAP_LINE = (
-    "a message as YAML, TOML or INI text needs the 'pktcap' extra: "
+    "a message or a lease as YAML, TOML or INI text needs the 'pktcap' extra: "
     + 'pip install "pydhcp[pktcap]"'
 )
 

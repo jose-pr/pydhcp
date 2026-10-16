@@ -13,6 +13,7 @@ from . import _enums as _enum
 from .. import _constants as _const, _nvt as _nvt
 from ..options import DHCPOptions
 from ..options._codes import DHCPOptionCode
+from ..options import _mapping as _options_mapping
 
 _NULL = 0x00.to_bytes(1, "big")
 
@@ -250,4 +251,4 @@ class _MessageFields:
     #: Key marking an option written as raw hex because its decoded form does
     #: not reproduce the original octets. Round-trips through JSON, YAML, TOML
     #: and INI alike, and `from_mapping` reads it back.
-    HEX_VALUE_KEY: _ty.ClassVar[str] = "hex"
+    HEX_VALUE_KEY: _ty.ClassVar[str] = _options_mapping.HEX_VALUE_KEY

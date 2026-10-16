@@ -9,7 +9,9 @@ import typing as _ty
 from .._missing import MISSING as _MISSING, Missing as _Missing
 from ..exceptions import DHCPValueError
 from ..options import DHCPOptions
+from ..options._codes import OptionCode
 from ..options._frozen import FrozenDHCPOptions
+from ..packet import structured as _structured
 
 __all__ = ["DHCPLease"]
 
@@ -104,6 +106,68 @@ class DHCPLease:
             offered=self.offered if isinstance(offered, _Missing) else offered,
         )
 
+    def to_mapping(self) -> _ty.Dict[str, _ty.Any]:
+        """The lease as plain data: `ip`, `expires`, `offered` and `options`.
+
+        `expires` is ISO 8601 text in UTC, and is left out for a lease that never
+        ends (TOML has no null); `options` is `DHCPOptions.to_mapping`'s form.
+        """
+        mapping: _ty.Dict[str, _ty.Any] = {"ip": str(self.ip)}
+        if self.expires is not None:
+            mapping["expires"] = self.expires.isoformat()
+        mapping["offered"] = self.offered
+        mapping["options"] = self.options.to_mapping()
+        return mapping
+
+    @classmethod
+    def from_mapping(
+        cls,
+        data: _ty.Mapping[str, _ty.Any],
+        *,
+        codemap: _ty.Optional[_ty.Type[OptionCode]] = None,
+    ) -> "DHCPLease":
+        """Build a lease from a mapping in the shape `to_mapping` produces.
+
+        Only `ip` is required: `expires` left out or null is a lease that never
+        ends, `offered` defaults to False and `options` to none. `expires` is ISO
+        8601 text with an offset (`Z` included) or an aware `datetime`; `options`
+        is read by `DHCPOptions.from_mapping` with `codemap`. Each value is then
+        checked as `DHCPLease(...)` checks it. Other keys are ignored.
+
+        Raises:
+            TypeError: a field has the wrong type.
+            ValueError: `ip` is missing, or a field cannot be read.
+        """
+        if "ip" not in data:
+            raise ValueError("the lease has no 'ip' field")
+        offered = data.get("offered", False)
+        if not isinstance(offered, bool):
+            raise TypeError(f"offered must be true or false, not {offered!r}")
+        return cls(
+            data["ip"],
+            _instant(data.get("expires")),
+            DHCPOptions.from_mapping(data.get("options"), codemap=codemap),
+            offered=offered,
+        )
+
+    def to_text(self, format: str) -> str:
+        """The lease as a document: ``"json"``, ``"yaml"``, ``"toml"`` or ``"ini"``.
+
+        `to_mapping` written out by `pydhcp.packet.structured.dumps`.
+        """
+        return _structured.dumps(self.to_mapping(), format)
+
+    @classmethod
+    def from_text(
+        cls,
+        text: str,
+        format: str,
+        *,
+        codemap: _ty.Optional[_ty.Type[OptionCode]] = None,
+    ) -> "DHCPLease":
+        """`pydhcp.packet.structured.loads` then `from_mapping`, with its errors."""
+        return cls.from_mapping(_structured.loads(text, format), codemap=codemap)
+
     def __setattr__(self, name: str, value: _ty.Any) -> _ty.NoReturn:
         raise AttributeError("DHCPLease is read-only")
 
@@ -137,6 +201,20 @@ class DHCPLease:
 
     def __deepcopy__(self, memo: _ty.Dict[int, _ty.Any]) -> "DHCPLease":
         return self
+
+
+def _instant(value: _ty.Any) -> _ty.Optional[_dt.datetime]:
+    """`expires` from a document: ISO 8601 text, a `datetime`, or nothing."""
+    if not isinstance(value, str):
+        return _ty.cast(_ty.Optional[_dt.datetime], value)
+    text = value.strip()
+    if text[-1:] in ("Z", "z"):
+        # `fromisoformat` takes the `Z` designator only from Python 3.11.
+        text = text[:-1] + "+00:00"
+    try:
+        return _dt.datetime.fromisoformat(text)
+    except ValueError:
+        raise DHCPValueError(f"expires is not an ISO 8601 instant: {value!r}") from None
 
 
 def _rebuild(

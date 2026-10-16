@@ -14,6 +14,11 @@ from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
 from .. import _constants as _const
 from . import _wire
+from ._wire import (
+    MAX_OPTION_CODE as MAX_OPTION_CODE,
+    MIN_OPTION_CODE as MIN_OPTION_CODE,
+    check_code as _check_code,
+)
 from .._missing import MISSING as _MISSING
 
 _T = _ty.TypeVar("_T", bound=DHCPOptionType)
@@ -32,11 +37,6 @@ class _Keyed(_ty.Protocol):
 
 #: What `update()` and `copy()` merge: a mapping of code to value, or pairs.
 _OptionSource = _ty.Union[_Keyed, _ty.Iterable[_ty.Tuple[int, _ty.Any]]]
-
-#: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
-#: markers rather than options -- see `_check_code`.
-MIN_OPTION_CODE = 1
-MAX_OPTION_CODE = 254
 
 __all__ = [
     "BaseDHCPOptionCode",
@@ -114,35 +114,6 @@ __all__ = [
     "VIVendorSpecificInformationRecord",
     "VendorSpecificInformation",
 ]
-
-
-def _check_code(key: _ty.Any) -> int:
-    """Return `key` as a storable option code, or raise.
-
-    Code 0 stored as an option would be read back as padding and code 255 as the
-    end of the options, so a store refuses both and anything outside 1 to 254.
-    `decode()` does not come through here: receive is liberal and treats 0 and
-    255 as the framing they are.
-    """
-    if isinstance(key, bool) or not isinstance(key, int):
-        # `_builtins.type`: importing `.type` binds the submodule as this
-        # module's global `type`, shadowing the builtin.
-        raise TypeError(
-            f"option code must be an int, not {_builtins.type(key).__name__}"
-        )
-    code = int(key)
-    if code == 0:
-        raise ValueError("option code 0 is PAD, a padding marker, not an option")
-    if code == 255:
-        raise ValueError(
-            "option code 255 is END, the end-of-options marker, not an option"
-        )
-    if not MIN_OPTION_CODE <= code <= MAX_OPTION_CODE:
-        raise ValueError(
-            f"option code must be in range "
-            f"{MIN_OPTION_CODE}-{MAX_OPTION_CODE}, got {code}"
-        )
-    return code
 
 
 class DHCPOptions(_ty.MutableMapping[int, bytearray]):
@@ -286,6 +257,35 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
             except (KeyError, TypeError):
                 pass
         raise TypeError(f"{self._codemap.__name__} has no option named {name!r}")
+
+    def to_mapping(self) -> dict[str, _ty.Any]:
+        """The options as plain data: the code's name (its number when it has
+        none) to the value's `to_json()` form, in order.
+
+        Byte-exact: an option whose readable form would load back as other
+        octets is ``{"hex": "..."}``, which every option takes.
+        """
+        from . import _mapping
+
+        return _mapping.to_mapping(self)
+
+    @classmethod
+    def from_mapping(
+        cls: "_builtins.type[_OptionsT]",
+        data: _ty.Optional[_ty.Mapping[_ty.Any, _ty.Any]],
+        *,
+        codemap: _ty.Optional[_builtins.type[OptionCode]] = None,
+    ) -> _OptionsT:
+        """A bag from what `to_mapping` wrote; `None` is an empty one.
+
+        A key is a name in `codemap` or a number; a value is what its codec takes,
+        octets only as ``{"hex": ...}`` or as hex text for an opaque option.
+        """
+        from . import _mapping
+
+        options = cls(codemap)
+        _mapping.fill_from_mapping(options, data)
+        return options
 
     def retain(self, codes: _ty.Iterable[int]) -> None:
         """Keep only the options whose code is in `codes`; the order of the rest is kept."""

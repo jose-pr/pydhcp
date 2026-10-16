@@ -21,7 +21,7 @@ and are not importable from a public one.
 
 Install with `pip install pydhcp`; its one required dependency is `netimps`. Extras:
 `cli` (`pip install "pydhcp[cli]"`; `duho`, for the `pydhcp` command), `pktcap` (`pktcap`, for
-the capture functions, the `capture` and `replay` commands and a message as YAML, TOML or INI
+the capture functions, the `capture` and `replay` commands and a message or a lease as YAML, TOML or INI
 text: without it they raise an `ImportError`, or print and end with status 1, `captures need the
 'pktcap' extra: pip install "pydhcp[pktcap]"`; pktcap's own extras `yaml` and `toml` hold the
 format libraries). A missing one is named where it is used, with its `pip install "pydhcp[<extra>]"` line. A settings file is read by duho, whose own extras hold its TOML reader before Python 3.11 (`duho[config]`) and PyYAML (`duho[yaml]`).
@@ -46,7 +46,7 @@ those headers ship in the package, at the paths below (`importlib.resources.file
 | `pydhcp/AGENTS.md` | this file: the root exports, the network types, the metrics, logging, NVT text and constants, the exceptions, the command line in brief, the environment variables, the gotchas |
 | `pydhcp/listener/AGENTS.md` | `DHCPListener`, `AsyncDHCPListener`, the `listen` forms, the transports, `DHCPRequestContext`, host interface enumeration |
 | `pydhcp/server/AGENTS.md` | `DHCPServer`, `AsyncDHCPServer` and the hooks you override |
-| `pydhcp/lease/AGENTS.md` | `DHCPLease`, `LeaseBackend` and the two backends |
+| `pydhcp/lease/AGENTS.md` | `DHCPLease` and its document form, `LeaseBackend` and the two backends |
 | `pydhcp/client/AGENTS.md` | `DHCPClient`, `AsyncDHCPClient`: the message builders, `discover_offer`, `dora` |
 | `pydhcp/relay/AGENTS.md` | `DHCPRelay`, `AsyncDHCPRelay` and the pending-client table |
 | `pydhcp/capture/AGENTS.md` | DHCP for pktcap: `sniff_dhcp`, `asniff_dhcp`, `DHCPLayer`, `capture_dissector`, `dissect_dhcp`, `register_dhcp_dissector` and `pktcap_plugin` (the `pktcap` extra) |

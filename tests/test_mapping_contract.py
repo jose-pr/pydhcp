@@ -155,11 +155,35 @@ def test_an_option_name_that_is_nobody_s_is_refused_by_name() -> None:
 # --- a missing header key is a ValueError that names it -----------------------
 
 
-@pytest.mark.parametrize("key", ["op", "hops", "xid", "sname", "file", "chaddr"])
-def test_a_missing_header_field_is_a_value_error_naming_it(key: str) -> None:
+def test_a_missing_op_is_a_value_error_naming_it() -> None:
     data = _message().to_mapping()
+    del data["op"]
+    with pytest.raises(ValueError, match="'op'"):
+        DHCPMessage.from_mapping(data)
+
+
+def test_a_header_field_left_out_takes_the_constructors_default() -> None:
+    message = DHCPMessage.from_mapping({"op": "BOOTREQUEST"})
+    assert message == DHCPMessage(DHCPOpcode.BOOTREQUEST)
+    assert str(message.ciaddr) == "0.0.0.0" and message.xid == 0
+    assert message.chaddr == b"" and message.hlen == 0
+    assert len(message.options) == 0
+
+
+@pytest.mark.parametrize("key", ["hops", "xid", "secs", "sname", "file", "giaddr"])
+def test_one_field_left_out_is_its_default_and_the_rest_are_kept(key: str) -> None:
+    original = _message()
+    data = original.to_mapping()
     del data[key]
-    with pytest.raises(ValueError, match=f"'{key}'"):
+    loaded = DHCPMessage.from_mapping(data)
+    assert getattr(loaded, key) == getattr(DHCPMessage(original.op), key)
+    assert loaded.chaddr == original.chaddr and loaded.options == original.options
+
+
+def test_an_hlen_with_no_chaddr_is_refused() -> None:
+    data = _message().to_mapping()
+    del data["chaddr"]
+    with pytest.raises(ValueError, match="hlen"):
         DHCPMessage.from_mapping(data)
 
 

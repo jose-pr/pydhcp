@@ -132,11 +132,18 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
     a relay agent require — never past `max_packetsize` less the 28 octets of
     IPv4 and UDP header.
   - **`.to_mapping()`** / **`DHCPMessage.from_mapping()`** — structured
-    round-trip to/from a plain dict. Option keys are the option's label when it
-    has one, else its **numeric code** as a string (every unnamed code shares
-    the label `"UNKNOWN"`, so it is not used as a key). `to_mapping` names the
+    round-trip to/from a plain dict. `options` is `DHCPOptions.to_mapping()`'s
+    form (`pydhcp/options/AGENTS.md`): option keys are the option's label when
+    it has one, else its **numeric code** as a string. `to_mapping` names the
     options with the message's own code map; pass the same `codemap` to
     `from_mapping` (default `DHCPOptionCode`) to read them back.
+    - **Only `op` is required.** A header field the mapping leaves out takes
+      the constructor's default: `0.0.0.0` for an address, `0` for `hops`,
+      `xid` and `secs`, `UNICAST` flags, `ETHERNET`, an empty `chaddr`, `sname`
+      and `file`, and `hlen` the length of `chaddr` (an `hlen` given with no
+      `chaddr` is refused, as the constructor refuses it). `options` left out
+      or null is none. A missing `op` is a `ValueError` naming it; other keys
+      are ignored.
     - The round trip is **byte-exact**: each option is loaded back at dump
       time, and one whose readable form does not reproduce the original
       octets is written as **`{"hex": "..."}`** instead
@@ -152,7 +159,7 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
       (`option 1 (SUBNET_MASK) cannot hold a str: ...`); octets are read only
       from `{"hex": "..."}`, which any option takes, and from hex text for an
       option whose codec is opaque bytes (`VENDOR_SPECIFIC_INFORMATION`, an
-      unnamed code). A missing header field is a `ValueError` naming it.
+      unnamed code).
     - Integer options serialize as plain `int`, not as the `U16`/`U32`
       subclass — YAML cannot represent the subclass and TOML writes something
       it cannot read back.

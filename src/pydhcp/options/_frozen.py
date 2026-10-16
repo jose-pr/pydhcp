@@ -57,6 +57,10 @@ class FrozenDHCPOptions(DHCPOptions):
     ) -> _ty.Any:
         return cls(DHCPOptions.decode(data, codemap=codemap))
 
+    @classmethod
+    def from_mapping(cls, data: _ty.Any, *, codemap: _ty.Any = None) -> _ty.Any:
+        return cls(DHCPOptions.from_mapping(data, codemap=codemap))
+
     def __hash__(self) -> int:  # type: ignore[override]
         return hash(frozenset((code, bytes(v)) for code, v in self._options.items()))
 

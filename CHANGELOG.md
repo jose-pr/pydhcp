@@ -18,6 +18,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`DHCPOptions.copy(*options, **overrides)`** copies the bag and merges the arguments into the
   copy, so a merged bag is one expression and the original is left alone. `copy()` with no
   arguments is unchanged.
+- **`DHCPLease.to_mapping()` / `from_mapping()` and `to_text()` / `from_text()`**: a lease as plain
+  data or as a JSON, YAML, TOML or INI document, and back to an equal lease — `ip`, `expires`
+  (ISO 8601 in UTC, left out for a lease that never ends), `offered` and `options`. Only `ip` is
+  required on reading; `expires` also takes a `Z` suffix or an aware `datetime`.
+- **`DHCPOptions.to_mapping()` / `from_mapping()`**: the `options` form a message's document
+  already held — names, readable values and `{"hex": ...}` where those would not give the same
+  octets back — on the bag itself. `DHCPMessage` and `DHCPLease` both write their options this way.
+
+### Changed
+
+- **`DHCPMessage.from_mapping()` (and `from_text()`) require only `op`.** A header field the
+  document leaves out takes the constructor's default (`0.0.0.0` for an address, `0` for a
+  number, an empty `chaddr`) where it was a `ValueError`, and `options` may be left out or null.
+- **The `ImportError` for a document format without the `pktcap` extra** reads "a message or a
+  lease as YAML, TOML or INI text needs the 'pktcap' extra".
+- **The leases have their own API header, `pydhcp/lease/AGENTS.md`**, out of the server's;
+  `pydhcp.lease` is a package now, with the same import path and names.
 
 ## [0.8.1] - 2026-10-14
 
