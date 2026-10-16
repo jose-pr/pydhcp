@@ -18,7 +18,8 @@ DHCPOptions.replace(option)
 DHCPOptions.decode(data: bytes | bytearray | memoryview, *, codemap=None) -> DHCPOptions
 DHCPOptions.encode(word_size=1) -> bytearray
 DHCPOptions.partial_encode(maxsize, word_size=1) -> tuple[bytearray, DHCPOptions | None]
-DHCPOptions.copy() -> DHCPOptions
+DHCPOptions.copy(*options, **overrides) -> DHCPOptions
+DHCPOptions.update(*options, **overrides) -> None
 DHCPOptions.retain(codes) -> None
 ```
 
@@ -94,7 +95,22 @@ DHCPOptions.retain(codes) -> None
     payload copied into a fresh `bytearray`. Use this before handing an
     options bag to code that mutates it (a response pipeline, an encoder);
     a plain assignment aliases the container *and* its payload buffers, so
-    the mutations write straight back into the source.
+    the mutations write straight back into the source. Arguments are merged
+    into the copy as `.update()` merges them, so `base.copy(layer,
+    ROUTER="10.0.0.1")` is the merged bag in one expression with `base` left
+    alone, even when the merge is refused. A read-only bag's copy is an
+    ordinary mutable one.
+  - **`.update()`** — merges several sources in one call, later
+    writes winning: each positional in order, a mapping of code to value or
+    an iterable of `(code, value)` pairs (another bag's raw payloads are copied,
+    never decoded), then each keyword, whose name is an option in the bag's
+    codemap in any letter case (`update(defaults, image, router="10.0.0.1")`).
+    Values are stored as `options[code] = value` stores them. **All or
+    nothing** across the whole call: a refused code or value raises as
+    `__setitem__` does, a keyword naming no option raises `TypeError`, and
+    either way the bag is left as it was. Codes already present keep their
+    position; new ones follow in the order written. A read-only bag raises
+    `TypeError`, even for an empty call.
   - **`.retain()`** — keep only the options whose code is in `codes`
     (any iterable of integers or option codes), in their present order; the
     rest are deleted. A read-only bag raises `TypeError`, even when nothing would go.

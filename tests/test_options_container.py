@@ -295,3 +295,79 @@ def test_a_frozen_bag_refuses_retain_even_when_nothing_would_go() -> None:
     frozen = FrozenDHCPOptions(_bag(o1=b"\xff\xff\xff\x00"))
     with pytest.raises(TypeError):
         frozen.retain([1])
+
+
+# --- update and copy: several sources, then names, the last write winning -------
+
+ROUTER = int(DHCPOptionCode.ROUTER)
+
+
+def test_update_merges_sources_in_order_then_names() -> None:
+    bag = _bag(o12=b"base", o1=b"\xff\x00\x00\x00")
+    scope = _bag(o3=b"\x0a\x00\x00\x01", o12=b"scope")
+    image = {HOSTNAME: "image"}
+    bag.update(scope, image, [(15, "example")], ROUTER="10.0.0.9")
+    assert list(bag) == [12, 1, 3, 15]  # present codes keep their place
+    assert bytes(bag[HOSTNAME]) == b"image"
+    assert bytes(bag[ROUTER]) == bytes([10, 0, 0, 9])
+    assert bag.get(15) == "example"
+
+
+def test_update_copies_a_bags_raw_payloads_without_decoding_them() -> None:
+    # A one-octet subnet mask does not decode; merging must not try.
+    source = _bag(o1=b"\x01")
+    bag = DHCPOptions()
+    bag.update(source)
+    assert bytes(bag[SUBNET]) == b"\x01"
+    source[SUBNET].append(2)
+    assert bytes(bag[SUBNET]) == b"\x01"
+
+
+def test_update_reads_a_name_in_any_case_from_the_bags_codemap() -> None:
+    bag = DHCPOptions()
+    bag.update(router="10.0.0.1", HostName="h")
+    assert bytes(bag[ROUTER]) == bytes([10, 0, 0, 1])
+    assert bytes(bag[HOSTNAME]) == b"h"
+
+
+@pytest.mark.parametrize(
+    "args, kwargs, error",
+    [
+        (({HOSTNAME: "new"}, {TIME_OFFSET: 2**31}), {}, DHCPValueError),
+        (({HOSTNAME: "new"}, [(0, b"x")]), {}, ValueError),
+        (({HOSTNAME: "new"},), {"NOT_AN_OPTION": 1}, TypeError),
+        (({HOSTNAME: "new"},), {"hostname": None}, TypeError),
+    ],
+)
+def test_a_refused_update_leaves_the_bag_as_it_was(
+    args: _ty.Any, kwargs: _ty.Any, error: _ty.Any
+) -> None:
+    bag = _bag(o12=b"host")
+    payload = bag[HOSTNAME]
+    with pytest.raises(error):
+        bag.update(*args, **kwargs)
+    assert dict(bag) == {HOSTNAME: bytearray(b"host")}
+    assert bag[HOSTNAME] is payload
+
+
+def test_copy_merges_into_the_copy_and_leaves_the_source() -> None:
+    base = _bag(o12=b"host", o3=b"\x0a\x00\x00\x01")
+    merged = base.copy({HOSTNAME: "other"}, router="10.0.0.2")
+    assert bytes(merged[HOSTNAME]) == b"other"
+    assert bytes(merged[ROUTER]) == bytes([10, 0, 0, 2])
+    assert base == _bag(o12=b"host", o3=b"\x0a\x00\x00\x01")
+    with pytest.raises(TypeError):
+        base.copy(NOT_AN_OPTION=1)
+    assert base == _bag(o12=b"host", o3=b"\x0a\x00\x00\x01")
+
+
+def test_a_frozen_bag_refuses_update_and_its_copy_merges() -> None:
+    frozen = FrozenDHCPOptions(_bag(o12=b"host"))
+    with pytest.raises(TypeError):
+        frozen.update()
+    with pytest.raises(TypeError):
+        frozen.update({HOSTNAME: "other"})
+    merged = frozen.copy(hostname="other")
+    assert type(merged) is DHCPOptions
+    assert bytes(merged[HOSTNAME]) == b"other"
+    assert bytes(frozen[HOSTNAME]) == b"host"

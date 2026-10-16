@@ -21,6 +21,18 @@ _C = _ty.TypeVar("_C", bound=OptionCode)
 _R = _ty.TypeVar("_R")
 _OptionsT = _ty.TypeVar("_OptionsT", bound="DHCPOptions")
 
+
+class _Keyed(_ty.Protocol):
+    """What `dict.update` reads as a mapping: `keys()` and `[]`."""
+
+    def keys(self) -> _ty.Iterable[_ty.Any]: ...
+
+    def __getitem__(self, __key: _ty.Any) -> _ty.Any: ...
+
+
+#: What `update()` and `copy()` merge: a mapping of code to value, or pairs.
+_OptionSource = _ty.Union[_Keyed, _ty.Iterable[_ty.Tuple[int, _ty.Any]]]
+
 #: The codes an option may be stored under. 0 (PAD) and 255 (END) are framing
 #: markers rather than options -- see `_check_code`.
 MIN_OPTION_CODE = 1
@@ -142,7 +154,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
     * **`get()` decodes; `[]` does not.** `options[53]` is
       `bytearray(b'\\x05')`, `options.get(53)` is `DHCPMessageType.DHCPACK`.
       Everything the ABC supplies -- `values()`, `pop()`, `setdefault()`,
-      `popitem()`, `update()`, and `dict(options)` -- routes through
+      `popitem()`, and `dict(options)` -- routes through
       `__getitem__`, so all of it yields raw `bytearray`s like `[]`, not
       decoded values like `get()`. Reach for `get(code, decode=False)` when you
       want the bytes and you want to say so.
@@ -223,18 +235,57 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         encoded, _ = self.partial_encode(None, word_size)
         return encoded
 
-    def copy(self) -> "DHCPOptions":
+    def copy(self, *options: _OptionSource, **overrides: _ty.Any) -> "DHCPOptions":
         """Return an independent copy sharing no mutable state with `self`.
 
         The codemap is preserved and every payload is copied into a fresh
         `bytearray`, so mutating either container (or a payload handed out by
-        `get(..., decode=False)`) cannot write through to the other.
+        `get(..., decode=False)`) cannot write through to the other. Arguments
+        are then merged into the copy as `update()` merges them; `self` is
+        left as it was, whether or not the merge is refused.
         """
         copied = DHCPOptions(self._codemap)
         copied._options = _ty.OrderedDict(
             (code, bytearray(value)) for code, value in self._options.items()
         )
+        if options or overrides:
+            copied.update(*options, **overrides)
         return copied
+
+    def update(self, *options: _OptionSource, **overrides: _ty.Any) -> None:
+        """Merge each of `options` in order, then each keyword; the last write wins.
+
+        A positional is a mapping of code to value (another bag's raw payloads
+        are copied, not decoded) or an iterable of `(code, value)` pairs; a
+        keyword names an option in this bag's codemap, in any letter case
+        (`update(defaults, ROUTER="10.0.0.1")`). Every value is stored as
+        `options[code] = value` stores it. All or nothing: a refused code,
+        name or value leaves the bag as it was.
+        """
+        staged = DHCPOptions(self._codemap)
+        # Payloads are shared, never written: a store replaces the bytearray.
+        staged._options = _ty.OrderedDict(self._options)
+        for source in options:
+            pairs: _ty.Iterable[tuple[int, _ty.Any]]
+            if hasattr(source, "keys"):
+                mapping = _ty.cast(_Keyed, source)
+                pairs = ((code, mapping[code]) for code in mapping.keys())
+            else:
+                pairs = source
+            for code, value in pairs:
+                staged[code] = value
+        for name, value in overrides.items():
+            staged[self._code_named(name)] = value
+        self._options.update(staged._options)
+
+    def _code_named(self, name: str) -> int:
+        """The code of the option `name` names in this bag's codemap, any case."""
+        for key in (name, name.upper()):
+            try:
+                return int(self._codemap[key])  # type: ignore[index]
+            except (KeyError, TypeError):
+                pass
+        raise TypeError(f"{self._codemap.__name__} has no option named {name!r}")
 
     def retain(self, codes: _ty.Iterable[int]) -> None:
         """Keep only the options whose code is in `codes`; the order of the rest is kept."""

@@ -7,7 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **`DHCPOptions.update(*options, **overrides)` merges several bags in one call.** Each
+  positional — a mapping of code to value, another bag, or `(code, value)` pairs — is applied
+  in order, then each keyword, named after an option in the bag's codemap in any letter case:
+  `options.update(scope, image, router="10.0.0.1")`. Another bag's raw payloads are copied
+  without being decoded. The whole call is all or nothing: a refused code, name or value leaves
+  the bag as it was. A read-only bag refuses it.
+- **`DHCPOptions.copy(*options, **overrides)`** copies the bag and merges the arguments into the
+  copy, so a merged bag is one expression and the original is left alone. `copy()` with no
+  arguments is unchanged.
 
 ## [0.8.1] - 2026-10-14
 

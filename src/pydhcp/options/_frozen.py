@@ -42,6 +42,9 @@ class FrozenDHCPOptions(DHCPOptions):
     def retain(self, codes: _ty.Iterable[int]) -> None:
         self._read_only()
 
+    def update(self, *options: _ty.Any, **overrides: _ty.Any) -> None:
+        self._read_only()
+
     def _decode_into(self, options: memoryview, base_offset: int = 0) -> memoryview:
         self._read_only()
 
