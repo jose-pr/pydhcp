@@ -236,7 +236,14 @@ TLVOption(code, value)
   option 77 is registered as opaque `Bytes`, because iPXE and several PXE ROMs
   send the option unframed and the strict codec rejects those packets. Ask for
   the structured form with `options.get(77, decode=UserClass)` — the same
-  arrangement option 43 uses.
+  arrangement option 43 uses. A payload that is not length-prefixed raises
+  `DHCPDecodeError` naming `LenientUserClass`.
+- **`LenientUserClass`** (`UserClass` subclass) — option 77 in either form:
+  `options.get(77, decode=LenientUserClass)` is `[b"iPXE"]` for iPXE's flat
+  `iPXE` and for `\x04iPXE`. RFC 3004 framing when the length octets account
+  for every octet and no class is empty, else one class (flat text can be
+  misread only at 33+ octets); written back RFC 3004 framed. Not the iPXE test:
+  option 175's presence is.
 - **`TLVOption`** — one generic `(code: int, value: Bytes)`
   TLV record.
 - **`EncapsulatedOptions`** — TLV container for building vendor-specific
@@ -267,24 +274,18 @@ ClientMachineID.from_uuid(value: uuid.UUID | str) -> ClientMachineID
 ```
 
 - **`ClientArchitecture`** (`IntEnum` codec, 2 octets) — one entry of option 93
-  (`CLIENT_SYSTEM_ARCHITECTURE`, registered as `List[ClientArchitecture]`), named
-  from IANA's "Processor Architecture Types" registry, which corrects RFC 4578
-  s2.1's table: `X86_BIOS` 0, `X86_UEFI` 6, **`X64_UEFI` 7**, **`EBC` 9**,
-  `ARM32_UEFI` 10, `ARM64_UEFI` 11, `X64_UEFI_HTTP` 16, `ARM64_UEFI_HTTP` 19,
-  `RISCV64_UEFI` 27, `LOONGARCH64_UEFI` 39 and the rest of the registry up to
-  `ARM_RPIBOOT` 41. A number it does not name is an unnamed member
-  (`.label()` `ARCH_<n>`, `.name` `None`), never refused. Members compare as
-  their numbers, so `options.get(93) == [7]` holds. `.is_http()` is true for the
-  registry's "boot from http" entries. `to_json()` is the name, or the number
-  for an unnamed one.
-- **`ClientNDI`** (record) — option 94 (RFC 4578 s2.2): `type` (1 is UNDI, the
-  only one defined), `major`, `minor`; three octets. `display_text()` reads
-  `UNDI 3.16`.
+  (registered as `List[ClientArchitecture]`), named from IANA's "Processor
+  Architecture Types" registry, which corrects RFC 4578 s2.1: `X86_BIOS` 0,
+  `X86_UEFI` 6, **`X64_UEFI` 7**, **`EBC` 9**, `ARM64_UEFI` 11, `X64_UEFI_HTTP`
+  16, ... `ARM_RPIBOOT` 41. Another number is an unnamed member (`ARCH_<n>`),
+  never refused. Members compare as numbers (`options.get(93) == [7]`);
+  `.is_http()` marks "boot from http"; `to_json()` is the name, else the number.
+- **`ClientNDI`** (record) — option 94 (RFC 4578 s2.2): `type` (1 is UNDI),
+  `major`, `minor`, three octets; displayed `UNDI 3.16`.
 - **`ClientMachineID`** (record) — option 97 (RFC 4578 s2.3, member `UUID`):
-  `type` and `ident`. Type 0 is a 16-octet GUID, which `.uuid` reads as a
-  `uuid.UUID` in the order the octets arrived (`None` for any other type or
-  length, which is kept as received). Sending a type 0 that is not 16 octets
-  raises `DHCPValueError`. `ClientMachineID.from_uuid(u)` builds a type 0.
+  `type` and `ident`. Type 0 is a 16-octet GUID, `.uuid` (octets in arrival
+  order; `None` for another type or length, kept as received). Sending a type 0
+  of another length raises `DHCPValueError`.
 
 ## iPXE's option 175 (`pydhcp.options`)
 
@@ -319,9 +320,8 @@ numbers and layouts are iPXE's own (`src/include/ipxe/dhcp.h` and `features.h`).
   present. Built from `(code, value)` items whose code is a number or a name and
   whose value is octets, a codec value, or what the codec's `from_json` takes:
   `IPXEOptions([(IPXEOption.NO_PXEDHCP, 1), ("san-filename", "iscsi:...")])`.
-  `to_json()` writes `[name, value]` pairs (`[["HTTPS", 1], ["VERSION",
-  "1.21.1"]]`), a sub-option whose readable form would not give its octets back
-  as `{"hex": ...}`; `display_text()` reads `HTTPS=U8(1), BUS_ID=PCI 8086:100e`.
+  `to_json()` writes `[name, value]` pairs (`{"hex": ...}` where the readable
+  form would not give the octets back); displayed `HTTPS=U8(1), BUS_ID=PCI 8086:100e`.
 - **`IPXEBusID`** (record) — `BUS_ID`: `bus_type` (1 is PCI) and `ident`, the
   octets that bus identifies the NIC by; for PCI, `vendor` and `device` read
   them (big-endian), else `None`. `IPXEBusID.pci(0x8086, 0x100E)` builds one.

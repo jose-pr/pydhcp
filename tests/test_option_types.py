@@ -257,7 +257,7 @@ def test_user_class_round_trip_and_rejects_zero_length_entries():
     with pytest.raises(ValueError, match="zero-length"):
         UserClass.unpack_from(memoryview(b"\x00"))
 
-    with pytest.raises(ValueError, match="truncated"):
+    with pytest.raises(ValueError, match="runs past the end"):
         UserClass.unpack_from(memoryview(b"\x05abc"))
 
 
@@ -1225,3 +1225,43 @@ def test_a_machine_id_of_another_shape_is_kept_and_a_bad_guid_is_not_sent() -> N
     assert (odd.type, bytes(odd.ident), odd.uuid) == (5, b"abc", None)
     with pytest.raises(DHCPValueError, match="16-octet"):
         ClientMachineID(0, b"short").pack()
+
+
+# --- option 77 in either form -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "payload, classes",
+    [
+        (b"iPXE", [b"iPXE"]),
+        (b"iPXE-Finance", [b"iPXE-Finance"]),
+        (b"\x04iPXE", [b"iPXE"]),
+        (b"\x04iPXE\x07Finance", [b"iPXE", b"Finance"]),
+        (b"\x04iPXE\x00", [b"\x04iPXE\x00"]),  # an empty class is not RFC 3004
+        (b"", []),
+    ],
+)
+def test_the_lenient_user_class_reads_either_form(
+    payload: bytes, classes: list
+) -> None:
+    from pydhcp.options import LenientUserClass
+
+    options = DHCPOptions()
+    options[77] = payload
+    assert list(options.get(77, decode=LenientUserClass)) == classes
+
+
+def test_the_strict_user_class_names_the_lenient_one_for_ipxes_flat_form() -> None:
+    from pydhcp.exceptions import DHCPDecodeError
+
+    options = DHCPOptions()
+    options[77] = b"iPXE"
+    with pytest.raises(DHCPDecodeError, match="LenientUserClass"):
+        options.get(77, decode=UserClass)
+
+
+def test_the_lenient_user_class_writes_rfc_3004_framing() -> None:
+    from pydhcp.options import LenientUserClass
+
+    assert LenientUserClass.unpack(b"iPXE").pack() == b"\x04iPXE"
+    assert DHCPOptions().get(77) is None  # option 77 itself stays opaque Bytes

@@ -144,6 +144,7 @@ EXPECTED_OPTIONS_TYPE = [
     "I32",
     "I8",
     "IPv4AddressOption",
+    "LenientUserClass",
     "List",
     "MoSFQDNList",
     "MoSFQDNRecord",

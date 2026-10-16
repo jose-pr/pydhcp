@@ -86,6 +86,7 @@ from ._scalar import (
 )
 from ._vendor import (
     UserClass as UserClass,
+    LenientUserClass as LenientUserClass,
     TLVOption as TLVOption,
     EncapsulatedOptions as EncapsulatedOptions,
     VendorSpecificInformation as VendorSpecificInformation,
@@ -99,6 +100,7 @@ from ._vendor import (
 __all__ = [
     "DHCPOptionType",
     "OptionCodec",
+    "LenientUserClass",
     "List",
     "RecordList",
     "DHCPOptionCodes",

@@ -54,6 +54,7 @@ DISPLAY: dict[str, str] = {
     "ClientIdentifier": "ETHERNET(02:03)|01:02:03",
     "OptionOverload": "<OptionOverload.FILE: 1>",
     "UserClass": "b'ab'",
+    "LenientUserClass": "b'ab'",
     "TLVOption": "TLVOption(code=1, value=b'x')",
     "EncapsulatedOptions": "TLVOption(code=1, value=b'x')",
     "VendorSpecificInformation": "b'ab'",

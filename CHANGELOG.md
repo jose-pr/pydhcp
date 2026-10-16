@@ -71,6 +71,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   unknown number an unnamed member); option 94 is `ClientNDI` (`UNDI 3.16`); option 97 is
   `ClientMachineID`, whose `.uuid` reads a type 0 GUID.
 
+- **`LenientUserClass`** reads option 77 in either form clients send, RFC 3004's length-prefixed
+  classes or iPXE's one flat string: `options.get(77, decode=LenientUserClass)`. Option 77
+  itself stays opaque `Bytes`, and the strict `UserClass` now names `LenientUserClass` when it
+  meets a flat payload, where it said "truncated".
+
 ### Changed
 
 - **Options 93, 94 and 97 decode to the new codecs**: an architecture still compares equal to its

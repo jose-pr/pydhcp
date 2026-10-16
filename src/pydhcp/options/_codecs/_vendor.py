@@ -48,10 +48,17 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
                     f"{cls.__name__} option contains a zero-length entry"
                 )
             if idx + length > size:
-                raise DHCPDecodeError(f"{cls.__name__} option is truncated")
+                raise DHCPDecodeError(
+                    f"{cls.__name__} option is not length-prefixed entries: an "
+                    f"entry of {length} octets runs past the end of the payload"
+                    + cls._UNFRAMED_HINT
+                )
             self.append(_octets(option[idx : idx + length]))
             idx += length
         return self, size
+
+    #: Appended to the refusal of a payload that is not length-prefixed.
+    _UNFRAMED_HINT: _ty.ClassVar[str] = ""
 
     def pack_into(self, data: bytearray) -> int:
         written = 0
@@ -80,6 +87,45 @@ class _LengthPrefixedOpaqueList(_NormalizedList[Bytes]):
 
 class UserClass(_LengthPrefixedOpaqueList):
     """RFC 3004 user-class opaque byte list."""
+
+    _UNFRAMED_HINT = (
+        " (iPXE sends option 77 as one unframed string: read it with "
+        "LenientUserClass)"
+    )
+
+
+class LenientUserClass(UserClass):
+    """Option 77 in either form a client sends: RFC 3004's or one flat string.
+
+    RFC 3004 prefixes each class with its length; iPXE, and DHCP servers that
+    predate the RFC, treat the option as one string. A payload is read as RFC
+    3004 when its length octets account for every octet and no class is empty,
+    and as one class otherwise. That can misread only flat text of 33 octets or
+    more whose first octet, and each length it leads to, land exactly on the
+    end. Written back, the classes are always RFC 3004 framed.
+    """
+
+    @classmethod
+    def unpack_from(
+        cls: type[_LengthPrefixedOpaqueListT], option: memoryview
+    ) -> tuple[_LengthPrefixedOpaqueListT, int]:
+        if _framed(option):
+            return super().unpack_from(option)
+        self = cls()
+        if option:
+            self.append(_octets(option))
+        return self, len(option)
+
+
+def _framed(option: memoryview) -> bool:
+    """Whether `option` is whole RFC 3004 entries: non-empty, ending on the end."""
+    idx = 0
+    while idx < len(option):
+        length = option[idx]
+        if length == 0:
+            return False
+        idx += 1 + length
+    return idx == len(option)
 
 
 class TLVOption(_Record):

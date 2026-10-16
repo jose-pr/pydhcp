@@ -80,6 +80,7 @@ __all__ = [
     "IPXEOptions",
     "IPXEVersion",
     "IPv4AddressOption",
+    "LenientUserClass",
     "List",
     "MAX_OPTION_CODE",
     "MIN_OPTION_CODE",
