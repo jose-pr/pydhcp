@@ -38,6 +38,11 @@ from ._ccc import (
     CCCSecurityTicketControlSubOption as CCCSecurityTicketControlSubOption,
     CCCKDCServerAddressSubOption as CCCKDCServerAddressSubOption,
 )
+from ._pxe import (
+    ClientArchitecture as ClientArchitecture,
+    ClientMachineID as ClientMachineID,
+    ClientNDI as ClientNDI,
+)
 from ._mos import (
     MoSIPv4AddressRecord as MoSIPv4AddressRecord,
     MoSFQDNRecord as MoSFQDNRecord,
@@ -104,6 +109,7 @@ __all__ = [
     "DomainList",
     "UncompressedDomainList",
     "RDNSSSelection",
+    "ClientArchitecture",
     "ClientFQDN",
     "SIPServers",
     "DomainName",
@@ -123,6 +129,8 @@ __all__ = [
     "I32",
     "I8",
     "ClientIdentifier",
+    "ClientMachineID",
+    "ClientNDI",
     "OptionOverload",
     "UserClass",
     "TLVOption",

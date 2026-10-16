@@ -13,6 +13,7 @@ from ._codecs._ccc import CCCOption
 from ._codecs._domains import DomainList, DomainName, UncompressedDomainList
 from ._codecs._fqdn import ClientFQDN
 from ._codecs._message_type import DHCPMessageType
+from ._codecs._pxe import ClientArchitecture, ClientMachineID, ClientNDI
 from ._codecs._mos import MoSFQDNList, MoSIPv4AddressList
 from ._codecs._scalar import (
     Boolean,
@@ -81,7 +82,10 @@ DHCPOptionCode.CLIENT_LAST_TRANSACTION_TIME.register_type(U32)
 # RFC 4388 s6.1: 'Len n (multiple of 4), Address 1 ... Address n'. A single
 # address could not decode a DHCPLEASEACTIVE for a multi-homed client.
 DHCPOptionCode.ASSOCIATED_IP.register_type(List[IPv4AddressOption])
-DHCPOptionCode.CLIENT_SYSTEM_ARCHITECTURE.register_type(List[U16])
+# RFC 4578 s2.1-2.3, with IANA's Processor Architecture Types for option 93.
+DHCPOptionCode.CLIENT_SYSTEM_ARCHITECTURE.register_type(List[ClientArchitecture])
+DHCPOptionCode.CLIENT_NDI.register_type(ClientNDI)
+DHCPOptionCode.UUID.register_type(ClientMachineID)
 DHCPOptionCode.PCODE.register_type(String)
 DHCPOptionCode.TCODE.register_type(String)
 DHCPOptionCode.IPV6_ONLY.register_type(U32)

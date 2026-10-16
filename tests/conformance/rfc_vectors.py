@@ -54,7 +54,14 @@ from pydhcp.options import (
     VIVendorClass,
     VIVendorSpecificInformation,
 )
-from pydhcp.options import IPXEBusID, IPXEOptions, IPXEVersion
+from pydhcp.options import (
+    ClientArchitecture,
+    ClientMachineID,
+    ClientNDI,
+    IPXEBusID,
+    IPXEOptions,
+    IPXEVersion,
+)
 from pydhcp.packet import DHCPMessageType
 
 
@@ -349,7 +356,7 @@ VECTORS: list[Vector] = [
     ),
     Vector(
         "rfc4578-s2.1-client-system-architecture",
-        List[U16],
+        List[ClientArchitecture],
         _h("00 00 00 07"),
         ([0, 7],),
         code=93,
@@ -460,6 +467,30 @@ VECTORS.extend(
             _h("14 01 01 24 01 01 eb 03 01 15 01"),
             ([(0x14, b"\x01"), (0x24, b"\x01"), (0xEB, _h("01 15 01"))],),
             code=175,
+        ),
+    ]
+)
+
+# RFC 4578 s2.1-2.3; the architecture numbers are IANA's Processor Architecture
+# Types registry, which corrects the RFC's table (7 is x64 UEFI, 9 is EBC).
+VECTORS.extend(
+    [
+        Vector(
+            "rfc4578-s2.1-x64-uefi-then-x64-uefi-http",
+            List[ClientArchitecture],
+            _h("00 07 00 10"),
+            ([7, 16],),
+            code=93,
+        ),
+        Vector(
+            "rfc4578-s2.2-undi-2.11", ClientNDI, _h("01 02 0b"), (1, 2, 11), code=94
+        ),
+        Vector(
+            "rfc4578-s2.3-guid",
+            ClientMachineID,
+            _h("00") + bytes(range(16)),
+            (0, bytes(range(16))),
+            code=97,
         ),
     ]
 )

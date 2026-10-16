@@ -258,6 +258,34 @@ TLVOption(code, value)
   container). Each entry may be bytes or the hex text `to_json` writes, so a
   message written as JSON, YAML or TOML reads back as the same value.
 
+## PXE options 93, 94 and 97 (`pydhcp.options`)
+
+```python
+ClientNDI(type, major, minor)
+ClientMachineID(type, ident)
+ClientMachineID.from_uuid(value: uuid.UUID | str) -> ClientMachineID
+```
+
+- **`ClientArchitecture`** (`IntEnum` codec, 2 octets) — one entry of option 93
+  (`CLIENT_SYSTEM_ARCHITECTURE`, registered as `List[ClientArchitecture]`), named
+  from IANA's "Processor Architecture Types" registry, which corrects RFC 4578
+  s2.1's table: `X86_BIOS` 0, `X86_UEFI` 6, **`X64_UEFI` 7**, **`EBC` 9**,
+  `ARM32_UEFI` 10, `ARM64_UEFI` 11, `X64_UEFI_HTTP` 16, `ARM64_UEFI_HTTP` 19,
+  `RISCV64_UEFI` 27, `LOONGARCH64_UEFI` 39 and the rest of the registry up to
+  `ARM_RPIBOOT` 41. A number it does not name is an unnamed member
+  (`.label()` `ARCH_<n>`, `.name` `None`), never refused. Members compare as
+  their numbers, so `options.get(93) == [7]` holds. `.is_http()` is true for the
+  registry's "boot from http" entries. `to_json()` is the name, or the number
+  for an unnamed one.
+- **`ClientNDI`** (record) — option 94 (RFC 4578 s2.2): `type` (1 is UNDI, the
+  only one defined), `major`, `minor`; three octets. `display_text()` reads
+  `UNDI 3.16`.
+- **`ClientMachineID`** (record) — option 97 (RFC 4578 s2.3, member `UUID`):
+  `type` and `ident`. Type 0 is a 16-octet GUID, which `.uuid` reads as a
+  `uuid.UUID` in the order the octets arrived (`None` for any other type or
+  length, which is kept as received). Sending a type 0 that is not 16 octets
+  raises `DHCPValueError`. `ClientMachineID.from_uuid(u)` builds a type 0.
+
 ## iPXE's option 175 (`pydhcp.options`)
 
 ```python

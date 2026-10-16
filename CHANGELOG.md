@@ -66,8 +66,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `VERSION` as `IPXEVersion`; a server builds one from `(name, value)` pairs. Its presence is how
   to tell iPXE from a PXE ROM. Also `I8`, a signed one-octet integer codec.
 
+- **The PXE options of RFC 4578 are structured**: option 93 is a `List[ClientArchitecture]`,
+  named from IANA's Processor Architecture Types registry (7 is `X64_UEFI`, 9 is `EBC`, an
+  unknown number an unnamed member); option 94 is `ClientNDI` (`UNDI 3.16`); option 97 is
+  `ClientMachineID`, whose `.uuid` reads a type 0 GUID.
+
 ### Changed
 
+- **Options 93, 94 and 97 decode to the new codecs**: an architecture still compares equal to its
+  number (`options.get(93) == [7]`), but options 94 and 97 are records, no longer `Bytes`, and a
+  document writes option 93 by name (`["X64_UEFI"]`). The octets on the wire are unchanged.
 - **`options.get(175)` is an `IPXEOptions`, not `Bytes`**, and a document writes option 175 as
   `[name, value]` pairs in place of hex text. The octets on the wire are unchanged.
 

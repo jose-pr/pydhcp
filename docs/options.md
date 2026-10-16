@@ -123,7 +123,7 @@ from the option registry (`python docs/options_table.py --write` regenerates it)
 fails when the page and the registry disagree.
 
 <!-- options-table:begin -->
-161 option codes are named, and a further two (0 and 255) frame the option stream. 124 of the named codes have a structured codec; the other 37 are carried as opaque `Bytes` (the octets are kept and forwarded unchanged). Any other code from 0 to 255 is also read as opaque `Bytes`.
+161 option codes are named, and a further two (0 and 255) frame the option stream. 126 of the named codes have a structured codec; the other 35 are carried as opaque `Bytes` (the octets are kept and forwarded unchanged). Any other code from 0 to 255 is also read as opaque `Bytes`.
 
 | Code | Name | Codec | RFC | Departure from the RFC text |
 | ---: | --- | --- | --- | --- |
@@ -219,10 +219,10 @@ fails when the page and the registry disagree.
 | 90 | `AUTHENTICATION` | `Bytes` (opaque) | RFC 3118 |  |
 | 91 | `CLIENT_LAST_TRANSACTION_TIME` | `U32` | RFC 4388 |  |
 | 92 | `ASSOCIATED_IP` | `List[IPv4AddressOption]` | RFC 4388 |  |
-| 93 | `CLIENT_SYSTEM_ARCHITECTURE` | `List[U16]` | RFC 4578 |  |
-| 94 | `CLIENT_NDI` | `Bytes` (opaque) | RFC 4578 |  |
+| 93 | `CLIENT_SYSTEM_ARCHITECTURE` | `List[ClientArchitecture]` | RFC 4578 |  |
+| 94 | `CLIENT_NDI` | `ClientNDI` | RFC 4578 |  |
 | 95 | `LDAP` | `Bytes` (opaque) | RFC 3679 |  |
-| 97 | `UUID` | `Bytes` (opaque) | RFC 4578 |  |
+| 97 | `UUID` | `ClientMachineID` | RFC 4578 |  |
 | 98 | `USERAUTH` | `Bytes` (opaque) | RFC 2485 |  |
 | 99 | `GEOCONF_CIVIC` | `Bytes` (opaque) | RFC 4776 |  |
 | 100 | `PCODE` | `String` | RFC 4833 |  |

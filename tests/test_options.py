@@ -177,7 +177,8 @@ def test_typed_registrations_and_aliases():
     assert DHCPOptionCode.CLIENT_LAST_TRANSACTION_TIME.get_type().__name__ == "U32"
     assert DHCPOptionCode.ASSOCIATED_IP.get_type()._args_[0] is IPv4AddressOption
     assert (
-        DHCPOptionCode.CLIENT_SYSTEM_ARCHITECTURE.get_type()._args_[0].__name__ == "U16"
+        DHCPOptionCode.CLIENT_SYSTEM_ARCHITECTURE.get_type().item_type().__name__
+        == "ClientArchitecture"
     )
     assert DHCPOptionCode.PCODE.get_type() is String
     assert DHCPOptionCode.TCODE.get_type() is String

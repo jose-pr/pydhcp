@@ -1177,3 +1177,51 @@ def test_a_sub_option_its_codec_refuses_comes_back_as_octets() -> None:
 
     ipxe = IPXEOptions.unpack(bytes([0xEB, 2, 1, 21]))  # VERSION is three octets
     assert ipxe.get("version") == b"\x01\x15"
+
+
+# --- the PXE options of RFC 4578 -----------------------------------------------------
+
+
+def test_option_93_names_each_architecture_and_still_compares_as_numbers() -> None:
+    from pydhcp.options import ClientArchitecture
+
+    options = DHCPOptions()
+    options[93] = bytes.fromhex("0007 0010 0063".replace(" ", ""))
+    arches = options.get(93)
+    assert arches == [ClientArchitecture.X64_UEFI, ClientArchitecture.X64_UEFI_HTTP, 99]
+    assert arches == [7, 16, 99] and [a.is_http() for a in arches] == [
+        False,
+        True,
+        False,
+    ]
+    assert ClientArchitecture(99).label() == "ARCH_99"
+    assert options.to_mapping() == {
+        "CLIENT_SYSTEM_ARCHITECTURE": ["X64_UEFI", "X64_UEFI_HTTP", 99]
+    }
+    assert DHCPOptions.from_mapping(options.to_mapping()) == options
+    assert ClientArchitecture.EBC == 9  # IANA's correction of RFC 4578's table
+
+
+def test_options_94_and_97_read_as_records() -> None:
+    import uuid
+
+    from pydhcp.options import ClientMachineID, ClientNDI
+
+    machine = uuid.UUID("12345678-9abc-def0-1234-56789abcdef0")
+    options = DHCPOptions()
+    options[94] = ClientNDI(1, 3, 16)
+    options[97] = ClientMachineID.from_uuid(machine)
+    assert bytes(options[94]) == b"\x01\x03\x10"
+    assert options.get(94).display_text() == "UNDI 3.16"
+    assert options.get(97).uuid == machine
+    assert DHCPOptions.from_mapping(options.to_mapping()) == options
+
+
+def test_a_machine_id_of_another_shape_is_kept_and_a_bad_guid_is_not_sent() -> None:
+    from pydhcp.exceptions import DHCPValueError
+    from pydhcp.options import ClientMachineID
+
+    odd = ClientMachineID.unpack(b"\x05abc")
+    assert (odd.type, bytes(odd.ident), odd.uuid) == (5, b"abc", None)
+    with pytest.raises(DHCPValueError, match="16-octet"):
+        ClientMachineID(0, b"short").pack()
