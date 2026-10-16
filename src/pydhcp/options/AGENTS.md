@@ -218,6 +218,7 @@ DHCPOptionType.from_json(data) -> DHCPOptionType
 DHCPOptionType.display_text() -> str
 DHCPOptionType.unpack(option) -> DHCPOptionType
 DHCPOptionType.pack() -> bytes
+List.item_type() -> type
 ```
 
 `OptionCodec` is the `typing.Protocol` a codec satisfies; `isinstance(x,
@@ -305,6 +306,10 @@ it (`ClasslessRoute(gateway='192.0.2.1', network='10.0.0.0/8')`,
 - **`List[T]`** (generic, subscript with a `DHCPOptionType`, e.g.
   `List[IPv4AddressOption]`) — a homogeneous repeated-record list; items are
   normalized through `T(...)` on every operation that adds an item.
+  **`List.item_type()`** (classmethod) is `T`: `List[U16].item_type()` is `U16`,
+  `CCCOption.item_type()` is `CCCSubOption` (a subclass answers its subscripted
+  base's), and a bare `List` raises `TypeError`. `RecordList` and
+  `DHCPOptionCodes` answer the same way.
 - **`RecordList[T]`** (`List[T]` subclass) — the same container for a record
   type built from **two** constructor arguments (`T(code, value)`). It differs
   from `List` only in normalization: a `tuple` argument is one record, not a

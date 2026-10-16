@@ -28,6 +28,18 @@ class List(_NormalizedList[_T], metaclass=GenericMeta):
             self.extend(_items if isinstance(_items, (tuple, list)) else (_items,))
 
     @classmethod
+    def item_type(cls) -> type:
+        """The codec of each item: `IPv4AddressOption` for `List[IPv4AddressOption]`.
+
+        A subclass of a subscripted list answers its base's; `List` itself,
+        unsubscripted, has none and raises `TypeError`.
+        """
+        args = getattr(cls, "_args_", None)
+        if not args:
+            raise TypeError(f"{cls.__name__} has no item type: subscript it")
+        return _ty.cast(type, args[0])
+
+    @classmethod
     def _normalize(cls, item: _ty.Any) -> _T:
         ty = cls._args_[0]
         if isinstance(item, _ty.cast(_ty.Any, ty)):

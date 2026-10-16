@@ -1112,3 +1112,14 @@ def test_classless_route():
     decoded = ClasslessRoute.unpack(encoded)
     assert decoded.network == net
     assert decoded.gateway == gw
+
+
+def test_a_list_codec_names_its_item_type() -> None:
+    from pydhcp.options import CCCOption, CCCSubOption, DHCPOptionCodes, DHCPOptionCode
+
+    assert List[IPv4AddressOption].item_type() is IPv4AddressOption
+    assert List[U16]().item_type() is U16
+    assert CCCOption.item_type() is CCCSubOption
+    assert DHCPOptionCodes[DHCPOptionCode].item_type() is DHCPOptionCode
+    with pytest.raises(TypeError, match="subscript"):
+        List.item_type()

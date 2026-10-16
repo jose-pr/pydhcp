@@ -51,6 +51,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Bytes.from_json` reads hex text; records with several fields read their `to_json` list;
   `List[T]` reads each item with `T.from_json`. `from_mapping` uses it.
 
+- **`List.item_type()`**: the codec of a list codec's items (`List[U16].item_type()` is `U16`,
+  `CCCOption.item_type()` is `CCCSubOption`), so a caller need not read the private `_args_`.
+
 ### Fixed
 
 - **The codec law `Codec(value.to_json()) == value` was false for 19 codecs**: `Bytes` refuses
