@@ -12,9 +12,9 @@ import threading as _threading
 import time as _time
 import typing as _ty
 
-from ._lease import DHCPLease
-from ._lease_store import InMemoryLeaseBackend
-from .options import DHCPOptions
+from ._value import DHCPLease
+from ._store import InMemoryLeaseBackend
+from ..options import DHCPOptions
 
 __all__ = ["FileLeaseBackend"]
 

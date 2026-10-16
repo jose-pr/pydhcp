@@ -45,7 +45,8 @@ those headers ship in the package, at the paths below (`importlib.resources.file
 | --- | --- |
 | `pydhcp/AGENTS.md` | this file: the root exports, the network types, the metrics, logging, NVT text and constants, the exceptions, the command line in brief, the environment variables, the gotchas |
 | `pydhcp/listener/AGENTS.md` | `DHCPListener`, `AsyncDHCPListener`, the `listen` forms, the transports, `DHCPRequestContext`, host interface enumeration |
-| `pydhcp/server/AGENTS.md` | `DHCPServer`, `AsyncDHCPServer`, the hooks you override, and the leases: `DHCPLease`, `LeaseBackend` and the two backends |
+| `pydhcp/server/AGENTS.md` | `DHCPServer`, `AsyncDHCPServer` and the hooks you override |
+| `pydhcp/lease/AGENTS.md` | `DHCPLease`, `LeaseBackend` and the two backends |
 | `pydhcp/client/AGENTS.md` | `DHCPClient`, `AsyncDHCPClient`: the message builders, `discover_offer`, `dora` |
 | `pydhcp/relay/AGENTS.md` | `DHCPRelay`, `AsyncDHCPRelay` and the pending-client table |
 | `pydhcp/capture/AGENTS.md` | DHCP for pktcap: `sniff_dhcp`, `asniff_dhcp`, `DHCPLayer`, `capture_dissector`, `dissect_dhcp`, `register_dhcp_dissector` and `pktcap_plugin` (the `pktcap` extra) |
@@ -135,7 +136,7 @@ DHCPRequestContext(transport, interface, client, client_mac, ifindex=None, local
   handler most often assigns (`pydhcp/options/_codecs/AGENTS.md`).
 - `DHCPLease` — one address held by one client, as a read-only value; `LeaseBackend` is the
   protocol a store implements, `InMemoryLeaseBackend` and `FileLeaseBackend` the two stores
-  (`pydhcp/server/AGENTS.md`).
+  (`pydhcp/lease/AGENTS.md`).
 - `DHCPTransport` — the protocol a reply is sent through; `UDPTransport` and
   `PktInfoUDPTransport` send on a socket, and `DHCPRequestContext` is what a handler is
   given with each message (`pydhcp/listener/AGENTS.md`).

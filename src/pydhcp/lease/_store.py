@@ -10,8 +10,8 @@ import threading as _threading
 import typing as _ty
 from math import inf as _inf
 
-from ._lease import DHCPLease
-from .options import DHCPOptions
+from ._value import DHCPLease
+from ..options import DHCPOptions
 
 __all__ = ["InMemoryLeaseBackend", "LeaseBackend"]
 

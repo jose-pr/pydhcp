@@ -8,7 +8,8 @@ import typing as _ty
 from duho import Meta
 
 from ..server._sync import DHCPServer
-from ..lease import FileLeaseBackend, LeaseBackend
+from ..lease._file import FileLeaseBackend
+from ..lease._store import LeaseBackend
 from ._common import _arguments, _Listening
 
 

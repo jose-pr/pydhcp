@@ -6,7 +6,7 @@ below describes its own directory and points to the ones nested in it.
 
 | Header | Covers |
 | --- | --- |
-| [`src/pydhcp/AGENTS.md`](src/pydhcp/AGENTS.md) | the shipped API header: the root exports, the exceptions, the environment variables, and the table of the package headers beside the code (listener, server, client, relay, capture, packet, options, cli) |
+| [`src/pydhcp/AGENTS.md`](src/pydhcp/AGENTS.md) | the shipped API header: the root exports, the exceptions, the environment variables, and the table of the package headers beside the code (listener, server, lease, client, relay, capture, packet, options, cli) |
 | [`tests/AGENTS.md`](tests/AGENTS.md) | running the suite, the skips each platform expects, the layout, the network guard, the loopback rules, the real-peer tests |
 
 Those headers are meant to be read *instead of* the source, so a change to the
@@ -22,6 +22,7 @@ src/pydhcp/        the package (src layout: an editable install or PYTHONPATH is
   _network/        hardware-type, interface and socket-address types (private)
   listener/        listeners and transports, one private module per responsibility
   server/ client/ relay/   each role: _core.py under _sync.py and _asyncio.py drivers
+  lease/           the DHCPLease value (_value.py) and the in-memory and file stores
   capture/         DHCP for pktcap (the `pktcap` extra): the dissector, the plugin with the
                    filter keys, and the socket source (sniff_dhcp, asniff_dhcp)
   cli/             the `pydhcp` command: one private module per subcommand; `capture` and

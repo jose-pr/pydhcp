@@ -9,7 +9,7 @@ import netimps as _netimps
 import typing as _ty
 
 from .. import _constants as _const, _network as _net
-from ..lease import DHCPLease
+from ..lease._value import DHCPLease
 from ..listener._limit import _brief
 from ..options._codes import DHCPOptionCode
 from ..options import DHCPOptions

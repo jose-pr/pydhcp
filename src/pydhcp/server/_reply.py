@@ -9,7 +9,7 @@ import math as _math
 import typing as _ty
 
 from .. import _constants as _const, _network as _net
-from ..lease import DHCPLease
+from ..lease._value import DHCPLease
 from ..listener._receive import DHCPRequestContext, _is_loopback
 from ..listener._transport import _Datagram
 from ..options import DHCPOptions

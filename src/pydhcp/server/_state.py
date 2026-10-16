@@ -9,7 +9,7 @@ import typing as _ty
 from .._clock import _Timed
 from .._metrics import DHCPMetrics
 from ..listener._limit import _LogLimit
-from ..lease import LeaseBackend
+from ..lease._store import LeaseBackend
 from ..packet import _enums as _enum
 
 _BACKEND_METHODS = ("allocate", "offer", "commit", "lookup", "release", "renew")
@@ -133,7 +133,7 @@ class _ServerState(_Timed):
         Each driver's constructor takes its own listener arguments and calls
         this for the rest, so the two cannot drift apart.
         """
-        from ..lease import InMemoryLeaseBackend
+        from ..lease._store import InMemoryLeaseBackend
 
         # `is None`, not truthiness: a backend that reports its size through
         # `__len__` is falsy while it is empty, and is still the caller's.

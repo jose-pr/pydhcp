@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typing as _ty
 
-from ..lease import LeaseBackend
+from ..lease._store import LeaseBackend
 from ..listener._asyncio import AsyncDHCPListener
 from netimps import ListenLike
 from ._core import _ServerCore
