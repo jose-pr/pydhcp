@@ -12,6 +12,7 @@ import threading as _threading
 import time as _time
 import typing as _ty
 
+from .. import _nvt
 from ._value import DHCPLease
 from ._store import InMemoryLeaseBackend
 from ..options import DHCPOptions
@@ -160,6 +161,9 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                 expires=expires,
                 options=opts,
                 offered=state == "offered",
+                siaddr=lease_data.get("siaddr", "0.0.0.0"),
+                sname=_nvt.decode(bytes.fromhex(lease_data.get("sname", ""))),
+                file=_nvt.decode(bytes.fromhex(lease_data.get("file", ""))),
             )
             holders[address] = client_id
             # A lease that has run out is absent by contract, so it neither
@@ -238,12 +242,20 @@ class FileLeaseBackend(InMemoryLeaseBackend):
                 opts_data = {}
                 for code, option in lease.options.items(decoded=False):
                     opts_data[str(int(code))] = option.hex()
-                data[client_id] = {
+                entry: _ty.Dict[str, _ty.Any] = {
                     "ip": str(lease.ip),
                     "expires": exp_str,
                     "state": "offered" if lease.offered else "bound",
                     "options": opts_data,
                 }
+                # Written only when set: an entry without them is a lease without them.
+                if not lease.siaddr.is_unspecified:
+                    entry["siaddr"] = str(lease.siaddr)
+                if lease.sname:
+                    entry["sname"] = _nvt.encode(lease.sname).hex()
+                if lease.file:
+                    entry["file"] = _nvt.encode(lease.file).hex()
+                data[client_id] = entry
             self._write_atomically(data)
 
     #: Attempts at the final rename, and the pause between them.

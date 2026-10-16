@@ -157,7 +157,11 @@ class _Handlers(_Replies):
         )
         # A DISCOVER is a probe: it may hold an address as an offer but must
         # not extend an existing binding or commit one.
-        lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
+        lease = self._with_address(
+            self.acquire_lease(client_id, actual_server_id, msg, commit=False),
+            msg,
+            context,
+        )
         now = self._instant(context).utc
         if lease and self._refused_as_quarantined(msg, lease, client_id, context):
             return
@@ -221,7 +225,11 @@ class _Handlers(_Replies):
         # Decide first, on a call that cannot extend the binding: a REQUEST for
         # the wrong address is about to be NAKed, and renewing the address it is
         # being refused was exactly backwards.
-        lease = self.acquire_lease(client_id, actual_server_id, msg, commit=False)
+        lease = self._with_address(
+            self.acquire_lease(client_id, actual_server_id, msg, commit=False),
+            msg,
+            context,
+        )
         if not lease:
             if shape == "SELECTING":
                 self._nak(msg, context, "the address is not available")
@@ -254,7 +262,11 @@ class _Handlers(_Replies):
             return
         # Only at this point is anything agreed, so this is where the lease time the ACK
         # advertises is actually committed.
-        committed = self.acquire_lease(client_id, actual_server_id, msg, commit=True)
+        committed = self._with_address(
+            self.acquire_lease(client_id, actual_server_id, msg, commit=True),
+            msg,
+            context,
+        )
         if committed is not None:
             lease = committed
         elif lease.offered:
@@ -265,6 +277,32 @@ class _Handlers(_Replies):
             msg, lease, actual_server_id, _enum.DHCPMessageType.DHCPACK, now=now
         )
         self._filter_and_send(msg, resp, context, _enum.DHCPMessageType.DHCPACK)
+
+    def _with_address(
+        self,
+        lease: _ty.Optional[DHCPLease],
+        msg: DHCPMessage,
+        context: DHCPRequestContext,
+    ) -> _ty.Optional[DHCPLease]:
+        """`lease`, or None when it has no address to give.
+
+        Only an `acquire_lease` override returns one: a lease built with
+        `strict=False` and never given its address. Answering it would offer
+        0.0.0.0, so it is treated as no lease, with a rate-limited warning.
+        """
+        if lease is None or not lease.ip.is_unspecified:
+            return lease
+        self._log_limit.log(
+            LOGGER,
+            _logging.WARNING,
+            "lease with no address",
+            "[XID=%08x] acquire_lease returned a lease with no address (0.0.0.0) "
+            "for %s; treating it as no lease",
+            msg.xid,
+            _brief(msg.get_client_id()),
+            now=self._instant(context).monotonic,
+        )
+        return None
 
     def _nak(self, msg: DHCPMessage, context: DHCPRequestContext, reason: str) -> None:
         """Send a DHCPNAK to `msg`, with `reason` as its message option."""

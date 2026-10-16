@@ -105,7 +105,8 @@ DHCPMessage(op, *, htype=HardwareAddressType.ETHERNET, hlen=None, hops=0, xid=0,
 DHCPOptions(codemap=None)
 TLVOption(code, value)
 ClasslessRoute(gateway, network=None)
-DHCPLease(ip, expires=None, options=None, *, offered=False)
+DHCPLease(ip, expires=None, options=None, *, offered=False, siaddr=IPv4Address("0.0.0.0"),
+    sname="", file="", strict=True)
 InMemoryLeaseBackend()
 FileLeaseBackend(filepath)
 UDPTransport(socket)

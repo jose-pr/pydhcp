@@ -6,6 +6,7 @@ is not symmetric -- which is the whole difficulty: two of the fields that look
 like leaks are required echoes, and clearing them would break relayed clients.
 """
 
+import ipaddress
 from datetime import timedelta
 
 import pytest
@@ -119,3 +120,78 @@ def test_hops_and_secs_are_reset(server, lease, resp_ty) -> None:
     assert resp.hops == 0
     assert resp.secs == timedelta(0)
     assert resp.op is DHCPOpcode.BOOTREPLY
+
+
+# --- the boot fields come from the lease -------------------------------------------
+
+BOOT = dict(siaddr=IPv4("10.0.0.2"), sname="tftp.example", file="ipxe.efi")
+
+
+@pytest.mark.parametrize(
+    "resp_ty", [DHCPMessageType.DHCPOFFER, DHCPMessageType.DHCPACK]
+)
+def test_an_offer_and_an_ack_carry_the_leases_boot_fields(server, resp_ty) -> None:
+    lease = DHCPLease(IPv4("10.0.0.50"), None, DHCPOptions(), **BOOT)
+    # private: the reply builder, called directly to read the reply it makes
+    resp = server._create_response(_request(), lease, SERVER_ID, resp_ty)
+    assert (resp.siaddr, resp.sname, resp.file) == (
+        BOOT["siaddr"],
+        BOOT["sname"],
+        BOOT["file"],
+    )
+    assert DHCPMessage.decode(resp.encode()).file == "ipxe.efi"
+
+
+def test_a_nak_never_carries_the_leases_boot_fields(server) -> None:
+    lease = DHCPLease(IPv4("10.0.0.50"), None, DHCPOptions(), **BOOT)
+    # private: the reply builder, called directly to read the reply it makes
+    resp = server._create_response(
+        _request(), lease, SERVER_ID, DHCPMessageType.DHCPNAK
+    )
+    assert (resp.siaddr, resp.sname, resp.file) == (IPv4("0.0.0.0"), "", "")
+
+
+class _Reservations(DHCPServer):
+    """Hands every client the lease it was given, as an override would."""
+
+    def __init__(self, lease: DHCPLease) -> None:
+        super().__init__(lease_backend=InMemoryLeaseBackend())
+        self.lease = lease
+        self.sent: list = []
+
+    def acquire_lease(self, client_id, server_id, msg, *, commit=True):  # type: ignore[override]
+        return self.lease
+
+    def _filter_and_send(self, msg, resp, context, resp_ty) -> None:  # type: ignore[override]
+        self.sent.append(resp)
+
+
+def test_a_lease_with_no_address_is_never_offered(caplog) -> None:
+    server = _Reservations(DHCPLease("0.0.0.0", strict=False, **BOOT))
+    server.handle_discover(_discover(), _context())
+    assert server.sent == []
+    assert "no address" in caplog.text
+
+
+def test_a_reservation_with_boot_fields_is_offered_with_them() -> None:
+    server = _Reservations(DHCPLease("10.0.0.50", **BOOT))
+    server.handle_discover(_discover(), _context())
+    (offer,) = server.sent
+    assert offer.yiaddr == IPv4("10.0.0.50") and offer.file == "ipxe.efi"
+
+
+def _discover() -> DHCPMessage:
+    return build_request(DHCPMessageType.DHCPDISCOVER)
+
+
+def _context():
+    from unittest.mock import Mock
+
+    from pydhcp import DHCPRequestContext, NetworkInterface, SocketAddress
+
+    return DHCPRequestContext(
+        transport=Mock(),
+        interface=NetworkInterface("eth0", ipaddress.IPv4Interface("10.0.0.1/24")),
+        client=SocketAddress("10.0.0.50", 68),
+        client_mac=CHADDR,
+    )

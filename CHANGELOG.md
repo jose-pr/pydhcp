@@ -35,6 +35,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   field holds when it carries none) **and `INFINITE_LEASE_TIME`** (`0xFFFFFFFF`, RFC 2131's
   "infinity" for option 51), so a caller need not define its own.
 
+- **`DHCPLease` carries the BOOTP boot fields `siaddr`, `sname` and `file`**, and the server
+  puts them in the OFFER and ACK it builds from the lease (never in a NAK), so a server built on
+  pydhcp can answer a PXE client. They are blank by default, as replies were; checked to fit
+  their 64- and 128-octet fields; kept by `replace()`, the mapping and text forms, pickling and
+  `FileLeaseBackend`'s file.
+- **`DHCPLease(..., strict=False)` and `lease.validate()`**: a lease built non-strict may hold
+  `0.0.0.0`, for a reservation with no address yet, and `validate()` raises `DHCPValueError` for
+  one that has none. Strict, the default, is unchanged. `from_mapping(strict=False)` reads a
+  document with no `ip` that way, and the server treats an address-less lease returned by
+  `acquire_lease` as no lease.
+
 ### Fixed
 
 - **`DHCPMessage(op=2)` built a message whose `to_mapping()` raised `AttributeError`.** The

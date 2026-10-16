@@ -145,9 +145,13 @@ class _Replies(_LeasePolicy):
         # giaddr is deliberately *not* reset: Table 3 says a reply echoes it,
         # and it is what lets the relay route the answer back to the segment the
         # request came from. Clearing it would strand every relayed client.
-        resp.siaddr = _const.UNSPECIFIED_ADDRESS
-        resp.sname = ""
-        resp.file = ""
+        #
+        # The three are the lease's instead: blank when it sets none, and in a
+        # NAK (Table 3 gives it none) or an INFORM's ACK, which has no lease.
+        boot = None if resp_ty is _enum.DHCPMessageType.DHCPNAK else lease
+        resp.siaddr = _const.UNSPECIFIED_ADDRESS if boot is None else boot.siaddr
+        resp.sname = "" if boot is None else boot.sname
+        resp.file = "" if boot is None else boot.file
         if resp_ty is _enum.DHCPMessageType.DHCPOFFER:
             # Table 3: ciaddr is 0 in a DHCPOFFER. In a DHCPACK it is the
             # ciaddr from the DHCPREQUEST, so the clone is right there and this

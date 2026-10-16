@@ -202,6 +202,10 @@ AsyncDHCPServer(listen=None, *, max_packet_size=None, lease_backend=None, per_in
     `giaddr`, `chaddr` and `xid` are the request's, and through a relay
     (`giaddr` set) the broadcast bit is set as well (§4.3.2). No lease time,
     and none of the options the client asked for.
+  - **An OFFER or ACK carries the lease's `siaddr`, `sname` and `file`**
+    (`pydhcp/lease/AGENTS.md`), never the client's; blank when the lease sets
+    none, and in an INFORM's ACK. A lease with no address (`strict=False`,
+    `0.0.0.0`) returned by `acquire_lease` is treated as no lease.
   - **`.handle_inform()`** answers only a `ciaddr` that is the datagram's source
     address or lies in the served network** (RFC 2131 §4.3.5 sends the ACK to
     `ciaddr`); any other, and an INFORM with no `ciaddr`, is dropped and

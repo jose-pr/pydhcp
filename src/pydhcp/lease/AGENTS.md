@@ -10,12 +10,15 @@ source. It ships inside the package and is self-contained; the top header is
 ## Leases (`pydhcp.lease`)
 
 ```python
-DHCPLease(ip, expires=None, options=None, *, offered=False)
-DHCPLease.replace(*, ip=..., expires=..., options=..., offered=...) -> DHCPLease
+DHCPLease(ip, expires=None, options=None, *, offered=False,
+    siaddr=IPv4Address("0.0.0.0"), sname="", file="", strict=True)
+DHCPLease.validate() -> DHCPLease
+DHCPLease.replace(*, ip=..., expires=..., options=..., offered=..., siaddr=..., sname=...,
+    file=..., strict=True) -> DHCPLease
 DHCPLease.to_mapping() -> dict[str, Any]
-DHCPLease.from_mapping(data: Mapping[str, Any], *, codemap=None) -> DHCPLease
+DHCPLease.from_mapping(data: Mapping[str, Any], *, codemap=None, strict=True) -> DHCPLease
 DHCPLease.to_text(format: str) -> str
-DHCPLease.from_text(text: str, format: str, *, codemap=None) -> DHCPLease
+DHCPLease.from_text(text: str, format: str, *, codemap=None, strict=True) -> DHCPLease
 LeaseBackend.offer(client_id, ip, hold_seconds, options=None) -> DHCPLease | None
 LeaseBackend.commit(client_id, ttl) -> DHCPLease | None
 LeaseBackend.lookup(client_id) -> DHCPLease | None
@@ -31,9 +34,17 @@ FileLeaseBackend.close()
 
 - **`DHCPLease`** — one address held by one
   client, as a **value**: read-only (assigning raises `AttributeError`),
-  hashable, equal when the address, expiry and option payloads are.
+  hashable, equal when every field below is (option payloads compared raw).
   - `ip: IPv4Address` is required. `None` raises `TypeError` and `0.0.0.0`
-    raises `DHCPValueError`: a lease has an address.
+    raises `DHCPValueError`: a lease has an address. **`strict=False`** lifts
+    the second rule only, for a reservation that has no address yet (a MAC-only
+    host entry): such a lease may hold `0.0.0.0`, and whoever takes it calls
+    **`.validate()`**, which returns the lease or raises `DHCPValueError` when
+    `ip` is `0.0.0.0` (a strict lease always passes). `strict` is not kept: a
+    lease built either way with a real address is the same lease. The stores
+    build their leases strictly, so `offer`/`allocate` of `0.0.0.0` still
+    raise, and the server treats an address-less lease from an `acquire_lease`
+    override as no lease (a rate-limited WARNING), never offering `0.0.0.0`.
   - `expires: datetime | None` is the instant the lease ends, **timezone-aware**
     (held in UTC), or `None` for a lease that never ends. A naive `datetime`
     raises `DHCPValueError` (use `datetime.now(timezone.utc)`); a `float` or
@@ -46,21 +57,36 @@ FileLeaseBackend.close()
   - `offered: bool` is the lease's state: `True` for an address held for a
     client that was offered it and has not accepted (`expires` is then the end
     of the hold), `False` for a binding. It takes part in equality and hash.
-  - **`.replace(*, ip, expires, options, offered)`** returns a new lease with
-    the named fields changed and the rest carried over (`options` as the same
-    object); a given field is checked as the constructor checks it, and
-    `expires=None` is a lease that never ends. The original is unchanged.
+  - `siaddr: IPv4Address`, `sname: str`, `file: str` — the BOOTP header fields
+    a reply to the client carries (RFC 2131 Table 3): the next server to boot
+    from, its name, and the boot file a PXE ROM loads. Unset (`0.0.0.0`, `""`)
+    by default, and a reply from such a lease leaves them blank. `siaddr` takes
+    anything `IPv4Address` takes; `sname` and `file` are text that must fit the
+    64- and 128-octet fields once encoded (`DHCPValueError` otherwise, never
+    truncated). The server copies them into the OFFER and ACK built from the
+    lease, never into a NAK. Options 66 and 67 are separate: some ROMs read
+    those, some the header fields; set both if unsure.
+  - **`.replace(*, ip, expires, options, offered, siaddr, sname, file, strict)`**
+    returns a new lease with the named fields changed and the rest carried over
+    (`options` as the same object); a given field is checked as the constructor
+    checks it, and `expires=None` is a lease that never ends. `strict` applies to
+    a new `ip` only: an address carried over, `0.0.0.0` included, was accepted
+    already. The original is unchanged.
   - **`.to_mapping()`** / **`DHCPLease.from_mapping()`** — the lease as plain
     data and back, to an equal lease: `{"ip": "10.0.0.5", "expires":
-    "2100-01-01T12:00:00+00:00", "offered": false, "options": {"ROUTER":
-    ["10.0.0.1"]}}`. `expires` is ISO 8601 in UTC and is **left out** for a
-    lease that never ends (TOML has no null); `options` is
+    "2100-01-01T12:00:00+00:00", "offered": false, "siaddr": "10.0.0.1",
+    "file": "ipxe.efi", "options": {"ROUTER": ["10.0.0.1"]}}`. `expires` is ISO
+    8601 in UTC and is **left out** for a lease that never ends (TOML has no
+    null); `siaddr`, `sname` and `file` are written only when set, `sname` and
+    `file` as text or `{"hex": ...}` when not UTF-8, as a message writes them;
+    `options` is
     `DHCPOptions.to_mapping`'s form, named with the lease's code map, so pass
     the same `codemap` to read it back. Reading is lenient: **only `ip` is
-    required** (a missing one is a `ValueError` naming it; it has no default,
-    since a lease always has an address); `expires` missing or null never
-    ends, `offered` defaults to `False`, `options` to none, other keys are
-    ignored. `expires` takes ISO 8601 text with an offset, `Z` included, or an
+    required** (a missing one is a `ValueError` naming it), and with
+    `strict=False` not even that: a missing `ip` is then `0.0.0.0`, for
+    `.validate()` to catch. `expires` missing or null never ends, `offered`
+    defaults to `False`, the boot fields to blank, `options` to none, other keys
+    are ignored. `expires` takes ISO 8601 text with an offset, `Z` included, or an
     aware `datetime`; `offered` must be a bool (`TypeError`). Every value is
     then checked as the constructor checks it.
   - **`.to_text(format)`** / **`DHCPLease.from_text(text, format)`** — the
@@ -140,7 +166,8 @@ FileLeaseBackend.close()
     tries, waiting **`REPLACE_BACKOFF_SECONDS`** (`0.02`) times the attempt
     number between them.
   - The file maps each client identifier to `{"ip", "expires", "state",
-    "options"}` (option payloads as hex). `state` is `"offered"` or `"bound"`;
+    "options"}` (option payloads as hex), plus `siaddr`, `sname` and `file`
+    (the last two as hex octets) for a lease that sets them. `state` is `"offered"` or `"bound"`;
     an entry with no `state`, as older files hold, is bound. `expires` is an
     ISO-8601 instant with an offset (written in UTC, `+00:00`: an expiry is an
     instant, so a clock change or a different time zone does not move it), or

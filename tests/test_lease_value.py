@@ -372,3 +372,105 @@ def test_a_replaced_lease_is_still_a_value() -> None:
         changed.ip = IPv4("192.0.2.12")  # type: ignore[misc]
     assert pickle.loads(pickle.dumps(changed)) == changed
     assert copy.deepcopy(changed) == changed
+
+
+# --- the boot fields, strict and validate() ----------------------------------------
+
+
+def test_a_lease_carries_the_boot_fields_through_every_copy() -> None:
+    import pickle
+
+    lease = DHCPLease("10.0.0.5", LATER, siaddr="10.0.0.1", sname="tftp", file="a.efi")
+    assert str(lease.siaddr) == "10.0.0.1"
+    mapping = lease.to_mapping()
+    assert (mapping["siaddr"], mapping["sname"], mapping["file"]) == (
+        "10.0.0.1",
+        "tftp",
+        "a.efi",
+    )
+    assert DHCPLease.from_mapping(mapping) == lease
+    assert pickle.loads(pickle.dumps(lease)) == lease
+    assert lease.replace(expires=None).file == "a.efi"
+    assert lease != lease.replace(file="b.efi")
+    assert "file='a.efi'" in repr(lease)
+
+
+def test_unset_boot_fields_are_left_out_of_the_mapping() -> None:
+    mapping = DHCPLease("10.0.0.5").to_mapping()
+    assert not {"siaddr", "sname", "file"} & set(mapping)
+
+
+def test_a_file_name_that_is_not_utf8_round_trips_as_octets() -> None:
+    # private: the NVT text codec, to build a name that is not UTF-8
+    from pydhcp import _nvt
+
+    name = _nvt.decode(b"boot\xff.efi")
+    lease = DHCPLease("10.0.0.5", file=name)
+    assert lease.to_mapping()["file"] == {"hex": "626f6f74ff2e656669"}
+    assert DHCPLease.from_mapping(lease.to_mapping()) == lease
+
+
+@pytest.mark.parametrize(
+    "field, value, error",
+    [
+        ("sname", "x" * 65, DHCPValueError),
+        ("file", "x" * 129, DHCPValueError),
+        ("file", b"a.efi", TypeError),
+        ("siaddr", "nowhere", DHCPValueError),
+    ],
+)
+def test_a_boot_field_that_does_not_fit_is_refused(
+    field: str, value: object, error: type
+) -> None:
+    with pytest.raises(error):
+        DHCPLease("10.0.0.5", **{field: value})  # type: ignore[arg-type]
+    DHCPLease("10.0.0.5", sname="x" * 64, file="x" * 128)
+
+
+def test_strict_false_admits_no_address_and_validate_catches_it() -> None:
+    with pytest.raises(DHCPValueError, match="strict=False"):
+        DHCPLease("0.0.0.0")
+    reservation = DHCPLease("0.0.0.0", strict=False, file="a.efi")
+    with pytest.raises(DHCPValueError, match="no address"):
+        reservation.validate()
+    assert DHCPLease("10.0.0.5").validate() == DHCPLease("10.0.0.5")
+    assert DHCPLease("10.0.0.5", strict=False) == DHCPLease("10.0.0.5")
+    assert "strict=False" in repr(reservation)
+
+
+def test_replace_checks_a_new_address_and_carries_an_old_one() -> None:
+    reservation = DHCPLease("0.0.0.0", strict=False)
+    assert reservation.replace(file="b.efi").file == "b.efi"
+    assert reservation.replace(ip="10.0.0.9").validate().ip == ipaddress.IPv4Address(
+        "10.0.0.9"
+    )
+    with pytest.raises(DHCPValueError):
+        DHCPLease("10.0.0.5").replace(ip="0.0.0.0")
+    assert DHCPLease("10.0.0.5").replace(ip="0.0.0.0", strict=False).ip.is_unspecified
+
+
+def test_a_mapping_with_no_address_loads_only_when_not_strict() -> None:
+    with pytest.raises(ValueError, match="'ip'"):
+        DHCPLease.from_mapping({"file": "a.efi"})
+    reservation = DHCPLease.from_mapping({"file": "a.efi"}, strict=False)
+    assert reservation.ip.is_unspecified and reservation.file == "a.efi"
+    with pytest.raises(DHCPValueError):
+        DHCPLease.from_mapping({"ip": "0.0.0.0"})
+
+
+def test_the_lease_file_keeps_the_boot_fields(tmp_path) -> None:
+    # private: the NVT text codec, to build a name that is not UTF-8
+    from pydhcp import _nvt
+
+    path = str(tmp_path / "leases.json")
+    name = _nvt.decode(b"boot\xff.efi")
+    with FileLeaseBackend(path) as store:
+        held = store.allocate("01:aa", ipaddress.IPv4Address("10.0.0.5"), 3600)
+        assert held is not None
+        # private: the store's own put, to hold a lease with boot fields
+        store._put("01:aa", held.replace(siaddr="10.0.0.1", sname="t", file=name))
+        store._save()
+    with FileLeaseBackend(path) as reread:
+        lease = reread.lookup("01:aa")
+    assert lease is not None
+    assert (str(lease.siaddr), lease.sname, lease.file) == ("10.0.0.1", "t", name)
