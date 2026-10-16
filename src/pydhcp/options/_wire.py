@@ -1,9 +1,72 @@
-"""Writing options as TLVs: what the bag's `partial_encode` does."""
+"""Options as TLVs: what the bag's `decode` reads and `partial_encode` writes."""
 
 from __future__ import annotations
 
+import logging as _logging
 import math as _math
 import typing as _ty
+
+from .. import _leniency
+
+LOGGER = _logging.getLogger(__name__)
+
+
+def decode_into(
+    store: _ty.MutableMapping[int, bytearray],
+    options: memoryview,
+    base_offset: int = 0,
+) -> memoryview:
+    """Add the TLVs in `options` to `store`; the unconsumed tail comes back.
+
+    `base_offset` is where the buffer starts in the message, for log lines.
+    """
+    offset = base_offset
+    while options:
+        code = options[0]
+        if code == 0:
+            options = options[1:]
+            offset += 1
+            continue
+
+        if code == 255:
+            break
+
+        if len(options) < 2:
+            _leniency.note()
+            LOGGER.debug(
+                "Option %d at offset %d is truncated (cannot read length)",
+                code,
+                offset,
+            )
+            options = options[len(options) :]
+            break
+
+        length = options[1]
+        remaining = len(options) - 2
+        if length > remaining:
+            # Keep what arrived only if there is something to keep: an
+            # option that declares a length and supplies nothing would read
+            # as present and then fail in whatever handler decodes it.
+            _leniency.note()
+            LOGGER.debug(
+                "Option %d at offset %d claims %d bytes but only %d available",
+                code,
+                offset,
+                length,
+                remaining,
+            )
+            data = options[2:]
+            if data:
+                store.setdefault(code, bytearray()).extend(data)
+            options = options[len(options) :]
+            continue
+
+        next_idx = 2 + length
+        data = options[2:next_idx]
+        options = options[next_idx:]
+        offset += next_idx
+        store.setdefault(code, bytearray()).extend(data)
+    return options
 
 
 def partial_encode(

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib as _contextlib
-import logging as _logging
 import typing as _ty
 import builtins as _builtins
 from ._codes import (
@@ -13,11 +12,9 @@ from ._codecs import DHCPOptionType as DHCPOptionType, OptionCodec as OptionCode
 from ._codecs._base import is_codec, is_codec_class
 from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
-from .. import _constants as _const, _leniency
+from .. import _constants as _const
 from . import _wire
 from .._missing import MISSING as _MISSING
-
-LOGGER = _logging.getLogger(__name__)
 
 _T = _ty.TypeVar("_T", bound=DHCPOptionType)
 _C = _ty.TypeVar("_C", bound=OptionCode)
@@ -200,53 +197,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
 
         `base_offset` is where the buffer starts in the message, for log lines.
         """
-        offset = base_offset
-        while options:
-            code = options[0]
-            if code == 0:
-                options = options[1:]
-                offset += 1
-                continue
-
-            if code == 255:
-                break
-
-            if len(options) < 2:
-                _leniency.note()
-                LOGGER.debug(
-                    "Option %d at offset %d is truncated (cannot read length)",
-                    code,
-                    offset,
-                )
-                options = options[len(options) :]
-                break
-
-            length = options[1]
-            remaining = len(options) - 2
-            if length > remaining:
-                # Keep what arrived only if there is something to keep: an
-                # option that declares a length and supplies nothing would read
-                # as present and then fail in whatever handler decodes it.
-                _leniency.note()
-                LOGGER.debug(
-                    "Option %d at offset %d claims %d bytes but only %d available",
-                    code,
-                    offset,
-                    length,
-                    remaining,
-                )
-                data = options[2:]
-                if data:
-                    self._options.setdefault(code, bytearray()).extend(data)
-                options = options[len(options) :]
-                continue
-
-            next_idx = 2 + length
-            data = options[2:next_idx]
-            options = options[next_idx:]
-            offset += next_idx
-            self._options.setdefault(code, bytearray()).extend(data)
-        return options
+        return _wire.decode_into(self._options, options, base_offset)
 
     def partial_encode(
         self, maxsize: _ty.Optional[float], word_size: int = 1
