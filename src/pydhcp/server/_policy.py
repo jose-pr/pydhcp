@@ -178,7 +178,10 @@ class _LeasePolicy(_InputGuard):
         if _server is None:
             return None
 
-        if msg.giaddr != _const.WILDCARD_V4 and msg.giaddr not in _server.network:
+        if (
+            msg.giaddr != _const.UNSPECIFIED_ADDRESS
+            and msg.giaddr not in _server.network
+        ):
             self.metrics.addresses_refused += 1
             self._log_limit.log(
                 LOGGER,
@@ -220,7 +223,7 @@ class _LeasePolicy(_InputGuard):
         ip: _ty.Optional[_ipaddress.IPv4Address] = None
         if requested_ip:
             ip = requested_ip
-        elif msg.ciaddr != _const.WILDCARD_V4:
+        elif msg.ciaddr != _const.UNSPECIFIED_ADDRESS:
             ip = msg.ciaddr
 
         if ip is None:
@@ -323,7 +326,7 @@ class _LeasePolicy(_InputGuard):
         network served would make this server send a reply wherever the sender
         chose; such a request is refused.
         """
-        if msg.ciaddr == _const.WILDCARD_V4:
+        if msg.ciaddr == _const.UNSPECIFIED_ADDRESS:
             return "it carries no ciaddr to answer"
         if msg.ciaddr == sender:
             return None

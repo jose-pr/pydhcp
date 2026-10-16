@@ -240,6 +240,15 @@ HardwareAddressType.format_address(address: bytes) -> str
     else `repr(address)`.
   - Defined in the private `pydhcp._network` (the option codecs need it to name a client identifier's type octet and `pydhcp.packet` imports the codecs, so defining it here would make a cycle) and exported by `pydhcp.packet`, which is where the rest of the message-header enums live and the spelling to use for the `htype` header field.
 
+## Constants (`pydhcp.packet`)
+
+- **`UNSPECIFIED_ADDRESS`** — `IPv4Address("0.0.0.0")`: what an address header
+  field (`ciaddr`, `yiaddr`, `siaddr`, `giaddr`) holds when it carries no address,
+  and every one of them in a fresh `DHCPMessage`. Compare with `==`.
+- **`INFINITE_LEASE_TIME`** (`0xFFFFFFFF`) — the time value RFC 2131 §3.3 reserves
+  for "infinity", as option 51 (`IP_ADDRESS_LEASE_TIME`) carries it. The server
+  sends it for a lease that never ends and reads it in a request as asking for one.
+
 ## Structured text (`pydhcp.packet.structured`)
 
 ```python

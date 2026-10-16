@@ -31,6 +31,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   without a name and `register_type` / `get_type`, with its own codec table, and works as a
   `DHCPOptions(codemap=...)`.
 
+- **`pydhcp.packet.UNSPECIFIED_ADDRESS`** (`IPv4Address("0.0.0.0")`, what an address header
+  field holds when it carries none) **and `INFINITE_LEASE_TIME`** (`0xFFFFFFFF`, RFC 2131's
+  "infinity" for option 51), so a caller need not define its own.
+
 ### Fixed
 
 - **An unnamed option code belonged to whichever enum made it first.** The unnamed members and

@@ -42,7 +42,7 @@ def _warn_if_address_bound_hears_no_broadcast(address: _net.SocketAddress) -> No
     global _ADDRESS_BOUND_WARNED
     if _ADDRESS_BOUND_WARNED or not _address_bound_hears_no_broadcast():
         return
-    if address.ip == _const.WILDCARD_V4 or address.ip.is_loopback:
+    if address.ip == _const.UNSPECIFIED_ADDRESS or address.ip.is_loopback:
         return
     _ADDRESS_BOUND_WARNED = True
     LOGGER.warning(

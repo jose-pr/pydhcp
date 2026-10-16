@@ -199,7 +199,7 @@ class _Handlers(_Replies):
         )
         if server_id is not None:
             shape = "SELECTING"
-        elif msg.ciaddr != _const.WILDCARD_V4:
+        elif msg.ciaddr != _const.UNSPECIFIED_ADDRESS:
             shape = "RENEWING" if context.is_unicast is not False else "REBINDING"
         elif requested is not None:
             shape = "INIT-REBOOT"
@@ -289,7 +289,7 @@ class _Handlers(_Replies):
         declined: _ty.Optional[_ipaddress.IPv4Address] = msg.options.get(
             DHCPOptionCode.REQUESTED_IP, decode=_type.IPv4AddressOption
         )
-        if declined is None and msg.ciaddr != _const.WILDCARD_V4:
+        if declined is None and msg.ciaddr != _const.UNSPECIFIED_ADDRESS:
             declined = msg.ciaddr
         if declined is None and held is not None:
             declined = held.ip
@@ -367,7 +367,7 @@ class _Handlers(_Replies):
         # holds at that moment, and the address would go to someone else while
         # the client was still using it.
         existing = self.lookup_lease(client_id)
-        if existing is not None and msg.ciaddr != _const.WILDCARD_V4:
+        if existing is not None and msg.ciaddr != _const.UNSPECIFIED_ADDRESS:
             if existing.ip != msg.ciaddr:
                 self._log_limit.log(
                     LOGGER,

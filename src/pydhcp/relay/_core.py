@@ -267,7 +267,7 @@ class _RelayCore(_PendingClients):
     ) -> None:
         now = self._instant(context).monotonic
         if (
-            msg.giaddr == _const.WILDCARD_V4
+            msg.giaddr == _const.UNSPECIFIED_ADDRESS
             and DHCPOptionCode.RELAY_AGENT_INFORMATION in msg.options
             and not self.trust_client_relay_agent_info
         ):
@@ -289,7 +289,7 @@ class _RelayCore(_PendingClients):
             self.metrics.packets_dropped_untrusted += 1
             return
 
-        if msg.giaddr != _const.WILDCARD_V4 and self._is_own_address(
+        if msg.giaddr != _const.UNSPECIFIED_ADDRESS and self._is_own_address(
             msg.giaddr, context
         ):
             # RFC 3046 s2.1.1: "SHALL discard the packet if the giaddr spoofs a
@@ -341,10 +341,10 @@ class _RelayCore(_PendingClients):
         # client's own option 82 (the trusted case) stays.
         add_info = (
             self.insert_relay_agent_info
-            and msg.giaddr == _const.WILDCARD_V4
+            and msg.giaddr == _const.UNSPECIFIED_ADDRESS
             and DHCPOptionCode.RELAY_AGENT_INFORMATION not in msg.options
         )
-        if forwarded.giaddr == _const.WILDCARD_V4:
+        if forwarded.giaddr == _const.UNSPECIFIED_ADDRESS:
             forwarded.giaddr = _ty.cast(_ipaddress.IPv4Address, context.interface.ip)
 
         data = self._encode_request(forwarded, add_info, now)
@@ -420,9 +420,9 @@ class _RelayCore(_PendingClients):
         dest: _ipaddress.IPv4Address
         if msg.broadcast:
             dest = _ipaddress.IPv4Address("255.255.255.255")
-        elif msg.ciaddr != _const.WILDCARD_V4:
+        elif msg.ciaddr != _const.UNSPECIFIED_ADDRESS:
             dest = msg.ciaddr
-        elif msg.yiaddr != _const.WILDCARD_V4 and _is_loopback(context):
+        elif msg.yiaddr != _const.UNSPECIFIED_ADDRESS and _is_loopback(context):
             # Loopback has no ARP to fail, and POSIX refuses a broadcast from a
             # socket bound to 127.0.0.1 -- see _is_loopback.
             dest = msg.yiaddr

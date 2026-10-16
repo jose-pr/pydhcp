@@ -8,6 +8,10 @@ from ._enums import (
     HardwareAddressType as HardwareAddressType,
 )
 from ._message import DHCPMessage as DHCPMessage
+from .._constants import (
+    INFINITE_LEASE_TIME as INFINITE_LEASE_TIME,
+    UNSPECIFIED_ADDRESS as UNSPECIFIED_ADDRESS,
+)
 
 __all__ = [
     "DHCPMessageType",
@@ -16,4 +20,6 @@ __all__ = [
     "DHCPFlags",
     "HardwareAddressType",
     "DHCPMessage",
+    "INFINITE_LEASE_TIME",
+    "UNSPECIFIED_ADDRESS",
 ]

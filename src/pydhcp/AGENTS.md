@@ -69,7 +69,7 @@ Every public module's `__all__`.
 | `pydhcp.lease` | `DHCPLease`, `FileLeaseBackend`, `InMemoryLeaseBackend`, `LeaseBackend` |
 | `pydhcp.listener` | `AsyncDHCPListener`, `BROADCAST_ADDRESS`, `DHCPListener`, `DHCPMetrics`, `DHCPRequestContext`, `DHCPTransport`, `ListenLike`, `PktInfoUDPTransport`, `UDPTransport` |
 | `pydhcp.options` | `BaseDHCPOptionCode`, `BaseFixedLengthInteger`, `Boolean`, `Bytes`, `CCCAPBackoffRetry`, `CCCAPBackoffRetrySubOption`, `CCCASBackoffRetry`, `CCCASBackoffRetrySubOption`, `CCCKDCServerAddressList`, `CCCKDCServerAddressSubOption`, `CCCKerberosRealmName`, `CCCKerberosRealmNameSubOption`, `CCCOption`, `CCCPrimaryDHCPServerAddress`, `CCCPrimaryDHCPServerAddressSubOption`, `CCCProvisioningServerAddress`, `CCCProvisioningServerAddressSubOption`, `CCCProvisioningServerFQDN`, `CCCProvisioningTimer`, `CCCProvisioningTimerSubOption`, `CCCSecondaryDHCPServerAddress`, `CCCSecondaryDHCPServerAddressSubOption`, `CCCSecurityTicketControl`, `CCCSecurityTicketControlSubOption`, `CCCSubOption`, `CCCTicketGrantingServerUtilization`, `CCCTicketGrantingServerUtilizationSubOption`, `ClasslessRoute`, `ClientFQDN`, `ClientIdentifier`, `DHCPOption`, `DHCPOptionCode`, `DHCPOptionCodes`, `DHCPOptionType`, `DHCPOptions`, `DomainList`, `DomainName`, `EncapsulatedOptions`, `FixedLengthInteger`, `Flag`, `I32`, `IPv4AddressOption`, `List`, `MAX_OPTION_CODE`, `MIN_OPTION_CODE`, `MoSFQDNList`, `MoSFQDNRecord`, `MoSIPv4AddressList`, `MoSIPv4AddressRecord`, `OctetString`, `OptionCode`, `OptionCodeEnum`, `OptionCodec`, `OptionOverload`, `PCPServerList`, `PolicyFilter`, `RDNSSSelection`, `RecordList`, `RelayAgentInformation`, `SIPServers`, `StaticRoute`, `StatusCode`, `String`, `TLVOption`, `U16`, `U32`, `U8`, `URIList`, `UncompressedDomainList`, `UserClass`, `VIVendorClass`, `VIVendorClassRecord`, `VIVendorSpecificInformation`, `VIVendorSpecificInformationRecord`, `VendorSpecificInformation` |
-| `pydhcp.packet` | `DHCPFlags`, `DHCPMessage`, `DHCPMessageType`, `DHCPOpcode`, `DHCPPort`, `HardwareAddressType` |
+| `pydhcp.packet` | `DHCPFlags`, `DHCPMessage`, `DHCPMessageType`, `DHCPOpcode`, `DHCPPort`, `HardwareAddressType`, `INFINITE_LEASE_TIME`, `UNSPECIFIED_ADDRESS` |
 | `pydhcp.packet.structured` | `dumps`, `loads` |
 | `pydhcp.relay` | `AsyncDHCPRelay`, `DEFAULT_MAX_HOPS`, `DHCPRelay`, `RFC1542_MAX_HOPS`, `ServerAddressLike` |
 | `pydhcp.server` | `AsyncDHCPServer`, `DHCPServer` |
@@ -282,10 +282,9 @@ lossless on the wire and safe on a screen; use them rather than calling
 ## Constants (`pydhcp._constants`)
 
 Not importable from a public module: they live in the private
-`pydhcp._constants`.
+`pydhcp._constants`. The two a caller needs, `UNSPECIFIED_ADDRESS` and
+`INFINITE_LEASE_TIME`, are exported by `pydhcp.packet` (`pydhcp/packet/AGENTS.md`).
 
-- **`WILDCARD_V4`** — `IPv4Address("0.0.0.0")`: the "every address" bind target, and
-  the source of a client that has none yet. netimps has no such constant.
 - **`BOOTP_MIN_PACKET_SIZE`** (300) — the minimal BOOTP message (RFC 951's
   fixed header plus its 64-octet vend field). `DHCPMessage.encode()` pads to
   it: RFC 1542 §2.1 has a relay agent check a datagram can hold this and
@@ -301,7 +300,6 @@ Not importable from a public module: they live in the private
   message-size limit to get the DHCP payload budget.
 - **`UDP_MAX_PACKET_SIZE`** (65535) — the listeners' default
   `max_packet_size`.
-- **`INFINITE_LEASE_TIME`** (`0xFFFFFFFF`) — RFC 2131's "infinite" lease.
 
 ## Exceptions (`pydhcp.exceptions`)
 

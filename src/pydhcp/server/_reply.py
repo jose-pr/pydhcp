@@ -145,23 +145,23 @@ class _Replies(_LeasePolicy):
         # giaddr is deliberately *not* reset: Table 3 says a reply echoes it,
         # and it is what lets the relay route the answer back to the segment the
         # request came from. Clearing it would strand every relayed client.
-        resp.siaddr = _const.WILDCARD_V4
+        resp.siaddr = _const.UNSPECIFIED_ADDRESS
         resp.sname = ""
         resp.file = ""
         if resp_ty is _enum.DHCPMessageType.DHCPOFFER:
             # Table 3: ciaddr is 0 in a DHCPOFFER. In a DHCPACK it is the
             # ciaddr from the DHCPREQUEST, so the clone is right there and this
             # must not be widened to cover both.
-            resp.ciaddr = _const.WILDCARD_V4
+            resp.ciaddr = _const.UNSPECIFIED_ADDRESS
         if resp_ty is _enum.DHCPMessageType.DHCPNAK:
             # RFC 2131 Table 3: a DHCPNAK carries no address and no lease time --
             # it refuses the client's. Cloning the request left ciaddr set and
             # the lease's address in yiaddr, i.e. a refusal that still looked
             # like an offer of the very address being refused.
-            resp.yiaddr = _const.WILDCARD_V4
-            resp.ciaddr = _const.WILDCARD_V4
+            resp.yiaddr = _const.UNSPECIFIED_ADDRESS
+            resp.ciaddr = _const.UNSPECIFIED_ADDRESS
         elif lease is None:
-            resp.yiaddr = _const.WILDCARD_V4
+            resp.yiaddr = _const.UNSPECIFIED_ADDRESS
         else:
             if lease.offered:
                 # What the OFFER promises is the lease the ACK would grant, not
@@ -303,7 +303,7 @@ class _Replies(_LeasePolicy):
             resp.options[DHCPOptionCode.RELAY_AGENT_INFORMATION] = relay_info
         if (
             resp_ty is _enum.DHCPMessageType.DHCPNAK
-            and msg.giaddr != _const.WILDCARD_V4
+            and msg.giaddr != _const.UNSPECIFIED_ADDRESS
         ):
             # RFC 2131 s4.3.2: through a relay the server MUST set the broadcast
             # bit, so that the relay broadcasts the NAK to the client; the
@@ -378,15 +378,15 @@ class _Replies(_LeasePolicy):
             # to the relay. Falling through to the normal rules unicast the
             # refusal to the very address the client was told it may not use, so
             # the client never saw it and retried until its timers expired.
-            if msg.giaddr != _const.WILDCARD_V4:
+            if msg.giaddr != _const.UNSPECIFIED_ADDRESS:
                 dest = msg.giaddr
                 to_relay = True
             else:
                 dest = _ipaddress.IPv4Address("255.255.255.255")
-        elif msg.giaddr != _const.WILDCARD_V4:
+        elif msg.giaddr != _const.UNSPECIFIED_ADDRESS:
             dest = msg.giaddr
             to_relay = True
-        elif msg.ciaddr != _const.WILDCARD_V4:
+        elif msg.ciaddr != _const.UNSPECIFIED_ADDRESS:
             dest = msg.ciaddr
         elif msg.broadcast:
             dest = _ipaddress.IPv4Address("255.255.255.255")
@@ -396,7 +396,7 @@ class _Replies(_LeasePolicy):
             # cannot deliver to yiaddr before the client owns it. Loopback is the
             # exception both ways -- there is no ARP to fail, and POSIX refuses a
             # broadcast from a socket bound to 127.0.0.1 outright.
-            if resp.yiaddr != _const.WILDCARD_V4 and (
+            if resp.yiaddr != _const.UNSPECIFIED_ADDRESS and (
                 self.UNICAST_TO_UNCONFIGURED_CLIENT or _is_loopback(context)
             ):
                 dest = resp.yiaddr

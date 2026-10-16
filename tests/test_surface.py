@@ -178,6 +178,8 @@ EXPECTED_PACKET = [
     "DHCPOpcode",
     "DHCPPort",
     "HardwareAddressType",
+    "INFINITE_LEASE_TIME",
+    "UNSPECIFIED_ADDRESS",
 ]
 
 EXPECTED_PACKET_ENUMS = [

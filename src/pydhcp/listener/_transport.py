@@ -52,7 +52,7 @@ def _dest_string(dst: _ipaddress.IPv4Address) -> str:
     0.0.0.0, which is what `str()` would produce and what `sendto` would then
     reject or silently route nowhere.
     """
-    return BROADCAST_ADDRESS if dst == _const.WILDCARD_V4 else str(dst)
+    return BROADCAST_ADDRESS if dst == _const.UNSPECIFIED_ADDRESS else str(dst)
 
 
 class UDPTransport(DHCPTransport):

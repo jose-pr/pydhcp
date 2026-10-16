@@ -791,3 +791,16 @@ def test_what_a_header_field_already_took_is_still_sent():
         0x8000,
         IPv4("192.0.2.9"),
     )
+
+
+def test_the_wire_constants_a_caller_needs_are_public() -> None:
+    import ipaddress
+
+    from pydhcp.packet import INFINITE_LEASE_TIME, UNSPECIFIED_ADDRESS
+
+    assert UNSPECIFIED_ADDRESS == ipaddress.IPv4Address("0.0.0.0")
+    assert INFINITE_LEASE_TIME == 0xFFFFFFFF == 2**32 - 1
+    message = DHCPMessage(DHCPOpcode.BOOTREQUEST)
+    assert (message.ciaddr, message.yiaddr, message.siaddr, message.giaddr) == (
+        UNSPECIFIED_ADDRESS,
+    ) * 4

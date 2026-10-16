@@ -264,7 +264,7 @@ class _ClientCore:
         if kind is not msg_type:
             return None
         if msg_type is _enum.DHCPMessageType.DHCPOFFER:
-            if msg.yiaddr == _const.WILDCARD_V4:
+            if msg.yiaddr == _const.UNSPECIFIED_ADDRESS:
                 self._log_limit.log(
                     LOGGER,
                     _logging.WARNING,
@@ -434,10 +434,10 @@ class _ClientCore:
             # an exchange stamps the real elapsed time before each send.
             secs=_dt.timedelta(seconds=0),
             flags=_enum.DHCPFlags.BROADCAST if broadcast else _enum.DHCPFlags.UNICAST,
-            ciaddr=_const.WILDCARD_V4,
-            yiaddr=_const.WILDCARD_V4,
-            siaddr=_const.WILDCARD_V4,
-            giaddr=_const.WILDCARD_V4,
+            ciaddr=_const.UNSPECIFIED_ADDRESS,
+            yiaddr=_const.UNSPECIFIED_ADDRESS,
+            siaddr=_const.UNSPECIFIED_ADDRESS,
+            giaddr=_const.UNSPECIFIED_ADDRESS,
             chaddr=bytes(chaddr),
             sname="",
             file="",
