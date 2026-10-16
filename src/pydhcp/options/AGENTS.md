@@ -144,7 +144,7 @@ DHCPOptionCode.register_type(optiontype) -> None
 DHCPOptionCode.get_type() -> type[DHCPOptionType]
 ```
 
-- **`DHCPOptionCode`** (`IntEnum` + `BaseDHCPOptionCode`) — the standard
+- **`DHCPOptionCode`** (an `OptionCodeEnum`) — the standard
   IANA option-code registry (`PAD`=0 … `END`=255 and everything in
   between), each member RFC-documented in its docstring. `.label() -> str`
   returns the enum member name (or `BaseDHCPOptionCode.label()`'s
@@ -175,11 +175,23 @@ BaseDHCPOptionCode.decode(code, value) -> DHCPOption
   constructs/looks up a code value), `.normalize(code, value) -> DHCPOption`,
   `.decode(code, value: bytearray) -> DHCPOption`. Subclass this (instead of
   `DHCPOptionCode`) to build an application-specific option-code enum with
-  its own codec bindings, and pass it as `DHCPOptions(codemap=...)`.
+  its own codec bindings, and pass it as `DHCPOptions(codemap=...)`; for an
+  enum, subclass `OptionCodeEnum` (next), which brings the rest.
   `int(code)` is the `value` attribute (an `IntEnum` member has one) or, for
   an `int` subclass, its own integer identity; a subclass with **neither**
   raises `TypeError` rather than answering `0`, which is PAD. `repr()` never
   raises, so such a code still prints as `[000]UNKNOWN` while you debug it.
+
+- **`OptionCodeEnum`** (`BaseDHCPOptionCode` + `IntEnum`, no members) — the
+  base of `DHCPOptionCode` and of your own code enum:
+  `class SiteCodes(OptionCodeEnum): SITE_NAME = 224`. It brings what
+  `DHCPOptionCode` does: a number 0-255 with no member is an **unnamed member**
+  (one per number, `.label()` `"UNKNOWN"`, `.name` `None`) rather than a
+  `ValueError`, and `.register_type(codec)` / `.get_type()` bind and read a
+  code's codec, `Bytes` until bound. **Each subclass has its own codec table
+  and its own unnamed members**: registering on `SiteCodes` never changes
+  `DHCPOptionCode`, and `DHCPOptionCode(250)` and `SiteCodes(250)` are each
+  their own class's member, whichever was made first.
 
 - **`DHCPOption`** (`NamedTuple[code: int | BaseDHCPOptionCode, value:
   DHCPOptionType]`) — one decoded/normalized option pair, as returned by

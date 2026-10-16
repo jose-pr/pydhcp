@@ -6,9 +6,6 @@ import enum as _enum
 from ._codecs._scalar import Bytes
 from ._codecs._base import OptionCodec, is_codec_class
 
-_CODEMAP: list[type[OptionCodec]] = [Bytes] * 256
-_PSEUDO_MEMBERS: dict[int, "DHCPOptionCode"] = {}
-
 
 @_ty.runtime_checkable
 class OptionCode(_ty.Protocol):
@@ -98,32 +95,61 @@ class DHCPOption(_ty.NamedTuple):
     value: "OptionCodec"
 
 
-class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
+_OptionCodeEnumT = _ty.TypeVar("_OptionCodeEnumT", bound="OptionCodeEnum")
+
+
+def _codecs(cls: type) -> list[type[OptionCodec]]:
+    """The codec of each code 0-255 in the code enum `cls`."""
+    return _ty.cast("list[type[OptionCodec]]", getattr(cls, "_codecs"))
+
+
+def _unnamed(cls: type) -> dict[int, _ty.Any]:
+    """The unnamed member the code enum `cls` made for each code with no name."""
+    return _ty.cast("dict[int, _ty.Any]", getattr(cls, "_unnamed"))
+
+
+class OptionCodeEnum(BaseDHCPOptionCode, _enum.IntEnum):
+    """The base of an option-code enum: a member per named code, the rest unnamed.
+
+    Each subclass has its own codec table and its own unnamed members, so one
+    enum's registrations and lookups never reach another's.
+    """
+
+    def __init_subclass__(cls, **kwargs: _ty.Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # Not annotated in the class body, where an enum would read them as members.
+        setattr(cls, "_codecs", [Bytes] * 256)
+        setattr(cls, "_unnamed", {})
+
     @classmethod
-    def _missing_(cls, value: object) -> "_ty.Optional[DHCPOptionCode]":
+    def _missing_(
+        cls: type[_OptionCodeEnumT], value: object
+    ) -> _ty.Optional[_OptionCodeEnumT]:
         """Return an opaque pseudo-member for any byte value without one.
 
-        Only 163 of codes 0-255 are members here, and RFC 3942 reserves 224-254
-        for site-specific use, so raising for the rest means a client sending any
-        of them gets no service at all: the receive path resolves every option
-        code before the packet reaches a handler. Such codes carry no known
-        structure, so `get_type()` returns `Bytes` and `label()` reports
-        "UNKNOWN" -- which is what the shipped API header documents.
+        Only 163 of codes 0-255 are members of `DHCPOptionCode`, and RFC 3942
+        reserves 224-254 for site-specific use, so raising for the rest means a
+        client sending any of them gets no service at all: the receive path
+        resolves every option code before the packet reaches a handler. Such
+        codes carry no known structure, so `get_type()` returns `Bytes` and
+        `label()` reports "UNKNOWN" -- which is what the shipped API header
+        documents.
         """
         if not isinstance(value, int) or isinstance(value, bool):
             return None
         if not 0 <= value <= 255:
             return None
-        pseudo = _PSEUDO_MEMBERS.get(value)
+        unnamed = _unnamed(cls)
+        pseudo = unnamed.get(value)
         if pseudo is None:
             pseudo = int.__new__(cls, value)
             pseudo._name_ = None  # type: ignore[assignment]
             pseudo._value_ = value
-            _PSEUDO_MEMBERS[value] = pseudo
-        return pseudo
+            pseudo = unnamed.setdefault(value, pseudo)
+        return _ty.cast(_OptionCodeEnumT, pseudo)
 
     def register_type(self, optiontype: type[OptionCodec]) -> None:
-        """Bind `optiontype` as this code's codec, permanently.
+        """Bind `optiontype` as this code's codec in this enum, permanently.
 
         The built-in registry is loaded with this module, so a registration made
         after import is always the later write.
@@ -133,16 +159,20 @@ class DHCPOptionCode(BaseDHCPOptionCode, _enum.IntEnum):
                 "optiontype must be a DHCPOptionType subclass or have the methods "
                 "of OptionCodec"
             )
-        _CODEMAP[self] = optiontype
+        _codecs(type(self))[self] = optiontype
 
     def get_type(self) -> type[OptionCodec]:
-        return _CODEMAP[self]
+        return _codecs(type(self))[self]
 
     def label(self) -> str:
         label = getattr(self, "name", None)
         if not isinstance(label, str):
             return BaseDHCPOptionCode.label(self)
         return label
+
+
+class DHCPOptionCode(OptionCodeEnum):
+    """The IANA DHCPv4 option codes, each member documented with its RFC text."""
 
     #
     #   VENDOR EXTENSIONS

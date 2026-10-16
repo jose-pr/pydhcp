@@ -26,6 +26,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   already held — names, readable values and `{"hex": ...}` where those would not give the same
   octets back — on the bag itself. `DHCPMessage` and `DHCPLease` both write their options this way.
 
+- **`OptionCodeEnum`**, the base of `DHCPOptionCode`, for an option-code enum of your own:
+  `class SiteCodes(OptionCodeEnum): SITE_NAME = 224`. It brings unnamed members for codes
+  without a name and `register_type` / `get_type`, with its own codec table, and works as a
+  `DHCPOptions(codemap=...)`.
+
+### Fixed
+
+- **An unnamed option code belonged to whichever enum made it first.** The unnamed members and
+  the codec table were shared by every class, so an enum that reused `DHCPOptionCode`'s
+  `_missing_` made `DHCPOptionCode(250)` raise `TypeError` once it had made 250 itself, and the
+  other way round. Each code enum now keeps its own.
+
 ### Changed
 
 - **`DHCPMessage.from_mapping()` (and `from_text()`) require only `op`.** A header field the

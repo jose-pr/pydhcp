@@ -7,6 +7,7 @@ from ._codes import (
     BaseDHCPOptionCode as BaseDHCPOptionCode,
     DHCPOption as DHCPOption,
     OptionCode as OptionCode,
+    OptionCodeEnum as OptionCodeEnum,
 )
 from ._codecs import DHCPOptionType as DHCPOptionType, OptionCodec as OptionCodec
 from ._codecs._base import is_codec, is_codec_class
@@ -90,6 +91,7 @@ __all__ = [
     "MoSIPv4AddressRecord",
     "OctetString",
     "OptionCode",
+    "OptionCodeEnum",
     "OptionCodec",
     "OptionOverload",
     "PCPServerList",

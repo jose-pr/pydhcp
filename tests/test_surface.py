@@ -207,6 +207,7 @@ EXPECTED_OPTIONS = sorted(
         "MAX_OPTION_CODE",
         "MIN_OPTION_CODE",
         "OptionCode",
+        "OptionCodeEnum",
     ]
 )
 

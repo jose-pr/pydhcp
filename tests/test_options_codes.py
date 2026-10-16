@@ -12,7 +12,7 @@ import pytest
 
 from pydhcp.options import DHCPOptions, MAX_OPTION_CODE, MIN_OPTION_CODE
 from pydhcp.options import BaseDHCPOptionCode
-from pydhcp.options import DHCPOptionCode
+from pydhcp.options import Bytes, DHCPOptionCode
 
 
 def test_pad_and_end_are_not_storable_options() -> None:
@@ -120,3 +120,58 @@ def test_a_code_class_that_is_an_int_still_converts() -> None:
     assert int(IntCode(53)) == 53
     # private: the code map as stored
     assert DHCPOptions()._codemap is DHCPOptionCode
+
+
+# --- a code enum of one's own: its own unnamed members and codecs ----------------
+
+
+def _site_codes() -> type:
+    from pydhcp.options import OptionCodeEnum
+
+    class SiteCodes(OptionCodeEnum):
+        SITE_NAME = 224
+
+    return SiteCodes
+
+
+@pytest.mark.parametrize("first", ["pydhcp", "site"])
+def test_an_unnamed_code_is_each_enums_own_whichever_was_made_first(first: str) -> None:
+    site = _site_codes()
+    makers = [lambda: DHCPOptionCode(249), lambda: site(249)]
+    for make in makers if first == "pydhcp" else reversed(makers):
+        make()
+    assert type(DHCPOptionCode(249)) is DHCPOptionCode
+    assert type(site(249)) is site
+    assert site(249) is site(249) and site(249).label() == "UNKNOWN"
+    assert site(249).name is None and int(site(249)) == 249
+
+
+def test_a_registration_on_one_enum_leaves_the_other_alone() -> None:
+    from pydhcp.options import String
+
+    site = _site_codes()
+    before = DHCPOptionCode(224).get_type()
+    site.SITE_NAME.register_type(String)
+    site(230).register_type(String)
+    assert site.SITE_NAME.get_type() is String and site(230).get_type() is String
+    assert DHCPOptionCode(224).get_type() is before
+    assert DHCPOptionCode(230).get_type() is Bytes
+    assert site(6).get_type() is Bytes  # nothing of DHCPOptionCode's comes along
+
+
+def test_an_own_enum_works_as_a_codemap() -> None:
+    from pydhcp.options import String
+
+    site = _site_codes()
+    site.SITE_NAME.register_type(String)
+    options = DHCPOptions(codemap=site)
+    options[224] = "lab"
+    options[250] = b"\x01"
+    assert options.get(224) == "lab"
+    assert options.to_mapping() == {"SITE_NAME": "lab", "250": "01"}
+
+
+def test_an_unnamed_member_pickles_to_the_same_member() -> None:
+    import pickle
+
+    assert pickle.loads(pickle.dumps(DHCPOptionCode(250))) is DHCPOptionCode(250)

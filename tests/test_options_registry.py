@@ -49,8 +49,8 @@ def test_every_standard_code_is_bound_the_moment_the_package_is_imported() -> No
         import pydhcp.options._codes as codes
         from pydhcp.options import Bytes
 
-        bound = sum(1 for codec in codes._CODEMAP if codec is not Bytes)
-        print(codes._CODEMAP[6] is not Bytes, bound > 100)
+        bound = sum(1 for codec in codes.DHCPOptionCode._codecs if codec is not Bytes)
+        print(codes.DHCPOptionCode._codecs[6] is not Bytes, bound > 100)
         """)
     assert out == "True True", out
 
@@ -68,7 +68,7 @@ def test_a_registration_made_after_import_replaces_the_built_in_codec() -> None:
 
 
 def test_registering_a_non_codec_still_raises_before_anything_is_written() -> None:
-    """The type check stays ahead of the registry load and of `_CODEMAP`."""
+    """The type check stays ahead of the registry load and of the codec table."""
     before = DHCPOptionCode.DOMAIN_NAME.get_type()
     with pytest.raises(TypeError):
         DHCPOptionCode.DOMAIN_NAME.register_type(int)  # type: ignore[arg-type]
