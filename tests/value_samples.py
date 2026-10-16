@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import typing as _ty
 
-from pydhcp.options import DHCPOptionCode
+from pydhcp.options import DHCPOptionCode, IPXEBusID, IPXEOptions, IPXEVersion
 from pydhcp.packet import DHCPMessageType
 
 # private: the unit under test is not re-exported from a public module
@@ -44,6 +44,10 @@ SAMPLES: dict[type, tuple[tuple[_ty.Any, ...], tuple[_ty.Any, ...]]] = {
     U16: ((7,), (8,)),
     U32: ((86400,), (86401,)),
     I32: ((-5,), (5,)),
+    I8: ((-5,), (5,)),
+    IPXEBusID: ((1, b"\x80\x86\x10\x0e"), (1, b"\x80\x86\x10\x0f")),
+    IPXEVersion: ((1, 21, 1), (1, 21, 2)),
+    IPXEOptions: (([(0x13, b"\x01")],), ([(0x14, b"\x01")],)),
     ClientIdentifier: ((b"\x01\x02\x03",), (b"\x01\x02\x04",)),
     OptionOverload: ((1,), (2,)),
     UserClass: (([b"ab"],), ([b"abc"],)),
@@ -134,6 +138,7 @@ ITEMS: dict[type, tuple[_ty.Any, _ty.Any]] = {
     UserClass: (b"zz", b""),
     EncapsulatedOptions: ((9, b"z"), (1,)),
     RelayAgentInformation: ((9, b"z"), (1,)),
+    IPXEOptions: ((0xB0, 1), (1,)),
     VIVendorSpecificInformation: ((9, b"z"), (1,)),
     VIVendorClass: ((9, [b"z"]), (9, [b""])),
     MoSIPv4AddressList: ((2, ["192.0.2.9"]), (1, ["not an address"])),

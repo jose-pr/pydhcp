@@ -75,6 +75,7 @@ from ._scalar import (
     U16 as U16,
     U32 as U32,
     I32 as I32,
+    I8 as I8,
     ClientIdentifier as ClientIdentifier,
     OptionOverload as OptionOverload,
 )
@@ -120,6 +121,7 @@ __all__ = [
     "U16",
     "U32",
     "I32",
+    "I8",
     "ClientIdentifier",
     "OptionOverload",
     "UserClass",

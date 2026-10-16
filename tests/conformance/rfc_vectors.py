@@ -54,6 +54,7 @@ from pydhcp.options import (
     VIVendorClass,
     VIVendorSpecificInformation,
 )
+from pydhcp.options import IPXEBusID, IPXEOptions, IPXEVersion
 from pydhcp.packet import DHCPMessageType
 
 
@@ -438,4 +439,27 @@ VECTORS.append(
         code=121,
         direction="decode",
     )
+)
+
+# Option 175 is iPXE's, not an RFC's: the layouts are those of iPXE's
+# src/include/ipxe/dhcp.h (DHCP_EB_BUS_ID's five octets for PCI, the three
+# octets FEATURE_VERSION writes) and features.h (each DHCP_EB_FEATURE_* a
+# one-octet 1).
+VECTORS.extend(
+    [
+        Vector(
+            "ipxe-dhcp.h-bus-id-pci",
+            IPXEBusID,
+            _h("01 80 86 10 0e"),
+            (1, _h("80 86 10 0e")),
+        ),
+        Vector("ipxe-features.h-version", IPXEVersion, _h("01 15 01"), (1, 21, 1)),
+        Vector(
+            "ipxe-features.h-https-and-efi-flags-and-version",
+            IPXEOptions,
+            _h("14 01 01 24 01 01 eb 03 01 15 01"),
+            ([(0x14, b"\x01"), (0x24, b"\x01"), (0xEB, _h("01 15 01"))],),
+            code=175,
+        ),
+    ]
 )

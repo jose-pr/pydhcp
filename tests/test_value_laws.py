@@ -19,7 +19,7 @@ import pytest
 
 from helpers import build_request
 from pydhcp import DHCPMessage, DHCPOptions, DHCPValueError
-from pydhcp.options import DHCPOptionCode
+from pydhcp.options import DHCPOptionCode, IPXEBusID, IPXEOptions, IPXEVersion
 
 # private: the unit under test is not exported from a public module
 from pydhcp.options import _codecs as codecs
@@ -45,6 +45,9 @@ EVAL_NAMESPACE = {
     **vars(codecs),
     "DHCPMessageType": DHCPMessageType,
     "DHCPOptionCode": DHCPOptionCode,
+    "IPXEBusID": IPXEBusID,
+    "IPXEOptions": IPXEOptions,
+    "IPXEVersion": IPXEVersion,
     "IPv4Address": IPv4Address,
     "ipaddress": ipaddress,
 }

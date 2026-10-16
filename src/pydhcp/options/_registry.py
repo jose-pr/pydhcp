@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ._codes import DHCPOptionCode
+from ._ipxe import IPXEOptions
 from ._codecs._addresses import (
     ClasslessRoute,
     IPv4AddressOption,
@@ -186,3 +187,6 @@ DHCPOptionCode.FORCERENEW_NONCE_CAPABLE.register_type(List[U8])
 DHCPOptionCode.RDNSS_SELECTION.register_type(RDNSSSelection)
 # RFC 6926 s6.2.2: a status octet plus an optional UTF-8 message.
 DHCPOptionCode.STATUS_CODE.register_type(StatusCode)
+# iPXE's encapsulated options (its src/include/ipxe/dhcp.h); IANA lists 175 as
+# "Etherboot (Tentatively Assigned)".
+DHCPOptionCode.ETHERBOOT.register_type(IPXEOptions)

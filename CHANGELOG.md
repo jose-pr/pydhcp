@@ -60,6 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   documents) and the capture filter's `option.NAME` all go through it; `from_mapping()` and the
   filter took exact member names only.
 
+- **Option 175, iPXE's encapsulated options, decodes as `IPXEOptions`**: the sub-options named by
+  `IPXEOption` (iPXE's `DHCP_EB_*` numbers), each read by its codec through `.get("https")`,
+  the feature flags through `.features()`, `BUS_ID` as `IPXEBusID` (PCI vendor and device) and
+  `VERSION` as `IPXEVersion`; a server builds one from `(name, value)` pairs. Its presence is how
+  to tell iPXE from a PXE ROM. Also `I8`, a signed one-octet integer codec.
+
+### Changed
+
+- **`options.get(175)` is an `IPXEOptions`, not `Bytes`**, and a document writes option 175 as
+  `[name, value]` pairs in place of hex text. The octets on the wire are unchanged.
+
 ### Fixed
 
 - **The codec law `Codec(value.to_json()) == value` was false for 19 codecs**: `Bytes` refuses

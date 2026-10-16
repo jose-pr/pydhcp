@@ -411,6 +411,13 @@ class I32(FixedLengthInteger):
     SIGNED = True
 
 
+class I8(FixedLengthInteger):
+    """Signed 8-bit integer."""
+
+    NUMBER_OF_BYTES = 1
+    SIGNED = True
+
+
 _ClientIdentifierT = _ty.TypeVar("_ClientIdentifierT", bound="ClientIdentifier")
 
 

@@ -13,8 +13,10 @@ from ._codecs import DHCPOptionType as DHCPOptionType, OptionCodec as OptionCode
 from ._codecs._base import is_codec, is_codec_class
 from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
+from ._ipxe import IPXEBusID, IPXEOption, IPXEOptions, IPXEVersion
 from .. import _constants as _const
-from . import _names, _wire
+from . import _merge, _wire
+from ._merge import OptionSource as _OptionSource
 from ._wire import (
     MAX_OPTION_CODE as MAX_OPTION_CODE,
     MIN_OPTION_CODE as MIN_OPTION_CODE,
@@ -26,18 +28,6 @@ _T = _ty.TypeVar("_T", bound=DHCPOptionType)
 _C = _ty.TypeVar("_C", bound=OptionCode)
 _R = _ty.TypeVar("_R")
 _OptionsT = _ty.TypeVar("_OptionsT", bound="DHCPOptions")
-
-
-class _Keyed(_ty.Protocol):
-    """What `dict.update` reads as a mapping: `keys()` and `[]`."""
-
-    def keys(self) -> _ty.Iterable[_ty.Any]: ...
-
-    def __getitem__(self, __key: _ty.Any) -> _ty.Any: ...
-
-
-#: What `update()` and `copy()` merge: a mapping of code to value, or pairs.
-_OptionSource = _ty.Union[_Keyed, _ty.Iterable[_ty.Tuple[int, _ty.Any]]]
 
 __all__ = [
     "BaseDHCPOptionCode",
@@ -81,6 +71,11 @@ __all__ = [
     "FixedLengthInteger",
     "Flag",
     "I32",
+    "I8",
+    "IPXEBusID",
+    "IPXEOption",
+    "IPXEOptions",
+    "IPXEVersion",
     "IPv4AddressOption",
     "List",
     "MAX_OPTION_CODE",
@@ -235,31 +230,7 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         `options[code] = value` stores it. All or nothing: a refused code,
         name or value leaves the bag as it was.
         """
-        staged = DHCPOptions(self._codemap)
-        # Payloads are shared, never written: a store replaces the bytearray.
-        staged._options = _ty.OrderedDict(self._options)
-        for source in options:
-            pairs: _ty.Iterable[tuple[int, _ty.Any]]
-            if hasattr(source, "keys"):
-                mapping = _ty.cast(_Keyed, source)
-                pairs = ((code, mapping[code]) for code in mapping.keys())
-            else:
-                pairs = source
-            for code, value in pairs:
-                staged[code] = value
-        for name, value in overrides.items():
-            staged[self._code_named(name)] = value
-        self._options.update(staged._options)
-
-    def _code_named(self, name: str) -> int:
-        """The code a keyword names in this bag's codemap (`_names.resolve_code`).
-
-        `TypeError`, as for any keyword a call does not take, when it names none.
-        """
-        try:
-            return _names.resolve_code(self._codemap, name)
-        except ValueError as exc:
-            raise TypeError(str(exc)) from None
+        _merge.merge(self, options, overrides)
 
     def to_mapping(self) -> dict[str, _ty.Any]:
         """The options as plain data: the code's name (its number when it has

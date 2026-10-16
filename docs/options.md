@@ -123,7 +123,7 @@ from the option registry (`python docs/options_table.py --write` regenerates it)
 fails when the page and the registry disagree.
 
 <!-- options-table:begin -->
-161 option codes are named, and a further two (0 and 255) frame the option stream. 123 of the named codes have a structured codec; the other 38 are carried as opaque `Bytes` (the octets are kept and forwarded unchanged). Any other code from 0 to 255 is also read as opaque `Bytes`.
+161 option codes are named, and a further two (0 and 255) frame the option stream. 124 of the named codes have a structured codec; the other 37 are carried as opaque `Bytes` (the octets are kept and forwarded unchanged). Any other code from 0 to 255 is also read as opaque `Bytes`.
 
 | Code | Name | Codec | RFC | Departure from the RFC text |
 | ---: | --- | --- | --- | --- |
@@ -275,7 +275,7 @@ fails when the page and the registry disagree.
 | 159 | `V4_PORTPARAMS` | `Bytes` (opaque) | RFC 7618 |  |
 | 161 | `MUD_URL_V4` | `String` | RFC 8520 |  |
 | 162 | `V4_DNR` | `Bytes` (opaque) | RFC 9463 |  |
-| 175 | `ETHERBOOT` | `Bytes` (opaque) | none |  |
+| 175 | `ETHERBOOT` | `IPXEOptions` | none |  |
 | 176 | `IP_TELEPHONE` | `Bytes` (opaque) | none |  |
 | 177 | `LEGACY_CCC` | `Bytes` (opaque) | none |  |
 | 208 | `PXE_LINUX_MAGIC` | `Bytes` (opaque) | RFC 5071 |  |

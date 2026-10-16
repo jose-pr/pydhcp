@@ -71,8 +71,8 @@ Flag(value=True)
 
 - **`BaseFixedLengthInteger`** / **`FixedLengthInteger`** — abstract fixed-
   width big-endian integer base; subclasses set `NUMBER_OF_BYTES`/`SIGNED`.
-  **`U8`**/**`U16`**/**`U32`** (unsigned, 1/2/4 bytes), **`I32`** (signed,
-  4 bytes) are the concrete codecs. The constructor takes a whole number (or
+  **`U8`**/**`U16`**/**`U32`** (unsigned, 1/2/4 bytes), **`I8`**/**`I32`**
+  (signed, 1/4 bytes) are the concrete codecs. The constructor takes a whole number (or
   its text) and raises `DHCPValueError` outside the type's range
   (`I32`: -2147483648 to 2147483647) and `TypeError` for a float or other type.
 - **`ClientIdentifier`** (`Bytes` subclass) — RFC 2132 client identifier
@@ -257,6 +257,48 @@ TLVOption(code, value)
   vendor-identifying vendor class (enterprise-number-keyed data / its list
   container). Each entry may be bytes or the hex text `to_json` writes, so a
   message written as JSON, YAML or TOML reads back as the same value.
+
+## iPXE's option 175 (`pydhcp.options`)
+
+```python
+IPXEOptions.get(code: str | int, default=None) -> Any
+IPXEOptions.features() -> list[IPXEOption]
+IPXEBusID(bus_type: int, ident)
+IPXEBusID.pci(vendor: int, device: int) -> IPXEBusID
+IPXEVersion(major, minor=0, patch=0)
+```
+
+Option 175 (`DHCPOptionCode.ETHERBOOT`) is registered as **`IPXEOptions`**. iPXE
+sends it in **every** request, so `175 in msg.options` is how to tell iPXE from a
+PXE ROM; option 77's `iPXE` is a user class a script can change. The sub-option
+numbers and layouts are iPXE's own (`src/include/ipxe/dhcp.h` and `features.h`).
+
+- **`IPXEOption`** (`OptionCodeEnum`) — the sub-option codes, named as iPXE's
+  `DHCP_EB_*` constants: `PRIORITY` (`I8`); the feature flags iPXE sets,
+  `PXE_EXT`, `ISCSI`, `AOE`, `HTTP`, `HTTPS`, `TFTP`, `FTP`, `DNS`, `BZIMAGE`,
+  `MULTIBOOT`, `SLAM`, `SRP`, `NBI`, `PXE`, `ELF`, `COMBOOT`, `EFI`, `FCOE`,
+  `VLAN`, `MENU`, `SDI`, `NFS` (0x10 to 0x29, each a `U8` of 1; `.is_feature()`);
+  `KEEP_SAN`, `SKIP_SAN_BOOT`, `NO_PXEDHCP`, `USE_CACHED`, `SAN_RETRY`,
+  `SAN_DRIVE` (`U8`); `BUS_ID` (`IPXEBusID`); `VERSION` (`IPXEVersion`);
+  `SCRIPTLET`, `SYSLOGS_SERVER`, `SAN_FILENAME`, `USERNAME`, `PASSWORD`,
+  `REVERSE_USERNAME`, `REVERSE_PASSWORD` (`String`); `TRUST`, `CERT`, `KEY`,
+  `CROSS_CERT`, `UID`, `GID` and any unnamed code opaque `Bytes`.
+- **`IPXEOptions`** (`EncapsulatedOptions` subclass) — the sub-options as the
+  octets they arrived as, in order (PAD and END framing honoured). **`.get(code)`**
+  reads the first sub-option `code` names (a number or a name
+  `IPXEOption.resolve` reads: `"bus-id"`, `"https"`) by its codec, octets its
+  codec refuses as `Bytes`, never an error; **`.features()`** lists the flags
+  present. Built from `(code, value)` items whose code is a number or a name and
+  whose value is octets, a codec value, or what the codec's `from_json` takes:
+  `IPXEOptions([(IPXEOption.NO_PXEDHCP, 1), ("san-filename", "iscsi:...")])`.
+  `to_json()` writes `[name, value]` pairs (`[["HTTPS", 1], ["VERSION",
+  "1.21.1"]]`), a sub-option whose readable form would not give its octets back
+  as `{"hex": ...}`; `display_text()` reads `HTTPS=U8(1), BUS_ID=PCI 8086:100e`.
+- **`IPXEBusID`** (record) — `BUS_ID`: `bus_type` (1 is PCI) and `ident`, the
+  octets that bus identifies the NIC by; for PCI, `vendor` and `device` read
+  them (big-endian), else `None`. `IPXEBusID.pci(0x8086, 0x100E)` builds one.
+- **`IPXEVersion`** (record) — `VERSION`: `major`, `minor`, `patch`, one octet
+  each; also built from `"1.21.1"`, which `to_json()` writes.
 
 ## Domain names (`pydhcp.options._codecs._domain`)
 

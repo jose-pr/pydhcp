@@ -2,6 +2,7 @@ import pytest
 import logging
 import json
 from pydhcp.options import (
+    DHCPOptions,
     List,
     IPv4AddressOption,
     String,
@@ -1123,3 +1124,56 @@ def test_a_list_codec_names_its_item_type() -> None:
     assert DHCPOptionCodes[DHCPOptionCode].item_type() is DHCPOptionCode
     with pytest.raises(TypeError, match="subscript"):
         List.item_type()
+
+
+# --- option 175: iPXE's encapsulated options --------------------------------------
+
+#: What an iPXE 1.21.1 build with HTTP, HTTPS and EFI on an Intel e1000 sends.
+_IPXE_175 = bytes.fromhex(
+    "130101 140101 240101 b1050180 86100e eb03011501".replace(" ", "")
+)
+
+
+def test_option_175_reads_as_ipxes_sub_options() -> None:
+    from pydhcp.options import IPXEBusID, IPXEOption, IPXEOptions, IPXEVersion
+
+    options = DHCPOptions()
+    options[175] = _IPXE_175
+    ipxe = options.get(175)
+    assert isinstance(ipxe, IPXEOptions)
+    assert ipxe.features() == [IPXEOption.HTTP, IPXEOption.HTTPS, IPXEOption.EFI]
+    assert ipxe.get("https") == 1 and ipxe.get(IPXEOption.ISCSI) is None
+    bus = ipxe.get("bus-id")
+    assert isinstance(bus, IPXEBusID) and (bus.vendor, bus.device) == (0x8086, 0x100E)
+    assert ipxe.get(IPXEOption.VERSION) == IPXEVersion("1.21.1")
+    assert "HTTPS=" in ipxe.display_text() and "PCI 8086:100e" in ipxe.display_text()
+
+
+def test_option_175_round_trips_through_a_document_by_name() -> None:
+    import json
+
+    from pydhcp.options import IPXEOptions
+
+    options = DHCPOptions()
+    options[175] = _IPXE_175 + bytes([0xC2, 2, 0, 7])  # UID: opaque, kept as octets
+    document = json.loads(json.dumps(options.to_mapping()))
+    assert document["ETHERBOOT"][0] == ["HTTP", 1]
+    assert document["ETHERBOOT"][-1] == ["UID", {"hex": "0007"}]
+    assert DHCPOptions.from_mapping(document) == options
+    assert IPXEOptions.from_json(document["ETHERBOOT"]).pack() == bytes(options[175])
+
+
+def test_a_server_builds_option_175_from_names_and_values() -> None:
+    from pydhcp.options import IPXEOption, IPXEOptions
+
+    reply = IPXEOptions([(IPXEOption.NO_PXEDHCP, 1), ("san-filename", "iscsi:t")])
+    assert reply.pack() == bytes([0xB0, 1, 1, 0xBC, 7]) + b"iscsi:t"
+    with pytest.raises(ValueError):
+        IPXEOptions([("no-such-sub-option", 1)])
+
+
+def test_a_sub_option_its_codec_refuses_comes_back_as_octets() -> None:
+    from pydhcp.options import IPXEOptions
+
+    ipxe = IPXEOptions.unpack(bytes([0xEB, 2, 1, 21]))  # VERSION is three octets
+    assert ipxe.get("version") == b"\x01\x15"
