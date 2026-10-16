@@ -167,3 +167,19 @@ def test_what_the_constructor_refuses_is_refused(
 def test_other_keys_are_ignored() -> None:
     lease = DHCPLease.from_mapping({"ip": "10.0.0.5", "client": "01:aa"})
     assert lease == DHCPLease("10.0.0.5")
+
+
+def test_a_document_written_before_an_option_had_a_codec_still_loads() -> None:
+    """Options 175, 94 and 97 were opaque, so a document holds them as hex text."""
+    options = DHCPOptions.from_mapping(
+        {
+            "ETHERBOOT": "130101eb03011501",
+            "CLIENT_NDI": "010310",
+            "97": "00" + "11" * 16,
+        }
+    )
+    assert bytes(options[175]) == bytes.fromhex("130101eb03011501")
+    assert options.get(94).display_text() == "UNDI 3.16"
+    assert options.get(97).uuid is not None
+    with pytest.raises(DHCPValueError, match="CLIENT_NDI"):
+        DHCPOptions.from_mapping({"CLIENT_NDI": "not hex"})

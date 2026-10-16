@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Options 94, 97 and 175 decode to structured values where they were `Bytes`, and option 93's
+entries are named; the octets on the wire are the same. "Changed" lists these and the rest of what
+behaves differently.
+
 ### Added
 
 - **`DHCPOptions.update(*options, **overrides)` merges several bags in one call.** Each
@@ -25,16 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`DHCPOptions.to_mapping()` / `from_mapping()`**: the `options` form a message's document
   already held — names, readable values and `{"hex": ...}` where those would not give the same
   octets back — on the bag itself. `DHCPMessage` and `DHCPLease` both write their options this way.
-
 - **`OptionCodeEnum`**, the base of `DHCPOptionCode`, for an option-code enum of your own:
   `class SiteCodes(OptionCodeEnum): SITE_NAME = 224`. It brings unnamed members for codes
   without a name and `register_type` / `get_type`, with its own codec table, and works as a
   `DHCPOptions(codemap=...)`.
-
 - **`pydhcp.packet.UNSPECIFIED_ADDRESS`** (`IPv4Address("0.0.0.0")`, what an address header
   field holds when it carries none) **and `INFINITE_LEASE_TIME`** (`0xFFFFFFFF`, RFC 2131's
   "infinity" for option 51), so a caller need not define its own.
-
 - **`DHCPLease` carries the BOOTP boot fields `siaddr`, `sname` and `file`**, and the server
   puts them in the OFFER and ACK it builds from the lease (never in a NAK), so a server built on
   pydhcp can answer a PXE client. They are blank by default, as replies were; checked to fit
@@ -45,32 +46,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   one that has none. Strict, the default, is unchanged. `from_mapping(strict=False)` reads a
   document with no `ip` that way, and the server treats an address-less lease returned by
   `acquire_lease` as no lease.
-
 - **`DHCPOptionType.from_json(data)`**, the inverse of `to_json()`: the documented codec law is
   now `Codec.from_json(value.to_json()) == value`, and a test holds every built-in codec to it.
   `Bytes.from_json` reads hex text; records with several fields read their `to_json` list;
   `List[T]` reads each item with `T.from_json`. `from_mapping` uses it.
-
 - **`List.item_type()`**: the codec of a list codec's items (`List[U16].item_type()` is `U16`,
   `CCCOption.item_type()` is `CCCSubOption`), so a caller need not read the private `_args_`.
-
 - **`BaseDHCPOptionCode.resolve(name)`, one reading of an option's name**: a number, `option-67`,
   or a member name in any case with `-` and `_` alike (`bootfile-name`), an alias included.
   `DHCPOptions.update()` keywords, `from_mapping()` keys (so `DHCPMessage` and `DHCPLease`
   documents) and the capture filter's `option.NAME` all go through it; `from_mapping()` and the
   filter took exact member names only.
-
 - **Option 175, iPXE's encapsulated options, decodes as `IPXEOptions`**: the sub-options named by
   `IPXEOption` (iPXE's `DHCP_EB_*` numbers), each read by its codec through `.get("https")`,
   the feature flags through `.features()`, `BUS_ID` as `IPXEBusID` (PCI vendor and device) and
   `VERSION` as `IPXEVersion`; a server builds one from `(name, value)` pairs. Its presence is how
   to tell iPXE from a PXE ROM. Also `I8`, a signed one-octet integer codec.
-
 - **The PXE options of RFC 4578 are structured**: option 93 is a `List[ClientArchitecture]`,
   named from IANA's Processor Architecture Types registry (7 is `X64_UEFI`, 9 is `EBC`, an
   unknown number an unnamed member); option 94 is `ClientNDI` (`UNDI 3.16`); option 97 is
   `ClientMachineID`, whose `.uuid` reads a type 0 GUID.
-
 - **`LenientUserClass`** reads option 77 in either form clients send, RFC 3004's length-prefixed
   classes or iPXE's one flat string: `options.get(77, decode=LenientUserClass)`. Option 77
   itself stays opaque `Bytes`, and the strict `UserClass` now names `LenientUserClass` when it
@@ -80,9 +75,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 - **Options 93, 94 and 97 decode to the new codecs**: an architecture still compares equal to its
   number (`options.get(93) == [7]`), but options 94 and 97 are records, no longer `Bytes`, and a
-  document writes option 93 by name (`["X64_UEFI"]`). The octets on the wire are unchanged.
+  document writes option 93 by name (`["X64_UEFI"]`). The octets on the wire are unchanged, and a
+  document written by 0.8, which holds options 94 and 97 as hex text, still loads.
 - **`options.get(175)` is an `IPXEOptions`, not `Bytes`**, and a document writes option 175 as
-  `[name, value]` pairs in place of hex text. The octets on the wire are unchanged.
+  `[name, value]` pairs in place of hex text, which it still reads. The octets on the wire are
+  unchanged.
+- **`DHCPMessage.from_mapping()` (and `from_text()`) require only `op`.** A header field the
+  document leaves out takes the constructor's default (`0.0.0.0` for an address, `0` for a
+  number, an empty `chaddr`) where it was a `ValueError`, and `options` may be left out or null.
+- **The `ImportError` for a document format without the `pktcap` extra** reads "a message or a
+  lease as YAML, TOML or INI text needs the 'pktcap' extra".
+- **The leases have their own API header, `pydhcp/lease/AGENTS.md`**, out of the server's;
+  `pydhcp.lease` is a package now, with the same import path and names.
 
 ### Fixed
 
@@ -98,16 +102,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the codec table were shared by every class, so an enum that reused `DHCPOptionCode`'s
   `_missing_` made `DHCPOptionCode(250)` raise `TypeError` once it had made 250 itself, and the
   other way round. Each code enum now keeps its own.
-
-### Changed
-
-- **`DHCPMessage.from_mapping()` (and `from_text()`) require only `op`.** A header field the
-  document leaves out takes the constructor's default (`0.0.0.0` for an address, `0` for a
-  number, an empty `chaddr`) where it was a `ValueError`, and `options` may be left out or null.
-- **The `ImportError` for a document format without the `pktcap` extra** reads "a message or a
-  lease as YAML, TOML or INI text needs the 'pktcap' extra".
-- **The leases have their own API header, `pydhcp/lease/AGENTS.md`**, out of the server's;
-  `pydhcp.lease` is a package now, with the same import path and names.
 
 ## [0.8.1] - 2026-10-14
 

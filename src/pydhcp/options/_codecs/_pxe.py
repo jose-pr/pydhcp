@@ -160,6 +160,14 @@ class ClientNDI(_Record):
     def to_json(self) -> list[int]:
         return [self.type, self.major, self.minor]
 
+    @classmethod
+    def from_json(cls, data: _ty.Any) -> _ty.Any:
+        """What `to_json` writes, or the hex text of a document written while
+        this option had no codec of its own."""
+        if isinstance(data, str):
+            return cls.unpack(Bytes.parse(data))
+        return super().from_json(data)
+
     def display_text(self) -> str:
         kind = "UNDI" if self.type == self.UNDI else f"type {self.type}"
         return f"{kind} {self.major}.{self.minor}"
@@ -215,6 +223,14 @@ class ClientMachineID(_Record):
 
     def to_json(self) -> list[_ty.Any]:
         return [self.type, self.ident.to_json()]
+
+    @classmethod
+    def from_json(cls, data: _ty.Any) -> _ty.Any:
+        """What `to_json` writes, or the hex text of a document written while
+        this option had no codec of its own."""
+        if isinstance(data, str):
+            return cls.unpack(Bytes.parse(data))
+        return super().from_json(data)
 
     def display_text(self) -> str:
         found = self.uuid

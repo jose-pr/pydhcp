@@ -256,6 +256,14 @@ class IPXEOptions(EncapsulatedOptions):
             written.append([key, readable])
         return written
 
+    @classmethod
+    def from_json(cls, data: _ty.Any) -> _ty.Any:
+        """What `to_json` writes, or the hex text of a document written while
+        this option had no codec of its own."""
+        if isinstance(data, str):
+            return cls.unpack(Bytes.parse(data))
+        return super().from_json(data)
+
     def _item_text(self, option: TLVOption) -> str:
         """One sub-option as the message display shows it: HTTPS=U8(1)."""
         code = IPXEOption(option.code)
