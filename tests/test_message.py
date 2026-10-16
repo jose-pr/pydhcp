@@ -804,3 +804,29 @@ def test_the_wire_constants_a_caller_needs_are_public() -> None:
     assert (message.ciaddr, message.yiaddr, message.siaddr, message.giaddr) == (
         UNSPECIFIED_ADDRESS,
     ) * 4
+
+
+def test_the_constructor_stores_numbers_and_text_as_the_fields_types() -> None:
+    import datetime
+    import ipaddress
+
+    message = DHCPMessage(op=2, htype=1, flags=0x8000, secs=5, yiaddr="10.0.0.5")
+    assert message.op is DHCPOpcode.BOOTREPLY
+    assert message.htype is HardwareAddressType.ETHERNET
+    assert message.flags is DHCPFlags.BROADCAST
+    assert message.secs == datetime.timedelta(seconds=5)
+    assert message.yiaddr == ipaddress.IPv4Address("10.0.0.5")
+    mapping = message.to_mapping()
+    assert (mapping["op"], mapping["flags"]) == ("BOOTREPLY", "BROADCAST")
+    assert DHCPMessage.from_mapping(mapping) == message
+
+
+@pytest.mark.parametrize(
+    "field, value", [("op", 3), ("ciaddr", "x"), ("secs", "soon"), ("htype", 300)]
+)
+def test_a_header_value_of_no_use_is_refused_naming_the_field(
+    field: str, value: object
+) -> None:
+    kwargs = {"op": DHCPOpcode.BOOTREQUEST, field: value}
+    with pytest.raises(DHCPValueError, match=f"^{field}="):
+        DHCPMessage(**kwargs)  # type: ignore[arg-type]

@@ -39,7 +39,12 @@ subclassing the last: `_fields` (the dataclass and its fields), `_decode`,
   `.decode()` stays liberal: it takes the `hlen` the sender wrote, whatever the
   `htype` (a 4-octet address under Ethernet, 16 octets under InfiniBand, `hlen =
   0`) and keeps the address as long as that, so what was received re-encodes
-  as it arrived. `options=None` makes a fresh `DHCPOptions`. Fields:
+  as it arrived. `options=None` makes a fresh `DHCPOptions`. The constructor
+  stores each field as its type: `op`, `htype` and `flags` may be given as
+  numbers (`op=2` is `BOOTREPLY`), the four addresses as anything `IPv4Address`
+  takes, `secs` as whole seconds; a value that is none of these raises
+  `DHCPValueError` naming the field (`op=3`). Assigning a field afterwards is
+  not checked. Fields:
   `op: DHCPOpcode`, `htype: HardwareAddressType`, `hlen: int`, `hops: int`,
   `xid: int`, `secs: datetime.timedelta`, `flags: DHCPFlags`, `ciaddr: IPv4`,
   `yiaddr: IPv4`, `siaddr: IPv4`, `giaddr: IPv4`, `chaddr: bytes` (≤16

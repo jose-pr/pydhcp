@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`DHCPMessage(op=2)` built a message whose `to_mapping()` raised `AttributeError`.** The
+  constructor kept the number; it now stores `op`, `htype` and `flags` as their enums, the
+  addresses as `IPv4Address` and `secs` as a `timedelta`, and refuses a value that is none of
+  these with a `DHCPValueError` naming the field.
 - **An unnamed option code belonged to whichever enum made it first.** The unnamed members and
   the codec table were shared by every class, so an enum that reused `DHCPOptionCode`'s
   `_missing_` made `DHCPOptionCode(250)` raise `TypeError` once it had made 250 itself, and the

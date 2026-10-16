@@ -92,6 +92,19 @@ def _check_bootp_field(field: str, value: _ty.Sized, width: int) -> None:
         )
 
 
+_Typed = _ty.TypeVar("_Typed")
+
+
+def _typed(field: str, kind: _ty.Callable[[_ty.Any], _Typed], value: _ty.Any) -> _Typed:
+    """`value` as the header field's type, or `DHCPValueError` naming the field."""
+    if isinstance(kind, type) and isinstance(value, kind):
+        return _ty.cast(_Typed, value)
+    try:
+        return kind(value)
+    except ValueError as exc:
+        raise DHCPValueError(f"{field}={value!r} is not valid: {exc}") from None
+
+
 def _decode_bootp_field(raw: memoryview, field: str) -> str:
     """Decode a NUL-terminated BOOTP text field.
 
@@ -201,7 +214,10 @@ class _MessageFields:
         in the same header, so a message that says otherwise is refused here and
         by `encode`. (`decode` reads whatever `hlen` the sender wrote, and the
         address is that many octets, so a received message always agrees.) A
-        fresh option bag is made when `options` is not given.
+        fresh option bag is made when `options` is not given. `op`, `htype` and
+        `flags` may be given as their numbers, the addresses as anything
+        `IPv4Address` takes and `secs` as seconds: each is stored as its type, so
+        a method reading `op.name` or `secs.total_seconds()` later cannot fail.
         """
         if hlen is None:
             hlen = len(chaddr)
@@ -209,17 +225,21 @@ class _MessageFields:
             raise DHCPValueError(
                 f"hlen={hlen} is not the length of chaddr ({len(chaddr)} octets)"
             )
-        self.op = op
-        self.htype = htype
+        self.op = _typed("op", _enum.DHCPOpcode, op)
+        self.htype = _typed("htype", _enum.HardwareAddressType, htype)
         self.hlen = hlen
         self.hops = hops
         self.xid = xid
-        self.secs = secs
-        self.flags = flags
-        self.ciaddr = ciaddr
-        self.yiaddr = yiaddr
-        self.siaddr = siaddr
-        self.giaddr = giaddr
+        self.secs = (
+            secs
+            if isinstance(secs, _dt.timedelta)
+            else _dt.timedelta(seconds=_typed("secs", int, secs))
+        )
+        self.flags = _typed("flags", _enum.DHCPFlags, flags)
+        self.ciaddr = _typed("ciaddr", _ipaddress.IPv4Address, ciaddr)
+        self.yiaddr = _typed("yiaddr", _ipaddress.IPv4Address, yiaddr)
+        self.siaddr = _typed("siaddr", _ipaddress.IPv4Address, siaddr)
+        self.giaddr = _typed("giaddr", _ipaddress.IPv4Address, giaddr)
         self.chaddr = chaddr
         self.sname = sname
         self.file = file
