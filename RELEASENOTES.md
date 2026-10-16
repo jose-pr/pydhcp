@@ -4,6 +4,45 @@ The companion to [CHANGELOG.md](CHANGELOG.md): what a user upgrading needs to re
 release, in a few lines. The changelog has the detail of every change. No performance statement is
 made here that is not a result in `benchmarks/results/` recorded by CI.
 
+## [0.9.0] - 2026-10-17
+
+Options and leases as plain data, and what a server answering PXE and iPXE clients needs.
+
+### Upgrading from 0.8.1
+
+- **Options 94, 97 and 175 decode to records** (`ClientNDI`, `ClientMachineID`, `IPXEOptions`)
+  where they were `Bytes`. Code that compared them with bytes reads the octets with
+  `options.get(code, decode=False)`. Option 93's entries are `ClientArchitecture` members, which
+  still compare equal to their numbers. The octets on the wire are the same, and documents
+  written by 0.8 still load.
+- **`DHCPMessage.from_mapping()` requires only `op`**: a header field left out takes the
+  constructor's default where it was refused.
+- **`UserClass` meeting iPXE's flat option 77** now says so and names `LenientUserClass`.
+
+### New
+
+- `DHCPLease` and `DHCPOptions` to and from plain data and JSON, YAML, TOML or INI text.
+- `DHCPLease(siaddr=, sname=, file=)`: the boot fields a server puts in its OFFER and ACK, and
+  `strict=False` with `validate()` for a reservation that has no address yet.
+- `DHCPOptions.update()` and `copy()` merging several bags and options by name;
+  `DHCPOptionCode.resolve()` reading `bootfile-name`, `option-67` or `67` everywhere a name is read.
+- Option 175 as iPXE's sub-options, options 93, 94 and 97 as RFC 4578 and IANA name them,
+  `LenientUserClass` for option 77, `OptionCodeEnum` for a code enum of your own,
+  `DHCPOptionType.from_json()`, `List.item_type()`, and `UNSPECIFIED_ADDRESS` and
+  `INFINITE_LEASE_TIME` in `pydhcp.packet`.
+
+### How it was checked
+
+Measured on 2026-10-17 at commit `050dedb`, against netimps 0.4.1, pktcap 0.1.1 and duho 0.7.4, each
+as published:
+
+- **Windows:** 5,063 passed and 45 skipped, on Python 3.14 and on Python 3.9 (ARM64 both).
+- **Linux** (Fedora 44 under WSL2), Python 3.14 and 3.9: 5,016 passed and 41 skipped without
+  privilege; as root the 32 real-peer tests against dnsmasq, ISC dhclient and udhcpc ran and passed.
+- **macOS and FreeBSD:** Intel macOS 15.7 on Python 3.9 and FreeBSD 16.0 on Python 3.11 (an
+  unprivileged account): 4,996 passed and 58 skipped on each.
+- **The hosted matrix:** the same 25 jobs as for 0.8.1 passed; the benchmark job runs only when asked.
+
 ## [0.8.1] - 2026-10-14
 
 A dependency release: the `cli` extra requires `duho>=0.7.4,<0.8`. With it a settings file that

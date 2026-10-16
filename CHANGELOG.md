@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [0.9.0] - 2026-10-17
+
 Options 94, 97 and 175 decode to structured values where they were `Bytes`, and option 93's
 entries are named; the octets on the wire are the same. "Changed" lists these and the rest of what
 behaves differently.
@@ -1908,7 +1912,8 @@ convention: a name that still resolves is a name nobody migrates off.
 
 - Initial release.
 
-[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/jose-pr/pydhcp/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/jose-pr/pydhcp/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/jose-pr/pydhcp/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/jose-pr/pydhcp/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/jose-pr/pydhcp/compare/v0.6.1...v0.7.0
