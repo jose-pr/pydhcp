@@ -105,8 +105,8 @@ DHCPOptions.from_mapping(data: Mapping | None, *, codemap=None) -> DHCPOptions
   - **`.update()`** — merges several sources in one call, later
     writes winning: each positional in order, a mapping of code to value or
     an iterable of `(code, value)` pairs (another bag's raw payloads are copied,
-    never decoded), then each keyword, whose name is an option in the bag's
-    codemap in any letter case (`update(defaults, image, router="10.0.0.1")`).
+    never decoded), then each keyword, read by the codemap's `resolve` (any
+    letter case, an alias, `option_67`: `update(defaults, image, router="10.0.0.1")`).
     Values are stored as `options[code] = value` stores them. **All or
     nothing** across the whole call: a refused code or value raises as
     `__setitem__` does, a keyword naming no option raises `TypeError`, and
@@ -124,8 +124,9 @@ DHCPOptions.from_mapping(data: Mapping | None, *, codemap=None) -> DHCPOptions
     loaded back as it is written, and one whose readable form would give other
     octets (text that is not UTF-8, a payload the codec normalises) is
     **`{"hex": "..."}`** instead, which every option takes on reading. Reading
-    takes a key by name in `codemap` (default `DHCPOptionCode`) or by number,
-    and a value as its codec takes it; octets only as `{"hex": ...}` or as hex
+    takes any key `codemap.resolve` reads (default `DHCPOptionCode`: a name in any
+    case, `bootfile-name`, `option-67`, `67`), and a value by the codec's
+    `from_json`; octets only as `{"hex": ...}` or as hex
     text for an option whose codec is opaque bytes. A value the codec refuses
     raises as `options[code] = value` does, naming the option. `None` is an
     empty bag; anything else that is not a mapping is a `TypeError`. A
@@ -163,6 +164,7 @@ DHCPOptionCode.get_type() -> type[DHCPOptionType]
 BaseDHCPOptionCode.get_type()
 BaseDHCPOptionCode.label()
 BaseDHCPOptionCode.from_code(code)
+BaseDHCPOptionCode.resolve(name: str | int) -> BaseDHCPOptionCode
 BaseDHCPOptionCode.normalize(code, value) -> DHCPOption
 BaseDHCPOptionCode.decode(code, value) -> DHCPOption
 ```
@@ -173,7 +175,16 @@ BaseDHCPOptionCode.decode(code, value) -> DHCPOption
   the defaults, for a custom code enum:
   `.get_type()`, `.label()`, `.from_code(code: int)` (classmethod,
   constructs/looks up a code value), `.normalize(code, value) -> DHCPOption`,
-  `.decode(code, value: bytearray) -> DHCPOption`. Subclass this (instead of
+  `.decode(code, value: bytearray) -> DHCPOption`, and **`.resolve(name)`**
+  (classmethod), the one reading of an option's name that `update()`,
+  `from_mapping()` and the capture filter's `option.NAME` all use: an `int`;
+  digits; `option-67` (`-`, `_`, a space or nothing, any case); or a member
+  name, exactly or in any case with `-` and `_` alike (`bootfile-name` is
+  `BOOTFILE_NAME`), an alias member included (`GRD` is `SIXRD`). It returns the
+  member (`from_code` of the number); text that is none of these raises
+  `ValueError` naming the enum, and anything but text or an integer
+  `TypeError`. Server-specific spellings (dhcpd's `domain-name-servers` for
+  `DNS`) are not names here. Subclass this (instead of
   `DHCPOptionCode`) to build an application-specific option-code enum with
   its own codec bindings, and pass it as `DHCPOptions(codemap=...)`; for an
   enum, subclass `OptionCodeEnum` (next), which brings the rest.

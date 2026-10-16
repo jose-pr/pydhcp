@@ -84,7 +84,8 @@ pktcap_plugin(registry) -> None
   error goes on, so a failed call registers nothing (`ValueError` for a layer name or a port
   that is taken). `pydhcp capture` and `pydhcp replay` load it themselves. Keys, each also as
   `dhcp.KEY`, over `DHCPLayer`: `op`, `msg_type`, `xid`, `client_id`, `chaddr` and
-  `option.NAME_OR_CODE`. Values: `op` and `msg_type` take a member's name in any letter case or
+  `option.NAME_OR_CODE` (a code 1 to 254, or a name as `DHCPOptionCode.resolve` reads it:
+  `option.bootfile-name`, `option.option-67`). Values: `op` and `msg_type` take a member's name in any letter case or
   a number from 0 to 255, named or not, and `msg_type` also `UNKNOWN` (no option 53) and
   `TYPE_<n>` (an unnamed type); `xid` is an integer in any base up to 32 bits; `client_id` and
   `chaddr` are whole octets in hexadecimal with `:`, `-` or `.` between groups, compared without

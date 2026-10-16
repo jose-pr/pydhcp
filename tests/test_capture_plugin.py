@@ -341,7 +341,6 @@ REFUSED = [
     "chaddr=001",
     "chaddr=" + "00" * 17,
     "option.NOSUCH=1",
-    "option.hostname=x",
     "option.0=x",
     "option.255=x",
     "option.-1=x",

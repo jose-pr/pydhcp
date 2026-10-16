@@ -54,6 +54,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **`List.item_type()`**: the codec of a list codec's items (`List[U16].item_type()` is `U16`,
   `CCCOption.item_type()` is `CCCSubOption`), so a caller need not read the private `_args_`.
 
+- **`BaseDHCPOptionCode.resolve(name)`, one reading of an option's name**: a number, `option-67`,
+  or a member name in any case with `-` and `_` alike (`bootfile-name`), an alias included.
+  `DHCPOptions.update()` keywords, `from_mapping()` keys (so `DHCPMessage` and `DHCPLease`
+  documents) and the capture filter's `option.NAME` all go through it; `from_mapping()` and the
+  filter took exact member names only.
+
 ### Fixed
 
 - **The codec law `Codec(value.to_json()) == value` was false for 19 codecs**: `Bytes` refuses

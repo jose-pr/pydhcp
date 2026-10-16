@@ -155,9 +155,13 @@ def option_selector(
             )
     else:
         try:
-            code = DHCPOptionCode[option]
-        except KeyError:
+            code = DHCPOptionCode.resolve(option)
+        except ValueError:
             raise ValueError(f"Unsupported DHCP option filter key: {key!r}") from None
+        if not 1 <= int(code) <= 254:
+            raise ValueError(
+                f"Capture filter {key}= names no option: a code is 1 to 254"
+            )
     return code, value
 
 

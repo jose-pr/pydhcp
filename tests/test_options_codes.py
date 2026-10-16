@@ -175,3 +175,57 @@ def test_an_unnamed_member_pickles_to_the_same_member() -> None:
     import pickle
 
     assert pickle.loads(pickle.dumps(DHCPOptionCode(250))) is DHCPOptionCode(250)
+
+
+# --- one reading of an option's name ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "BOOTFILE_NAME",
+        "bootfile_name",
+        "bootfile-name",
+        "Bootfile-Name",
+        " bootfile_name ",
+        "67",
+        67,
+        "option-67",
+        "OPTION_67",
+        "option67",
+        "option 67",
+    ],
+)
+def test_every_spelling_of_an_option_resolves_to_its_member(name: object) -> None:
+    assert DHCPOptionCode.resolve(name) is DHCPOptionCode.BOOTFILE_NAME  # type: ignore[arg-type]
+
+
+def test_an_alias_resolves_to_its_code_and_an_unnamed_number_to_a_member() -> None:
+    assert DHCPOptionCode.resolve("grd") is DHCPOptionCode.SIXRD
+    assert DHCPOptionCode.resolve("option-250") is DHCPOptionCode(250)
+
+
+@pytest.mark.parametrize(
+    "name, error",
+    [("nope", ValueError), ("", ValueError), (True, TypeError), (1.5, TypeError)],
+)
+def test_a_name_that_names_nothing_is_refused(name: object, error: type) -> None:
+    with pytest.raises(error):
+        DHCPOptionCode.resolve(name)  # type: ignore[arg-type]
+
+
+def test_update_from_mapping_and_the_capture_filter_read_names_alike() -> None:
+    # private: the capture filter's key reader, called directly
+    from pydhcp.capture._filter import option_selector
+
+    options = DHCPOptions.from_mapping({"bootfile-name": "a.efi", "option-66": "tftp"})
+    assert sorted(options) == [66, 67]
+    options.update(Bootfile_Name="b.efi")
+    assert options.get(67) == "b.efi"
+    with pytest.raises(TypeError, match="unknown option"):
+        options.update(no_such_option=1)
+    assert (
+        option_selector("option.bootfile-name", "x")[0] is DHCPOptionCode.BOOTFILE_NAME
+    )
+    with pytest.raises(ValueError, match="1 to 254"):
+        option_selector("option.option-0", "x")

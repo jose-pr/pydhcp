@@ -3,6 +3,7 @@ from __future__ import annotations
 import typing as _ty
 import enum as _enum
 
+from . import _names
 from ._codecs._scalar import Bytes
 from ._codecs._base import OptionCodec, is_codec_class
 
@@ -34,6 +35,9 @@ class OptionCode(_ty.Protocol):
     def decode(cls, code: int, value: bytearray) -> "DHCPOption": ...
 
 
+_BaseCodeT = _ty.TypeVar("_BaseCodeT", bound="BaseDHCPOptionCode")
+
+
 class BaseDHCPOptionCode:
     """The base class of a code enum: the defaults of `OptionCode`.
 
@@ -50,6 +54,13 @@ class BaseDHCPOptionCode:
     @classmethod
     def from_code(cls, code: int) -> "BaseDHCPOptionCode":
         return cls(code)  # type: ignore[call-arg]
+
+    @classmethod
+    def resolve(cls: type[_BaseCodeT], name: _ty.Union[str, int]) -> _BaseCodeT:
+        """The code `name` names: a number, `option-<n>`, or a member name in
+        any case with `-` and `_` alike (`bootfile-name`). `ValueError` for text
+        that is none of these; see `pydhcp/options/AGENTS.md`."""
+        return _ty.cast(_BaseCodeT, cls.from_code(_names.resolve_code(cls, name)))
 
     def __int__(self) -> int:
         """The option code as a byte value.

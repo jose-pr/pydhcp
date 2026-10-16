@@ -7,7 +7,7 @@ import enum as _enum
 import typing as _ty
 
 from . import DHCPOptions
-from . import _codecs
+from . import _codecs, _names
 from ._codes import OptionCode
 
 #: The key of the self-describing octets form, `{"hex": "0a000001"}`.
@@ -66,18 +66,8 @@ def _option_type(codemap: type[OptionCode], code: int) -> type[_codecs.OptionCod
 
 
 def _coerce_option_code(raw_code: _ty.Any, codemap: type[OptionCode]) -> int:
-    if isinstance(raw_code, int):
-        return raw_code
-    if isinstance(raw_code, str):
-        if raw_code.isdigit():
-            return int(raw_code)
-        try:
-            return int(codemap[raw_code])  # type: ignore[index]
-        except (KeyError, TypeError):
-            raise ValueError(
-                f"unknown option {raw_code!r}: it is neither a name in "
-                f"{codemap.__name__} nor a number"
-            ) from None
+    if isinstance(raw_code, (int, str)):
+        return _names.resolve_code(codemap, raw_code)
     return int(raw_code)
 
 

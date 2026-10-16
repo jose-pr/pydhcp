@@ -14,7 +14,7 @@ from ._codecs._base import is_codec, is_codec_class
 from ._codecs import *  # noqa: F403
 from ._codes import DHCPOptionCode as DHCPOptionCode
 from .. import _constants as _const
-from . import _wire
+from . import _names, _wire
 from ._wire import (
     MAX_OPTION_CODE as MAX_OPTION_CODE,
     MIN_OPTION_CODE as MIN_OPTION_CODE,
@@ -252,13 +252,14 @@ class DHCPOptions(_ty.MutableMapping[int, bytearray]):
         self._options.update(staged._options)
 
     def _code_named(self, name: str) -> int:
-        """The code of the option `name` names in this bag's codemap, any case."""
-        for key in (name, name.upper()):
-            try:
-                return int(self._codemap[key])  # type: ignore[index]
-            except (KeyError, TypeError):
-                pass
-        raise TypeError(f"{self._codemap.__name__} has no option named {name!r}")
+        """The code a keyword names in this bag's codemap (`_names.resolve_code`).
+
+        `TypeError`, as for any keyword a call does not take, when it names none.
+        """
+        try:
+            return _names.resolve_code(self._codemap, name)
+        except ValueError as exc:
+            raise TypeError(str(exc)) from None
 
     def to_mapping(self) -> dict[str, _ty.Any]:
         """The options as plain data: the code's name (its number when it has
